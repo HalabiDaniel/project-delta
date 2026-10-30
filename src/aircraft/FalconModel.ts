@@ -60,8 +60,8 @@ const mirror = (tris: V3[][]): V3[][] =>
   tris.map((tri) => tri.map(([x, y, z]) => [-x, y, z] as V3).reverse());
 
 export interface FalconMaterials {
-  paper: pc.StandardMaterial;
-  accent: pc.StandardMaterial;
+  paper: pc.Material;
+  accent: pc.Material;
 }
 
 export function createPaperMaterial(color: pc.Color, gloss = 0.15): pc.StandardMaterial {
@@ -77,25 +77,129 @@ export function createPaperMaterial(color: pc.Color, gloss = 0.15): pc.StandardM
   return material;
 }
 
-/** Builds the Falcon as an entity with paper-white body and coloured tail surfaces. */
-export function createFalcon(app: pc.AppBase, accentColor: pc.Color): pc.Entity {
-  const materials: FalconMaterials = {
+export function falconMaterials(accentColor: pc.Color): FalconMaterials {
+  return {
     paper: createPaperMaterial(new pc.Color(...PALETTE.paper)),
     accent: createPaperMaterial(accentColor),
   };
-  const body = [...LEFT_BODY, ...mirror(LEFT_BODY), ...KEEL];
-  const accent = [...LEFT_ACCENT, ...mirror(LEFT_ACCENT)];
+}
 
-  const entity = new pc.Entity('falcon');
-  entity.addComponent('render', {
-    meshInstances: [
-      new pc.MeshInstance(buildFlatMesh(app.graphicsDevice, body, FALCON_SCALE), materials.paper),
-      new pc.MeshInstance(buildFlatMesh(app.graphicsDevice, accent, FALCON_SCALE), materials.accent),
-    ],
-    castShadows: true,
-    receiveShadows: false,
-  });
-  return entity;
+/** The halves stand almost upright when folded in half; the tails sit a touch further in so they never z-fight the wings. */
+const STAND_UP = { paper: Math.PI / 2 - 0.1, accent: Math.PI / 2 - 0.05 };
+
+interface FoldPart {
+  mesh: pc.Mesh;
+  final: number[];
+  positions: Float32Array;
+  normals: Float32Array;
+  standUp: number;
+  /** Lift above the sheet while flat, so the tails lie on top of the wings instead of inside them. */
+  lift: number;
+}
+
+/**
+ * The Falcon, with a folding animation. `setFold(t)` poses it anywhere between a flat sheet of
+ * paper (t = 0), folded in half along the centre crease with both halves standing up (t = 0.5),
+ * and the finished plane with its wings folded down (t = 1). Each vertex rotates about the centre
+ * crease, so the sheet really folds instead of morphing.
+ */
+export class FoldableFalcon {
+  readonly entity: pc.Entity;
+  private readonly parts: FoldPart[];
+  private fold = -1;
+
+  /**
+   * @param restDrop How far to lower the model while it lies flat, so the sheet rests on the
+   * ground instead of floating at the finished plane's height.
+   */
+  constructor(device: pc.GraphicsDevice, materials: FalconMaterials, private readonly restDrop = 0) {
+    const body = [...LEFT_BODY, ...mirror(LEFT_BODY), ...KEEL];
+    const accent = [...LEFT_ACCENT, ...mirror(LEFT_ACCENT)];
+    this.parts = [
+      this.part(device, body, STAND_UP.paper, 0),
+      this.part(device, accent, STAND_UP.accent, 0.004),
+    ];
+    this.entity = new pc.Entity('falcon');
+    this.entity.addComponent('render', {
+      meshInstances: [new pc.MeshInstance(this.parts[0].mesh, materials.paper), new pc.MeshInstance(this.parts[1].mesh, materials.accent)],
+      castShadows: true,
+      receiveShadows: false,
+    });
+    this.setFold(1);
+  }
+
+  setFold(t: number): void {
+    t = Math.min(1, Math.max(0, t));
+    if (t === this.fold) return;
+    this.fold = t;
+    // 0 → 0.42: both halves rise along the crease. 0.55 → 1: the wings fold back down, with a little bounce.
+    const rise = smoothstep(t / 0.42);
+    const down = t <= 0.55 ? 0 : easeOutBack((t - 0.55) / 0.45);
+    for (const part of this.parts) {
+      const { final, positions } = part;
+      for (let i = 0; i < final.length; i += 3) {
+        const x = final[i], y = final[i + 1], z = final[i + 2];
+        if (Math.abs(x) < 1e-6) {
+          // On the crease (nose, spine, keel): rises out of the sheet as it is folded.
+          positions[i] = 0;
+          positions[i + 1] = y * rise;
+        } else {
+          const r = Math.hypot(x, y);
+          const finalAngle = Math.atan2(y, Math.abs(x));
+          const angle = part.standUp * rise + (finalAngle - part.standUp * rise) * down;
+          positions[i] = Math.sign(x) * r * Math.cos(angle);
+          positions[i + 1] = r * Math.sin(angle) + part.lift * (1 - rise);
+        }
+        positions[i + 2] = z;
+      }
+      faceNormals(positions, part.normals);
+      part.mesh.setPositions(positions);
+      part.mesh.setNormals(part.normals);
+      part.mesh.update(pc.PRIMITIVE_TRIANGLES);
+    }
+    this.entity.setLocalPosition(0, -this.restDrop * (1 - rise), 0);
+  }
+
+  private part(device: pc.GraphicsDevice, triangles: V3[][], standUp: number, lift: number): FoldPart {
+    const final: number[] = [];
+    for (const tri of triangles) for (const p of tri) final.push(p[0] * FALCON_SCALE, p[1] * FALCON_SCALE, p[2] * FALCON_SCALE);
+    return {
+      mesh: new pc.Mesh(device),
+      final,
+      positions: new Float32Array(final.length),
+      normals: new Float32Array(final.length),
+      standUp,
+      lift,
+    };
+  }
+}
+
+/** Where a wingtip's trailing corner sits on the finished model, for the wingtip trails. */
+export const WINGTIP: V3 = [WING_TIP_TRAIL[0] * FALCON_SCALE, WING_TIP_TRAIL[1] * FALCON_SCALE, WING_TIP_TRAIL[2] * FALCON_SCALE];
+
+/** Writes one face normal per triangle (following the winding) into all three of its vertices. */
+function faceNormals(positions: ArrayLike<number>, out: Float32Array): void {
+  for (let i = 0; i < positions.length; i += 9) {
+    const ux = positions[i + 3] - positions[i], uy = positions[i + 4] - positions[i + 1], uz = positions[i + 5] - positions[i + 2];
+    const vx = positions[i + 6] - positions[i], vy = positions[i + 7] - positions[i + 1], vz = positions[i + 8] - positions[i + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    for (let k = 0; k < 9; k += 3) {
+      out[i + k] = nx / len;
+      out[i + k + 1] = ny / len;
+      out[i + k + 2] = nz / len;
+    }
+  }
+}
+
+function smoothstep(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
+
+function easeOutBack(t: number): number {
+  const c = 1.70158;
+  return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
 }
 
 /**
@@ -109,17 +213,9 @@ export function buildFlatMesh(
   scale = 1,
 ): pc.Mesh {
   const positions: number[] = [];
-  const normals: number[] = [];
-  for (const [a, b, c] of triangles) {
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
-    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const len = Math.hypot(nx, ny, nz) || 1;
-    for (const p of [a, b, c]) {
-      positions.push(p[0] * scale, p[1] * scale, p[2] * scale);
-      normals.push(nx / len, ny / len, nz / len);
-    }
-  }
+  for (const tri of triangles) for (const p of tri) positions.push(p[0] * scale, p[1] * scale, p[2] * scale);
+  const normals = new Float32Array(positions.length);
+  faceNormals(positions, normals);
   const mesh = new pc.Mesh(device);
   mesh.setPositions(positions);
   mesh.setNormals(normals);

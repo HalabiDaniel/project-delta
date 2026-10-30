@@ -1,21 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { BOMB, WORLD } from '../config';
+import { BOMB, MISSIONS, WORLD } from '../config';
 import { generateTerritories } from '../world/WorldGenerator';
-import { sweepBomb, type TargetZone } from './Bomb';
+import { sweepBomb, type ZoneRef } from './Bomb';
 
 const territories = generateTerritories();
 const t5 = territories.find((t) => t.id === 'T5')!;
-const target: TargetZone = { x: t5.x, z: t5.z, radius: WORLD.targetRadius, top: WORLD.targetHeight };
+const t7 = territories.find((t) => t.id === 'T7')!;
+const radius = 5;
+const zones: ZoneRef[] = [
+  { objective: 0, territoryId: 'T5', zone: { x: t5.x, z: t5.z, radius, top: MISSIONS.targetHeight } },
+  { objective: 1, territoryId: 'T7', zone: { x: t7.x + 8, z: t7.z, radius: 2, top: MISSIONS.targetHeight } },
+];
 const r = BOMB.radius;
 
 /** One falling step straight down at (x, z). */
 const drop = (x: number, z: number, from = 1.5, to = 0.2) =>
-  sweepBomb({ x, y: from, z }, { x, y: to, z }, r, target, territories);
+  sweepBomb({ x, y: from, z }, { x, y: to, z }, r, zones, territories);
 
 describe('sweepBomb', () => {
   it('a ball coming down on the bullseye hits the target', () => {
-    expect(drop(t5.x, t5.z)?.kind).toBe('target');
-    expect(drop(t5.x + WORLD.targetRadius - 0.5, t5.z)?.kind).toBe('target');
+    expect(drop(t5.x, t5.z)).toMatchObject({ kind: 'target', objective: 0, territoryId: 'T5' });
+    expect(drop(t5.x + radius - 0.5, t5.z)?.kind).toBe('target');
+  });
+
+  it('each zone reports its own objective, including small off-centre ones', () => {
+    expect(drop(t7.x + 8, t7.z)).toMatchObject({ kind: 'target', objective: 1, territoryId: 'T7' });
+    expect(drop(t7.x, t7.z)).toMatchObject({ kind: 'platform', territoryId: 'T7' });
+  });
+
+  it('with no open zones every landing is a platform impact', () => {
+    expect(sweepBomb({ x: t5.x, y: 1.5, z: t5.z }, { x: t5.x, y: 0.2, z: t5.z }, r, [], territories)?.kind).toBe('platform');
   });
 
   it('landing elsewhere on the target territory is not a hit', () => {
@@ -35,7 +49,7 @@ describe('sweepBomb', () => {
   });
 
   it('a fast step cannot tunnel through the bullseye', () => {
-    const impact = sweepBomb({ x: t5.x - 3, y: 40, z: t5.z }, { x: t5.x + 3, y: -20, z: t5.z }, r, target, territories);
+    const impact = sweepBomb({ x: t5.x - 3, y: 40, z: t5.z }, { x: t5.x + 3, y: -20, z: t5.z }, r, zones, territories);
     expect(impact?.kind).toBe('target');
     expect(Math.abs(impact!.x - t5.x)).toBeLessThan(1);
   });

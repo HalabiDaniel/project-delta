@@ -1,39 +1,32 @@
 import * as pc from 'playcanvas';
 import { BOMB, PALETTE, WORLD } from '../config';
+import type { Point3, TargetZone } from '../missions/Mission';
 import type { Territory } from '../world/Territory';
 import { buildPaperBallMesh, createPaperMaterial } from './FalconModel';
 
-export interface Vec3Like {
-  x: number;
-  y: number;
-  z: number;
-}
-
-/** The bullseye on the target territory: a short cylinder standing on the platform. */
-export interface TargetZone {
-  x: number;
-  z: number;
-  radius: number;
-  /** Height of the bullseye's top face. */
-  top: number;
+/** A target zone that belongs to mission objective `objective`. */
+export interface ZoneRef {
+  objective: number;
+  territoryId: string;
+  zone: TargetZone;
 }
 
 export type BombImpact =
-  | { kind: 'target'; x: number; y: number; z: number }
+  | { kind: 'target'; objective: number; territoryId: string; x: number; y: number; z: number }
   | { kind: 'platform'; territoryId: string; x: number; y: number; z: number }
   | { kind: 'void'; x: number; y: number; z: number };
 
 /**
  * Finds what a falling ball of `radius` hits while moving from `prev` to `next` this step.
  * Top faces are tested by sweeping the step, so fast bombs cannot tunnel through them. Only a
- * ball that comes down on the bullseye itself counts as a target hit; landing anywhere else on
- * the target territory is an ordinary platform impact.
+ * ball that comes down on one of the target zones counts as a target hit; landing anywhere else,
+ * even on a target territory, is an ordinary platform impact.
  */
 export function sweepBomb(
-  prev: Vec3Like,
-  next: Vec3Like,
+  prev: Point3,
+  next: Point3,
   radius: number,
-  target: TargetZone,
+  zones: readonly ZoneRef[],
   territories: readonly Territory[],
   voidY: number = WORLD.voidY,
 ): BombImpact | null {
@@ -43,10 +36,12 @@ export function sweepBomb(
     return { x: prev.x + (next.x - prev.x) * t, z: prev.z + (next.z - prev.z) * t };
   };
 
-  // Count a hit when the ball's centre comes down within half a ball of the bullseye's edge.
-  const onTarget = crossing(target.top + radius);
-  if (onTarget && Math.hypot(onTarget.x - target.x, onTarget.z - target.z) <= target.radius + radius * 0.5) {
-    return { kind: 'target', x: onTarget.x, y: target.top, z: onTarget.z };
+  // Count a hit when the ball's centre comes down within half a ball of the zone's edge.
+  for (const { objective, territoryId, zone } of zones) {
+    const onTarget = crossing(zone.top + radius);
+    if (onTarget && Math.hypot(onTarget.x - zone.x, onTarget.z - zone.z) <= zone.radius + radius * 0.5) {
+      return { kind: 'target', objective, territoryId, x: onTarget.x, y: zone.top, z: onTarget.z };
+    }
   }
 
   for (const territory of territories) {
@@ -64,33 +59,27 @@ export function sweepBomb(
   return null;
 }
 
-/** The single paper-ball bomb: released from the plane, falls under gravity, reports its impact. */
-export class Bomb {
+/** One paper-ball bomb: released from the plane, falls under gravity, reports its impact. */
+class Bomb {
   readonly entity: pc.Entity;
   active = false;
+  /** Release order, so the camera can follow the newest bomb. */
+  serial = 0;
   readonly position = new pc.Vec3();
   readonly velocity = new pc.Vec3();
   private readonly previous = new pc.Vec3();
   private spin = 0;
 
-  constructor(app: pc.AppBase) {
+  constructor(app: pc.AppBase, mesh: pc.Mesh, material: pc.Material) {
     this.entity = new pc.Entity('bomb');
-    this.entity.addComponent('render', {
-      meshInstances: [
-        new pc.MeshInstance(
-          buildPaperBallMesh(app.graphicsDevice, BOMB.radius),
-          createPaperMaterial(new pc.Color(...PALETTE.paperBall)),
-        ),
-      ],
-      castShadows: true,
-    });
+    this.entity.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: true });
     this.entity.enabled = false;
     app.root.addChild(this.entity);
   }
 
-  /** Drops the ball, carrying the plane's velocity plus a small downward kick. */
-  release(position: pc.Vec3, planeVelocity: pc.Vec3): void {
+  release(position: pc.Vec3, planeVelocity: pc.Vec3, serial: number): void {
     this.active = true;
+    this.serial = serial;
     this.spin = 0;
     this.position.copy(position);
     this.velocity.copy(planeVelocity);
@@ -99,7 +88,7 @@ export class Bomb {
     this.entity.setPosition(this.position);
   }
 
-  update(dt: number, target: TargetZone, territories: readonly Territory[]): BombImpact | null {
+  update(dt: number, zones: readonly ZoneRef[], territories: readonly Territory[]): BombImpact | null {
     if (!this.active) return null;
     this.previous.copy(this.position);
     this.velocity.y -= BOMB.gravity * dt;
@@ -110,7 +99,7 @@ export class Bomb {
     this.entity.setPosition(this.position);
     this.entity.setEulerAngles(this.spin, this.spin * 0.7, 0);
 
-    const impact = sweepBomb(this.previous, this.position, BOMB.radius, target, territories);
+    const impact = sweepBomb(this.previous, this.position, BOMB.radius, zones, territories);
     if (impact) this.clear();
     return impact;
   }
@@ -118,5 +107,47 @@ export class Bomb {
   clear(): void {
     this.active = false;
     this.entity.enabled = false;
+  }
+}
+
+/** The bombs currently in the air. Several can fall at once on multi-bomb missions. */
+export class Bombs {
+  private readonly pool: Bomb[] = [];
+  private serial = 0;
+
+  constructor(app: pc.AppBase, size = 4) {
+    const mesh = buildPaperBallMesh(app.graphicsDevice, BOMB.radius);
+    const material = createPaperMaterial(new pc.Color(...PALETTE.paperBall));
+    for (let i = 0; i < size; i++) this.pool.push(new Bomb(app, mesh, material));
+  }
+
+  get anyActive(): boolean {
+    return this.pool.some((b) => b.active);
+  }
+
+  /** Drops a ball, carrying the plane's velocity plus a small downward kick. */
+  release(position: pc.Vec3, planeVelocity: pc.Vec3): void {
+    const bomb = this.pool.find((b) => !b.active) ?? this.pool.reduce((a, b) => (a.serial < b.serial ? a : b));
+    bomb.release(position, planeVelocity, ++this.serial);
+  }
+
+  update(dt: number, zones: readonly ZoneRef[], territories: readonly Territory[]): BombImpact[] {
+    const impacts: BombImpact[] = [];
+    for (const bomb of this.pool) {
+      const impact = bomb.update(dt, zones, territories);
+      if (impact) impacts.push(impact);
+    }
+    return impacts;
+  }
+
+  /** Position of the most recently released bomb still falling, for the camera. */
+  newest(): pc.Vec3 | null {
+    let newest: Bomb | null = null;
+    for (const b of this.pool) if (b.active && (!newest || b.serial > newest.serial)) newest = b;
+    return newest?.position ?? null;
+  }
+
+  clear(): void {
+    for (const b of this.pool) b.clear();
   }
 }

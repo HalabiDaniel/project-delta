@@ -8,7 +8,10 @@ const MAX_MOUSE_STEP = 120;
 const LOCK_SETTLE_MS = 100;
 const LOCK_REQUEST_CAP_MS = 500;
 
-const GAME_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'Escape']);
+const GAME_KEYS = new Set([
+  'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'Escape', 'Enter',
+  'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
+]);
 
 /**
  * Keyboard and mouse for the game, using physical key codes (so WASD works on any layout).

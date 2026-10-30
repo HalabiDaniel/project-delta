@@ -1,24 +1,22 @@
 import * as pc from 'playcanvas';
 import { PALETTE, WORLD } from '../config';
-import type { TargetZone } from '../aircraft/Bomb';
 import { yawFromDirection } from '../aircraft/PlaneController';
 import { Territory } from './Territory';
 
 export interface World {
   territories: Territory[];
   home: Territory;
-  target: Territory;
-  /** The bullseye in the centre of the target territory; only this counts as a hit. */
-  targetZone: TargetZone;
-  /** Where planes are folded and launched from, on the home platform. */
+  /** Platform entities by territory id, so mission markers can tint objective territories. */
+  platforms: Map<string, pc.Entity>;
+  /** Where planes are folded and launched from: the start of the runway on the home platform. */
   launchPosition: pc.Vec3;
-  /** Launch heading: straight at the target. */
+  /** Launch heading: along the runway, towards the centre of the world. */
   launchYaw: number;
 }
 
 /**
  * Lays out gridSize × gridSize square territories, numbered T1… row by row, separated by empty
- * gaps and centred on the origin. T1 belongs to the player and T5 (the centre) is the target.
+ * gaps and centred on the origin. T1 belongs to the player; mission targets are chosen per mission.
  */
 export function generateTerritories(
   gridSize: number = WORLD.gridSize,
@@ -32,58 +30,40 @@ export function generateTerritories(
     for (let col = 0; col < gridSize; col++) {
       const id = `T${row * gridSize + col + 1}`;
       territories.push(
-        new Territory(
-          id,
-          (col - offset) * spacing,
-          (row - offset) * spacing,
-          size,
-          id === WORLD.homeId ? 'player' : null,
-          id === WORLD.targetId,
-        ),
+        new Territory(id, (col - offset) * spacing, (row - offset) * spacing, size, id === WORLD.homeId ? 'player' : null),
       );
     }
   }
   return territories;
 }
 
-/** Creates the territories, the target marker, the launch pad, lighting and fog. */
+/** Creates the territories, the runway and launch pad, lighting and fog. */
 export function buildWorld(app: pc.AppBase): World {
   const territories = generateTerritories();
   const home = territories.find((t) => t.isHome)!;
-  const target = territories.find((t) => t.isTarget)!;
 
   setUpLighting(app);
 
+  const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
-    const color = territory.isHome ? PALETTE.home : territory.isTarget ? PALETTE.target : PALETTE.neutral;
-    const platform = box(`territory-${territory.id}`, flatMaterial(color));
+    const platform = box(`territory-${territory.id}`, flatMaterial(territory.isHome ? PALETTE.home : PALETTE.neutral));
     platform.setPosition(territory.x, territory.top - territory.thickness / 2, territory.z);
     platform.setLocalScale(territory.size, territory.thickness, territory.size);
     app.root.addChild(platform);
+    platforms.set(territory.id, platform);
   }
 
-  const targetZone: TargetZone = {
-    x: target.x,
-    z: target.z,
-    radius: WORLD.targetRadius,
-    top: target.top + WORLD.targetHeight,
-  };
-  app.root.addChild(createBullseye(targetZone));
-
-  // Launch from just behind the centre of the home platform, facing the target.
-  const dx = target.x - home.x;
-  const dz = target.z - home.z;
+  // The runway runs through the centre of the home platform, pointing at the centre of the world.
+  const dx = -home.x;
+  const dz = -home.z;
   const len = Math.hypot(dx, dz) || 1;
-  const launchPosition = new pc.Vec3(home.x - (dx / len) * 6, 0, home.z - (dz / len) * 6);
-  const launchYaw = yawFromDirection(dx, dz);
+  const dir = { x: dx / len, z: dz / len };
+  const launchYaw = yawFromDirection(dir.x, dir.z);
+  const startOffset = WORLD.runwayLength / 2 - 6;
+  const launchPosition = new pc.Vec3(home.x - dir.x * startOffset, 0, home.z - dir.z * startOffset);
+  app.root.addChild(createRunway(home, launchYaw, launchPosition));
 
-  const pad = box('launch-pad', flatMaterial(PALETTE.launchPad));
-  pad.setPosition(launchPosition.x, 0.02, launchPosition.z);
-  pad.setLocalScale(4, 0.04, 6);
-  pad.setEulerAngles(0, (launchYaw * 180) / Math.PI, 0);
-  app.root.addChild(pad);
-
-  return { territories, home, target, targetZone, launchPosition, launchYaw };
+  return { territories, home, platforms, launchPosition, launchYaw };
 }
 
 function setUpLighting(app: pc.AppBase): void {
@@ -92,8 +72,8 @@ function setUpLighting(app: pc.AppBase): void {
   const fog = app.scene.fog;
   fog.type = pc.FOG_LINEAR;
   fog.color = new pc.Color(...PALETTE.sky);
-  fog.start = 160;
-  fog.end = 480;
+  fog.start = 220;
+  fog.end = 560;
 
   const sun = new pc.Entity('sun');
   sun.addComponent('light', {
@@ -101,46 +81,57 @@ function setUpLighting(app: pc.AppBase): void {
     color: new pc.Color(1, 0.97, 0.9),
     intensity: 1.1,
     castShadows: true,
-    shadowDistance: 110,
+    shadowDistance: 120,
     shadowResolution: 2048,
     shadowBias: 0.3,
     normalOffsetBias: 0.05,
     shadowType: pc.SHADOW_PCF3_32F,
   });
-  // High sun from behind the T1 → T5 approach, so the plane's shadow falls just ahead of it.
+  // High sun from behind the home → centre approach, so the plane's shadow falls just ahead of it.
   sun.setEulerAngles(25, -135, 0);
   app.root.addChild(sun);
 }
 
-/** Red-white-red rings in the centre of the target territory. */
-function createBullseye(zone: TargetZone): pc.Entity {
-  const root = new pc.Entity('target-marker');
-  root.setPosition(zone.x, 0, zone.z);
-  const red = flatMaterial(PALETTE.bullseyeRed);
-  const white = flatMaterial(PALETTE.bullseyeWhite);
-  const rings: Array<[number, pc.StandardMaterial]> = [
-    [zone.radius, red],
-    [zone.radius * 0.68, white],
-    [zone.radius * 0.36, red],
-  ];
-  rings.forEach(([radius, material], i) => {
-    const height = zone.top + i * 0.02;
-    const ring = new pc.Entity(`ring-${i}`);
-    ring.addComponent('render', { type: 'cylinder', material, castShadows: false });
-    ring.setLocalPosition(0, height / 2, 0);
-    ring.setLocalScale(radius * 2, height, radius * 2);
-    root.addChild(ring);
-  });
+/** A painted strip with a dashed centre line, threshold bars and the launch pad at its start. */
+function createRunway(home: Territory, yaw: number, launch: pc.Vec3): pc.Entity {
+  const root = new pc.Entity('runway');
+  root.setPosition(home.x, 0, home.z);
+  root.setEulerAngles(0, (yaw * 180) / Math.PI, 0);
+  const paint = flatMaterial(PALETTE.launchPad);
+  const strip = box('runway-strip', flatMaterial(PALETTE.runway));
+  strip.setLocalPosition(0, 0.015, 0);
+  strip.setLocalScale(WORLD.runwayWidth, 0.03, WORLD.runwayLength);
+  root.addChild(strip);
+  // Local -Z is the launch direction.
+  for (let z = -WORLD.runwayLength / 2 + 7; z < WORLD.runwayLength / 2 - 6; z += 4) {
+    const dash = box('runway-dash', paint);
+    dash.setLocalPosition(0, 0.035, z);
+    dash.setLocalScale(0.35, 0.02, 2);
+    root.addChild(dash);
+  }
+  for (const end of [-1, 1]) {
+    for (let i = -2; i <= 2; i++) {
+      if (i === 0) continue;
+      const bar = box('runway-threshold', paint);
+      bar.setLocalPosition(i * 1.2, 0.035, end * (WORLD.runwayLength / 2 - 1.2));
+      bar.setLocalScale(0.6, 0.02, 1.8);
+      root.addChild(bar);
+    }
+  }
+  const pad = box('launch-pad', paint);
+  pad.setLocalScale(4, 0.02, 6);
+  root.addChild(pad);
+  pad.setPosition(launch.x, 0.04, launch.z);
   return root;
 }
 
-function box(name: string, material: pc.Material): pc.Entity {
+export function box(name: string, material: pc.Material): pc.Entity {
   const entity = new pc.Entity(name);
   entity.addComponent('render', { type: 'box', material, castShadows: false, receiveShadows: true });
   return entity;
 }
 
-function flatMaterial(color: readonly [number, number, number]): pc.StandardMaterial {
+export function flatMaterial(color: readonly [number, number, number]): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
   material.diffuse = new pc.Color(color[0], color[1], color[2]);
   material.useMetalness = true;

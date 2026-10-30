@@ -1,9 +1,15 @@
 import * as pc from 'playcanvas';
-import { CAMERA, PALETTE, PLANE } from '../config';
+import { BOOST, CAMERA, PALETTE, PLANE } from '../config';
 import type { Territory } from '../world/Territory';
 import { forwardFromAngles, type PlaneController } from './PlaneController';
 
-/** Third-person camera: frames the launch pad at the desk and follows behind the plane in flight. */
+const RAD_TO_DEG = 180 / Math.PI;
+
+/**
+ * Third-person camera: frames the launch pad at the desk and follows behind the plane in flight.
+ * The follow view trails the plane on a soft spring, leans gently into banked turns and pulls back
+ * (and widens) as the plane speeds up, so speed reads without any camera shake.
+ */
 export class ChaseCamera {
   readonly entity: pc.Entity;
   private readonly pos = new pc.Vec3();
@@ -11,6 +17,7 @@ export class ChaseCamera {
   private readonly wantPos = new pc.Vec3();
   private readonly wantLook = new pc.Vec3();
   private readonly dir = new pc.Vec3();
+  private roll = 0;
 
   constructor(app: pc.AppBase) {
     this.entity = new pc.Entity('camera');
@@ -27,13 +34,16 @@ export class ChaseCamera {
     return this.entity.camera!;
   }
 
-  /** The resting view at home: behind and above the launch pad, looking out toward the target. */
+  /** The resting view at home: behind and above the launch pad, looking out along the runway. */
   updateDesk(dt: number, launch: pc.Vec3, yaw: number, snap = false): void {
     forwardFromAngles(yaw, 0, this.dir);
-    this.wantPos.set(launch.x - this.dir.x * 12, launch.y + 9, launch.z - this.dir.z * 12);
-    this.wantLook.set(launch.x + this.dir.x * 40, launch.y - 10, launch.z + this.dir.z * 40);
-    this.setFov(CAMERA.baseFov);
-    this.move(snap ? Infinity : 3, dt);
+    // Off to one side a little, so the plane (or its preview) isn't hidden behind its own tail.
+    const sideX = -this.dir.z;
+    const sideZ = this.dir.x;
+    this.wantPos.set(launch.x - this.dir.x * 9 + sideX * 2.5, launch.y + 5, launch.z - this.dir.z * 9 + sideZ * 2.5);
+    this.wantLook.set(launch.x + this.dir.x * 14, launch.y + 0.5, launch.z + this.dir.z * 14);
+    this.setFov(CAMERA.baseFov, snap ? Infinity : dt);
+    this.move(snap ? Infinity : 3, dt, 0);
   }
 
   /**
@@ -42,11 +52,16 @@ export class ChaseCamera {
    */
   updateFollow(dt: number, plane: PlaneController, territories: readonly Territory[], focus: pc.Vec3 | null): void {
     const p = plane.position;
+    const speedFrac = clamp((plane.speed - PLANE.minSpeed) / (PLANE.maxSpeed - PLANE.minSpeed), 0, 1);
+    const boostFrac = clamp((plane.speed - PLANE.maxSpeed) / BOOST.speed, 0, 1);
+    const boosting = plane.boost.active ? 1 : boostFrac;
+    const distance = CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting;
+
     forwardFromAngles(plane.yaw, plane.pitch * 0.6, this.dir);
     this.wantPos.set(
-      p.x - this.dir.x * CAMERA.distance,
-      p.y - this.dir.y * CAMERA.distance + CAMERA.height,
-      p.z - this.dir.z * CAMERA.distance,
+      p.x - this.dir.x * distance,
+      p.y - this.dir.y * distance + CAMERA.height,
+      p.z - this.dir.z * distance,
     );
     // Never dip inside a platform when climbing away low over one.
     for (const t of territories) {
@@ -64,29 +79,36 @@ export class ChaseCamera {
       this.wantLook.lerp(this.wantLook, focus, CAMERA.bombCamBlend);
       this.wantPos.y += CAMERA.bombCamRise;
     }
-    const speedFrac = (plane.speed - PLANE.minSpeed) / (PLANE.maxSpeed - PLANE.minSpeed);
-    this.setFov(CAMERA.baseFov + CAMERA.speedFov * speedFrac, dt);
-    this.move(CAMERA.followStiffness, dt);
+    this.setFov(CAMERA.baseFov + CAMERA.speedFov * speedFrac + CAMERA.boostFov * boosting, dt);
+    this.move(CAMERA.followStiffness, dt, plane.roll * CAMERA.rollFollow);
   }
 
   /** Holds position and keeps watching a point (the crash site). */
   updateWatch(dt: number, point: pc.Vec3): void {
     this.wantPos.copy(this.pos);
     this.wantLook.copy(point);
-    this.move(3, dt);
+    this.move(3, dt, 0);
   }
 
-  private move(stiffness: number, dt: number): void {
-    const k = stiffness === Infinity ? 1 : 1 - Math.exp(-stiffness * dt);
-    const kLook = stiffness === Infinity ? 1 : 1 - Math.exp(-stiffness * 2 * dt);
+  private move(stiffness: number, dt: number, roll: number): void {
+    const snap = stiffness === Infinity;
+    const k = snap ? 1 : 1 - Math.exp(-stiffness * dt);
+    const kLook = snap ? 1 : 1 - Math.exp(-stiffness * 2 * dt);
     this.pos.lerp(this.pos, this.wantPos, k);
     this.look.lerp(this.look, this.wantLook, kLook);
+    this.roll += (roll - this.roll) * (snap ? 1 : 1 - Math.exp(-CAMERA.rollStiffness * dt));
     this.entity.setPosition(this.pos);
     this.entity.lookAt(this.look);
+    // Lean into the turn: roll about the view axis, the same way the plane banks.
+    if (Math.abs(this.roll) > 1e-4) this.entity.rotateLocal(0, 0, this.roll * RAD_TO_DEG);
   }
 
-  private setFov(fov: number, dt = Infinity): void {
+  private setFov(fov: number, dt: number): void {
     const cam = this.camera;
     cam.fov = dt === Infinity ? fov : cam.fov + (fov - cam.fov) * (1 - Math.exp(-3 * dt));
   }
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return v < min ? min : v > max ? max : v;
 }

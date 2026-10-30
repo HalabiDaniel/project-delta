@@ -11,7 +11,6 @@ export class Territory {
     readonly z: number,
     readonly size: number,
     readonly owner: TerritoryOwner,
-    readonly isTarget: boolean,
     readonly thickness: number = WORLD.thickness,
   ) {}
 

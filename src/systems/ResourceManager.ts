@@ -1,6 +1,9 @@
 import { ECONOMY } from '../config';
 
-export type PaperListener = (paper: number, delta: number) => void;
+/** Why the balance changed: a purchase, a mission reward, home income, or the dev reset. */
+export type PaperSource = 'spend' | 'reward' | 'income' | 'reset';
+
+export type PaperListener = (paper: number, delta: number, source: PaperSource) => void;
 
 /**
  * Owns the player's paper. All costs and rewards go through here, so the total can never become
@@ -27,28 +30,28 @@ export class ResourceManager {
   /** Deducts `cost` and returns true, or returns false and changes nothing if unaffordable. */
   spend(cost: number): boolean {
     if (!this.canAfford(cost)) return false;
-    this.set(this._paper - cost);
+    this.set(this._paper - cost, 'spend');
     return true;
   }
 
-  earn(amount: number): void {
+  earn(amount: number, source: PaperSource = 'reward'): void {
     assertAmount(amount);
-    this.set(this._paper + amount);
+    this.set(this._paper + amount, source);
   }
 
   /** Development reset: restores the starting balance. */
   reset(): void {
-    this.set(this.startingPaper);
+    this.set(this.startingPaper, 'reset');
   }
 
   onChange(listener: PaperListener): void {
     this.listeners.push(listener);
   }
 
-  private set(value: number): void {
+  private set(value: number, source: PaperSource): void {
     const delta = value - this._paper;
     this._paper = value;
-    if (delta !== 0) for (const listener of this.listeners) listener(value, delta);
+    if (delta !== 0) for (const listener of this.listeners) listener(value, delta, source);
   }
 }
 
