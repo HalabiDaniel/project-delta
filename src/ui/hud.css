@@ -13,6 +13,13 @@
   --fit-good: #1d4ed8;
   --possible: #6b7280;
   --unsuitable: #b91c1c;
+  --threat-0: #6b7280;
+  --threat-1: #ca8a04;
+  --threat-2: #ea580c;
+  --threat-3: #dc2626;
+  --tracking: #f59e0b;
+  --locking: #a855f7;
+  --firing: #dc2626;
 }
 
 .hud {
@@ -220,6 +227,7 @@
 /* Mission cards */
 .cards {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
@@ -658,7 +666,7 @@ kbd.big {
 .hint {
   position: absolute;
   left: 50%;
-  top: 16px;
+  top: 168px;
   transform: translateX(-50%);
   padding: 6px 12px;
   border-radius: 8px;
@@ -1375,10 +1383,322 @@ kbd.big {
 }
 
 /* Narrower windows: tighter garage cards. */
-@media (max-width: 1240px) {
+@media (max-width: 1320px) {
   .plane-card { width: 132px; }
   .inspector { width: 236px; }
   .status { width: 252px; }
   .st-row { grid-template-columns: 52px 1fr 46px; }
   .pips i { width: 12px; }
+}
+
+
+/* ---- v0.0.4: defenses ------------------------------------------------------------------------ */
+
+.icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  vertical-align: -2px;
+}
+
+/* Operation codenames and threat lines on mission cards and the tracker */
+.codename {
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.card .codename + .card-title { margin-top: 0; }
+
+.card-threat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.threat-chip {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--threat-0);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.card-threat[data-level='1'] .threat-chip { background: var(--threat-1); }
+.card-threat[data-level='2'] .threat-chip { background: var(--threat-2); }
+.card-threat[data-level='3'] .threat-chip { background: var(--threat-3); }
+.card-threat[data-level='3'] { color: var(--bad); }
+[data-tr-threat] { margin-top: 4px; }
+
+/* The objective symbol above the target marker */
+.ti-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  transform: translate(-50%, -60px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.ti-icon .icon { width: 14px; height: 14px; }
+.target-indicator[data-tone='home'] .ti-icon { background: var(--blue); }
+.target-indicator[data-tone='ring'] .ti-icon { background: var(--orange); }
+.target-indicator.offscreen .ti-icon { display: none; }
+
+/* Labels over defenses */
+.tl-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tl-icon { width: 11px; height: 11px; }
+.target-label[data-state='tracking'] .tl-name { background: var(--tracking); color: #fff; }
+.target-label[data-state='locking'] .tl-name { background: var(--locking); color: #fff; animation: pulse 0.5s ease-in-out infinite; }
+.target-label[data-state='firing'] .tl-name { background: var(--firing); color: #fff; }
+.target-label[data-state='tracking'] .tl-role,
+.target-label[data-state='locking'] .tl-role,
+.target-label[data-state='firing'] .tl-role { color: #fecaca; font-weight: 800; }
+
+/* Threat panel: the defended territory being approached */
+.threat-panel {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.14);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.tp-id {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--threat-0);
+  color: #fff;
+  font-weight: 900;
+}
+
+.tp-level {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.threat-panel[data-level='1'] .tp-id { background: var(--threat-1); }
+.threat-panel[data-level='2'] .tp-id { background: var(--threat-2); }
+.threat-panel[data-level='3'] .tp-id { background: var(--threat-3); }
+.threat-panel[data-level='1'] .tp-level { color: var(--threat-1); }
+.threat-panel[data-level='2'] .tp-level { color: var(--threat-2); }
+.threat-panel[data-level='3'] .tp-level { color: var(--threat-3); }
+
+.tp-icons { display: inline-flex; gap: 3px; }
+
+.tp-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #4d5530;
+  color: #fff;
+}
+
+.tp-icon[data-engaged='true'] { background: var(--firing); }
+.tp-icon[data-alive='false'] { background: #d1d5db; color: #6b7280; position: relative; }
+.tp-icon[data-alive='false']::after {
+  content: '';
+  position: absolute;
+  inset: 10px 2px auto;
+  height: 2px;
+  background: #6b7280;
+  transform: rotate(-45deg);
+}
+
+.tp-status { font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+.threat-panel[data-status='spotted'] .tp-status { color: var(--worn); }
+.threat-panel[data-status='engaged'] { border-color: var(--firing); }
+.threat-panel[data-status='engaged'] .tp-status { color: var(--firing); animation: blink 0.6s step-end infinite; }
+.threat-panel[data-status='neutralised'] .tp-status { color: var(--good); }
+
+@keyframes blink { 50% { opacity: 0.35; } }
+
+/* Rocket lock and launch warning */
+.lock-warning {
+  position: absolute;
+  left: 50%;
+  top: 62px;
+  min-width: 300px;
+  padding: 6px 16px 7px;
+  border-radius: 10px;
+  background: rgba(126, 34, 206, 0.92);
+  color: #fff;
+  text-align: center;
+  transform: translateX(-50%);
+  box-shadow: 0 8px 30px rgba(88, 28, 135, 0.35);
+}
+
+.lock-warning[data-state='locking'] { animation: pulse 0.5s ease-in-out infinite; }
+.lock-warning[data-state='incoming'] { background: rgba(185, 28, 28, 0.94); animation: pulse 0.25s ease-in-out infinite; }
+.lw-title { font-size: 18px; font-weight: 900; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.lw-sub { font-size: 12px; opacity: 0.92; }
+
+.lw-bar {
+  height: 4px;
+  margin: 3px 0;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.lw-bar i { display: block; height: 100%; background: #fff; }
+
+.threat-note {
+  position: absolute;
+  left: 50%;
+  top: 128px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(21, 128, 61, 0.92);
+  color: #fff;
+  font-weight: 800;
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.threat-note[data-tone='bad'] { background: rgba(185, 28, 28, 0.92); }
+.threat-note.show { animation: note 1.4s ease-out forwards; }
+
+@keyframes note {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* The threat ring: where defenses and rockets are, around the middle of the screen (ahead is up) */
+.threat-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.threat-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  --c: var(--tracking);
+}
+
+.threat-item[data-state='locking'] { --c: var(--locking); }
+.threat-item[data-state='firing'],
+.threat-item[data-state='incoming'] { --c: var(--firing); }
+
+.tr-pos { position: absolute; left: 0; top: 0; }
+
+.tr-chev {
+  position: absolute;
+  left: -9px;
+  top: -12px;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 12px solid var(--c);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+}
+
+.tr-icon {
+  position: absolute;
+  left: -11px;
+  top: 3px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--c);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.tr-icon .icon { width: 12px; height: 12px; }
+
+.tr-dist {
+  display: none;
+  position: absolute;
+  left: -24px;
+  top: 27px;
+  width: 48px;
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.threat-item[data-state='incoming'] .tr-dist { display: block; }
+.threat-item[data-state='incoming'] .tr-icon,
+.threat-item[data-state='locking'] .tr-icon { animation: pulse 0.35s ease-in-out infinite; }
+
+/* A red arc towards whatever just hit the plane */
+.hit-arc {
+  position: absolute;
+  left: -150px;
+  top: -150px;
+  width: 300px;
+  height: 300px;
+  border: 7px solid transparent;
+  border-top-color: rgb(220, 38, 38);
+  border-radius: 50%;
+  opacity: var(--strength, 0.8);
+  pointer-events: none;
+  animation: hit-arc 0.9s ease-out forwards;
+}
+
+@keyframes hit-arc {
+  0% { opacity: var(--strength, 0.8); }
+  100% { opacity: 0; }
+}
+
+.overlay-rules + .overlay-rules { margin-top: -6px; }
+
+/* Shorter windows: the cards not chosen shrink to the essentials, and the mini-map gets smaller. */
+@media (max-height: 820px) {
+  .card:not(.selected) .card-desc,
+  .card:not(.selected) .codename { display: none; }
+  .card:not(.selected) .card-threat span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .minimap { transform: scale(0.8); transform-origin: 100% 100%; }
+  .overlay-card { padding: 14px 24px; }
+  .overlay-card h2 { margin-bottom: 6px; }
+  .controls { margin-bottom: 8px; }
+  .controls th,
+  .controls td { padding: 1px 8px; }
 }

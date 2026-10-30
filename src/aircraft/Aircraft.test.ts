@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { AIRCRAFT, AIRCRAFT_ORDER, LANDING, PLANE, type AircraftId, type Difficulty } from '../config';
+import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
+import { layoutDefenses } from '../defenses/Layout';
 import type { MissionType } from '../missions/Mission';
 import { generateMission, MISSION_TYPES, type MissionContext } from '../missions/MissionGenerator';
 import { seededRng } from '../systems/Random';
@@ -9,8 +11,10 @@ import { aircraftRatings, assessSuitability, bombLoad, RATING_KEYS } from './Air
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
-const dummies = layoutTargetRange(territories).filter((t) => t.kind === 'dummy');
-const ctx: MissionContext = { territories, homeId: home.id, launch: { x: home.x + 8, z: home.z + 8 }, dummies };
+const range = layoutTargetRange(territories);
+const dummies = range.filter((t) => t.kind === 'dummy');
+const installations = layoutDefenses(territories, range.flatMap((s) => s.shapes.map(footprint))).installations;
+const ctx: MissionContext = { territories, homeId: home.id, launch: { x: home.x + 8, z: home.z + 8 }, dummies, installations };
 
 const mission = (type: MissionType, difficulty: Difficulty = 'medium') => generateMission(type, difficulty, ctx, seededRng(3));
 const level = (id: AircraftId, type: MissionType, difficulty: Difficulty = 'medium') => assessSuitability(AIRCRAFT[id], mission(type, difficulty)).level;
@@ -63,6 +67,8 @@ describe('aircraftRatings', () => {
     expect(widewing.payload).toBe(5);
     expect(widewing.durability).toBe(5);
     expect(widewing.maneuverability).toBe(1);
+    expect(dart.stealth).toBe(5);
+    expect(widewing.stealth).toBe(1);
     // The multipurpose plane sits in the middle of everything.
     for (const key of RATING_KEYS) expect(swift[key]).toBe(3);
   });
@@ -75,6 +81,20 @@ describe('assessSuitability', () => {
     expect(level('dart', 'delivery')).toBe('recommended');
     expect(level('falcon', 'practice')).toBe('recommended');
     expect(level('falcon', 'rings')).toBe('recommended');
+  });
+
+  it('recommends the right planes for the missions against defenses', () => {
+    expect(level('falcon', 'suppression')).toBe('recommended');
+    expect(level('swift', 'suppression')).toBe('good');
+    expect(level('dart', 'danger-recon')).toBe('recommended');
+    expect(level('falcon', 'danger-recon')).toBe('recommended');
+    expect(level('widewing', 'danger-recon')).toBe('possible');
+    expect(level('widewing', 'fortified')).toBe('recommended');
+    expect(level('falcon', 'fortified')).toBe('good');
+    expect(level('falcon', 'survival')).toBe('recommended');
+    // A multi-stage strike needs a bit of everything: the weakest stat decides, which favours the all-rounder.
+    expect(level('swift', 'multi-stage')).toBe('recommended');
+    for (const id of ['dart', 'falcon', 'widewing'] as const) expect(level(id, 'multi-stage')).toBe('possible');
   });
 
   it('a rack too small for one bomb per target is the only thing that rules a plane out', () => {

@@ -43,6 +43,13 @@ export interface SortieLog {
   shotsFired: number;
   shotsHit: number;
   targetsDestroyed: number;
+  /** Turrets, launchers, radars and depots destroyed (also counted in targetsDestroyed). */
+  defensesDestroyed: number;
+  /** Enemy rounds and rockets fired at the plane, and how many of them hit it. */
+  enemyShots: number;
+  enemyHits: number;
+  /** What destroyed the plane, when enemy fire did ("Ink turret on T8"). */
+  killedBy: string | null;
   rearms: number;
   outcome: 'flying' | 'recovered' | 'lost';
 }
@@ -59,12 +66,15 @@ export type GameEvent =
   | { type: 'fired'; barrel: number; ammo: number }
   | { type: 'out-of-ammo' }
   | { type: 'bomb-dropped'; remaining: number }
-  | { type: 'bomb-missed'; remaining: number }
+  /** `tooHigh`: it landed on target, but wasn't released on a clean low-level approach. */
+  | { type: 'bomb-missed'; remaining: number; tooHigh: boolean }
+  /** The plane climbed too high inside a low-level approach zone. */
+  | { type: 'approach-blown'; index: number }
   | { type: 'objective-complete'; index: number; objective: Objective }
   | { type: 'mission-succeeded'; reward: number }
   | { type: 'mission-failed'; reason: MissionFailure }
   | { type: 'damaged'; amount: number; source: DamageSource; health: number }
-  | { type: 'target-destroyed'; id: string }
+  | { type: 'target-destroyed'; id: string; defense: boolean }
   | { type: 'range-exhausted' }
   | { type: 'crashed'; cause: CrashCause }
   | { type: 'landed' }
@@ -82,6 +92,7 @@ export interface GameStats {
   successes: number;
   failures: number;
   targetsDestroyed: number;
+  defensesDestroyed: number;
 }
 
 const CRASH_CAUSE: Record<DamageSource, CrashCause> = {
@@ -100,7 +111,7 @@ const CRASH_CAUSE: Record<DamageSource, CrashCause> = {
  */
 export class GameState {
   phase: GamePhase = 'desk';
-  readonly stats: GameStats = { planesBuilt: 0, planesRecovered: 0, planesLost: 0, successes: 0, failures: 0, targetsDestroyed: 0 };
+  readonly stats: GameStats = { planesBuilt: 0, planesRecovered: 0, planesLost: 0, successes: 0, failures: 0, targetsDestroyed: 0, defensesDestroyed: 0 };
   /** Mission cards on offer at home. */
   offers: Mission[];
   selected = 0;
@@ -309,22 +320,28 @@ export class GameState {
     return true;
   }
 
+  /** Would a bomb released now count for a low-level strike? (True when no objective asks for one.) */
+  get releaseClean(): boolean {
+    return this.mission?.releaseClean ?? true;
+  }
+
   /**
    * A released bomb has landed, on objective `objective`'s target or (null) anywhere else.
-   * `struck` says whether its blast damaged a prop or practice target, which also counts as a hit
-   * for accuracy. Only a bomb that lands while the mission is still active can complete an
-   * objective. Once every bomb is gone with a target still standing, the mission fails.
+   * `struck` says whether its blast damaged a prop, target or installation, which also counts as a
+   * hit for accuracy; `clean` whether it was released on a clean low-level approach. Only a bomb
+   * that lands while the mission is still active can complete an objective. Once every bomb is
+   * gone with a target still standing, the mission fails.
    */
-  resolveBomb(objective: number | null, struck = false): void {
+  resolveBomb(objective: number | null, struck = false, clean = true): void {
     this.bombsFalling = Math.max(0, this.bombsFalling - 1);
     const mission = this.mission;
     // A bomb released just before touchdown can still land while the plane rolls out.
     const live = (this.phase === 'flying' || this.phase === 'landed') && !!mission?.isActive;
-    const scored = live && objective !== null && mission!.completeBomb(objective);
+    const scored = live && objective !== null && mission!.completeBomb(objective, clean);
     if ((scored || struck) && this.sortie) this.sortie.bombHits++;
     if (!live || !mission) return;
     if (scored) this.objectiveComplete(objective!);
-    else this.emit({ type: 'bomb-missed', remaining: this.bombsLoaded });
+    else this.emit({ type: 'bomb-missed', remaining: this.bombsLoaded, tooHigh: objective !== null && !clean });
     if (mission.isActive && mission.hasUnfinishedBombs() && this.bombsLoaded === 0 && this.bombsFalling === 0) {
       this.failMission('missed');
     }
@@ -336,27 +353,44 @@ export class GameState {
   }
 
   /**
-   * The player dealt `dealt` damage to a prop or practice target; `destroyed` names it if that
-   * finished it off. Destroyed practice planes count towards target practice objectives.
+   * The player dealt `dealt` damage to a prop, practice target or (`defense`) installation;
+   * `destroyed` names it if that finished it off. Destroyed targets count towards destroy objectives.
    */
-  recordDamage(dealt: number, destroyed: string | null): void {
+  recordDamage(dealt: number, destroyed: string | null, defense = false): void {
     if (this.sortie) this.sortie.damageDealt += dealt;
     if (!destroyed) return;
     if (this.sortie) this.sortie.targetsDestroyed++;
     this.stats.targetsDestroyed++;
-    this.emit({ type: 'target-destroyed', id: destroyed });
+    if (defense) {
+      if (this.sortie) this.sortie.defensesDestroyed++;
+      this.stats.defensesDestroyed++;
+    }
+    this.emit({ type: 'target-destroyed', id: destroyed, defense });
     if (this.phase !== 'flying' && this.phase !== 'landed') return;
     for (const index of this.mission?.completeDestroy(destroyed) ?? []) this.objectiveComplete(index);
   }
 
-  /** The plane takes damage. At zero health it is destroyed, and the cause depends on what did it. */
-  damageAircraft(amount: number, source: DamageSource): { dealt: number; destroyed: boolean } {
+  /** An enemy round or rocket was fired at the plane. */
+  recordIncoming(): void {
+    if (this.phase === 'flying' && this.sortie) this.sortie.enemyShots++;
+  }
+
+  /**
+   * The plane takes damage. At zero health it is destroyed, and the cause depends on what did it.
+   * `by` names the enemy weapon behind ink and rocket hits, for the report.
+   */
+  damageAircraft(amount: number, source: DamageSource, by: string | null = null): { dealt: number; destroyed: boolean } {
     if (this.phase !== 'flying' || !this.durability) return { dealt: 0, destroyed: false };
+    const enemy = source === 'projectile' || source === 'blast';
+    if (enemy && by) this.sortie!.enemyHits++;
     const dealt = this.durability.damage(Math.round(amount));
     if (dealt <= 0) return { dealt: 0, destroyed: false };
     this.sortie!.damageTaken += dealt;
     this.emit({ type: 'damaged', amount: dealt, source, health: this.durability.health });
-    if (this.durability.destroyed) this.crash(CRASH_CAUSE[source]);
+    if (this.durability.destroyed) {
+      if (enemy) this.sortie!.killedBy = by;
+      this.crash(CRASH_CAUSE[source]);
+    }
     return { dealt, destroyed: this.durability.destroyed };
   }
 
@@ -372,8 +406,13 @@ export class GameState {
       this.rangeLeft = Math.max(0, this.rangeLeft - Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z));
       if (this.rangeLeft === 0) this.emit({ type: 'range-exhausted' });
     }
-    if (!this.mission) return;
-    for (const index of this.mission.updateFlight(prev, pos, dt)) this.objectiveComplete(index);
+    const mission = this.mission;
+    if (!mission) return;
+    const approaches = mission.objectives.map((_, i) => mission.approachState(i));
+    for (const index of mission.updateFlight(prev, pos, dt)) this.objectiveComplete(index);
+    approaches.forEach((before, index) => {
+      if (before !== 'blown' && mission.approachState(index) === 'blown' && mission.isActive) this.emit({ type: 'approach-blown', index });
+    });
   }
 
   /** flying → landed. The sortie goes on: the plane can rearm and take off again. A landing objective completes. */
@@ -480,6 +519,8 @@ export class GameState {
   private objectiveComplete(index: number): void {
     const mission = this.mission!;
     this.emit({ type: 'objective-complete', index, objective: mission.objectives[index] });
+    // Finishing one may open the next, whose targets may already be down.
+    for (const next of mission.settle()) this.objectiveComplete(next);
     if (mission.allDone && mission.succeed()) {
       this.resources.earn(mission.reward, 'reward');
       if (this.sortie) this.sortie.paperEarned += mission.reward;
@@ -503,6 +544,7 @@ export class GameState {
 function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): SortieLog {
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
-    bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, rearms: 0, outcome: 'flying',
+    bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0,
+    enemyShots: 0, enemyHits: 0, killedBy: null, rearms: 0, outcome: 'flying',
   };
 }

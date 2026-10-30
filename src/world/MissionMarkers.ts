@@ -30,12 +30,14 @@ interface Marker {
   /** Bullseye rings that turn green once hit. */
   paint: pc.Entity[];
   beacon: pc.Entity | null;
-  /** For target practice: a ring under each practice plane, by target id. */
+  /** For destroy objectives: a ring under each target, by target id. */
   rings: Map<string, pc.Entity>;
+  /** A low-level strike's ceiling: the sheet the plane must stay under near the target. */
+  sheet: pc.Entity | null;
 }
 
-/** Where a practice target stands, so its marker ring can go under it. */
-export type TargetLookup = (id: string) => { x: number; z: number } | null;
+/** Where a target stands (and how big a ring it needs), so its marker ring can go under it. */
+export type TargetLookup = (id: string) => { x: number; z: number; r?: number } | null;
 
 /**
  * Draws the selected (or active) mission into the world: bullseyes on bombing targets, a column of
@@ -61,6 +63,11 @@ export class MissionMarkers {
     beaconHome: glowMaterial(PALETTE.home, 0.3),
     airRecon: glowMaterial(PALETTE.recon, 0.09),
     airDelivery: glowMaterial(PALETTE.delivery, 0.09),
+    airSurvive: glowMaterial(PALETTE.threat3, 0.08),
+    beaconSurvive: glowMaterial(PALETTE.threat3, 0.3),
+    escapeLine: glowMaterial(PALETTE.recon, 0.5),
+    sheetClean: glowMaterial(PALETTE.recon, 0.1),
+    sheetBlown: glowMaterial(PALETTE.bullseyeRed, 0.12),
     ringNext: glowMaterial(PALETTE.ringNext, 0.95),
     practiceRing: glowMaterial(PALETTE.target, 0.85),
     ringWaiting: flatMaterial(PALETTE.paper),
@@ -92,30 +99,46 @@ export class MissionMarkers {
       return;
     }
     mission.objectives.forEach((objective, index) => {
-      const marker: Marker = { index, objective, state: null, body: null, paint: [], beacon: null, rings: new Map() };
+      const marker: Marker = { index, objective, state: null, body: null, paint: [], beacon: null, rings: new Map(), sheet: null };
       switch (objective.kind) {
         case 'bomb': {
           const [body, paint] = this.bullseye(objective.zone, objective.precision);
           marker.body = body;
           marker.paint = paint;
           marker.beacon = this.beacon(objective.zone.x, objective.zone.z, this.mat.beaconBomb, objective.precision ? 0.35 : 0.6);
+          if (objective.approach) {
+            const a = objective.approach;
+            const sheet = new pc.Entity('low-ceiling');
+            sheet.addComponent('render', { type: 'cylinder', material: this.mat.sheetClean, castShadows: false, receiveShadows: false });
+            sheet.setPosition(a.x, a.ceiling, a.z);
+            sheet.setLocalScale(a.radius * 2, 0.05, a.radius * 2);
+            this.root.addChild(sheet);
+            marker.sheet = sheet;
+          }
           break;
         }
         case 'recon':
-        case 'reach': {
+        case 'reach':
+        case 'survive': {
           const a = objective.airspace;
           const box = new pc.Entity('airspace');
-          box.addComponent('render', {
-            type: 'box',
-            material: objective.kind === 'recon' ? this.mat.airRecon : this.mat.airDelivery,
-            castShadows: false,
-            receiveShadows: false,
-          });
+          const material = objective.kind === 'recon' ? this.mat.airRecon : objective.kind === 'reach' ? this.mat.airDelivery : this.mat.airSurvive;
+          box.addComponent('render', { type: 'box', material, castShadows: false, receiveShadows: false });
           box.setPosition(a.x, a.ceiling / 2, a.z);
           box.setLocalScale(a.half * 2, a.ceiling, a.half * 2);
           this.root.addChild(box);
           marker.body = box;
-          marker.beacon = this.beacon(a.x, a.z, objective.kind === 'recon' ? this.mat.beaconRecon : this.mat.beaconDelivery, 0.8);
+          const beacon = objective.kind === 'recon' ? this.mat.beaconRecon : objective.kind === 'reach' ? this.mat.beaconDelivery : this.mat.beaconSurvive;
+          marker.beacon = this.beacon(a.x, a.z, beacon, 0.8);
+          break;
+        }
+        case 'escape': {
+          // The line to cross: a ring around the territory, out beyond its weapons.
+          const line = new pc.Entity('escape-line');
+          line.addComponent('render', { meshInstances: [new pc.MeshInstance(this.torus(objective.distance, 0.3), this.mat.escapeLine)], castShadows: false });
+          line.setPosition(objective.x, 0.2, objective.z);
+          this.root.addChild(line);
+          marker.body = line;
           break;
         }
         case 'ring':
@@ -132,8 +155,8 @@ export class MissionMarkers {
           for (const id of objective.targets) {
             const at = this.targetAt(id);
             if (!at) continue;
-            const ring = new pc.Entity('practice-ring');
-            ring.addComponent('render', { meshInstances: [new pc.MeshInstance(this.torus(2.1, 0.18), this.mat.practiceRing)], castShadows: false });
+            const ring = new pc.Entity('target-ring');
+            ring.addComponent('render', { meshInstances: [new pc.MeshInstance(this.torus(at.r ?? 2.1, 0.18), this.mat.practiceRing)], castShadows: false });
             ring.setPosition(at.x, t.top + 0.12, at.z);
             this.root.addChild(ring);
             marker.rings.set(id, ring);
@@ -157,7 +180,7 @@ export class MissionMarkers {
     }
     // Beacons breathe gently so they read as markers, not scenery.
     const pulse = 0.22 + 0.1 * Math.sin(this.time * 3);
-    for (const key of ['beaconBomb', 'beaconRecon', 'beaconDelivery', 'beaconHome'] as const) {
+    for (const key of ['beaconBomb', 'beaconRecon', 'beaconDelivery', 'beaconHome', 'beaconSurvive'] as const) {
       this.mat[key].opacity = pulse;
       this.mat[key].update();
     }
@@ -166,8 +189,13 @@ export class MissionMarkers {
         const s = 1 + 0.06 * Math.sin(this.time * 6);
         m.body.setLocalScale(s, s, s);
       }
+      if (m.sheet) {
+        m.sheet.enabled = m.state === 'open';
+        const material = mission.approachState(m.index) === 'blown' ? this.mat.sheetBlown : this.mat.sheetClean;
+        if (m.sheet.render!.material !== material) m.sheet.render!.material = material;
+      }
       if (m.rings.size > 0) {
-        // A ring stays under each practice plane until it has been shot down once.
+        // A ring stays under each target until it has been destroyed once.
         const destroyed = mission.destroyedTargets(m.index);
         const s = 1 + 0.08 * Math.sin(this.time * 5);
         for (const [id, ring] of m.rings) {
@@ -187,7 +215,11 @@ export class MissionMarkers {
         break;
       case 'recon':
       case 'reach':
+      case 'survive':
         if (m.body) m.body.enabled = state === 'open' || state === 'waiting';
+        break;
+      case 'escape':
+        if (m.body) m.body.enabled = state === 'open';
         break;
       case 'ring':
         if (m.body) {
@@ -209,7 +241,7 @@ export class MissionMarkers {
     const status = new Map<string, boolean>();
     if (this.mission) {
       this.mission.objectives.forEach((o, i) => {
-        if (o.kind !== 'bomb' && o.kind !== 'recon' && o.kind !== 'reach' && o.kind !== 'destroy') return;
+        if (o.kind === 'ring' || o.kind === 'land' || o.kind === 'escape') return;
         const done = this.mission!.isDone(i);
         status.set(o.territoryId, (status.get(o.territoryId) ?? true) && done);
       });
@@ -263,6 +295,9 @@ export class MissionMarkers {
     if (!mesh) {
       const geometry = new pc.TorusGeometry({ tubeRadius: tube, ringRadius: radius, segments: 36, sides: 8 });
       mesh = pc.Mesh.fromGeometry(this.app.graphicsDevice, geometry);
+      // The cache holds a reference: markers are destroyed on every mission change, and PlayCanvas
+      // would otherwise destroy the mesh with the last of them.
+      mesh.incRefCount();
       this.ringMeshes.set(key, mesh);
     }
     return mesh;

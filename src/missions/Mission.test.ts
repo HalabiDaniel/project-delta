@@ -171,3 +171,82 @@ describe('geometry', () => {
     expect(crossesRing(sideways, { x: 0, y: 10, z: 1 }, { x: 0, y: 10, z: -1 })).toBe(false);
   });
 });
+
+describe('objectives against defenses', () => {
+  it('survival counts time inside the airspace, below its ceiling', () => {
+    const m = mission({ type: 'survival', bombs: 0, objectives: [{ kind: 'survive', territoryId: 'T6', airspace, duration: 3 }] });
+    m.start();
+    m.updateFlight({ x: 70, y: 10, z: 0 }, { x: 70, y: 10, z: 0 }, 2);
+    m.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: 0 }, 5); // outside: doesn't count
+    expect(m.progress[0]).toBeCloseTo(2 / 3);
+    expect(m.updateFlight({ x: 70, y: 10, z: 0 }, { x: 70, y: 10, z: 0 }, 1)).toEqual([0]);
+  });
+
+  it('an escape completes once far enough away, and only after the reconnaissance', () => {
+    const m = mission({
+      type: 'danger-recon',
+      bombs: 0,
+      ordered: true,
+      objectives: [
+        { kind: 'recon', territoryId: 'T6', airspace, duration: 1 },
+        { kind: 'escape', territoryId: 'T6', x: 70, z: 0, distance: 100 },
+      ],
+    });
+    m.start();
+    const far = { x: 70, y: 10, z: -120 };
+    expect(m.updateFlight(far, far, 0.1)).toEqual([]); // the escape isn't open yet
+    expect(m.updateFlight({ x: 70, y: 10, z: 0 }, { x: 70, y: 10, z: 0 }, 1)).toEqual([0]);
+    expect(m.updateFlight({ x: 70, y: 10, z: -60 }, { x: 70, y: 10, z: -60 }, 0.1)).toEqual([]);
+    expect(m.updateFlight(far, far, 0.1)).toEqual([1]);
+  });
+
+  it('a low-level approach is clean only if the plane stays low inside the zone; leaving resets it', () => {
+    const approach = { x: 0, z: 0, radius: 50, ceiling: 12 };
+    const m = mission({ type: 'low-attack', objectives: [{ kind: 'bomb', territoryId: 'T5', zone, precision: false, approach }] });
+    m.start();
+    const at = (x: number, y: number) => m.updateFlight({ x, y, z: 0 }, { x, y, z: 0 }, 0.1);
+    at(-80, 30);
+    expect(m.approachState(0)).toBe('outside');
+    expect(m.releaseClean).toBe(false);
+    at(-40, 10);
+    expect(m.approachState(0)).toBe('clean');
+    expect(m.releaseClean).toBe(true);
+    at(-20, 20);
+    expect(m.approachState(0)).toBe('blown');
+    at(-20, 8); // coming back down inside the zone doesn't help
+    expect(m.approachState(0)).toBe('blown');
+    expect(m.completeBomb(0, false)).toBe(false);
+    at(-80, 8);
+    at(-40, 8);
+    expect(m.approachState(0)).toBe('clean');
+    expect(m.completeBomb(0, true)).toBe(true);
+  });
+
+  it('entering the zone too high blows the run at once', () => {
+    const approach = { x: 0, z: 0, radius: 50, ceiling: 12 };
+    const m = mission({ type: 'low-attack', objectives: [{ kind: 'bomb', territoryId: 'T5', zone, precision: false, approach }] });
+    m.start();
+    m.updateFlight({ x: -40, y: 30, z: 0 }, { x: -40, y: 30, z: 0 }, 0.1);
+    expect(m.approachState(0)).toBe('blown');
+  });
+
+  it('in an ordered strike, a target destroyed early counts as soon as its stage opens', () => {
+    const m = mission({
+      type: 'multi-stage',
+      ordered: true,
+      objectives: [
+        { kind: 'destroy', territoryId: 'T8', targets: ['T8-radar'], count: 1, what: 'radar' },
+        { kind: 'destroy', territoryId: 'T8', targets: ['T8-supply'], count: 1, what: 'supply' },
+        { kind: 'land', territoryId: 'T1' },
+      ],
+    });
+    m.start();
+    expect(m.completeDestroy('T8-supply')).toEqual([]); // the radar comes first
+    expect(m.isDone(1)).toBe(false);
+    // The radar opens the depot's stage, which is already down: both complete together.
+    expect(m.completeDestroy('T8-radar')).toEqual([0, 1]);
+    expect(m.settle()).toEqual([]);
+    expect(m.completeLanding('T1')).toBe(true);
+    expect(m.allDone).toBe(true);
+  });
+});

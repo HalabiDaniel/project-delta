@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { PALETTE, WORLD } from '../config';
+import { PALETTE, THREAT, WORLD, type ThreatLevel } from '../config';
 import { yawFromDirection } from '../aircraft/PlaneController';
 import { Territory } from './Territory';
 
@@ -16,12 +16,14 @@ export interface World {
 
 /**
  * Lays out gridSize × gridSize square territories, numbered T1… row by row, separated by empty
- * gaps and centred on the origin. T1 belongs to the player; mission targets are chosen per mission.
+ * gaps and centred on the origin. T1 belongs to the player; the others get their threat level from
+ * `threats` (unlisted ones are unprotected). Mission targets are chosen per mission.
  */
 export function generateTerritories(
   gridSize: number = WORLD.gridSize,
   size: number = WORLD.territorySize,
   gap: number = WORLD.gap,
+  threats: Readonly<Record<string, ThreatLevel>> = THREAT.map,
 ): Territory[] {
   const spacing = size + gap;
   const offset = (gridSize - 1) / 2;
@@ -29,8 +31,9 @@ export function generateTerritories(
   for (let row = 0; row < gridSize; row++) {
     for (let col = 0; col < gridSize; col++) {
       const id = `T${row * gridSize + col + 1}`;
+      const home = id === WORLD.homeId;
       territories.push(
-        new Territory(id, (col - offset) * spacing, (row - offset) * spacing, size, id === WORLD.homeId ? 'player' : null),
+        new Territory(id, (col - offset) * spacing, (row - offset) * spacing, size, home ? 'player' : null, WORLD.thickness, home ? 0 : (threats[id] ?? 0)),
       );
     }
   }

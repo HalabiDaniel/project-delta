@@ -1,13 +1,15 @@
 import { SUITABILITY_LABELS, type SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
-import { LANDING, type AircraftId, type Difficulty } from '../config';
+import { LANDING, type AircraftId, type Difficulty, type ThreatLevel } from '../config';
 import type { MissionFailure, MissionStatus, MissionType } from '../missions/Mission';
 import type { BoundaryState } from '../systems/Boundary';
 import type { BuildKind, GamePhase } from '../systems/GameState';
 import { attr, bindButton, esc, place, text, toggle, width, type ScreenPoint } from './dom';
 import { Garage, type GarageView } from './Garage';
+import { icon, type IconName } from './icons';
 import { MiniMap, type MiniMapView } from './MiniMap';
+import { ThreatHud, type ThreatView } from './ThreatHud';
 import './hud.css';
 
 export type { ScreenPoint } from './dom';
@@ -18,6 +20,8 @@ export interface TargetIndicator extends ScreenPoint {
   angle: number;
   label: string;
   tone: 'target' | 'home' | 'ring';
+  /** What kind of objective it is: a bullseye, a turret, a radar, a reconnaissance zone… */
+  icon: IconName;
   /** Close enough that the marker should fade out of the way. */
   near: boolean;
 }
@@ -27,20 +31,32 @@ export interface TerritoryLabel extends ScreenPoint {
   role: 'home' | 'objective' | 'neutral';
 }
 
-/** A name, role and health bar floating over a practice target or a damaged prop. */
+/** A name, role and health bar floating over a practice target, a damaged prop or a defense. */
 export interface TargetLabelView extends ScreenPoint {
   id: string;
   name: string;
   role: string;
   health: number;
-  /** One the current mission wants shot down. */
+  /** One the current mission wants destroyed. */
   mission: boolean;
   /** 0 → 1 as it gets further away, for fading. */
   far: number;
+  icon: IconName | null;
+  /** A defense's behaviour towards the plane. */
+  state: 'idle' | 'tracking' | 'locking' | 'firing' | null;
+}
+
+/** The danger on a mission card or in the tracker. */
+export interface ThreatSummary {
+  level: ThreatLevel;
+  label: string;
+  /** "T8: 2 ink turrets + 1 rocket launcher · radar", or "No defenses". */
+  detail: string;
 }
 
 export interface MissionCardView {
   type: MissionType;
+  codename: string;
   title: string;
   description: string;
   difficulty: Difficulty;
@@ -50,6 +66,7 @@ export interface MissionCardView {
   reward: number;
   bombs: number;
   timeLimit: number | null;
+  threat: ThreatSummary;
   /** How well each design suits this mission, for the chips along the bottom. */
   fits: Array<{ id: AircraftId; name: string; level: SuitabilityLevel; selected: boolean }>;
 }
@@ -65,6 +82,8 @@ export interface ObjectiveView {
 
 export interface TrackerView {
   title: string;
+  codename: string;
+  threat: ThreatSummary;
   type: MissionType;
   difficultyLabel: string;
   multiplier: number;
@@ -135,6 +154,13 @@ export interface ResultView {
   bombHits: number;
   shotsFired: number;
   shotsHit: number;
+  defensesDestroyed: number;
+  /** Enemy rounds and rockets fired at the plane, and how many hit. */
+  enemyShots: number;
+  enemyHits: number;
+  /** "Survived · 64/100 health", or what shot it down. */
+  survival: string;
+  survived: boolean;
   paperSpent: number;
   paperEarned: number;
 }
@@ -143,6 +169,7 @@ export interface CareerView {
   missionsCompleted: number;
   planesLost: number;
   targetsDestroyed: number;
+  defensesDestroyed: number;
   favorite: string | null;
 }
 
@@ -171,6 +198,8 @@ export interface HudView {
   labels: TerritoryLabel[];
   targets: TargetLabelView[];
   minimap: MiniMapView;
+  /** Warnings about the defenses, in flight. */
+  threat: ThreatView | null;
 }
 
 export interface HudActions {
@@ -195,6 +224,12 @@ export const MISSION_TYPE_LABELS: Record<MissionType, string> = {
   'multi-bomb': 'Multi-target',
   rings: 'Flight challenge',
   practice: 'Target practice',
+  suppression: 'Suppression',
+  'danger-recon': 'Dangerous recon',
+  fortified: 'Fortified bombing',
+  'multi-stage': 'Multi-stage strike',
+  survival: 'Survival challenge',
+  'low-attack': 'Low-altitude attack',
 };
 
 const BUILD_VERB: Record<BuildKind, string> = { fold: 'Fold', refit: 'Refit', rollout: 'Roll out' };
@@ -212,6 +247,7 @@ const CONTROLS: Array<[string, string]> = [
   ['Space', 'Launch, or take off again after landing'],
   ['R', 'Rearm ink and range (landed at home)'],
   ['Enter', 'End the sortie / continue'],
+  ['M', 'Sound on / off'],
   ['Esc', 'Pause / show controls'],
 ];
 
@@ -219,7 +255,7 @@ const TEMPLATE = /* html */ `
   <div class="labels" data-labels></div>
   <div class="target-labels" data-target-labels></div>
   <div class="target-indicator" data-target>
-    <span class="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-label" data-target-label></span>
+    <span class="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-icon" data-target-icon></span><span class="ti-label" data-target-label></span>
   </div>
   <div class="reticle nose" data-nose><span class="hit-x" data-hitmark></span></div>
   <div class="reticle aim" data-aim></div>
@@ -227,7 +263,7 @@ const TEMPLATE = /* html */ `
   <div class="damage-flash" data-damage-flash></div>
 
   <section class="panel resources">
-    <div class="brand">paperwars<span>.io</span> <small>v0.0.3</small></div>
+    <div class="brand">paperwars<span>.io</span> <small>v0.0.4</small></div>
     <div class="paper"><svg class="paper-icon" viewBox="0 0 18 22" aria-hidden="true"><path d="M1 1h11l5 5v15H1z" fill="#fff" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 1v5h5" fill="#e5e7eb" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><b data-paper></b><span>paper</span><span class="delta" data-delta></span></div>
     <div class="income"><span class="income-bar"><i data-income-bar></i></span><span data-income-text></span></div>
     <div class="stats-title">Career <small>(this browser)</small></div>
@@ -235,6 +271,7 @@ const TEMPLATE = /* html */ `
       <div><dt>Missions completed</dt><dd data-missions></dd></div>
       <div><dt>Planes lost</dt><dd data-lost></dd></div>
       <div><dt>Targets destroyed</dt><dd data-destroyed></dd></div>
+      <div><dt>Defenses destroyed</dt><dd data-defenses></dd></div>
       <div><dt>Favourite plane</dt><dd data-favorite></dd></div>
     </dl>
   </section>
@@ -246,8 +283,10 @@ const TEMPLATE = /* html */ `
     </div>
     <div data-tracker>
       <div class="tracker-head"><span class="eyebrow" data-tr-type></span><span class="pill" data-tr-status></span></div>
+      <div class="codename" data-tr-codename></div>
       <div class="mission-title" data-tr-title></div>
       <div class="mission-meta" data-tr-meta></div>
+      <div class="card-threat" data-tr-threat><span class="threat-chip" data-tr-threat-chip></span><span data-tr-threat-detail></span></div>
       <div class="timer" data-tr-timer></div>
       <ul class="objectives" data-tr-objectives></ul>
       <p class="mission-hint" data-tr-hint></p>
@@ -305,9 +344,13 @@ const TEMPLATE = /* html */ `
           <div><dt>Aircraft</dt><dd data-res-plane></dd></div>
           <div><dt data-res-mission-title></dt><dd data-res-mission></dd></div>
           <div><dt>Time taken</dt><dd data-res-time></dd></div>
+          <div><dt>Aircraft survival</dt><dd data-res-survival></dd></div>
           <div><dt>Damage dealt</dt><dd data-res-dealt></dd></div>
+          <div><dt>Defenses destroyed</dt><dd data-res-defenses></dd></div>
+          <div><dt>Damage taken</dt><dd data-res-taken></dd></div>
+          <div><dt>Enemy fire dodged</dt><dd data-res-dodged></dd></div>
           <div><dt>Bombing accuracy</dt><dd data-res-bombs></dd></div>
-          <div><dt>Ink accuracy</dt><dd data-res-shots></dd></div>
+          <div><dt>Ink: shots fired · hits</dt><dd data-res-shots></dd></div>
         </dl>
         <dl class="ledger money">
           <div><dt>Paper spent</dt><dd data-res-spent></dd></div>
@@ -330,6 +373,7 @@ const TEMPLATE = /* html */ `
         ${CONTROLS.map(([key, action]) => `<tr><th><kbd>${key}</kbd></th><td>${action}</td></tr>`).join('')}
       </table>
       <p class="overlay-rules">Land on <b>T1</b> to rearm or bring your plane home: come in slow (under ${LANDING.maxSpeed}), descend gently (under ${LANDING.maxSink} m/s) with the wings level. Fast or steep touchdowns cost health.</p>
+      <p class="overlay-rules">Defended territories shoot back. Turrets can't turn to face behind them, fast and turning planes are hard to hit, rockets can't follow a hard turn, and nothing fires over <b>T1</b>. Destroy a territory's radar and its guns see less far.</p>
       <button class="btn primary" data-resume>Resume</button>
       <p class="overlay-note">Click anywhere or press Esc to continue.</p>
     </div>
@@ -344,6 +388,7 @@ export class HUD {
   private readonly targetEls = new Map<string, HTMLElement>();
   private readonly minimap: MiniMap;
   private readonly garage: Garage;
+  private readonly threats: ThreatHud;
   private bannerTimer = 0;
   private hitTimer = 0;
   private cardsKey = '';
@@ -364,6 +409,7 @@ export class HUD {
     this.docks = [...root.querySelectorAll<HTMLElement>('[data-dock]')];
     this.minimap = new MiniMap(this.el.minimap as HTMLCanvasElement);
     this.garage = new Garage(this.el['garage-cards'], this.el.inspector, actions.selectAircraft);
+    this.threats = new ThreatHud(root);
 
     bindButton(this.el.build, actions.build);
     bindButton(this.el.continue, actions.continueToDesk);
@@ -384,6 +430,7 @@ export class HUD {
     text(this.el.missions, String(v.career.missionsCompleted));
     text(this.el.lost, String(v.career.planesLost));
     text(this.el.destroyed, String(v.career.targetsDestroyed));
+    text(this.el.defenses, String(v.career.defensesDestroyed));
     text(this.el.favorite, v.career.favorite ?? '—');
     width(this.el['income-bar'], v.income.producing ? v.income.progress : 0);
     text(
@@ -412,6 +459,7 @@ export class HUD {
     this.renderTarget(v);
     this.renderLabels(v.labels);
     this.renderTargetLabels(v.paused ? [] : v.targets);
+    this.threats.render(flying ? v.threat : null);
     this.minimap.render(v.minimap, dt);
 
     if (this.bannerTimer && now > this.bannerTimer) {
@@ -461,6 +509,16 @@ export class HUD {
     this.hitTimer = performance.now() + (kill ? 420 : 160);
   }
 
+  /** A red arc towards whatever hit the plane: 0 ahead, positive to the right (radians). */
+  damageDirection(angle: number, amount: number): void {
+    this.threats.damageDirection(angle, amount);
+  }
+
+  /** A short line under the lock warning. */
+  threatNote(message: string, tone: 'good' | 'bad' | 'info'): void {
+    this.threats.note(message, tone);
+  }
+
   /** The screen edges flash red when the plane is hurt, more for bigger hits. */
   damageFlash(amount: number): void {
     const el = this.el['damage-flash'];
@@ -484,7 +542,7 @@ export class HUD {
   private renderCards(v: HudView): void {
     toggle(this.el['cards-wrap'], v.cards !== null);
     if (!v.cards) return;
-    const key = v.cards.map((c) => `${c.title}|${c.difficulty}|${c.reward}|${c.fits.map((f) => f.level).join(',')}`).join('/');
+    const key = v.cards.map((c) => `${c.codename}|${c.title}|${c.difficulty}|${c.reward}|${c.fits.map((f) => f.level).join(',')}`).join('/');
     if (key !== this.cardsKey) {
       this.cardsKey = key;
       const wrap = this.el.cards;
@@ -500,8 +558,10 @@ export class HUD {
           .join('');
         card.innerHTML = `
           <div class="card-top"><kbd>${i + 1}</kbd><span class="card-type">${MISSION_TYPE_LABELS[c.type]}</span><span class="card-diff" title="${c.difficultyLabel}">${stars} <b>×${c.multiplier}</b></span></div>
+          <div class="codename">${esc(c.codename)}</div>
           <div class="card-title">${esc(c.title)}</div>
           <div class="card-desc">${esc(c.description)}</div>
+          <div class="card-threat" data-level="${c.threat.level}"><span class="threat-chip">${esc(c.threat.label)}</span><span>${esc(c.threat.detail)}</span></div>
           <div class="card-foot"><span>${facts.join(' · ')}</span><b class="card-reward">+${c.reward}</b></div>
           <div class="card-fits">${fits}</div>`;
         bindButton(card, () => this.actions.select(i));
@@ -521,7 +581,11 @@ export class HUD {
     if (!t) return;
     text(this.el['tr-type'], `${MISSION_TYPE_LABELS[t.type]} · ${t.difficultyLabel} ×${t.multiplier}`);
     text(this.el['tr-title'], t.title);
+    text(this.el['tr-codename'], t.codename);
     text(this.el['tr-meta'], `Reward +${t.reward} paper`);
+    attr(this.el['tr-threat'], 'data-level', String(t.threat.level));
+    text(this.el['tr-threat-chip'], t.threat.label);
+    text(this.el['tr-threat-detail'], t.threat.detail);
     const [statusText, tone] = statusLabel(t.status, t.reward);
     text(this.el['tr-status'], statusText);
     attr(this.el['tr-status'], 'data-tone', tone);
@@ -611,14 +675,19 @@ export class HUD {
       text(this.el['res-mission'], r.missionLine);
       attr(this.el['res-mission'], 'data-tone', r.missionTone);
       text(this.el['res-time'], clock(r.time));
+      text(this.el['res-survival'], r.survival);
+      attr(this.el['res-survival'], 'data-tone', r.survived ? 'good' : 'bad');
       text(
         this.el['res-dealt'],
         r.damageDealt > 0 || r.targetsDestroyed > 0
           ? `${r.damageDealt}${r.targetsDestroyed ? ` · ${r.targetsDestroyed} destroyed` : ''}`
           : '0',
       );
+      text(this.el['res-defenses'], String(r.defensesDestroyed));
+      text(this.el['res-taken'], String(r.damageTaken));
+      text(this.el['res-dodged'], r.enemyShots > 0 ? `${r.enemyShots - r.enemyHits}/${r.enemyShots} · ${Math.round(((r.enemyShots - r.enemyHits) / r.enemyShots) * 100)}%` : '—');
       text(this.el['res-bombs'], r.bombsDropped > 0 ? `${r.bombHits}/${r.bombsDropped} · ${Math.round((r.bombHits / r.bombsDropped) * 100)}%` : '—');
-      text(this.el['res-shots'], r.shotsFired > 0 ? `${r.shotsHit}/${r.shotsFired} · ${Math.round((r.shotsHit / r.shotsFired) * 100)}%` : '—');
+      text(this.el['res-shots'], r.shotsFired > 0 ? `${r.shotsFired} · ${r.shotsHit} hits (${Math.round((r.shotsHit / r.shotsFired) * 100)}%)` : '—');
       text(this.el['res-spent'], r.paperSpent > 0 ? `−${r.paperSpent}` : '0');
       text(this.el['res-earned'], r.paperEarned > 0 ? `+${r.paperEarned}` : '0');
       const net = r.paperEarned - r.paperSpent;
@@ -705,6 +774,11 @@ export class HUD {
     attr(el, 'data-tone', t.tone);
     (el.querySelector('.ti-arrow') as HTMLElement).style.transform = `rotate(${t.angle}rad)`;
     text(this.el['target-label'], t.label);
+    const iconEl = this.el['target-icon'];
+    if (iconEl.dataset.icon !== t.icon) {
+      iconEl.dataset.icon = t.icon;
+      iconEl.innerHTML = icon(t.icon);
+    }
   }
 
   private renderLabels(labels: TerritoryLabel[]): void {
@@ -733,13 +807,15 @@ export class HUD {
       if (!el) {
         el = document.createElement('div');
         el.className = 'target-label';
-        el.innerHTML = '<b class="tl-name"></b><span class="tl-role"></span><span class="tl-health"><i></i></span>';
+        el.innerHTML = `<b class="tl-name">${t.icon ? icon(t.icon, 'icon tl-icon') : ''}<span></span></b><span class="tl-role"></span><span class="tl-health"><i></i></span>`;
         this.el['target-labels'].appendChild(el);
         this.targetEls.set(t.id, el);
       }
-      text(el.querySelector('.tl-name') as HTMLElement, t.name);
-      text(el.querySelector('.tl-role') as HTMLElement, t.mission ? 'Mission target' : t.role);
+      text(el.querySelector('.tl-name span') as HTMLElement, t.name);
+      const role = t.state === 'firing' ? 'Firing at you!' : t.state === 'locking' ? 'Locking on!' : t.state === 'tracking' ? 'Tracking you' : t.mission ? 'Mission target' : t.role;
+      text(el.querySelector('.tl-role') as HTMLElement, role);
       el.classList.toggle('mission', t.mission);
+      attr(el, 'data-state', t.state ?? 'none');
       const bar = el.querySelector('.tl-health i') as HTMLElement;
       width(bar, t.health);
       attr(bar, 'data-level', t.health > 0.6 ? 'ok' : t.health > 0.3 ? 'worn' : 'critical');

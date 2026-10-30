@@ -46,7 +46,7 @@ interface Puff {
   size: number;
 }
 
-export type BurstStyle = 'hit' | 'thud' | 'crash' | 'fold' | 'ring' | 'dust' | 'ink' | 'cardboard';
+export type BurstStyle = 'hit' | 'thud' | 'crash' | 'fold' | 'ring' | 'dust' | 'ink' | 'cardboard' | 'blast' | 'enemy-ink' | 'wreck';
 
 /** Height of the ground under (x, z), or null over a gap. */
 export type GroundFn = (x: number, z: number) => number | null;
@@ -62,6 +62,9 @@ const STYLES: Record<BurstStyle, { colors: readonly Color3[]; count: number; spe
   dust: { colors: [[0.97, 0.96, 0.92], [0.82, 0.84, 0.88]], count: 8, speed: 3, ring: 0 },
   ink: { colors: [PALETTE.inkShot, PALETTE.ink], count: 5, speed: 4, ring: 0 },
   cardboard: { colors: [PALETTE.cardboard, PALETTE.cardboardDark, PALETTE.tape], count: 26, speed: 10, ring: 6 },
+  blast: { colors: [[1, 1, 1], [1, 0.62, 0.15], [0.86, 0.15, 0.12], [0.25, 0.24, 0.22]], count: 28, speed: 12, ring: 5 },
+  'enemy-ink': { colors: [PALETTE.enemyInk, PALETTE.ink], count: 5, speed: 4, ring: 0 },
+  wreck: { colors: [PALETTE.defense, PALETTE.defenseDark, PALETTE.cardboard, PALETTE.paper], count: 34, speed: 11, ring: 7 },
 };
 
 const PUFF_COLORS: Array<[number, number, number]> = [[1, 1, 1], [1, 0.93, 0.55], [1, 0.62, 0.2]];
@@ -88,6 +91,9 @@ export class Effects {
   ) {
     this.splatMeshes = [0, 1, 2, 3].map(() => buildSplatMesh(app.graphicsDevice));
     this.ballMesh = buildPaperBallMesh(app.graphicsDevice, 1);
+    // PlayCanvas destroys a mesh when the last mesh instance using it is destroyed. Splats and
+    // wrecks come and go, so hold a reference to keep these shared meshes alive for the next ones.
+    for (const mesh of [...this.splatMeshes, this.ballMesh]) mesh.incRefCount();
   }
 
   /** An ink round landing: a few specks, and a small stain if it hit the ground. */
@@ -136,9 +142,21 @@ export class Effects {
     this.splat(position, onTarget ? 4 : 2.2, onTarget ? [0.12, 0.14, 0.32] : [0.45, 0.47, 0.52]);
   }
 
+  /** A rocket bursting, or an installation going up: scraps, a shock ring and a cartoon cloud. */
+  explosion(position: pc.Vec3, scale = 1, style: BurstStyle = 'blast'): void {
+    this.burst(position, style);
+    this.puff(position, scale);
+  }
+
+  /** Enemy ink striking something: magenta specks, and a stain if it hit the ground. */
+  enemyInkHit(position: pc.Vec3, onGround: boolean): void {
+    this.burst(position, 'enemy-ink');
+    if (onGround) this.splat(position, 0.5, PALETTE.enemyInk, 3);
+  }
+
   burst(position: pc.Vec3, style: BurstStyle): void {
     const { colors, count, speed, ring } = STYLES[style];
-    this.burstColors(position, colors, count, speed, style === 'ink' ? 0.35 : 1);
+    this.burstColors(position, colors, count, speed, style === 'ink' || style === 'enemy-ink' ? 0.35 : 1);
     if (ring > 0) this.ring(position, ring, colors[1] ?? colors[0]);
   }
 

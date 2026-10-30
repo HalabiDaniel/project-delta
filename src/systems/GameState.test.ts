@@ -35,6 +35,22 @@ const SPECS: Record<string, MissionSpec> = {
     type: 'practice', difficulty: 'medium', title: 'Practice', description: '', reward: 60, bombs: 0, timeLimit: null, ordered: false,
     objectives: [{ kind: 'destroy', territoryId: 'T4', targets: ['T4-d1', 'T4-d2', 'T4-d3'], count: 2 }],
   },
+  suppression: {
+    type: 'suppression', difficulty: 'medium', title: 'Suppress T6', description: '', reward: 80, bombs: 2, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'destroy', territoryId: 'T6', targets: ['T6-turret1', 'T6-turret2'], count: 2, what: 'defense' }],
+  },
+  multiStage: {
+    type: 'multi-stage', difficulty: 'hard', title: 'Multi-stage', description: '', reward: 150, bombs: 1, timeLimit: null, ordered: true,
+    objectives: [
+      { kind: 'destroy', territoryId: 'T8', targets: ['T8-radar'], count: 1, what: 'radar' },
+      { kind: 'destroy', territoryId: 'T8', targets: ['T8-supply'], count: 1, what: 'supply' },
+      { kind: 'land', territoryId: 'T1' },
+    ],
+  },
+  low: {
+    type: 'low-attack', difficulty: 'medium', title: 'Low-level strike', description: '', reward: 90, bombs: 2, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'bomb', territoryId: 'T5', zone: zone(0), precision: false, approach: { x: 0, z: 0, radius: 50, ceiling: 12 } }],
+  },
 };
 
 const FALCON = AIRCRAFT.falcon.cost;
@@ -417,6 +433,72 @@ describe('GameState: landing, rearming and the end of a sortie', () => {
   });
 });
 
+describe('GameState: defenses', () => {
+  it('destroying defenses counts in the sortie and completes suppression', () => {
+    const { state, resources, events } = setup('suppression');
+    sortie(state);
+    state.recordDamage(50, null, true);
+    state.recordDamage(30, 'T6-turret1', true);
+    expect(state.mission?.status).toBe('active');
+    state.recordDamage(80, 'T6-turret2', true);
+    expect(state.mission?.status).toBe('succeeded');
+    expect(resources.paper).toBe(100 - FALCON + 80);
+    expect(state.sortie).toMatchObject({ damageDealt: 160, targetsDestroyed: 2, defensesDestroyed: 2 });
+    expect(state.stats.defensesDestroyed).toBe(2);
+    expect(events.filter((e) => e === 'target-destroyed')).toHaveLength(2);
+  });
+
+  it('a multi-stage strike done out of order still counts each stage, and pays on landing', () => {
+    const { state, resources } = setup('multiStage');
+    sortie(state);
+    state.recordDamage(90, 'T8-supply', true);
+    expect(state.mission?.isDone(1)).toBe(false);
+    state.recordDamage(70, 'T8-radar', true);
+    expect(state.mission?.isDone(0)).toBe(true);
+    expect(state.mission?.isDone(1)).toBe(true);
+    expect(state.mission?.status).toBe('active');
+    state.land('T1');
+    expect(state.mission?.status).toBe('succeeded');
+    expect(resources.paper).toBe(100 - FALCON + 150);
+  });
+
+  it('records incoming fire, hits taken and what shot the plane down', () => {
+    const { state } = setup('delivery');
+    sortie(state);
+    for (let i = 0; i < 5; i++) state.recordIncoming();
+    state.damageAircraft(4, 'projectile', 'Ink turret on T5');
+    state.damageAircraft(10, 'impact');
+    expect(state.sortie).toMatchObject({ enemyShots: 5, enemyHits: 1, damageTaken: 14, killedBy: null });
+    expect(state.damageAircraft(500, 'blast', 'Paper rocket launcher on T8').destroyed).toBe(true);
+    expect(state.phase).toBe('crashed');
+    expect(state.sortie).toMatchObject({ enemyHits: 2, killedBy: 'Paper rocket launcher on T8', outcome: 'lost' });
+  });
+
+  it('a low-level strike only counts a bomb released on a clean approach', () => {
+    const { state } = setup('low');
+    const seen: GameEvent[] = [];
+    state.onEvent((e) => seen.push(e));
+    state.selectAircraft('swift');
+    sortie(state);
+    expect(state.releaseClean).toBe(false); // not in the zone yet
+    state.updateFlight({ x: -60, y: 10, z: 0 }, { x: -40, y: 10, z: 0 }, 0.1);
+    expect(state.releaseClean).toBe(true);
+    state.updateFlight({ x: -40, y: 10, z: 0 }, { x: -30, y: 20, z: 0 }, 0.1);
+    expect(seen.map((e) => e.type)).toContain('approach-blown');
+    expect(state.releaseClean).toBe(false);
+    state.dropBomb();
+    state.resolveBomb(0, false, false);
+    expect(seen).toContainEqual({ type: 'bomb-missed', remaining: 1, tooHigh: true });
+    expect(state.mission?.status).toBe('active');
+    state.updateFlight({ x: -30, y: 8, z: 0 }, { x: -80, y: 8, z: 0 }, 0.1);
+    state.updateFlight({ x: -80, y: 8, z: 0 }, { x: -40, y: 8, z: 0 }, 0.1);
+    state.tick(BOMB.dropCooldown);
+    state.dropBomb();
+    state.resolveBomb(0, false, state.releaseClean);
+    expect(state.mission?.status).toBe('succeeded');
+  });
+});
+
 describe('LocalStats', () => {
   const memory = (): KeyValueStore & { data: Record<string, string> } => {
     const data: Record<string, string> = {};
@@ -433,9 +515,10 @@ describe('LocalStats', () => {
     first.recordMissionCompleted();
     first.recordPlaneLost();
     first.recordTargetDestroyed();
+    first.recordTargetDestroyed(true);
     first.rememberAircraft('swift');
     const second = new LocalStats(store);
-    expect(second.data).toMatchObject({ missionsCompleted: 1, planesLost: 1, targetsDestroyed: 1, lastAircraft: 'swift' });
+    expect(second.data).toMatchObject({ missionsCompleted: 1, planesLost: 1, targetsDestroyed: 2, defensesDestroyed: 1, lastAircraft: 'swift' });
     expect(second.favorite).toBe('widewing');
   });
 
@@ -446,7 +529,7 @@ describe('LocalStats', () => {
     expect(new LocalStats(broken).data.planesLost).toBe(0);
     const junk = memory();
     junk.data['paperwars.career.v1'] = JSON.stringify({ missionsCompleted: -4, planesLost: 'x', sorties: { falcon: 2, jet: 9 }, lastAircraft: 'jet' });
-    expect(new LocalStats(junk).data).toEqual({ missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, sorties: { falcon: 2 }, lastAircraft: null });
+    expect(new LocalStats(junk).data).toEqual({ missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, sorties: { falcon: 2 }, lastAircraft: null });
     const blocked: KeyValueStore = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     const stats = new LocalStats(blocked);
     stats.recordMissionCompleted();

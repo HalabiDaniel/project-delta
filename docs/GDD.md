@@ -513,6 +513,8 @@ However, rewards should distinguish player participation from completely automat
 
 SAMs are a later development feature, not part of version 0.0.1.
 
+Version 0.0.4 lays the groundwork with automated defenses the world owns: ink turrets, paper rocket launchers (an early, simplified SAM with basic homing) and radar stations on the unclaimed territories, placed by threat level. Player-built defenses come with version 0.0.8.
+
 ---
 
 ## 10. AI-Controlled Escort Aircraft
@@ -863,27 +865,31 @@ Better controls, feedback, landing, crashes, and improved target indicators.
 
 Fighter, bomber, and reconnaissance plane patterns with different costs and flight characteristics.
 
-### Version 0.0.4: Core Multiplayer
+### Version 0.0.4: Automated Territory Defenses
+
+Single-player still. Territories have threat levels (unprotected, light, guarded, fortified) and the defenses to match: ink turrets, paper rocket launchers and radar stations that detect, track and shoot at the player, with blind spots, limited accuracy and travel time. New mission types built around them (suppression, dangerous reconnaissance, fortified bombing, multi-stage strikes, survival, low-altitude attacks), risk-based rewards, and warnings that make every hit readable.
+
+### Version 0.0.5: Core Multiplayer
 
 Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
 
-### Version 0.0.5: Player Territory Bombing
+### Version 0.0.6: Player Territory Bombing
 
 Real player-versus-player attacks, defender losses, fighter interception, and notifications.
 
-### Version 0.0.6: Dynamic Mission Director
+### Version 0.0.7: Dynamic Mission Director
 
 Multiple mission categories, difficulty adaptation, and introductory bounties.
 
-### Version 0.0.7: Territory Defenses
+### Version 0.0.8: Player-Built Defenses
 
-Constructible automated defenses and resource costs.
+Constructible automated defenses and resource costs, built on the 0.0.4 defense systems.
 
-### Version 0.0.8: Persistent Sessions
+### Version 0.0.9: Persistent Sessions
 
 Player accounts, session reconnection, persistent economies, and campaign lifecycle.
 
-### Version 0.0.9: AI Escort Aircraft
+### Version 0.0.10: AI Escort Aircraft
 
 Purchasable single-use supporting aircraft.
 
