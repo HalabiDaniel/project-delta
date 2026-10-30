@@ -35,13 +35,15 @@ describe('ResourceManager', () => {
     expect(r.paper).toBe(100);
   });
 
-  it('notifies listeners with the change', () => {
+  it('notifies listeners with the change and where it came from', () => {
     const r = new ResourceManager();
-    const deltas: number[] = [];
-    r.onChange((_paper, delta) => deltas.push(delta));
+    const changes: string[] = [];
+    r.onChange((_paper, delta, source) => changes.push(`${delta}:${source}`));
     r.spend(20);
     r.earn(50);
+    r.earn(1, 'income');
     r.spend(500); // refused: no notification
-    expect(deltas).toEqual([-20, 50]);
+    r.reset();
+    expect(changes).toEqual(['-20:spend', '50:reward', '1:income', '-31:reset']);
   });
 });

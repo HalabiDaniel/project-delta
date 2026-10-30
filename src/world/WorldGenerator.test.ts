@@ -11,18 +11,23 @@ describe('generateTerritories', () => {
     expect(territories.map((t) => t.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9']);
   });
 
-  it('T1 is the player’s home, T5 is the centre target, the rest are neutral', () => {
+  it('T1 is the player’s home in a corner, T5 is the centre, the rest are neutral', () => {
     const [t1, , , , t5] = territories;
-    expect(t1.isHome && !t1.isTarget).toBe(true);
-    expect(t5.isTarget && !t5.isHome).toBe(true);
+    expect(t1.isHome).toBe(true);
     expect([t5.x, t5.z]).toEqual([0, 0]);
-    expect(territories.filter((t) => t.isHome || t.isTarget)).toHaveLength(2);
+    expect(t1.x).toBeLessThan(0);
+    expect(t1.z).toBeLessThan(0);
+    expect(territories.filter((t) => t.isHome)).toHaveLength(1);
   });
 
-  it('neighbours are separated by the configured gap', () => {
+  it('neighbours are separated by the configured gap, and the whole grid fits inside the boundary', () => {
     const [t1, t2, , t4] = territories;
+    expect(WORLD.gap).toBeGreaterThanOrEqual(30);
     expect(t2.x - t2.half - (t1.x + t1.half)).toBe(WORLD.gap);
     expect(t4.z - t4.half - (t1.z + t1.half)).toBe(WORLD.gap);
+    for (const t of territories) {
+      expect(Math.hypot(Math.abs(t.x) + t.half, Math.abs(t.z) + t.half)).toBeLessThan(WORLD.boundaryRadius - 30);
+    }
   });
 
   it('sphere tests respect platform edges and thickness', () => {
