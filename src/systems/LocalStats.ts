@@ -10,6 +10,8 @@ export interface CareerStats {
   missionsCompleted: number;
   planesLost: number;
   targetsDestroyed: number;
+  /** Turrets, launchers, radars and depots destroyed. */
+  defensesDestroyed: number;
   /** Sorties launched, per design. The most flown is the favourite. */
   sorties: Partial<Record<AircraftId, number>>;
   /** The design last chosen in the garage, restored next time. */
@@ -66,8 +68,9 @@ export class LocalStats {
     this.save();
   }
 
-  recordTargetDestroyed(): void {
+  recordTargetDestroyed(defense = false): void {
     this.data.targetsDestroyed++;
+    if (defense) this.data.defensesDestroyed++;
     this.save();
   }
 
@@ -87,7 +90,7 @@ export class LocalStats {
 }
 
 function load(store: KeyValueStore | null): CareerStats {
-  const empty: CareerStats = { missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, sorties: {}, lastAircraft: null };
+  const empty: CareerStats = { missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, sorties: {}, lastAircraft: null };
   let raw: unknown;
   try {
     const text = store?.getItem(KEY);
@@ -109,6 +112,7 @@ function load(store: KeyValueStore | null): CareerStats {
     missionsCompleted: count(r.missionsCompleted),
     planesLost: count(r.planesLost),
     targetsDestroyed: count(r.targetsDestroyed),
+    defensesDestroyed: count(r.defensesDestroyed),
     sorties,
     lastAircraft: typeof r.lastAircraft === 'string' && r.lastAircraft in AIRCRAFT ? (r.lastAircraft as AircraftId) : null,
   };

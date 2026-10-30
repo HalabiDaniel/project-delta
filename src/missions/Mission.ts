@@ -1,6 +1,20 @@
-import type { Difficulty } from '../config';
+import type { Difficulty, ThreatLevel } from '../config';
 
-export type MissionType = 'bombing' | 'precision' | 'recon' | 'delivery' | 'return' | 'multi-bomb' | 'rings' | 'practice';
+export type MissionType =
+  | 'bombing'
+  | 'precision'
+  | 'recon'
+  | 'delivery'
+  | 'return'
+  | 'multi-bomb'
+  | 'rings'
+  | 'practice'
+  | 'suppression'
+  | 'danger-recon'
+  | 'fortified'
+  | 'multi-stage'
+  | 'survival'
+  | 'low-attack';
 
 export type MissionStatus = 'available' | 'active' | 'succeeded' | 'failed';
 
@@ -44,14 +58,46 @@ export interface RingGate {
   radius: number;
 }
 
+/**
+ * A low-level approach: within `radius` of (x, z) the plane must stay at or below `ceiling`, or
+ * the run is blown until it leaves the zone and comes in again.
+ */
+export interface LowApproach {
+  x: number;
+  z: number;
+  radius: number;
+  ceiling: number;
+}
+
+/** outside – not in the approach zone. clean – in it, low the whole way. blown – in it, but went too high. */
+export type ApproachState = 'outside' | 'clean' | 'blown';
+
+/** What a destroy objective is after: practice planes, weapons, a radar station or a supply depot. */
+export type DestroyKind = 'practice' | 'defense' | 'radar' | 'supply';
+
 export type Objective =
-  | { kind: 'bomb'; territoryId: string; zone: TargetZone; precision: boolean }
+  | { kind: 'bomb'; territoryId: string; zone: TargetZone; precision: boolean; approach?: LowApproach }
   | { kind: 'recon'; territoryId: string; airspace: Airspace; duration: number }
   | { kind: 'reach'; territoryId: string; airspace: Airspace }
   | { kind: 'ring'; gate: RingGate; number: number }
   | { kind: 'land'; territoryId: string }
-  /** Shoot down (or bomb) `count` of the practice targets `targets` on a territory. */
-  | { kind: 'destroy'; territoryId: string; targets: string[]; count: number };
+  /** Shoot down (or bomb) `count` of the targets `targets` on a territory. */
+  | { kind: 'destroy'; territoryId: string; targets: string[]; count: number; what?: DestroyKind }
+  /** Spend `duration` seconds in total inside a defended territory's airspace. */
+  | { kind: 'survive'; territoryId: string; airspace: Airspace; duration: number }
+  /** Get at least `distance` (horizontally) away from (x, z): clear of a territory's weapons. */
+  | { kind: 'escape'; territoryId: string; x: number; z: number; distance: number };
+
+/** The danger a mission leads into, as the mission card shows it. */
+export interface MissionThreat {
+  /** The highest threat level among the territories below. */
+  level: ThreatLevel;
+  /** Defended territories the mission goes into (or, for a ring course, passes within reach of). */
+  territories: string[];
+  turrets: number;
+  launchers: number;
+  radars: number;
+}
 
 export interface MissionSpec {
   type: MissionType;
@@ -66,6 +112,10 @@ export interface MissionSpec {
   /** Ordered objectives must be done one after another; otherwise in any order. */
   ordered: boolean;
   objectives: Objective[];
+  /** Known defenses along the way. */
+  threat?: MissionThreat;
+  /** "Operation Paper Storm". */
+  codename?: string;
 }
 
 /**
@@ -81,8 +131,13 @@ export class Mission {
   elapsed = 0;
   /** Progress per objective, 0 to 1. An objective is done at 1. */
   readonly progress: number[];
-  /** Practice targets already destroyed, per destroy objective. */
-  private readonly destroyed = new Map<number, Set<string>>();
+  /**
+   * Everything destroyed since launch. A destroy objective counts each target once, and a target
+   * destroyed before its objective opened still counts when it does: wrecks stay down all sortie.
+   */
+  private readonly destroyed = new Set<string>();
+  /** Low-level approaches, per bomb objective that has one. */
+  private readonly approaches = new Map<number, ApproachState>();
 
   constructor(readonly spec: MissionSpec) {
     this.progress = spec.objectives.map(() => 0);
@@ -165,12 +220,33 @@ export class Mission {
     return this.spec.timeLimit !== null && this.elapsed >= this.spec.timeLimit;
   }
 
-  /** A bomb came down inside objective `index`'s zone. */
-  completeBomb(index: number): boolean {
+  /**
+   * A bomb came down inside objective `index`'s zone. `clean` says whether it was released on a
+   * clean low-level approach; objectives that demand one ignore bombs that weren't.
+   */
+  completeBomb(index: number, clean = true): boolean {
     const objective = this.objectives[index];
     if (!this.isActive || objective?.kind !== 'bomb' || !this.isOpen(index)) return false;
+    if (objective.approach && !clean) return false;
     this.progress[index] = 1;
     return true;
+  }
+
+  /** How the low-level approach for bomb objective `index` is going ('outside' if it has none). */
+  approachState(index: number): ApproachState {
+    return this.approaches.get(index) ?? 'outside';
+  }
+
+  /** Is a bomb released now on a clean approach? True when no open objective asks for one. */
+  get releaseClean(): boolean {
+    let needed = false;
+    for (const i of this.openObjectives()) {
+      const o = this.objectives[i];
+      if (o.kind !== 'bomb' || !o.approach) continue;
+      needed = true;
+      if (this.approachState(i) === 'clean') return true;
+    }
+    return !needed;
   }
 
   /**
@@ -185,6 +261,7 @@ export class Mission {
       if (!this.isOpen(i)) return;
       switch (objective.kind) {
         case 'recon':
+        case 'survive':
           if (insideAirspace(objective.airspace, pos)) {
             this.progress[i] = Math.min(1, this.progress[i] + dt / objective.duration);
           }
@@ -195,6 +272,12 @@ export class Mission {
         case 'ring':
           if (crossesRing(objective.gate, prev, pos)) this.progress[i] = 1;
           break;
+        case 'escape':
+          if (Math.hypot(pos.x - objective.x, pos.z - objective.z) >= objective.distance) this.progress[i] = 1;
+          break;
+        case 'bomb':
+          if (objective.approach) this.approaches.set(i, nextApproach(objective.approach, this.approachState(i), pos));
+          return;
         default:
           return;
       }
@@ -204,26 +287,35 @@ export class Mission {
   }
 
   /**
-   * Practice target `targetId` was destroyed. Each target counts once per objective, even if it
-   * folds itself back up and is shot down again. Returns the indices of objectives completed.
+   * Target `targetId` was destroyed. Each target counts once, even if it folds itself back up and
+   * is shot down again. Returns the indices of objectives completed.
    */
   completeDestroy(targetId: string): number[] {
+    if (!this.isActive) return [];
+    this.destroyed.add(targetId);
+    return this.settle();
+  }
+
+  /**
+   * Brings open destroy objectives up to date with everything destroyed so far, and completes
+   * those now satisfied. Call it after any objective completes: in an ordered mission that may open
+   * one whose targets are already down. Returns the indices completed.
+   */
+  settle(): number[] {
     const completed: number[] = [];
     if (!this.isActive) return completed;
     this.objectives.forEach((o, i) => {
-      if (o.kind !== 'destroy' || !this.isOpen(i) || !o.targets.includes(targetId)) return;
-      const set = this.destroyed.get(i) ?? new Set<string>();
-      set.add(targetId);
-      this.destroyed.set(i, set);
-      this.progress[i] = Math.min(1, set.size / o.count);
+      if (o.kind !== 'destroy' || !this.isOpen(i)) return;
+      this.progress[i] = Math.min(1, this.destroyedTargets(i).size / o.count);
       if (this.isDone(i)) completed.push(i);
     });
     return completed;
   }
 
-  /** Practice targets of objective `index` already destroyed. */
+  /** Targets of objective `index` already destroyed. */
   destroyedTargets(index: number): ReadonlySet<string> {
-    return this.destroyed.get(index) ?? new Set();
+    const o = this.objectives[index];
+    return new Set(o?.kind === 'destroy' ? o.targets.filter((id) => this.destroyed.has(id)) : []);
   }
 
   /** The plane landed on `territoryId`. Returns true if that completed a landing objective. */
@@ -236,6 +328,13 @@ export class Mission {
     this.progress[index] = 1;
     return true;
   }
+}
+
+/** One step of a low-level approach: entering low is clean, climbing too high inside blows it. */
+export function nextApproach(a: LowApproach, state: ApproachState, p: Point3): ApproachState {
+  if (Math.hypot(p.x - a.x, p.z - a.z) > a.radius) return 'outside';
+  if (p.y > a.ceiling) return 'blown';
+  return state === 'outside' ? 'clean' : state;
 }
 
 /** Is `p` over the airspace's square and no higher than its ceiling? */

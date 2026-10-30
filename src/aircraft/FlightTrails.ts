@@ -6,7 +6,7 @@ import type { PlaneController } from './PlaneController';
 const MAX_SAMPLES = 72;
 
 /** An unlit, see-through white material whose colour and opacity come from the vertices. */
-function trailMaterial(): pc.StandardMaterial {
+export function trailMaterial(): pc.StandardMaterial {
   const m = new pc.StandardMaterial();
   m.useLighting = false;
   m.diffuse = new pc.Color(0, 0, 0);
@@ -23,9 +23,10 @@ function trailMaterial(): pc.StandardMaterial {
 
 /**
  * A thin paper streamer behind one wingtip: a strip of quads through the tip's recent positions,
- * lying flat along the wing so it twists as the plane banks, tapering and fading with age.
+ * lying flat along the wing so it twists as the plane banks, tapering and fading with age. Wide
+ * ribbons (wider than a wingtip streamer) spread as they age instead, like smoke.
  */
-class Ribbon {
+export class Ribbon {
   readonly entity: pc.Entity;
   /** Lifetime and width of this ribbon's samples. */
   private readonly life: number;
@@ -113,6 +114,11 @@ class Ribbon {
   clear(): void {
     this.count = 0;
     this.entity.enabled = false;
+  }
+
+  /** Nothing left to draw. */
+  get empty(): boolean {
+    return this.count === 0;
   }
 }
 

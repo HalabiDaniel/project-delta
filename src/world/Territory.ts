@@ -1,9 +1,9 @@
 import type { Shape } from '../combat/Collision';
-import { WORLD } from '../config';
+import { WORLD, type ThreatLevel } from '../config';
 
 export type TerritoryOwner = 'player' | null;
 
-/** One square floating platform. Pure data plus the geometry queries collisions need. */
+/** One square floating platform with its threat level. Pure data plus the geometry queries collisions need. */
 export class Territory {
   constructor(
     readonly id: string,
@@ -13,6 +13,8 @@ export class Territory {
     readonly size: number,
     readonly owner: TerritoryOwner,
     readonly thickness: number = WORLD.thickness,
+    /** How heavily it is defended. Home is always 0. */
+    readonly threat: ThreatLevel = 0,
   ) {}
 
   /** Platform tops all sit at y = 0. */

@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
-  "description": "paperwars.io v0.0.3 - aircraft variety and combat foundations",
+  "description": "paperwars.io v0.0.4 - automated territory defenses",
   "type": "module",
   "scripts": {
     "dev": "vite",

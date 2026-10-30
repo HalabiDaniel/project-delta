@@ -137,6 +137,13 @@ export interface AircraftSpec {
   gun: GunSpec;
   gunLabel: string;
   bombs: { capacity: number; kind: BombKind };
+  /**
+   * How noticeable the plane is: defenses spot it at their detection range times this. Small
+   * planes slip in closer before anything reacts.
+   */
+  signature: number;
+  /** How big a target it is for enemy ink and rockets (a sphere around its centre). */
+  hitRadius: number;
   accent: readonly [number, number, number];
 }
 
@@ -166,6 +173,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     gun: { barrels: 1, ammo: 40, interval: 0.18, damage: 5, speed: 62, range: 60 },
     gunLabel: 'Light ink gun',
     bombs: { capacity: 1, kind: 'small' },
+    signature: 0.65,
+    hitRadius: 0.9,
     accent: [0.08, 0.62, 0.56],
   },
   falcon: {
@@ -188,6 +197,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     gun: { barrels: 2, ammo: 120, interval: 0.08, damage: 7, speed: 78, range: 85 },
     gunLabel: 'Twin ink guns',
     bombs: { capacity: 1, kind: 'standard' },
+    signature: 0.9,
+    hitRadius: 1.0,
     accent: [0.2, 0.45, 0.95],
   },
   swift: {
@@ -210,6 +221,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     gun: { barrels: 2, ammo: 80, interval: 0.12, damage: 6, speed: 70, range: 75 },
     gunLabel: 'Twin ink guns',
     bombs: { capacity: 2, kind: 'standard' },
+    signature: 1.0,
+    hitRadius: 1.05,
     accent: [0.95, 0.58, 0.1],
   },
   widewing: {
@@ -232,6 +245,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     gun: { barrels: 1, ammo: 50, interval: 0.2, damage: 6, speed: 60, range: 65 },
     gunLabel: 'Nose ink gun',
     bombs: { capacity: 4, kind: 'standard' },
+    signature: 1.25,
+    hitRadius: 1.4,
     accent: [0.82, 0.2, 0.32],
   },
 };
@@ -254,6 +269,8 @@ export const RATINGS = {
   payload: [0.6, 4],
   /** Ink damage per second. */
   firepower: [20, 90],
+  /** Detection signature, from easy to spot to hard to spot. */
+  stealth: [1.3, 0.6],
 } as const;
 
 export const LANDING = {
@@ -334,6 +351,147 @@ export const TARGETS = {
   labelRange: 90,
 } as const;
 
+/** 0 unprotected, 1 light, 2 guarded, 3 fortified. */
+export type ThreatLevel = 0 | 1 | 2 | 3;
+
+export interface ThreatProfile {
+  label: string;
+  /** What stands on a territory of this level. */
+  turrets: number;
+  launchers: number;
+  radar: boolean;
+  /** A supply depot: the marked target for fortified and multi-stage strikes. */
+  supply: boolean;
+}
+
+/**
+ * How heavily each territory is defended. T1 is home and always safe; the two territories next to
+ * it are unprotected, and the defenses get heavier towards the far side of the map, where the
+ * east column and T8 are enemy country.
+ */
+export const THREAT: {
+  map: Record<string, ThreatLevel>;
+  levels: Record<ThreatLevel, ThreatProfile>;
+  byDifficulty: Record<Difficulty, readonly [ThreatLevel, ThreatLevel]>;
+  rewardBonus: Record<ThreatLevel, number>;
+} = {
+  map: { T2: 0, T4: 0, T5: 1, T7: 1, T3: 2, T6: 2, T8: 3, T9: 3 },
+  levels: {
+    0: { label: 'Unprotected', turrets: 0, launchers: 0, radar: false, supply: false },
+    1: { label: 'Light', turrets: 1, launchers: 0, radar: false, supply: false },
+    2: { label: 'Guarded', turrets: 2, launchers: 0, radar: true, supply: true },
+    3: { label: 'Fortified', turrets: 2, launchers: 1, radar: true, supply: true },
+  },
+  /** The threat levels (lowest, highest) a mission of each difficulty sends the player into. */
+  byDifficulty: { easy: [0, 1], medium: [1, 2], hard: [2, 3] },
+  /** Extra reward for each defended territory a mission goes into, scaled by the type's exposure. */
+  rewardBonus: { 0: 0, 1: 8, 2: 16, 3: 26 },
+};
+
+/** Automated defenses on the territories. Numbers are first balancing guesses. */
+export const DEFENSES = {
+  turret: {
+    name: 'Ink turret',
+    role: 'Rapid fire · short range',
+    health: 80,
+    /** Engagement range. Planes are noticed at this times their signature. */
+    range: 45,
+    /** Half-angle it can turn either side of its rest heading. Behind it is a blind spot. */
+    arc: 130 * DEG,
+    turnRate: 1.7,
+    pitchRate: 1.4,
+    minPitch: -8 * DEG,
+    maxPitch: 80 * DEG,
+    /** Height of the gun's pivot above the platform, and the barrel's length. */
+    pivot: 2.1,
+    barrel: 1.5,
+    /** Seconds from first noticing a plane to the first shot (a radar does this in advance). */
+    acquireTime: 0.7,
+    /** Seconds between shots, and how close to the aim the barrel must be to fire. */
+    interval: 0.34,
+    fireCone: 7 * DEG,
+    /** How much of the plane's motion it leads (1 = all of it). */
+    lead: 0.9,
+    /** Seconds it takes to notice a change of course: manoeuvring throws its aim off. */
+    trackingLag: 0.3,
+    /** Scatter at low speed, and extra scatter per 10 m/s of plane speed above DEFENSES.spreadFreeSpeed. */
+    spread: 2 * DEG,
+    speedSpread: 2 * DEG,
+    shot: { speed: 44, damage: 4, travel: 55, radius: 0.22 },
+    /** Ground taken, including its barrier walls. */
+    footprint: 3.2,
+  },
+  launcher: {
+    name: 'Paper rocket launcher',
+    role: 'Homing rockets · long range',
+    health: 100,
+    range: 75,
+    turnRate: 0.9,
+    pitchRate: 0.9,
+    /** Rockets leave the rails climbing: planes very low on the horizon are out of its reach. */
+    minPitch: 6 * DEG,
+    maxPitch: 70 * DEG,
+    pivot: 1.5,
+    /** Seconds it must hold a plane in its sights before a rocket goes, and between rockets. */
+    lockTime: 1.6,
+    reload: 7,
+    footprint: 2.4,
+    rocket: {
+      launchSpeed: 10,
+      speed: 31,
+      accel: 30,
+      /** Fastest it can turn (rad/s): a hard turn makes it overshoot. */
+      turnRate: 1.8,
+      life: 5.5,
+      damage: 28,
+      /** It bursts this close to the plane (plus the plane's size), once armed. */
+      fuse: 1.3,
+      armTime: 0.4,
+      radius: 0.35,
+      /** How big a target it is for the player's ink. */
+      hitRadius: 1.1,
+    },
+  },
+  radar: {
+    name: 'Radar station',
+    role: 'Early warning',
+    health: 70,
+    /** Planes inside this (times their signature) alert every weapon on its territory. */
+    range: 85,
+    spin: 1.6,
+    footprint: 2.2,
+  },
+  supply: {
+    name: 'Supply depot',
+    role: 'Cardboard stores',
+    /** A bomb landing on it or right beside it finishes it. */
+    health: 70,
+    /** Ink barely dents the cardboard: share of ink damage it takes. Bombs do the job. */
+    inkFactor: 0.25,
+    footprint: 2.6,
+  },
+  /** Once a territory's radar is gone, its weapons only notice planes this much closer. */
+  radarLostDetection: 0.7,
+  /** Hysteresis: a weapon keeps a plane it is tracking out to this times its detection range. */
+  keepTrack: 1.15,
+  /** Seconds a weapon remembers a plane it can no longer see. */
+  memory: 1.2,
+  /** Plane speed below which aim doesn't scatter more. */
+  spreadFreeSpeed: 15,
+  /** Over home (and this close to it) nothing shoots and rockets lose track: T1 stays safe. */
+  homeSafeMargin: 12,
+  /** Weapons are placed so their reach stays clear of home and the first stretch after take-off. */
+  departureClearance: 8,
+  /** Share of the normal impact damage a plane takes flying into each kind. */
+  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, barrier: 0.85 },
+  /** Name and health labels show for installations this close. */
+  labelRange: 110,
+  /** The threat panel shows a defended territory once the plane is this close to its weapons' reach. */
+  approachMargin: 30,
+  /** A weapon's range ring shows once the plane is within this of its reach. */
+  ringMargin: 40,
+} as const;
+
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export const MISSIONS = {
@@ -354,7 +512,35 @@ export const MISSIONS = {
     'multi-bomb': 50,
     rings: 30,
     practice: 35,
+    suppression: 40,
+    'danger-recon': 30,
+    fortified: 45,
+    'multi-stage': 45,
+    survival: 35,
+    'low-attack': 45,
   },
+  /**
+   * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
+   * challenge means sitting under the guns, a delivery only touches the edge of the airspace.
+   */
+  exposure: {
+    bombing: 1,
+    precision: 1.2,
+    recon: 1.2,
+    delivery: 0.5,
+    return: 1,
+    'multi-bomb': 1,
+    rings: 0.6,
+    practice: 1,
+    suppression: 1.4,
+    'danger-recon': 1.2,
+    fortified: 1.1,
+    'multi-stage': 1.4,
+    survival: 1.6,
+    'low-attack': 1.2,
+  },
+  /** Mission types built around defenses need targets with at least this threat level. */
+  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2 },
   /** Extra paper per metre between the launch pad and the objective. */
   distanceReward: 0.15,
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
@@ -384,6 +570,17 @@ export const MISSIONS = {
   /** Target practice: dummies to shoot down on one territory, and the time limit on hard (plus travel). */
   practiceCount: { easy: 2, medium: 3, hard: 3 },
   practiceTimeHard: 28,
+  /** Dangerous reconnaissance: a short stay over a defended territory, then get clear of its weapons. */
+  dangerReconTime: { easy: 3, medium: 4, hard: 5 },
+  dangerReconCeiling: { easy: 32, medium: 28, hard: 24 },
+  /** Escaping means getting this far beyond the reach of the territory's longest-ranged weapon. */
+  escapeMargin: 12,
+  /** Survival challenge: total time to spend in a defended territory's airspace. */
+  survivalTime: { easy: 12, medium: 16, hard: 20 },
+  survivalCeiling: 32,
+  /** Low-level strike: stay below this height within `lowApproachRadius` of the bullseye. */
+  lowCeiling: { easy: 16, medium: 13, hard: 10 },
+  lowApproachRadius: 60,
 } as const;
 
 /**
@@ -400,7 +597,18 @@ export const SUITABILITY = {
     'multi-bomb': { payload: 3, range: 1 },
     rings: { maneuverability: 3, speed: 1 },
     practice: { firepower: 3, maneuverability: 2 },
+    suppression: { firepower: 3, maneuverability: 2, durability: 1 },
+    'danger-recon': { stealth: 2, maneuverability: 2, speed: 1 },
+    fortified: { payload: 3, durability: 3, firepower: 1, maneuverability: 1 },
+    'multi-stage': { payload: 1, firepower: 1, durability: 1, maneuverability: 1 },
+    survival: { maneuverability: 3, durability: 2, speed: 1 },
+    'low-attack': { payload: 2, maneuverability: 2, durability: 1 },
   },
+  /**
+   * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus
+   * one) instead of the average, so a specialist with one poor stat doesn't come out on top.
+   */
+  balanced: ['multi-stage'],
   recommended: 4,
   good: 2.75,
 } as const;
@@ -471,4 +679,20 @@ export const PALETTE = {
   dummyAccent: [0.86, 0.22, 0.2],
   inkShot: [0.12, 0.2, 0.7],
   damageTrail: [0.22, 0.24, 0.32],
+  /** Defenses: olive-drab card, a darker trim, and the scorched card of a wreck. */
+  defense: [0.52, 0.55, 0.38],
+  defenseDark: [0.33, 0.36, 0.25],
+  defenseBarrel: [0.18, 0.19, 0.17],
+  wreck: [0.26, 0.24, 0.22],
+  enemyInk: [0.55, 0.08, 0.32],
+  rocketPaper: [0.96, 0.95, 0.9],
+  rocketNose: [0.85, 0.14, 0.12],
+  rocketTrail: [0.92, 0.92, 0.9],
+  radarDish: [0.86, 0.87, 0.84],
+  rangeTurret: [0.95, 0.25, 0.2],
+  rangeLauncher: [0.65, 0.25, 0.85],
+  /** Flags and platform trim per threat level (light, guarded, fortified). */
+  threat1: [0.98, 0.78, 0.18],
+  threat2: [0.98, 0.5, 0.12],
+  threat3: [0.86, 0.15, 0.15],
 } as const;

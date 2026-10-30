@@ -74,6 +74,8 @@ class Bomb {
   readonly entity: pc.Entity;
   active = false;
   kind: BombKind = 'standard';
+  /** Released on a clean low-level approach (or none was asked for). */
+  clean = true;
   /** Release order, so the camera can follow the newest bomb. */
   serial = 0;
   readonly position = new pc.Vec3();
@@ -92,9 +94,10 @@ class Bomb {
     return BOMB.kinds[this.kind].radius;
   }
 
-  release(position: pc.Vec3, planeVelocity: pc.Vec3, serial: number, kind: BombKind): void {
+  release(position: pc.Vec3, planeVelocity: pc.Vec3, serial: number, kind: BombKind, clean: boolean): void {
     this.active = true;
     this.kind = kind;
+    this.clean = clean;
     const scale = this.radius / BOMB.kinds.standard.radius;
     this.entity.setLocalScale(scale, scale, scale);
     this.serial = serial;
@@ -143,18 +146,26 @@ export class Bombs {
     return this.pool.some((b) => b.active);
   }
 
-  /** Drops a ball, carrying the plane's velocity plus a small downward kick. */
-  release(position: pc.Vec3, planeVelocity: pc.Vec3, kind: BombKind): void {
+  /**
+   * Drops a ball, carrying the plane's velocity plus a small downward kick. `clean` records whether
+   * it left on a clean low-level approach.
+   */
+  release(position: pc.Vec3, planeVelocity: pc.Vec3, kind: BombKind, clean = true): void {
     const bomb = this.pool.find((b) => !b.active) ?? this.pool.reduce((a, b) => (a.serial < b.serial ? a : b));
-    bomb.release(position, planeVelocity, ++this.serial, kind);
+    bomb.release(position, planeVelocity, ++this.serial, kind, clean);
   }
 
-  /** Moves every falling bomb; returns each impact with the kind of bomb that made it. */
-  update(dt: number, zones: readonly ZoneRef[], territories: readonly Territory[], objects: readonly Collider[]): Array<BombImpact & { bomb: BombKind }> {
-    const impacts: Array<BombImpact & { bomb: BombKind }> = [];
+  /** Moves every falling bomb; returns each impact with the kind of bomb that made it and how it was released. */
+  update(
+    dt: number,
+    zones: readonly ZoneRef[],
+    territories: readonly Territory[],
+    objects: readonly Collider[],
+  ): Array<BombImpact & { bomb: BombKind; clean: boolean }> {
+    const impacts: Array<BombImpact & { bomb: BombKind; clean: boolean }> = [];
     for (const bomb of this.pool) {
       const impact = bomb.update(dt, zones, territories, objects);
-      if (impact) impacts.push({ ...impact, bomb: bomb.kind });
+      if (impact) impacts.push({ ...impact, bomb: bomb.kind, clean: bomb.clean });
     }
     return impacts;
   }

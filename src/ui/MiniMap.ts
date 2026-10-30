@@ -1,5 +1,17 @@
+import type { ThreatLevel } from '../config';
+import type { InstallationKind } from '../defenses/Layout';
+
 export interface MiniMapView {
-  territories: Array<{ id: string; x: number; z: number; half: number; role: 'home' | 'objective' | 'done' | 'neutral' }>;
+  territories: Array<{ id: string; x: number; z: number; half: number; role: 'home' | 'objective' | 'done' | 'neutral'; threat: ThreatLevel }>;
+  /** Every installation; weapons with `reach` set show how far (and which way) they can shoot. */
+  defenses: Array<{
+    x: number;
+    z: number;
+    kind: InstallationKind;
+    alive: boolean;
+    engaged: boolean;
+    reach: { range: number; facing: number; arc: number | null } | null;
+  }>;
   /** Precision spots and bullseyes still to hit. */
   zones: Array<{ x: number; z: number; precision: boolean }>;
   rings: Array<{ x: number; z: number; yaw: number; state: 'open' | 'waiting' }>;
@@ -28,6 +40,12 @@ const COLORS = {
   precision: '#3730a3',
   plane: '#111827',
   guide: 'rgba(220, 38, 38, 0.6)',
+  threat: ['', '#eab308', '#f97316', '#dc2626'],
+  defense: '#4d5530',
+  engaged: '#dc2626',
+  wreck: '#9ca3af',
+  reachTurret: 'rgba(220, 38, 38, 0.5)',
+  reachLauncher: 'rgba(147, 51, 234, 0.5)',
 };
 
 /**
@@ -87,6 +105,11 @@ export class MiniMap {
       const y = sy(t.x, t.z);
       ctx.fillStyle = COLORS[t.role];
       ctx.fillRect(x - half, y - half, half * 2, half * 2);
+      if (t.threat > 0) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = COLORS.threat[t.threat];
+        ctx.strokeRect(x - half + 0.75, y - half + 0.75, half * 2 - 1.5, half * 2 - 1.5);
+      }
       if (t.role === 'objective') {
         ctx.lineWidth = 2;
         ctx.strokeStyle = `rgba(234, 88, 12, ${0.5 + 0.5 * Math.sin(this.time * 4)})`;
@@ -94,6 +117,48 @@ export class MiniMap {
       }
       ctx.fillStyle = COLORS.label;
       ctx.fillText(t.id, x, y);
+    }
+
+    // How far each nearby weapon reaches, with the blind spot behind a turret left open.
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
+    for (const d of v.defenses) {
+      if (!d.reach || !d.alive) continue;
+      const x = sx(d.x, d.z);
+      const y = sy(d.x, d.z);
+      const facing = Math.atan2(Math.sin(d.reach.facing), -Math.cos(d.reach.facing));
+      const arc = d.reach.arc ?? Math.PI;
+      ctx.beginPath();
+      if (d.reach.arc !== null) ctx.moveTo(x, y);
+      ctx.arc(x, y, d.reach.range * scale, facing - arc, facing + arc);
+      if (d.reach.arc !== null) ctx.closePath();
+      ctx.strokeStyle = d.kind === 'launcher' ? COLORS.reachLauncher : COLORS.reachTurret;
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (const d of v.defenses) {
+      const x = sx(d.x, d.z);
+      const y = sy(d.x, d.z);
+      ctx.fillStyle = !d.alive ? COLORS.wreck : d.engaged && Math.sin(this.time * 12) > -0.3 ? COLORS.engaged : COLORS.defense;
+      ctx.beginPath();
+      switch (d.kind) {
+        case 'turret':
+          ctx.rect(x - 1.8, y - 1.8, 3.6, 3.6);
+          break;
+        case 'launcher':
+          ctx.moveTo(x, y - 2.6);
+          ctx.lineTo(x + 2.4, y + 2);
+          ctx.lineTo(x - 2.4, y + 2);
+          ctx.closePath();
+          break;
+        case 'radar':
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
+          break;
+        case 'supply':
+          ctx.rect(x - 1.4, y - 1.4, 2.8, 2.8);
+          break;
+      }
+      ctx.fill();
     }
 
     for (const z of v.zones) {

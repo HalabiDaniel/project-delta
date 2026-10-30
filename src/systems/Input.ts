@@ -9,7 +9,7 @@ const LOCK_SETTLE_MS = 100;
 const LOCK_REQUEST_CAP_MS = 500;
 
 const GAME_KEYS = new Set([
-  'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'Escape', 'Enter', 'NumpadEnter',
+  'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'KeyM', 'Escape', 'Enter', 'NumpadEnter',
   'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
 ]);
 

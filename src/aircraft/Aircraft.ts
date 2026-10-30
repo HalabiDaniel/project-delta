@@ -4,7 +4,7 @@ import type { MissionSpec, MissionType } from '../missions/Mission';
 export type RatingKey = keyof typeof RATINGS;
 export type Ratings = Record<RatingKey, number>;
 
-export const RATING_KEYS: readonly RatingKey[] = ['speed', 'maneuverability', 'durability', 'range', 'payload', 'firepower'];
+export const RATING_KEYS: readonly RatingKey[] = ['speed', 'maneuverability', 'durability', 'range', 'payload', 'firepower', 'stealth'];
 
 export const RATING_LABELS: Record<RatingKey, string> = {
   speed: 'Speed',
@@ -13,6 +13,7 @@ export const RATING_LABELS: Record<RatingKey, string> = {
   range: 'Range',
   payload: 'Payload',
   firepower: 'Firepower',
+  stealth: 'Stealth',
 };
 
 /** The raw number behind each rating. */
@@ -25,6 +26,7 @@ export function ratingValue(spec: AircraftSpec, key: RatingKey): number {
     case 'range': return spec.range;
     case 'payload': return spec.bombs.capacity * BOMB.kinds[spec.bombs.kind].weight;
     case 'firepower': return spec.gun.damage / spec.gun.interval;
+    case 'stealth': return spec.signature;
   }
 }
 
@@ -86,12 +88,15 @@ export function assessSuitability(aircraft: AircraftSpec, spec: Pick<MissionSpec
   const weights: Partial<Record<RatingKey, number>> = SUITABILITY.weights[spec.type];
   let sum = 0;
   let total = 0;
+  let weakest = 5;
   for (const key of RATING_KEYS) {
     const w = weights[key] ?? 0;
     sum += w * ratings[key];
     total += w;
+    if (w > 0) weakest = Math.min(weakest, ratings[key]);
   }
-  const score = total > 0 ? sum / total : 3;
+  const balanced = (SUITABILITY.balanced as readonly MissionType[]).includes(spec.type);
+  const score = total === 0 ? 3 : balanced ? Math.min(5, weakest + 1) : sum / total;
 
   if (load < targets) {
     const rack = aircraft.bombs.capacity;
@@ -113,6 +118,7 @@ const PHRASES: Record<RatingKey, [high: string, low: string]> = {
   range: ['Long range', 'Short range'],
   payload: ['Big bomb rack', 'Small bomb rack'],
   firepower: ['Heavy guns', 'Light guns'],
+  stealth: ['Hard to spot', 'Easy to spot'],
 };
 
 /** The bomb load first (when it matters), then the most important rating that stands out. */
