@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { MISSIONS, WORLD, type Difficulty } from '../config';
 import { seededRng } from '../systems/Random';
+import { footprint } from '../combat/Collision';
+import { layoutTargetRange } from '../combat/Destructibles';
 import { generateTerritories } from '../world/WorldGenerator';
 import { insideAirspace } from './Mission';
 import { generateMission, generateOffers, MISSION_TYPES, missionReward, type MissionContext } from './MissionGenerator';
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
-const ctx: MissionContext = { territories, homeId: home.id, launch: { x: home.x + 8, z: home.z + 8 } };
+const range = layoutTargetRange(territories);
+const dummies = range.filter((s) => s.kind === 'dummy');
+const obstacles = range.flatMap((s) => s.shapes.map(footprint));
+const ctx: MissionContext = { territories, homeId: home.id, launch: { x: home.x + 8, z: home.z + 8 }, dummies, obstacles };
 
 describe('generateOffers', () => {
   it('offers three cards with different types and one of each difficulty', () => {
@@ -25,7 +30,7 @@ describe('generateOffers', () => {
     for (let seed = 1; seed <= 200; seed++) {
       for (const m of generateOffers(ctx, seededRng(seed))) {
         for (const o of m.objectives) {
-          if (o.kind === 'bomb' || o.kind === 'recon' || o.kind === 'reach') targets.add(o.territoryId);
+          if (o.kind === 'bomb' || o.kind === 'recon' || o.kind === 'reach' || o.kind === 'destroy') targets.add(o.territoryId);
         }
       }
     }
@@ -38,7 +43,29 @@ describe('generateMission', () => {
     for (const type of MISSION_TYPES) for (const difficulty of ['easy', 'medium', 'hard'] as const) for (let seed = 1; seed <= 15; seed++) fn(type, difficulty, seed);
   };
 
-  it('bombing missions carry one bomb per target, plus a spare unless hard', () => {
+  it('without practice planes in the world, target practice is never offered', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const offers = generateOffers({ territories, homeId: home.id, launch: ctx.launch }, seededRng(seed));
+      expect(offers.some((m) => m.spec.type === 'practice')).toBe(false);
+    }
+  });
+
+  it('target practice asks for the practice planes on one territory, timed only on hard', () => {
+    each((type, difficulty, seed) => {
+      if (type !== 'practice') return;
+      const spec = generateMission(type, difficulty, ctx, seededRng(seed));
+      expect(spec.bombs).toBe(0);
+      expect(spec.timeLimit !== null).toBe(difficulty === 'hard');
+      const o = spec.objectives[0];
+      expect(o.kind).toBe('destroy');
+      if (o.kind !== 'destroy') return;
+      expect(o.count).toBe(MISSIONS.practiceCount[difficulty]);
+      expect(o.targets).toHaveLength(3);
+      for (const id of o.targets) expect(dummies.find((d) => d.id === id)?.territoryId).toBe(o.territoryId);
+    });
+  });
+
+  it('bombing missions offer one bomb per target, plus spares on easier difficulties', () => {
     each((type, difficulty, seed) => {
       const spec = generateMission(type, difficulty, ctx, seededRng(seed));
       const targets = spec.objectives.filter((o) => o.kind === 'bomb').length;
@@ -57,6 +84,8 @@ describe('generateMission', () => {
       expect(o.precision).toBe(true);
       expect(o.zone.radius).toBe(MISSIONS.precisionRadius[difficulty]);
       expect(t.containsXZ(o.zone.x, o.zone.z, -o.zone.radius)).toBe(true);
+      // Clear of props and pencil stands, so nothing stands in the bomb's way.
+      for (const f of obstacles) expect(Math.hypot(f.x - o.zone.x, f.z - o.zone.z)).toBeGreaterThanOrEqual(f.r + o.zone.radius);
     });
   });
 
@@ -115,7 +144,7 @@ describe('missionReward', () => {
     }
   });
 
-  it('every mission pays more than a new plane costs', () => {
-    for (const type of MISSION_TYPES) expect(missionReward(type, 'easy', 50)).toBeGreaterThan(20);
+  it('every mission pays more than a mid-priced plane costs', () => {
+    for (const type of MISSION_TYPES) expect(missionReward(type, 'easy', 50)).toBeGreaterThan(25);
   });
 });

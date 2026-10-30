@@ -1,6 +1,6 @@
 import type { Difficulty } from '../config';
 
-export type MissionType = 'bombing' | 'precision' | 'recon' | 'delivery' | 'return' | 'multi-bomb' | 'rings';
+export type MissionType = 'bombing' | 'precision' | 'recon' | 'delivery' | 'return' | 'multi-bomb' | 'rings' | 'practice';
 
 export type MissionStatus = 'available' | 'active' | 'succeeded' | 'failed';
 
@@ -49,7 +49,9 @@ export type Objective =
   | { kind: 'recon'; territoryId: string; airspace: Airspace; duration: number }
   | { kind: 'reach'; territoryId: string; airspace: Airspace }
   | { kind: 'ring'; gate: RingGate; number: number }
-  | { kind: 'land'; territoryId: string };
+  | { kind: 'land'; territoryId: string }
+  /** Shoot down (or bomb) `count` of the practice targets `targets` on a territory. */
+  | { kind: 'destroy'; territoryId: string; targets: string[]; count: number };
 
 export interface MissionSpec {
   type: MissionType;
@@ -57,7 +59,7 @@ export interface MissionSpec {
   title: string;
   description: string;
   reward: number;
-  /** Bombs loaded for this mission. Missions without bombing objectives carry none. */
+  /** Bombs offered for this mission; a plane carries as many as its rack holds. Missions without bombing objectives offer none. */
   bombs: number;
   /** Seconds from launch, or null for no time limit. */
   timeLimit: number | null;
@@ -79,6 +81,8 @@ export class Mission {
   elapsed = 0;
   /** Progress per objective, 0 to 1. An objective is done at 1. */
   readonly progress: number[];
+  /** Practice targets already destroyed, per destroy objective. */
+  private readonly destroyed = new Map<number, Set<string>>();
 
   constructor(readonly spec: MissionSpec) {
     this.progress = spec.objectives.map(() => 0);
@@ -197,6 +201,29 @@ export class Mission {
       if (this.isDone(i)) completed.push(i);
     });
     return completed;
+  }
+
+  /**
+   * Practice target `targetId` was destroyed. Each target counts once per objective, even if it
+   * folds itself back up and is shot down again. Returns the indices of objectives completed.
+   */
+  completeDestroy(targetId: string): number[] {
+    const completed: number[] = [];
+    if (!this.isActive) return completed;
+    this.objectives.forEach((o, i) => {
+      if (o.kind !== 'destroy' || !this.isOpen(i) || !o.targets.includes(targetId)) return;
+      const set = this.destroyed.get(i) ?? new Set<string>();
+      set.add(targetId);
+      this.destroyed.set(i, set);
+      this.progress[i] = Math.min(1, set.size / o.count);
+      if (this.isDone(i)) completed.push(i);
+    });
+    return completed;
+  }
+
+  /** Practice targets of objective `index` already destroyed. */
+  destroyedTargets(index: number): ReadonlySet<string> {
+    return this.destroyed.get(index) ?? new Set();
   }
 
   /** The plane landed on `territoryId`. Returns true if that completed a landing objective. */

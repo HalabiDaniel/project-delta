@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { BOOST, CAMERA, PALETTE, PLANE } from '../config';
+import { CAMERA, PALETTE } from '../config';
 import type { Territory } from '../world/Territory';
 import { forwardFromAngles, type PlaneController } from './PlaneController';
 
@@ -52,10 +52,13 @@ export class ChaseCamera {
    */
   updateFollow(dt: number, plane: PlaneController, territories: readonly Territory[], focus: pc.Vec3 | null): void {
     const p = plane.position;
-    const speedFrac = clamp((plane.speed - PLANE.minSpeed) / (PLANE.maxSpeed - PLANE.minSpeed), 0, 1);
-    const boostFrac = clamp((plane.speed - PLANE.maxSpeed) / BOOST.speed, 0, 1);
+    const f = plane.flight;
+    const speedFrac = clamp((plane.speed - f.minSpeed) / (f.maxSpeed - f.minSpeed), 0, 1);
+    const boostFrac = clamp((plane.speed - f.maxSpeed) / f.boostSpeed, 0, 1);
     const boosting = plane.boost.active ? 1 : boostFrac;
-    const distance = CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting;
+    // Bigger planes get a little more room.
+    const size = Math.abs(plane.model.shape.wingtip[0]) * plane.model.shape.scale;
+    const distance = (CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting) * (0.8 + 0.14 * size);
 
     forwardFromAngles(plane.yaw, plane.pitch * 0.6, this.dir);
     this.wantPos.set(

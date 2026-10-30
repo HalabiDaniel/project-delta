@@ -130,6 +130,28 @@ describe('Mission', () => {
   });
 });
 
+describe('destroy objectives', () => {
+  const practice = () =>
+    mission({
+      type: 'practice',
+      bombs: 0,
+      objectives: [{ kind: 'destroy', territoryId: 'T4', targets: ['T4-d1', 'T4-d2', 'T4-d3'], count: 2 }],
+    });
+
+  it('count each practice target once, and complete at the required number', () => {
+    const m = practice();
+    expect(m.completeDestroy('T4-d1')).toEqual([]); // not started
+    m.start();
+    expect(m.completeDestroy('T4-d1')).toEqual([]);
+    expect(m.progress[0]).toBeCloseTo(0.5);
+    expect(m.completeDestroy('T4-d1')).toEqual([]); // respawned and shot again: still one
+    expect(m.completeDestroy('T5-d1')).toEqual([]); // not one of ours
+    expect(m.completeDestroy('T4-d3')).toEqual([0]);
+    expect(m.allDone).toBe(true);
+    expect([...m.destroyedTargets(0)].sort()).toEqual(['T4-d1', 'T4-d3']);
+  });
+});
+
 describe('geometry', () => {
   it('insideAirspace checks the square and the ceiling', () => {
     expect(insideAirspace(airspace, { x: 89, y: 5, z: -19 })).toBe(true);

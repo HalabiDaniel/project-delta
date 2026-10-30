@@ -1,3 +1,4 @@
+import type { Shape } from '../combat/Collision';
 import { WORLD } from '../config';
 
 export type TerritoryOwner = 'player' | null;
@@ -29,6 +30,11 @@ export class Territory {
 
   get isHome(): boolean {
     return this.owner === 'player';
+  }
+
+  /** The platform as a collision box. */
+  get shape(): Shape {
+    return { kind: 'box', x: this.x, y: (this.top + this.bottom) / 2, z: this.z, hx: this.half, hy: this.thickness / 2, hz: this.half, yaw: 0 };
   }
 
   /** Is (x, z) over this platform, optionally grown or shrunk by `margin` on every side? */

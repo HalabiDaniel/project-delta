@@ -1,5 +1,3 @@
-import { BOOST } from '../config';
-
 /**
  * ready    – Shift will boost.
  * active   – boosting: lasts while Shift is held, up to `duration`.
@@ -7,14 +5,14 @@ import { BOOST } from '../config';
  */
 export type BoostState = 'ready' | 'active' | 'cooldown';
 
-/** The Shift boost's timing. Holding Shift boosts whenever the boost is ready. */
+/** The Shift boost's timing. Holding Shift boosts whenever the boost is ready. Each design has its own. */
 export class Boost {
   state: BoostState = 'ready';
   private timeLeft = 0;
 
   constructor(
-    readonly duration: number = BOOST.duration,
-    readonly cooldown: number = BOOST.cooldown,
+    public duration: number,
+    public cooldown: number,
   ) {}
 
   get active(): boolean {

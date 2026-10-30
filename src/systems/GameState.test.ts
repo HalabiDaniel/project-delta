@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BOMB, ECONOMY, PLANE } from '../config';
+import { AIRCRAFT, BOMB, ECONOMY, PLANE } from '../config';
 import { Mission, type MissionSpec } from '../missions/Mission';
 import { GameState, type GameEvent } from './GameState';
 import { HomeIncome } from './HomeIncome';
+import { LocalStats, type KeyValueStore } from './LocalStats';
 import { ResourceManager } from './ResourceManager';
 
 const zone = (x: number) => ({ x, z: 0, radius: 5, top: 0.3 });
 
 const SPECS: Record<string, MissionSpec> = {
   bomb: {
-    type: 'bombing', difficulty: 'easy', title: 'Bomb T5', description: '', reward: 50, bombs: 1, timeLimit: null, ordered: false,
+    type: 'bombing', difficulty: 'easy', title: 'Bomb T5', description: '', reward: 50, bombs: 3, timeLimit: null, ordered: false,
     objectives: [{ kind: 'bomb', territoryId: 'T5', zone: zone(0), precision: false }],
   },
   double: {
@@ -30,7 +31,13 @@ const SPECS: Record<string, MissionSpec> = {
     type: 'delivery', difficulty: 'easy', title: 'Deliver', description: '', reward: 40, bombs: 0, timeLimit: 10, ordered: false,
     objectives: [{ kind: 'reach', territoryId: 'T6', airspace: { x: 70, z: 0, half: 20, ceiling: 35 } }],
   },
+  practice: {
+    type: 'practice', difficulty: 'medium', title: 'Practice', description: '', reward: 60, bombs: 0, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'destroy', territoryId: 'T4', targets: ['T4-d1', 'T4-d2', 'T4-d3'], count: 2 }],
+  },
 };
+
+const FALCON = AIRCRAFT.falcon.cost;
 
 /**
  * Offers the given missions, freshly, every time the cards are dealt. Home income is switched off
@@ -53,7 +60,7 @@ function setupWith(income: HomeIncome, ...kinds: string[]) {
   return { resources, state, events, deals: () => deals };
 }
 
-/** Builds (waiting out the fold) and launches. */
+/** Builds the chosen plane (waiting out the fold) and launches. */
 function sortie(state: GameState): void {
   expect(state.build()).toBe(true);
   state.tick(PLANE.buildTime);
@@ -61,57 +68,121 @@ function sortie(state: GameState): void {
   expect(state.launch()).toBe(true);
 }
 
-describe('GameState', () => {
-  it('starts at the desk with 100 paper and mission cards on offer', () => {
+/** Lands at home, then ends the sortie. */
+function landAndEnd(state: GameState): void {
+  expect(state.land('T1')).toBe(true);
+  expect(state.endSortie()).toBe(true);
+}
+
+describe('GameState: garage', () => {
+  it('starts at the desk with 100 paper, mission cards on offer and the Falcon chosen', () => {
     const { state, resources } = setup('bomb', 'double', 'delivery');
     expect(state.phase).toBe('desk');
     expect(resources.paper).toBe(ECONOMY.startingPaper);
     expect(state.offers.map((m) => m.title)).toEqual(['Bomb T5', 'Double', 'Deliver']);
     expect(state.selectedMission.title).toBe('Bomb T5');
+    expect(state.aircraft).toBe('falcon');
+    expect(state.hangar.size).toBe(0);
+  });
+
+  it('each design costs its own price and takes the fold time', () => {
+    for (const id of ['dart', 'falcon', 'swift', 'widewing'] as const) {
+      const { state, resources } = setup('delivery');
+      state.selectAircraft(id);
+      expect(state.buildCost).toBe(AIRCRAFT[id].cost);
+      expect(state.build()).toBe(true);
+      expect(resources.paper).toBe(100 - AIRCRAFT[id].cost);
+      expect(state.phase).toBe('building');
+      expect(state.launch()).toBe(false);
+      state.tick(PLANE.buildTime / 2);
+      expect(state.buildProgress).toBeCloseTo(0.5);
+      state.tick(PLANE.buildTime / 2);
+      expect(state.phase).toBe('ready');
+      expect(state.plane?.id).toBe(id);
+      expect(state.build()).toBe(false); // already have a plane
+    }
   });
 
   it('cards can be chosen until launch, and the chosen one is flown', () => {
     const { state } = setup('bomb', 'double', 'delivery');
-    expect(state.select(1)).toBe(true);
+    expect(state.select(2)).toBe(true);
     state.build();
-    expect(state.select(2)).toBe(true); // still allowed while folding
+    expect(state.select(0)).toBe(true); // still allowed while folding
     state.tick(PLANE.buildTime);
     state.launch();
-    expect(state.select(0)).toBe(false);
-    expect(state.mission?.title).toBe('Deliver');
+    expect(state.select(1)).toBe(false);
+    expect(state.mission?.title).toBe('Bomb T5');
     expect(state.mission?.status).toBe('active');
   });
 
-  it('folding costs 20 paper and takes the build time before the plane is ready', () => {
-    const { state, resources } = setup();
-    expect(state.build()).toBe(true);
-    expect(resources.paper).toBe(80);
-    expect(state.phase).toBe('building');
-    expect(state.launch()).toBe(false);
-    state.tick(PLANE.buildTime / 2);
-    expect(state.buildProgress).toBeCloseTo(0.5);
-    expect(state.phase).toBe('building');
-    state.tick(PLANE.buildTime / 2);
-    expect(state.phase).toBe('ready');
-    expect(state.build()).toBe(false); // already have a plane
-    expect(state.stats.planesBuilt).toBe(1);
+  it("a plane that can't carry a bomb per target can't be folded for that mission, at no charge", () => {
+    const { state, resources, events } = setup('double', 'bomb');
+    expect(state.suitability().level).toBe('unsuitable');
+    expect(state.canBuild()).toBe(false);
+    expect(state.build()).toBe(false);
+    expect(resources.paper).toBe(100);
+    expect(events).toContain('build-refused');
+    state.selectAircraft('widewing');
+    expect(state.canBuild()).toBe(true);
   });
 
+  it('switching the card to an impossible mission after folding blocks the launch until it is switched back', () => {
+    const { state, events } = setup('bomb', 'double');
+    state.build();
+    state.tick(PLANE.buildTime);
+    state.select(1);
+    expect(state.launch()).toBe(false);
+    expect(events).toContain('launch-refused');
+    state.select(0);
+    expect(state.launch()).toBe(true);
+  });
+
+  it('switching designs with a plane on the pad stows it; rolling it out later is free and its cost goes to that sortie', () => {
+    const { state, resources } = setup('bomb');
+    state.build();
+    expect(state.selectAircraft('dart')).toBe(false); // not while folding
+    state.tick(PLANE.buildTime);
+    expect(state.selectAircraft('dart')).toBe(true);
+    expect(state.phase).toBe('desk');
+    expect(state.hangar.get('falcon')).toMatchObject({ condition: 'ready', invested: FALCON });
+    expect(state.buildCostFor('falcon')).toBe(0);
+    state.selectAircraft('falcon');
+    expect(state.buildKindFor('falcon')).toBe('rollout');
+    expect(state.build()).toBe(true);
+    expect(resources.paper).toBe(100 - FALCON);
+    state.tick(PLANE.rolloutTime);
+    expect(state.phase).toBe('ready');
+    expect(state.sortie?.paperSpent).toBe(FALCON);
+    expect(state.stats.planesBuilt).toBe(1);
+  });
+});
+
+describe('GameState: weapons', () => {
   it('a hit pays the reward exactly once', () => {
     const { state, resources, events } = setup();
     sortie(state);
     expect(state.dropBomb()).toBe(true);
     state.resolveBomb(0);
     expect(state.mission?.status).toBe('succeeded');
-    expect(resources.paper).toBe(80 + 50);
+    expect(resources.paper).toBe(100 - FALCON + 50);
     state.resolveBomb(0);
     state.resolveBomb(null);
-    expect(resources.paper).toBe(130);
+    expect(resources.paper).toBe(100 - FALCON + 50);
     expect(events.filter((e) => e === 'mission-succeeded')).toHaveLength(1);
+  });
+
+  it('a plane carries as many of the offered bombs as its rack holds', () => {
+    for (const [id, load] of [['falcon', 1], ['swift', 2], ['widewing', 3]] as const) {
+      const { state } = setup('bomb');
+      state.selectAircraft(id);
+      sortie(state);
+      expect(state.bombsLoaded).toBe(load);
+    }
   });
 
   it('bombs are limited by the load and spaced by a cooldown', () => {
     const { state } = setup('double');
+    state.selectAircraft('widewing');
     sortie(state);
     expect(state.bombsLoaded).toBe(3);
     expect(state.dropBomb()).toBe(true);
@@ -127,6 +198,7 @@ describe('GameState', () => {
 
   it('a miss with bombs left keeps the mission going; the last miss fails it', () => {
     const { state, resources, events } = setup('double');
+    state.selectAircraft('widewing');
     sortie(state);
     for (let i = 0; i < 3; i++) {
       state.dropBomb();
@@ -139,69 +211,132 @@ describe('GameState', () => {
     state.resolveBomb(null);
     expect(state.mission?.status).toBe('failed');
     expect(state.mission?.failure).toBe('missed');
-    expect(resources.paper).toBe(80);
+    expect(resources.paper).toBe(100 - AIRCRAFT.widewing.cost);
+    expect(state.sortie).toMatchObject({ bombsDropped: 3, bombHits: 1 });
   });
 
-  it('both targets on a double strike pays once both are hit', () => {
-    const { state, resources } = setup('double');
+  it('ink guns fire at their rate until the ammunition runs out', () => {
+    const { state, events } = setup('delivery');
     sortie(state);
-    state.dropBomb();
-    state.resolveBomb(1);
+    const gun = AIRCRAFT.falcon.gun;
+    expect(state.gun?.ammo).toBe(gun.ammo);
+    expect(state.fire()).toBe(0);
+    expect(state.fire()).toBeNull();
+    state.tick(gun.interval);
+    expect(state.fire()).toBe(1); // the other wing
+    for (let i = 0; i < gun.ammo * 2; i++) {
+      state.tick(gun.interval);
+      state.fire();
+    }
+    expect(state.gun?.ammo).toBe(0);
+    expect(state.canFire()).toBe(false);
+    expect(events).toContain('out-of-ammo');
+    expect(state.sortie?.shotsFired).toBe(gun.ammo);
+  });
+
+  it('shooting down practice planes completes target practice, each counted once', () => {
+    const { state, resources, events } = setup('practice');
+    sortie(state);
+    state.recordShotHit();
+    state.recordDamage(20, null);
+    state.recordDamage(20, 'T4-d1');
     expect(state.mission?.status).toBe('active');
-    state.tick(BOMB.dropCooldown);
-    state.dropBomb();
-    state.resolveBomb(0);
+    state.recordDamage(40, 'T5-d1'); // not on the mission's territory
+    expect(state.mission?.status).toBe('active');
+    state.recordDamage(40, 'T4-d2');
     expect(state.mission?.status).toBe('succeeded');
-    expect(resources.paper).toBe(80 + 90);
+    expect(resources.paper).toBe(100 - FALCON + 60);
+    expect(state.sortie).toMatchObject({ damageDealt: 120, targetsDestroyed: 3, shotsHit: 1 });
+    expect(state.stats.targetsDestroyed).toBe(3);
+    expect(events.filter((e) => e === 'target-destroyed')).toHaveLength(3);
+  });
+});
+
+describe('GameState: damage and range', () => {
+  it('damage wears the plane down; at zero health it is destroyed by whatever did it', () => {
+    const { state, events } = setup('delivery');
+    sortie(state);
+    expect(state.damageAircraft(30, 'impact')).toEqual({ dealt: 30, destroyed: false });
+    expect(state.durability?.health).toBe(AIRCRAFT.falcon.maxHealth - 30);
+    expect(events).toContain('damaged');
+    expect(state.damageAircraft(500, 'landing')).toEqual({ dealt: 70, destroyed: true });
+    expect(state.phase).toBe('crashed');
+    expect(state.sortie).toMatchObject({ damageTaken: 100, outcome: 'lost' });
+    expect(state.stats.planesLost).toBe(1);
+    expect(state.mission?.failure).toBe('aircraft-lost');
   });
 
-  it('flying objectives complete from flight steps, and timed missions run out', () => {
-    const { state } = setup('delivery', 'delivery');
+  it('flying uses up range; once it is gone the plane can only glide', () => {
+    const { state, events } = setup('delivery');
+    state.selectAircraft('widewing');
     sortie(state);
-    expect(state.bombsLoaded).toBe(0);
-    expect(state.dropBomb()).toBe(false);
-    state.updateFlight({ x: 40, y: 10, z: 0 }, { x: 52, y: 10, z: 0 }, 0.1);
-    expect(state.mission?.status).toBe('succeeded');
-
-    const late = setup('delivery');
-    sortie(late.state);
-    late.state.tick(11);
-    expect(late.state.mission?.status).toBe('failed');
-    expect(late.state.mission?.failure).toBe('out-of-time');
+    expect(state.rangeLeft).toBe(AIRCRAFT.widewing.range);
+    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -300 }, 0.1);
+    expect(state.rangeLeft).toBe(AIRCRAFT.widewing.range - 300);
+    expect(state.outOfRange).toBe(false);
+    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -5000 }, 0.1);
+    expect(state.outOfRange).toBe(true);
+    expect(events.filter((e) => e === 'range-exhausted')).toHaveLength(1);
   });
+});
 
-  it('landing recovers the plane, and the next one is a cheap refit', () => {
-    const { state, resources, events } = setup();
+describe('GameState: landing, rearming and the end of a sortie', () => {
+  it('landing keeps the sortie going: rearm (free) restores ink and range, then take off again', () => {
+    const { state, resources, events } = setup('practice');
     sortie(state);
-    state.dropBomb();
-    state.resolveBomb(0);
+    for (let i = 0; i < 10; i++) {
+      state.fire();
+      state.tick(1);
+    }
+    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -200 }, 0.1);
+    expect(state.rearm()).toBe(false); // only on the ground
     expect(state.land('T1')).toBe(true);
     expect(state.phase).toBe('landed');
-    expect(state.hangarPlane).toBe(true);
+    expect(state.mission?.status).toBe('active');
+    const paper = resources.paper;
+    expect(state.rearm()).toBe(true);
+    expect(state.takeOff()).toBe(false); // the ground crew is still at it
+    state.tick(PLANE.rearmTime);
+    expect(events).toContain('rearmed');
+    expect(state.gun?.ammo).toBe(AIRCRAFT.falcon.gun.ammo);
+    expect(state.rangeLeft).toBe(AIRCRAFT.falcon.range);
+    expect(resources.paper).toBe(paper);
+    expect(state.canRearm()).toBe(false); // nothing left to top up
+    expect(state.takeOff()).toBe(true);
+    expect(state.phase).toBe('flying');
+    expect(state.sortie?.rearms).toBe(1);
+  });
+
+  it('the mission clock keeps running on the ground', () => {
+    const { state } = setup('delivery');
+    sortie(state);
+    state.land('T1');
+    state.tick(11);
+    expect(state.mission?.failure).toBe('out-of-time');
+  });
+
+  it('ending the sortie recovers the plane, abandons an unfinished mission, and the next one is a cheap refit', () => {
+    const { state, resources, events } = setup();
+    sortie(state);
+    landAndEnd(state);
+    expect(state.phase).toBe('debrief');
+    expect(state.mission?.failure).toBe('abandoned');
+    expect(state.hangar.get('falcon')?.condition).toBe('recovered');
     expect(state.stats.planesRecovered).toBe(1);
-    expect(state.mission?.status).toBe('succeeded'); // the reward stays
-    expect(events).toContain('landed');
+    expect(state.sortie?.outcome).toBe('recovered');
+    expect(events).toContain('sortie-ended');
 
     expect(state.continueToDesk()).toBe(true);
-    expect(state.buildCost).toBe(ECONOMY.refitCost);
+    expect(state.buildCost).toBe(AIRCRAFT.falcon.refitCost);
     const before = resources.paper;
     state.build();
-    expect(resources.paper).toBe(before - ECONOMY.refitCost);
-    expect(state.refitting).toBe(true);
+    expect(resources.paper).toBe(before - AIRCRAFT.falcon.refitCost);
+    expect(state.buildKind).toBe('refit');
     expect(state.stats.planesBuilt).toBe(1); // a refit isn't a new plane
     state.tick(PLANE.refitTime);
     expect(state.phase).toBe('ready');
-    expect(state.buildCost).toBe(ECONOMY.planeCost); // the hangar is empty again
-  });
-
-  it('landing before the mission is done abandons it', () => {
-    const { state, resources } = setup();
-    sortie(state);
-    state.land('T1');
-    expect(state.mission?.status).toBe('failed');
-    expect(state.mission?.failure).toBe('abandoned');
-    expect(resources.paper).toBe(80);
-    expect(state.stats.failures).toBe(1);
+    expect(state.durability?.health).toBe(AIRCRAFT.falcon.maxHealth); // repaired
+    expect(state.buildCostFor('falcon')).toBe(FALCON); // the hangar is empty again
   });
 
   it('a strike & return mission only pays once the plane lands', () => {
@@ -210,16 +345,11 @@ describe('GameState', () => {
     state.dropBomb();
     state.resolveBomb(0);
     expect(state.mission?.status).toBe('active');
-    expect(resources.paper).toBe(80);
-    // The landing ends the sortie before it completes the mission, so listeners see it as landed.
-    let phaseAtSuccess = '';
-    state.onEvent((e) => {
-      if (e.type === 'mission-succeeded') phaseAtSuccess = state.phase;
-    });
+    expect(resources.paper).toBe(100 - FALCON);
     state.land('T1');
     expect(state.mission?.status).toBe('succeeded');
-    expect(phaseAtSuccess).toBe('landed');
-    expect(resources.paper).toBe(80 + 120);
+    expect(resources.paper).toBe(100 - FALCON + 120);
+    expect(state.sortie).toMatchObject({ paperSpent: FALCON, paperEarned: 120 });
   });
 
   it('crashing loses the plane without a reward, and a late bomb cannot score', () => {
@@ -228,10 +358,10 @@ describe('GameState', () => {
     state.dropBomb();
     state.crash('void');
     expect(state.phase).toBe('crashed');
-    expect(state.hangarPlane).toBe(false);
+    expect(state.hangar.size).toBe(0);
     expect(state.mission?.failure).toBe('aircraft-lost');
     state.resolveBomb(0); // the bomb released before the crash lands afterwards
-    expect(resources.paper).toBe(80);
+    expect(resources.paper).toBe(100 - FALCON);
     expect(state.bombsFalling).toBe(0);
   });
 
@@ -241,10 +371,10 @@ describe('GameState', () => {
     state.dropBomb();
     state.resolveBomb(0);
     state.crash('hard-landing');
-    expect(resources.paper).toBe(130);
+    expect(resources.paper).toBe(100 - FALCON + 50);
     expect(state.stats.failures).toBe(0);
     state.continueToDesk();
-    expect(state.buildCost).toBe(ECONOMY.planeCost);
+    expect(state.buildCost).toBe(FALCON);
   });
 
   it('continuing deals fresh cards; the loop repeats without reloading', () => {
@@ -253,15 +383,15 @@ describe('GameState', () => {
       sortie(state);
       state.dropBomb();
       state.resolveBomb(0);
-      state.land('T1');
+      landAndEnd(state);
       expect(state.continueToDesk()).toBe(true);
       expect(state.phase).toBe('desk');
       expect(state.mission).toBeNull();
     }
     expect(deals()).toBe(4);
-    // One new plane, then two refits; three rewards.
-    expect(resources.paper).toBe(100 - 20 - 5 - 5 + 3 * 50);
-    expect(state.stats).toEqual({ planesBuilt: 1, planesRecovered: 3, successes: 3, failures: 0 });
+    const refit = AIRCRAFT.falcon.refitCost;
+    expect(resources.paper).toBe(100 - FALCON - refit - refit + 3 * 50);
+    expect(state.stats).toMatchObject({ planesBuilt: 1, planesRecovered: 3, successes: 3, failures: 0 });
   });
 
   it('paper never goes negative: building is refused, and home income gets the player going again', () => {
@@ -277,12 +407,49 @@ describe('GameState', () => {
       }
       expect(resources.paper).toBeGreaterThanOrEqual(0);
     }
-    expect(builds).toBe(5);
+    expect(builds).toBe(4);
     expect(state.canBuild()).toBe(false);
     expect(events).toContain('build-refused');
     const wait = state.income.timeToAfford(resources.paper, state.buildCost)!;
     expect(wait).toBeGreaterThan(0);
     state.tick(wait);
     expect(state.canBuild()).toBe(true);
+  });
+});
+
+describe('LocalStats', () => {
+  const memory = (): KeyValueStore & { data: Record<string, string> } => {
+    const data: Record<string, string> = {};
+    return { data, getItem: (k) => data[k] ?? null, setItem: (k, v) => void (data[k] = v) };
+  };
+
+  it('keeps career numbers across visits and works out the favourite plane', () => {
+    const store = memory();
+    const first = new LocalStats(store);
+    expect(first.favorite).toBeNull();
+    first.recordSortie('dart');
+    first.recordSortie('widewing');
+    first.recordSortie('widewing');
+    first.recordMissionCompleted();
+    first.recordPlaneLost();
+    first.recordTargetDestroyed();
+    first.rememberAircraft('swift');
+    const second = new LocalStats(store);
+    expect(second.data).toMatchObject({ missionsCompleted: 1, planesLost: 1, targetsDestroyed: 1, lastAircraft: 'swift' });
+    expect(second.favorite).toBe('widewing');
+  });
+
+  it('survives missing, broken or blocked storage', () => {
+    expect(new LocalStats(null).data.missionsCompleted).toBe(0);
+    const broken = memory();
+    broken.data['paperwars.career.v1'] = '{not json';
+    expect(new LocalStats(broken).data.planesLost).toBe(0);
+    const junk = memory();
+    junk.data['paperwars.career.v1'] = JSON.stringify({ missionsCompleted: -4, planesLost: 'x', sorties: { falcon: 2, jet: 9 }, lastAircraft: 'jet' });
+    expect(new LocalStats(junk).data).toEqual({ missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, sorties: { falcon: 2 }, lastAircraft: null });
+    const blocked: KeyValueStore = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
+    const stats = new LocalStats(blocked);
+    stats.recordMissionCompleted();
+    expect(stats.data.missionsCompleted).toBe(1);
   });
 });

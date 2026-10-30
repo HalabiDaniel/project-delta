@@ -8,6 +8,11 @@
   --good: #15803d;
   --bad: #b91c1c;
   --info: #1d4ed8;
+  --worn: #d97706;
+  --recommended: #15803d;
+  --fit-good: #1d4ed8;
+  --possible: #6b7280;
+  --unsuitable: #b91c1c;
 }
 
 .hud {
@@ -501,8 +506,8 @@
 }
 
 .bomb-text {
-  min-width: 9em;
-  font-size: 13px;
+  min-width: 6.5em;
+  font-size: 12px;
 }
 
 .gauge.bombs[data-state='ready'] .bomb-text { color: var(--good); font-weight: 700; }
@@ -570,29 +575,6 @@
 .ledger dd { margin: 0; font-weight: 700; text-align: right; }
 .ledger dd[data-tone='good'] { color: var(--good); }
 .ledger dd[data-tone='bad'] { color: var(--bad); }
-
-.keys {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
-  gap: 4px 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.75);
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.keys kbd + kbd {
-  margin-left: 3px;
-}
-
-.keys span:nth-child(odd) {
-  text-align: right;
-}
 
 kbd.big {
   font-size: 14px;
@@ -947,17 +929,456 @@ kbd.big {
   font-size: 12px;
 }
 
-/* Narrower windows: drop the key reminder and let the flight readout breathe. */
-@media (max-width: 1180px) {
-  .keys {
-    display: none;
-  }
 
-  .bomb-text {
-    min-width: 0;
-  }
 
-  .dock-row.flight {
-    gap: 12px;
-  }
+
+/* Career stats */
+.stats-title {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.stats-title small {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.resources .stats {
+  padding-top: 4px;
+  border-top: 0;
+}
+
+/* Shared bits: colour swatch, role chip, suitability badges */
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.role-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: var(--info);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fit-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--possible);
+}
+
+.fit-badge.small {
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+[data-level='recommended'].fit-badge { background: var(--recommended); }
+[data-level='good'].fit-badge { background: var(--fit-good); }
+[data-level='possible'].fit-badge { background: var(--possible); }
+[data-level='unsuitable'].fit-badge { background: var(--unsuitable); }
+
+/* Suitability chips on the mission cards */
+.card-fits {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.fit-chip {
+  flex: 1;
+  padding: 1px 0;
+  border-radius: 5px;
+  border: 1.5px solid transparent;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+}
+
+.fit-chip[data-level='recommended'] { background: var(--recommended); }
+.fit-chip[data-level='good'] { background: var(--fit-good); }
+.fit-chip[data-level='possible'] { background: #e5e7eb; color: var(--ink-soft); }
+.fit-chip[data-level='unsuitable'] { background: #fee2e2; color: var(--unsuitable); text-decoration: line-through; }
+.fit-chip.mine { border-color: var(--ink); box-shadow: 0 0 0 1px #fff inset; }
+
+/* Garage cards (bottom centre, at home) */
+.garage-row {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.plane-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1px 6px;
+  width: 150px;
+  padding: 8px 10px 8px 12px;
+  border: 2px solid var(--line);
+  border-left: 5px solid var(--accent);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.12);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.plane-card:hover { border-color: rgba(37, 99, 235, 0.45); border-left-color: var(--accent); }
+
+.plane-card.selected {
+  border-color: var(--blue);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2), 0 6px 24px rgba(15, 23, 42, 0.14);
+  transform: translateY(-4px);
+}
+
+.plane-card:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pc-name { font-size: 15px; font-weight: 800; }
+.pc-role { grid-column: 1 / 3; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+.pc-price { grid-column: 1 / 3; font-size: 12px; color: var(--ink-soft); }
+.pc-price b { color: var(--ink); font-size: 13px; }
+.pc-price s { opacity: 0.6; }
+.pc-price.short b { color: var(--bad); }
+.pc-health { grid-column: 1 / 3; height: 4px; border-radius: 2px; background: #e5e7eb; overflow: hidden; }
+.pc-health i { display: block; height: 100%; background: var(--worn); }
+.plane-card .fit-badge { justify-self: end; }
+
+/* Aircraft inspector (bottom left, at home) */
+.inspector {
+  top: auto;
+  left: 16px;
+  bottom: 16px;
+  width: 262px;
+}
+
+.insp-head,
+.st-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.insp-head .role-chip,
+.st-head .role-chip { margin-left: auto; }
+
+.insp-tagline {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.ratings {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.ratings div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.ratings dt { color: var(--ink-soft); }
+.ratings dd { margin: 0; }
+
+.pips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.pips i {
+  width: 16px;
+  height: 7px;
+  border-radius: 2px;
+  background: #e5e7eb;
+}
+
+.pips i.on { background: var(--blue); }
+
+.loadout {
+  margin: 8px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.fit {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.insp-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.insp-hint kbd { font-size: 10px; }
+
+/* Aircraft status (bottom left, in flight and on the ground) */
+.status {
+  top: auto;
+  left: 16px;
+  bottom: 16px;
+  width: 290px;
+  padding: 10px 14px;
+}
+
+.st-head { font-size: 15px; margin-bottom: 6px; }
+
+.st-row {
+  display: grid;
+  grid-template-columns: 58px 1fr 52px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.st-row .bar { width: auto; }
+
+.st-value {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.st-row.weapon {
+  grid-template-columns: auto auto 1fr auto;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.st-row.weapon kbd { font-size: 10px; }
+.st-weapon { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.st-row.weapon[data-state='low'] .st-value { color: var(--worn); }
+.st-row.weapon[data-state='empty'] .st-value { color: var(--bad); }
+.st-row.bombs { grid-template-columns: auto auto auto 1fr; }
+.st-row.bombs .bomb-text { text-align: right; }
+
+.bar i[data-level='ok'] { background: var(--good); }
+.bar i[data-level='worn'] { background: var(--worn); }
+.bar i[data-level='critical'] { background: var(--bad); }
+.bar.range i[data-level='ok'] { background: var(--blue); }
+.bar.ammo i { background: #3b4fc4; }
+
+.st-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.st-keys span { white-space: nowrap; }
+
+.st-keys kbd { font-size: 10px; min-width: 1.3em; padding: 0 4px; }
+
+.gauge.bombs[data-state='loaded'] .bomb-text,
+.st-row.bombs[data-state='loaded'] .bomb-text { color: var(--ink); font-weight: 700; }
+.st-row.bombs[data-state='ready'] .bomb-text { color: var(--good); font-weight: 700; }
+.st-row.bombs[data-state='reloading'] .bomb-text,
+.st-row.bombs[data-state='falling'] .bomb-text { color: var(--orange); font-weight: 700; }
+.st-row.bombs[data-state='empty'] .bomb-text,
+.st-row.bombs[data-state='none'] .bomb-text { color: var(--ink-soft); }
+
+/* Ground crew (after landing) */
+.ground-card {
+  max-width: 420px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.2);
+  text-align: center;
+}
+
+.ground-mission {
+  margin: 4px 0 10px;
+  font-weight: 700;
+}
+
+.ground-mission[data-tone='good'] { color: var(--good); }
+.ground-mission[data-tone='bad'] { color: var(--bad); }
+
+.ground-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ground-actions .btn { font-size: 13px; padding: 7px 10px; gap: 6px; }
+.ground-actions .btn kbd { font-size: 10.5px; }
+.btn.ghost:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn.primary:disabled kbd { opacity: 0.7; }
+
+.bar.mini {
+  display: inline-block;
+  width: 46px;
+  height: 6px;
+}
+
+.ground-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* Sortie report additions */
+.ledger.money {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ledger .net dt,
+.ledger .net dd { font-size: 16px; font-weight: 900; color: var(--ink); }
+.ledger .net dd[data-tone='good'] { color: var(--good); }
+.ledger .net dd[data-tone='bad'] { color: var(--bad); }
+
+/* Labels over practice targets and damaged props */
+.target-labels > .target-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  margin: -34px 0 0 -50px;
+  width: 100px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.tl-name {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tl-role {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.target-label.mission .tl-name { background: var(--orange); color: #fff; }
+.target-label.mission .tl-role { color: #fff; }
+
+.tl-health {
+  width: 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(31, 41, 55, 0.45);
+  overflow: hidden;
+}
+
+.tl-health i { display: block; height: 100%; background: var(--good); }
+.tl-health i[data-level='worn'] { background: var(--worn); }
+.tl-health i[data-level='critical'] { background: var(--bad); }
+
+/* Hit marker on the nose reticle */
+.hit-x {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  opacity: 0;
+  background:
+    linear-gradient(45deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, #fff 44%, #fff 56%, transparent 56%);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+.reticle.nose.hit .hit-x { opacity: 1; }
+
+.reticle.nose.kill .hit-x {
+  opacity: 1;
+  transform: scale(1.5);
+  filter: drop-shadow(0 0 2px #dc2626) drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+/* Damage numbers */
+.damage-number {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  font: 900 17px/1 system-ui, sans-serif;
+  color: #fff;
+  -webkit-text-stroke: 1.5px var(--ink);
+  paint-order: stroke fill;
+  pointer-events: none;
+  animation: damage-number 0.75s ease-out forwards;
+}
+
+.damage-number.kill { color: #fde047; font-size: 22px; }
+
+@keyframes damage-number {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
+  20% { opacity: 1; transform: translate(-50%, -110%) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -220%) scale(1); }
+}
+
+/* Red edges when the plane takes damage */
+.damage-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px 30px rgba(220, 38, 38, 0.75);
+}
+
+.damage-flash.show { animation: damage-flash 0.6s ease-out forwards; }
+
+@keyframes damage-flash {
+  0% { opacity: var(--strength, 0.6); }
+  100% { opacity: 0; }
+}
+
+/* Narrower windows: tighter garage cards. */
+@media (max-width: 1240px) {
+  .plane-card { width: 132px; }
+  .inspector { width: 236px; }
+  .status { width: 252px; }
+  .st-row { grid-template-columns: 52px 1fr 46px; }
+  .pips i { width: 12px; }
 }

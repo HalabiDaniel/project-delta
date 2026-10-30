@@ -1,9 +1,9 @@
-import { MISSIONS, PLANE, WORLD, type Difficulty } from '../config';
+import { MISSIONS, WORLD, type Difficulty } from '../config';
 import { pick, randRange, shuffled, type Rng } from '../systems/Random';
 import type { Territory } from '../world/Territory';
 import { Mission, type MissionSpec, type MissionType, type Objective, type RingGate, type TargetZone } from './Mission';
 
-export const MISSION_TYPES: readonly MissionType[] = ['bombing', 'precision', 'recon', 'delivery', 'return', 'multi-bomb', 'rings'];
+export const MISSION_TYPES: readonly MissionType[] = ['bombing', 'precision', 'recon', 'delivery', 'return', 'multi-bomb', 'rings', 'practice'];
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 
@@ -16,6 +16,10 @@ export interface MissionContext {
   gridSize?: number;
   /** Distance between neighbouring territory centres. */
   spacing?: number;
+  /** Practice planes standing on the territories, for target practice missions. */
+  dummies?: ReadonlyArray<{ id: string; territoryId: string }>;
+  /** Ground taken by props and stands, which precision spots keep clear of. */
+  obstacles?: ReadonlyArray<{ x: number; z: number; r: number }>;
 }
 
 /**
@@ -23,7 +27,8 @@ export interface MissionContext {
  * each difficulty, so there is always a safe choice and a lucrative one.
  */
 export function generateOffers(ctx: MissionContext, rng: Rng, count: number = MISSIONS.offers): Mission[] {
-  const types = shuffled(rng, MISSION_TYPES).slice(0, count);
+  const available = MISSION_TYPES.filter((type) => type !== 'practice' || practiceTerritories(ctx, 'hard').length > 0);
+  const types = shuffled(rng, available).slice(0, count);
   const difficulties = shuffled(rng, DIFFICULTIES);
   return types.map((type, i) => new Mission(generateMission(type, difficulties[i % difficulties.length], ctx, rng)));
 }
@@ -47,15 +52,13 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
     }
     case 'precision': {
       const t = pick(rng, targets);
-      const angle = rng() * Math.PI * 2;
-      const offset = randRange(rng, 5, t.half - 6);
+      const radius = MISSIONS.precisionRadius[difficulty];
+      const spot = precisionSpot(t, radius, ctx.obstacles ?? [], rng);
       return spec(type, difficulty, distanceTo(t), {
         title: `Precision strike: ${t.id}`,
         description: `Hit the small ink-blue spot on ${t.id}. Aim carefully.`,
         bombs: 1 + spareBombs,
-        objectives: [
-          bombObjective(t, MISSIONS.precisionRadius[difficulty], t.x + Math.cos(angle) * offset, t.z + Math.sin(angle) * offset),
-        ],
+        objectives: [bombObjective(t, radius, spot.x, spot.z)],
       });
     }
     case 'recon': {
@@ -71,7 +74,7 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
     case 'delivery': {
       const t = pick(rng, targets);
       const distance = distanceTo(t) - t.half;
-      const limit = Math.ceil((distance / PLANE.cruiseSpeed) * MISSIONS.deliverySlack[difficulty] + MISSIONS.deliveryExtraTime);
+      const limit = Math.ceil((distance / MISSIONS.referenceSpeed) * MISSIONS.deliverySlack[difficulty] + MISSIONS.deliveryExtraTime);
       return spec(type, difficulty, distanceTo(t), {
         title: `Rush delivery to ${t.id}`,
         description: `Reach ${t.id}'s airspace within ${limit} s.`,
@@ -108,7 +111,7 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
         length += distanceTo(g, from);
         from = g;
       }
-      const limit = difficulty === 'hard' ? Math.ceil((length / PLANE.cruiseSpeed) * MISSIONS.ringSlackHard + 4) : null;
+      const limit = difficulty === 'hard' ? Math.ceil((length / MISSIONS.referenceSpeed) * MISSIONS.ringSlackHard + 4) : null;
       return spec(type, difficulty, length, {
         title: 'Ring run',
         description: `Fly through ${gates.length} paper rings in order${limit ? ` within ${limit} s` : ''}.`,
@@ -117,7 +120,43 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
         objectives: gates.map((gate, i) => ({ kind: 'ring', gate, number: i + 1 })),
       });
     }
+    case 'practice': {
+      const candidates = practiceTerritories(ctx, difficulty);
+      if (candidates.length === 0) throw new Error('Target practice needs practice planes on the territories');
+      const id = pick(rng, candidates);
+      const t = targets.find((x) => x.id === id)!;
+      const dummies = (ctx.dummies ?? []).filter((d) => d.territoryId === id).map((d) => d.id);
+      const count = Math.min(MISSIONS.practiceCount[difficulty], dummies.length);
+      const limit = difficulty === 'hard' ? Math.ceil(distanceTo(t) / MISSIONS.referenceSpeed + MISSIONS.practiceTimeHard) : null;
+      const all = count === dummies.length;
+      return spec(type, difficulty, distanceTo(t), {
+        title: `Target practice: ${t.id}`,
+        description: `Shoot down ${all ? `all ${count}` : `${count} of the`} practice planes over ${t.id}${limit ? ` within ${limit} s` : ''}.`,
+        timeLimit: limit,
+        objectives: [{ kind: 'destroy', territoryId: t.id, targets: dummies, count }],
+      });
+    }
   }
+}
+
+/** Territories with enough practice planes for a target practice mission at this difficulty. */
+function practiceTerritories(ctx: MissionContext, difficulty: Difficulty): string[] {
+  const counts = new Map<string, number>();
+  for (const d of ctx.dummies ?? []) if (d.territoryId !== ctx.homeId) counts.set(d.territoryId, (counts.get(d.territoryId) ?? 0) + 1);
+  return [...counts].filter(([, n]) => n >= MISSIONS.practiceCount[difficulty]).map(([id]) => id);
+}
+
+/** A spot away from the centre, on the territory, clear of props and stands. */
+function precisionSpot(t: Territory, radius: number, obstacles: ReadonlyArray<{ x: number; z: number; r: number }>, rng: Rng) {
+  let spot = { x: t.x, z: t.z };
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const angle = rng() * Math.PI * 2;
+    const offset = randRange(rng, 5, t.half - 6);
+    spot = { x: t.x + Math.cos(angle) * offset, z: t.z + Math.sin(angle) * offset };
+    const clear = obstacles.every((o) => Math.hypot(o.x - spot.x, o.z - spot.z) >= o.r + radius + MISSIONS.precisionClearance);
+    if (clear) break;
+  }
+  return spot;
 }
 
 /** Reward = (type base + distance bonus) × difficulty multiplier, rounded to a multiple of 5. */
