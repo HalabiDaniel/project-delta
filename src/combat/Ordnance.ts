@@ -1,15 +1,38 @@
-import { segmentHit, type Collider } from '../combat/Collision';
-import { DEFENSES } from '../config';
+import { DEFENSES, type Side } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Territory } from '../world/Territory';
-import type { ShotOrder } from './Installation';
+import { segmentHit, sweepMoving, type Collider } from './Collision';
 
-/** A round of enemy ink or a paper rocket in flight. */
-export interface EnemyShot {
+export { sweepMoving } from './Collision';
+
+/** A round or rocket leaving a weapon: an installation's, or an AI aircraft's guns. */
+export interface ShotOrder {
+  kind: 'ink' | 'rocket';
+  /** The installation or aircraft that fired it. */
+  source: string;
+  /** Whose side fired it: it can only hit aircraft of the other side. */
+  side: Side;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  /** The aircraft it was aimed at. A rocket homes on it; for ink it is only bookkeeping. */
+  target?: string | null;
+  /** An aircraft gun's numbers; installations' ink uses the ink turret's. */
+  damage?: number;
+  travel?: number;
+  radius?: number;
+}
+
+/** A round of ink or a paper rocket in flight. */
+export interface Shot {
   id: number;
   kind: 'ink' | 'rocket';
-  /** The installation that fired it. */
   source: string;
+  side: Side;
+  target: string | null;
   x: number;
   y: number;
   z: number;
@@ -22,13 +45,20 @@ export interface EnemyShot {
   pz: number;
   age: number;
   travelled: number;
+  /** Ink dries up after this far. */
+  travel: number;
   damage: number;
   radius: number;
   active: boolean;
 }
 
-/** The plane, as enemy fire sees it: where it is now, where it was a step ago, and how big a target it is. */
-export interface PlaneTarget {
+/**
+ * An aircraft, as rounds and rockets see it: where it is now and a step ago, how big a target it
+ * is, and whose side it is on.
+ */
+export interface AircraftTarget {
+  id: string;
+  side: Side;
   x: number;
   y: number;
   z: number;
@@ -36,52 +66,58 @@ export interface PlaneTarget {
   py: number;
   pz: number;
   radius: number;
+  /** Rockets lose track of it: the player's plane over home. */
+  shielded?: boolean;
 }
 
 export type FireEvent =
-  /** A round struck the plane, or a rocket burst next to it. */
-  | { type: 'hit'; shot: EnemyShot; x: number; y: number; z: number }
+  /** A round struck an aircraft, or a rocket burst next to one. */
+  | { type: 'hit'; shot: Shot; target: string; x: number; y: number; z: number }
   /** It came down on a platform. */
-  | { type: 'ground'; shot: EnemyShot; territoryId: string; x: number; y: number; z: number }
+  | { type: 'ground'; shot: Shot; territoryId: string; x: number; y: number; z: number }
   /** A round dried up or a rocket ran out of fuel. */
-  | { type: 'spent'; shot: EnemyShot; x: number; y: number; z: number };
+  | { type: 'spent'; shot: Shot; x: number; y: number; z: number };
 
 const ROCKET_PREFIX = 'rocket-';
 
 /**
- * The defenses' rounds and rockets in flight. Ink flies straight and dries up after its travel;
- * rockets accelerate off the rails and chase the plane, but can only turn so fast, so a hard turn
- * at the right moment makes them overshoot. Hits are swept against the plane's own movement each
- * step, so fast planes and fast rounds can't pass through each other. Rockets can be shot down.
+ * Every round and rocket in flight except the player's own ink: the defenses' (enemy territories'
+ * and T1's) and the AI aircraft's guns. Ink flies straight and dries up after its travel; rockets
+ * accelerate off the rails and chase the aircraft they were fired at, but can only turn so fast,
+ * so a hard turn at the right moment makes them overshoot. A shot only hits aircraft of the other
+ * side, swept against each one's own movement every step, so fast planes and fast rounds can't
+ * pass through each other. Rockets can be shot down.
  */
-export class EnemyFire {
-  shots: EnemyShot[] = [];
+export class Ordnance {
+  shots: Shot[] = [];
   private nextId = 1;
 
-  spawn(order: ShotOrder): EnemyShot {
+  spawn(order: ShotOrder): Shot {
     const ink = order.kind === 'ink';
-    const shot: EnemyShot = {
+    const turret = DEFENSES.turret.shot;
+    const rocket = DEFENSES.launcher.rocket;
+    const shot: Shot = {
       id: this.nextId++,
       kind: order.kind,
       source: order.source,
+      side: order.side,
+      target: order.target ?? null,
       x: order.x, y: order.y, z: order.z,
       vx: order.vx, vy: order.vy, vz: order.vz,
       px: order.x, py: order.y, pz: order.z,
       age: 0,
       travelled: 0,
-      damage: ink ? DEFENSES.turret.shot.damage : DEFENSES.launcher.rocket.damage,
-      radius: ink ? DEFENSES.turret.shot.radius : DEFENSES.launcher.rocket.radius,
+      travel: order.travel ?? turret.travel,
+      damage: order.damage ?? (ink ? turret.damage : rocket.damage),
+      radius: order.radius ?? (ink ? turret.radius : rocket.radius),
       active: true,
     };
     this.shots.push(shot);
     return shot;
   }
 
-  /**
-   * Moves everything one step. `plane` is null when there is nothing to hit (landed, crashed);
-   * `homing` false makes rockets fly straight on (the plane is over home).
-   */
-  update(dt: number, plane: PlaneTarget | null, homing: boolean, territories: readonly Territory[]): FireEvent[] {
+  /** Moves everything one step. `aircraft` are everything in the air that can be hit. */
+  update(dt: number, aircraft: readonly AircraftTarget[], territories: readonly Territory[]): FireEvent[] {
     const events: FireEvent[] = [];
     const rocket = DEFENSES.launcher.rocket;
     for (const s of this.shots) {
@@ -89,8 +125,10 @@ export class EnemyFire {
       s.px = s.x;
       s.py = s.y;
       s.pz = s.z;
-      if (s.kind === 'rocket') steerRocket(s, plane && homing ? plane : null, dt);
-      else {
+      if (s.kind === 'rocket') {
+        const target = aircraft.find((a) => a.id === s.target && !a.shielded) ?? null;
+        steerRocket(s, target, dt);
+      } else {
         s.age += dt;
         s.x += s.vx * dt;
         s.y += s.vy * dt;
@@ -98,12 +136,17 @@ export class EnemyFire {
       }
       s.travelled += Math.hypot(s.x - s.px, s.y - s.py, s.z - s.pz);
 
-      if (plane && (s.kind === 'ink' || s.age >= rocket.armTime)) {
-        const reach = s.kind === 'ink' ? s.radius + plane.radius : rocket.fuse + plane.radius;
-        const t = sweepMoving({ x: s.px, y: s.py, z: s.pz }, s, { x: plane.px, y: plane.py, z: plane.pz }, plane, reach);
-        if (t !== null) {
+      if (s.kind === 'ink' || s.age >= rocket.armTime) {
+        let hit: { id: string; t: number } | null = null;
+        for (const a of aircraft) {
+          if (a.side === s.side || a.id === s.source) continue;
+          const reach = s.kind === 'ink' ? s.radius + a.radius : rocket.fuse + a.radius;
+          const t = sweepMoving({ x: s.px, y: s.py, z: s.pz }, s, { x: a.px, y: a.py, z: a.pz }, a, reach);
+          if (t !== null && (!hit || t < hit.t)) hit = { id: a.id, t };
+        }
+        if (hit) {
           s.active = false;
-          events.push({ type: 'hit', shot: s, ...along(s, t) });
+          events.push({ type: 'hit', shot: s, target: hit.id, ...along(s, hit.t) });
           continue;
         }
       }
@@ -117,7 +160,7 @@ export class EnemyFire {
         events.push({ type: 'ground', shot: s, territoryId: ground.id, ...along(s, ground.t) });
         continue;
       }
-      const spent = s.kind === 'ink' ? s.travelled >= DEFENSES.turret.shot.travel : s.age >= rocket.life;
+      const spent = s.kind === 'ink' ? s.travelled >= s.travel : s.age >= rocket.life;
       if (spent) {
         s.active = false;
         events.push({ type: 'spent', shot: s, x: s.x, y: s.y, z: s.z });
@@ -136,7 +179,7 @@ export class EnemyFire {
   }
 
   /** Removes a rocket hit by the player's ink. Returns it, or null if `colliderId` isn't a live rocket. */
-  shootDown(colliderId: string): EnemyShot | null {
+  shootDown(colliderId: string): Shot | null {
     if (!colliderId.startsWith(ROCKET_PREFIX)) return null;
     const id = Number(colliderId.slice(ROCKET_PREFIX.length));
     const shot = this.shots.find((s) => s.id === id && s.active) ?? null;
@@ -161,7 +204,7 @@ export function isRocket(id: string): boolean {
  * by no more than its turn rate allows. Plain pursuit, with no lead: easy to understand, and easy
  * to make overshoot with a hard turn. With no target it flies straight on until its fuel runs out.
  */
-export function steerRocket(s: EnemyShot, target: Point3 | null, dt: number): void {
+export function steerRocket(s: Shot, target: Point3 | null, dt: number): void {
   const c = DEFENSES.launcher.rocket;
   s.age += dt;
   let speed = Math.hypot(s.vx, s.vy, s.vz);
@@ -203,20 +246,6 @@ export function steerRocket(s: EnemyShot, target: Point3 | null, dt: number): vo
   s.z += s.vz * dt;
 }
 
-/**
- * Two points each moving in a straight line over one step (a0 → a1 and b0 → b1): the first
- * fraction of the step at which they come within `radius` of each other, or null. Worked out in
- * b's frame, where it is a ball standing still and a moves along a segment.
- */
-export function sweepMoving(a0: Point3, a1: Point3, b0: Point3, b1: Point3, radius: number): number | null {
-  return segmentHit(
-    { x: a0.x - b0.x, y: a0.y - b0.y, z: a0.z - b0.z },
-    { x: a1.x - b1.x, y: a1.y - b1.y, z: a1.z - b1.z },
-    0,
-    { kind: 'sphere', x: 0, y: 0, z: 0, r: radius },
-  );
-}
-
-function along(s: EnemyShot, t: number): { x: number; y: number; z: number } {
+function along(s: Shot, t: number): { x: number; y: number; z: number } {
   return { x: s.px + (s.x - s.px) * t, y: s.py + (s.y - s.py) * t, z: s.pz + (s.z - s.pz) * t };
 }

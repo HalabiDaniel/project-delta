@@ -46,4 +46,12 @@ describe('ResourceManager', () => {
     r.reset();
     expect(changes).toEqual(['-20:spend', '50:reward', '1:income', '-31:reset']);
   });
+
+  it('losing paper never goes below the protected floor', () => {
+    const r = new ResourceManager(100);
+    expect(r.lose(20, 50)).toBe(20);
+    expect(r.lose(40, 50)).toBe(30);
+    expect(r.lose(10, 50)).toBe(0);
+    expect(r.paper).toBe(50);
+  });
 });

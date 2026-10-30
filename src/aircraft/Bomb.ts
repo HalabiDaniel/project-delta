@@ -69,6 +69,20 @@ export function sweepBomb(
   return null;
 }
 
+/**
+ * Where a bomb released at `from` with the plane's velocity lands on ground at height `groundY`,
+ * ignoring anything standing in the way: the same fall the bombs make (the release kick, then
+ * gravity). Bomber pilots use it to judge the release.
+ */
+export function predictImpact(from: Point3, velocity: Point3, groundY: number, radius: number = BOMB.kinds.standard.radius): { x: number; z: number; time: number } {
+  const vy = velocity.y - BOMB.releaseKick;
+  const drop = from.y - (groundY + radius);
+  // from.y + vy t - g t² / 2 = groundY + radius
+  const g = BOMB.gravity;
+  const time = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * g * drop))) / g;
+  return { x: from.x + velocity.x * time, z: from.z + velocity.z * time, time };
+}
+
 /** One paper-ball bomb: released from the plane, falls under gravity, reports its impact. */
 class Bomb {
   readonly entity: pc.Entity;

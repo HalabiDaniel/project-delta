@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, DEFENSES, LANDING, MISSIONS, PALETTE, PLANE, TARGETS, THREAT, WEAPONS, WORLD, type AircraftId } from './config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, DEFENSES, LANDING, MISSIONS, PALETTE, PLANE, PLAYER_ID, TARGETS, THREAT, WEAPONS, WORLD, type AircraftId } from './config';
 import { aircraftRatings, RATING_KEYS, RATING_LABELS } from './aircraft/Aircraft';
 import { Bombs, type BombImpact, type ZoneRef } from './aircraft/Bomb';
 import { ChaseCamera } from './aircraft/ChaseCamera';
@@ -12,7 +12,7 @@ import { blastDamage, impactDamage, roughLandingDamage } from './combat/Damage';
 import type { Destructible } from './combat/Destructibles';
 import { layoutTargetRange } from './combat/Destructibles';
 import { Projectiles, type ShotImpact } from './combat/Projectiles';
-import { EnemyFire, isRocket, type FireEvent } from './defenses/EnemyFire';
+import { isRocket, Ordnance, type AircraftTarget, type FireEvent } from './combat/Ordnance';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from './defenses/Installation';
 import { layoutDefenses, overHome, type DefenseLayout } from './defenses/Layout';
 import type { Mission, Objective } from './missions/Mission';
@@ -43,7 +43,7 @@ import { Sounds } from './ui/Sounds';
 import type { ThreatRingItem, ThreatView } from './ui/ThreatHud';
 import { DefenseModels } from './world/DefenseModels';
 import { Effects } from './world/Effects';
-import { EnemyFireView } from './world/EnemyFireView';
+import { OrdnanceView } from './world/OrdnanceView';
 import { MissionMarkers } from './world/MissionMarkers';
 import { TargetRange } from './world/TargetRange';
 import { buildWorld, type World } from './world/WorldGenerator';
@@ -111,8 +111,8 @@ export class Game {
     readonly hud: HUD,
     readonly defenses: DefenseNetwork,
     readonly defenseModels: DefenseModels,
-    readonly enemyFire: EnemyFire,
-    readonly enemyFireView: EnemyFireView,
+    readonly ordnance: Ordnance,
+    readonly ordnanceView: OrdnanceView,
     readonly sounds: Sounds,
     layout: DefenseLayout,
   ) {
@@ -199,8 +199,8 @@ export class Game {
       hud,
       defenses,
       new DefenseModels(app, layout, defenses, world),
-      new EnemyFire(),
-      new EnemyFireView(app),
+      new Ordnance(),
+      new OrdnanceView(app),
       new Sounds(),
       layout,
     );
@@ -309,8 +309,8 @@ export class Game {
     // Defenses come back when the scenario resets: a new sortie, a fresh set of targets.
     this.defenses.restoreAll();
     this.defenseModels.restoreAll();
-    this.enemyFire.clear();
-    this.enemyFireView.clear();
+    this.ordnance.clear();
+    this.ordnanceView.clear();
     this.refreshPad();
     this.input.exitPointerLock();
     this.camera.updateDesk(0, this.world.launchPosition, this.world.launchYaw, true);
@@ -380,7 +380,7 @@ export class Game {
     this.updateDefenses(dt);
     const standing = [...this.range.colliders, ...this.installationColliders()];
     for (const impact of this.bombs.update(dt, this.openZones(), world.territories, standing)) this.onBombImpact(impact);
-    const shootable = [...standing, ...this.enemyFire.rocketColliders()];
+    const shootable = [...standing, ...this.ordnance.rocketColliders()];
     for (const impact of this.projectiles.update(dt, shootable, world.territories)) this.onShotImpact(impact);
     this.range.update(dt);
     this.markers.update(dt);
@@ -451,7 +451,7 @@ export class Game {
       else if (installation) damage = Math.round(damage * DEFENSES.hardness[installation.spec.kind]);
       else damage = Math.round(damage * DEFENSES.hardness.barrier);
       if (target && ram > 0) this.damageTarget(target, ram, this.range.centre(target, this.v3));
-      if (installation && ram > 0) this.damageInstallation(installation, ram, this.defenseModels.centre(installation.id, this.v3));
+      if (installation?.side === 'enemy' && ram > 0) this.damageInstallation(installation, ram, this.defenseModels.centre(installation.id, this.v3));
     }
     if (damage <= 0) return;
     this.effects.burst(plane.position, 'thud');
@@ -471,43 +471,50 @@ export class Game {
   // ---- Defenses -------------------------------------------------------------------------------
 
   /**
-   * The defenses look for the plane and shoot; their rounds and rockets fly; the models follow.
-   * Nothing shoots over home, and rockets lose track of a plane that gets there.
+   * The defenses look for aircraft of the other side and shoot; their rounds and rockets fly; the
+   * models follow. Nothing enemy shoots over home, and rockets lose track of a plane that gets there.
    */
   private updateDefenses(dt: number): void {
     const { plane, state, world } = this;
     const flying = state.phase === 'flying';
     const p = plane.position;
     const safe = overHome(world.home, p.x, p.z);
-    let target: Target | null = null;
+    const targets: Target[] = [];
     if (flying && !safe) {
       const v = plane.getVelocity(this.v2);
-      target = { x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature };
+      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature });
     }
-    const { orders, events } = this.defenses.update(dt, target);
+    const { orders, events } = this.defenses.update(dt, targets);
     for (const order of orders) {
-      this.enemyFire.spawn(order);
-      if (target) state.recordIncoming();
+      this.ordnance.spawn(order);
+      if (order.target === PLAYER_ID) state.recordIncoming();
       if (order.kind === 'rocket') this.effects.burst(this.v1.set(order.x, order.y, order.z), 'dust');
     }
     for (const event of events) this.onDefenseEvent(event);
-    const planeTarget = flying
-      ? { x: p.x, y: p.y, z: p.z, px: plane.prevPosition.x, py: plane.prevPosition.y, pz: plane.prevPosition.z, radius: plane.spec.hitRadius }
-      : null;
-    for (const event of this.enemyFire.update(dt, planeTarget, !safe, world.territories)) this.onEnemyFire(event);
+    const aircraft: AircraftTarget[] = [];
+    if (flying) {
+      const q = plane.prevPosition;
+      aircraft.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, px: q.x, py: q.y, pz: q.z, radius: plane.spec.hitRadius, shielded: safe });
+    }
+    for (const event of this.ordnance.update(dt, aircraft, world.territories)) this.onFire(event);
     // A blip when the territory being approached notices the plane (not every radar on the map).
     const approached = flying ? this.approachedTerritory() : null;
-    const spotted = approached !== null && this.defenses.isAware(approached);
+    const spotted = approached !== null && this.defenses.isAware(approached, PLAYER_ID);
     if (spotted && this.warned !== approached) this.sounds.play('spotted');
     this.warned = spotted ? approached : null;
     this.defenseModels.update(dt, flying ? p : null, approached);
-    this.enemyFireView.update(dt, this.enemyFire, this.camera.entity.getPosition());
-    const locking = flying ? this.defenses.installations.filter((i) => i.state === 'locking') : [];
+    this.ordnanceView.update(dt, this.ordnance, this.camera.entity.getPosition());
+    const locking = flying ? this.lockingOnPlayer() : [];
     this.sounds.lockTone(dt, locking.length > 0 ? Math.max(...locking.map((i) => i.lock)) : null);
   }
 
+  /** Launchers locking on to the player's plane. */
+  private lockingOnPlayer(): Installation[] {
+    return this.defenses.installations.filter((i) => i.state === 'locking' && i.targetId === PLAYER_ID);
+  }
+
   private onDefenseEvent(event: DefenseEvent): void {
-    if (this.state.phase !== 'flying') return;
+    if (this.state.phase !== 'flying' || event.target !== PLAYER_ID) return;
     switch (event.type) {
       case 'launch':
         this.sounds.play('launch');
@@ -518,8 +525,8 @@ export class Game {
     }
   }
 
-  /** Enemy fire landed: on the plane (damage, from which way), on a platform, or nowhere. */
-  private onEnemyFire(event: FireEvent): void {
+  /** A round or rocket landed: on the plane (damage, from which way), on a platform, or nowhere. */
+  private onFire(event: FireEvent): void {
     const point = this.v1.set(event.x, event.y, event.z);
     const rocket = event.shot.kind === 'rocket';
     if (event.type === 'hit') {
@@ -652,7 +659,7 @@ export class Game {
         if (damage > 0 && this.damageTarget(target, damage, this.range.labelPoint(target, this.v2)) > 0) struck = true;
       }
       for (const installation of this.defenses.installations) {
-        if (!installation.alive) continue;
+        if (!installation.alive || installation.side !== 'enemy') continue;
         const distance = Math.min(...installation.spec.shapes.map((s) => distanceToShape(point, s)));
         const damage = blastDamage(kind.damage, kind.blastRadius, distance);
         if (damage > 0 && this.damageInstallation(installation, damage, this.defenseModels.labelPoint(installation.id, this.v2)) > 0) struck = true;
@@ -670,7 +677,7 @@ export class Game {
     }
     this.effects.inkHit(point, false);
     if (isRocket(impact.id)) {
-      if (!this.enemyFire.shootDown(impact.id)) return;
+      if (!this.ordnance.shootDown(impact.id)) return;
       this.state.recordShotHit();
       this.effects.explosion(point, 0.45);
       this.sounds.play('pop');
@@ -680,6 +687,7 @@ export class Game {
       return;
     }
     const installation = this.defenses.get(impact.id);
+    if (installation?.side === 'player') return; // the player's own guns and stores shrug it off
     if (installation) {
       this.state.recordShotHit();
       // Cardboard depots shrug off most of the ink.
@@ -1126,19 +1134,19 @@ export class Game {
     if (t) {
       const all = defenses.on(t.id);
       const weapons = all.filter((i) => i.isWeapon);
-      const engaged = weapons.some((w) => w.alive && (w.state === 'firing' || w.state === 'locking'));
+      const engaged = weapons.some((w) => w.alive && w.targetId === PLAYER_ID && (w.state === 'firing' || w.state === 'locking'));
       panel = {
         territoryId: t.id,
         level: t.threat,
         label: THREAT.levels[t.threat].label,
-        status: weapons.every((w) => !w.alive) ? 'neutralised' : engaged ? 'engaged' : defenses.isAware(t.id) ? 'spotted' : 'clear',
+        status: weapons.every((w) => !w.alive) ? 'neutralised' : engaged ? 'engaged' : defenses.isAware(t.id, PLAYER_ID) ? 'spotted' : 'clear',
         installations: all.map((i) => ({ id: i.id, kind: i.spec.kind, alive: i.alive, engaged: i.alive && i.engaged })),
       };
     }
 
     // On the ring: weapons shooting or locking on, and those following the plane that it is about to fly into.
     const ring: ThreatRingItem[] = [];
-    for (const i of defenses.engaged()) {
+    for (const i of defenses.engagedWith(PLAYER_ID)) {
       const reach = Math.hypot(i.spec.x - p.x, i.spec.z - p.z) - i.spec.range;
       if (i.state === 'tracking' && reach > 10) continue;
       ring.push({
@@ -1151,7 +1159,7 @@ export class Game {
     }
     let nearest = Infinity;
     let rockets = 0;
-    for (const shot of this.enemyFire.shots) {
+    for (const shot of this.ordnance.shots) {
       if (shot.kind !== 'rocket') continue;
       const d = Math.hypot(shot.x - p.x, shot.y - p.y, shot.z - p.z);
       if (d > ROCKET_WARNING_RANGE) continue;
@@ -1159,7 +1167,7 @@ export class Game {
       nearest = Math.min(nearest, d);
       ring.push({ id: `rocket-${shot.id}`, angle: this.bearing(shot.x, shot.z), icon: 'rocket', state: 'incoming', distance: d });
     }
-    const locking = defenses.installations.filter((i) => i.state === 'locking');
+    const locking = this.lockingOnPlayer();
     const lock: ThreatView['lock'] =
       rockets > 0
         ? { state: 'incoming', progress: 1, distance: nearest, count: rockets }
@@ -1406,6 +1414,17 @@ export class Game {
           default: return `Shoot down practice planes on ${o.territoryId} (${n}/${o.count})`;
         }
       }
+      case 'intercept': {
+        const n = mission.destroyedTargets(index).size;
+        switch (o.what) {
+          case 'bomber': return 'Shoot down the bomber before it releases';
+          case 'scout': return 'Shoot down the scout before it gets away';
+          case 'fighter': return `Shoot down the enemy fighter over ${o.territoryId}`;
+          default: return `Shoot down the intruders (${n}/${o.count})`;
+        }
+      }
+      case 'escort': return `Keep the bomber flying until it hits ${o.territoryId}`;
+      case 'patrol': return `Patrol ${o.duration} s over ${o.territoryId} (${Math.floor(mission.progress[index] * o.duration)}/${o.duration})`;
     }
   }
 
@@ -1646,7 +1665,9 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
     case 'bomb': return out.set(o.zone.x, o.zone.top + 0.5, o.zone.z);
     case 'recon':
     case 'reach':
-    case 'survive': return out.set(o.airspace.x, 0.5, o.airspace.z);
+    case 'survive':
+    case 'patrol': return out.set(o.airspace.x, 0.5, o.airspace.z);
+    case 'escort': return out.set(o.zone.x, o.zone.top + 0.5, o.zone.z);
     case 'ring': return out.set(o.gate.x, o.gate.y, o.gate.z);
     case 'land': return out.set(world.home.x, 0.5, world.home.z);
     case 'escape': {
@@ -1655,7 +1676,8 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
       const len = Math.hypot(dx, dz) || 1;
       return out.set(o.x + (dx / len) * o.distance, 0.5, o.z + (dz / len) * o.distance);
     }
-    case 'destroy': {
+    case 'destroy':
+    case 'intercept': {
       const t = world.territories.find((x) => x.id === o.territoryId)!;
       return out.set(t.x, 0.5, t.z);
     }

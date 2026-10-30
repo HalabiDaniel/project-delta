@@ -2,15 +2,16 @@ import * as pc from 'playcanvas';
 import { PALETTE, WEAPONS } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Territory } from '../world/Territory';
-import { firstHit, segmentHit, type Collider } from './Collision';
+import { firstHit, firstMovingHit, segmentHit, type Collider, type MovingSphere } from './Collision';
 
 export type ShotImpact =
   | { kind: 'object'; id: string; x: number; y: number; z: number }
   | { kind: 'platform'; territoryId: string; x: number; y: number; z: number };
 
 /**
- * What an ink round moving from `prev` to `next` this step hits first: a prop or practice target,
- * or a platform. The whole step is swept, so fast rounds can't pass through thin things.
+ * What an ink round moving from `prev` to `next` this step hits first: a prop, practice target or
+ * installation, an aircraft (`movers`, swept along their own movement this step, each widened by
+ * `assist`), or a platform. The whole step is swept, so fast rounds can't pass through thin things.
  */
 export function sweepShot(
   prev: Point3,
@@ -18,8 +19,12 @@ export function sweepShot(
   radius: number,
   objects: readonly Collider[],
   territories: readonly Territory[],
+  movers: readonly MovingSphere[] = [],
+  assist = 0,
 ): ShotImpact | null {
-  const object = firstHit(prev, next, radius, objects);
+  const still = firstHit(prev, next, radius, objects);
+  const moving = firstMovingHit(prev, next, radius, movers, assist);
+  const object = moving && (!still || moving.t < still.t) ? moving : still;
   let platform: { id: string; t: number } | null = null;
   for (const t of territories) {
     const hit = segmentHit(prev, next, radius, t.shape);
@@ -29,6 +34,14 @@ export function sweepShot(
   if (object && (!platform || object.t <= platform.t)) return { kind: 'object', id: object.id, ...at(object.t) };
   if (platform) return { kind: 'platform', territoryId: platform.id, ...at(platform.t) };
   return null;
+}
+
+/**
+ * How much wider than its real size an aircraft counts for a round that has flown `travelled`
+ * metres: a small cone around the line of fire, capped. Close in, a round must really hit.
+ */
+export function aimAssist(travelled: number): number {
+  return Math.min(WEAPONS.aimAssist.max, travelled * Math.tan(WEAPONS.aimAssist.cone));
 }
 
 /** One blob of ink in flight. */
@@ -63,12 +76,12 @@ class Shot {
   }
 
   /** Moves the round; returns what it hit, 'spent' once it has flown its range, or null. */
-  update(dt: number, objects: readonly Collider[], territories: readonly Territory[]): ShotImpact | 'spent' | null {
+  update(dt: number, objects: readonly Collider[], territories: readonly Territory[], movers: readonly MovingSphere[]): ShotImpact | 'spent' | null {
     if (!this.active) return null;
     this.previous.copy(this.position);
     this.position.add(this.ahead.copy(this.velocity).mulScalar(dt));
     this.travelled += this.velocity.length() * dt;
-    const impact = sweepShot(this.previous, this.position, WEAPONS.projectileRadius, objects, territories);
+    const impact = sweepShot(this.previous, this.position, WEAPONS.projectileRadius, objects, territories, movers, aimAssist(this.travelled));
     if (impact) {
       this.clear();
       return impact;
@@ -113,12 +126,17 @@ export class Projectiles {
     shot.fire(position, velocity, damage, range);
   }
 
-  /** Impacts this step, each with the damage its round carried. */
-  update(dt: number, objects: readonly Collider[], territories: readonly Territory[]): Array<ShotImpact & { damage: number }> {
+  /** Impacts this step, each with the damage its round carried. `movers` are the aircraft it can hit. */
+  update(
+    dt: number,
+    objects: readonly Collider[],
+    territories: readonly Territory[],
+    movers: readonly MovingSphere[] = [],
+  ): Array<ShotImpact & { damage: number }> {
     const impacts: Array<ShotImpact & { damage: number }> = [];
     for (const shot of this.pool) {
       const damage = shot.damage;
-      const result = shot.update(dt, objects, territories);
+      const result = shot.update(dt, objects, territories, movers);
       if (result && result !== 'spent') impacts.push({ ...result, damage });
     }
     return impacts;

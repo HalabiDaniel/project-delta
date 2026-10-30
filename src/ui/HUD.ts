@@ -230,6 +230,12 @@ export const MISSION_TYPE_LABELS: Record<MissionType, string> = {
   'multi-stage': 'Multi-stage strike',
   survival: 'Survival challenge',
   'low-attack': 'Low-altitude attack',
+  dogfight: 'Dogfight',
+  'scout-intercept': 'Scout interception',
+  'bomber-intercept': 'Bomber interception',
+  escort: 'Bomber escort',
+  patrol: 'Airspace patrol',
+  combined: 'Combined attack',
 };
 
 const BUILD_VERB: Record<BuildKind, string> = { fold: 'Fold', refit: 'Refit', rollout: 'Roll out' };

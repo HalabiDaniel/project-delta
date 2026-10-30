@@ -1,7 +1,7 @@
 import { ECONOMY } from '../config';
 
-/** Why the balance changed: a purchase, a mission reward, home income, or the dev reset. */
-export type PaperSource = 'spend' | 'reward' | 'income' | 'reset';
+/** Why the balance changed: a purchase, a mission reward, home income, a successful enemy raid, or the dev reset. */
+export type PaperSource = 'spend' | 'reward' | 'income' | 'raid' | 'reset';
 
 export type PaperListener = (paper: number, delta: number, source: PaperSource) => void;
 
@@ -37,6 +37,18 @@ export class ResourceManager {
   earn(amount: number, source: PaperSource = 'reward'): void {
     assertAmount(amount);
     this.set(this._paper + amount, source);
+  }
+
+  /**
+   * Takes up to `amount` away (an enemy raid got through), but never below `floor`: a protected
+   * minimum is always left. Returns how much was actually lost.
+   */
+  lose(amount: number, floor: number): number {
+    assertAmount(amount);
+    assertAmount(floor);
+    const lost = Math.min(amount, Math.max(0, this._paper - floor));
+    if (lost > 0) this.set(this._paper - lost, 'raid');
+    return lost;
   }
 
   /** Development reset: restores the starting balance. */

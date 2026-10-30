@@ -6,7 +6,10 @@ import { layoutTargetRange } from '../combat/Destructibles';
 import { layoutDefenses } from '../defenses/Layout';
 import { generateTerritories } from '../world/WorldGenerator';
 import { insideAirspace, type Objective } from './Mission';
+import { AI, DEFENSES } from '../config';
+import { floorAt } from '../ai/Navigation';
 import {
+  AIR_TYPES,
   DEFENSE_TYPES,
   generateMission,
   generateOffers,
@@ -236,6 +239,75 @@ describe('generateMission', () => {
   });
 });
 
+describe('missions in the air', () => {
+  const each = (fn: (type: (typeof AIR_TYPES)[number], difficulty: Difficulty, seed: number) => void) => {
+    for (const type of AIR_TYPES) for (const difficulty of ['easy', 'medium', 'hard'] as const) for (let seed = 1; seed <= 10; seed++) fn(type, difficulty, seed);
+  };
+
+  it('every deal includes a mission in the air', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const offers = generateOffers(ctx, seededRng(seed));
+      expect(offers.some((m) => AIR_TYPES.includes(m.spec.type))).toBe(true);
+    }
+  });
+
+  it('send up the aircraft their objectives are about, with unique ids, at their own skill', () => {
+    const ids = new Set<string>();
+    each((type, difficulty, seed) => {
+      if (!supports(type, difficulty, ctx)) return;
+      const spec = generateMission(type, difficulty, ctx, seededRng(seed));
+      const spawned = (spec.aircraft ?? []).map((a) => a.orders);
+      expect(spawned.length).toBeGreaterThan(0);
+      expect(spawned.length).toBeLessThanOrEqual(AI.maxActive - 1);
+      for (const o of spawned) {
+        expect(ids.has(o.id)).toBe(false);
+        ids.add(o.id);
+        if (o.side === 'enemy') expect(o.skill).toBe(difficulty);
+        expect(o.route.length).toBeGreaterThanOrEqual(2);
+      }
+      for (const o of spec.objectives) {
+        if (o.kind === 'intercept') for (const id of o.targets) expect(spawned.some((a) => a.id === id && a.side === 'enemy')).toBe(true);
+        if (o.kind === 'escort') expect(spawned.find((a) => a.id === o.escort)).toMatchObject({ side: 'player', role: 'bomber', strike: { x: o.zone.x, z: o.zone.z } });
+      }
+      expect(spec.threat?.air?.skill ?? difficulty).toBe(difficulty);
+    });
+  });
+
+  it('routes keep a safe height over the platforms', () => {
+    each((type, difficulty, seed) => {
+      if (!supports(type, difficulty, ctx)) return;
+      for (const a of generateMission(type, difficulty, ctx, seededRng(seed)).aircraft ?? []) {
+        for (const p of a.orders.route.slice(1)) expect(p.y).toBeGreaterThanOrEqual(floorAt(territories, p.x, p.z) - 0.01);
+      }
+    });
+  });
+
+  it('bomber interceptions go for the paper store on home, from further off and escorted on harder cards', () => {
+    const store = installations.find((i) => i.territoryId === home.id && i.kind === 'supply')!;
+    const dist = (d: Difficulty) => {
+      const spec = generateMission('bomber-intercept', d, ctx, seededRng(1));
+      const bomber = spec.aircraft![0].orders;
+      expect(bomber.strike).toMatchObject({ territoryId: home.id, x: store.x, z: store.z });
+      expect(spec.objectives).toMatchObject([{ kind: 'intercept', what: 'bomber', before: 'release' }]);
+      expect(spec.aircraft!.every((a) => a.raid)).toBe(true);
+      expect(spec.aircraft!.length).toBe(d === 'hard' ? 2 : 1);
+      return Math.hypot(bomber.route[0].x - home.x, bomber.route[0].z - home.z);
+    };
+    expect(dist('easy')).toBeLessThan(dist('hard'));
+    expect(DEFENSES.home.turrets.length).toBeGreaterThan(0);
+  });
+
+  it('escorts and patrols stay out of fortified ground on easier cards, and enemy pilots pay', () => {
+    each((type, difficulty, seed) => {
+      if (type !== 'escort' || !supports(type, difficulty, ctx)) return;
+      const spec = generateMission(type, difficulty, ctx, seededRng(seed));
+      expect(threatOf(spec.objectives[0].kind === 'escort' ? spec.objectives[0].territoryId : '')).toBeLessThanOrEqual(2);
+    });
+    expect(missionReward('dogfight', 'medium', 100, [], ['hard'])).toBeGreaterThan(missionReward('dogfight', 'medium', 100, [], ['easy']));
+    expect(missionReward('dogfight', 'medium', 100, [], ['easy'])).toBeGreaterThan(missionReward('dogfight', 'medium', 100));
+  });
+});
+
 describe('missionReward', () => {
   it('harder and longer missions pay more, in multiples of 5', () => {
     for (const type of MISSION_TYPES) {
@@ -265,10 +337,13 @@ describe('missionReward', () => {
   });
 
   it('a ring course near defended ground says so', () => {
-    const near = installations.find((i) => i.kind === 'turret')!;
+    const near = installations.find((i) => i.kind === 'turret' && i.side === 'enemy')!;
     const gate = { x: near.x + 10, y: 12, z: near.z, yaw: 0, radius: 4 };
     const far = { x: 500, y: 12, z: 500, yaw: 0, radius: 4 };
     expect(missionThreat([{ kind: 'ring', gate, number: 1 }], ctx).territories).toContain(near.territoryId);
     expect(missionThreat([{ kind: 'ring', gate: far, number: 1 }], ctx)).toMatchObject({ level: 0, territories: [] });
+    // T1's own guns are no threat to the player.
+    const own = installations.find((i) => i.kind === 'turret' && i.side === 'player')!;
+    expect(missionThreat([{ kind: 'ring', gate: { ...gate, x: own.x + 10, z: own.z }, number: 1 }], ctx).territories).toEqual([]);
   });
 });

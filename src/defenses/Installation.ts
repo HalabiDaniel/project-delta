@@ -1,11 +1,20 @@
 import { Durability } from '../combat/Damage';
-import { DEFENSES } from '../config';
+import type { ShotOrder } from '../combat/Ordnance';
+import { DEFENSES, type Side } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Rng } from '../systems/Random';
 import type { InstallationSpec } from './Layout';
 
-/** What the defenses know about the plane: where it is, how it moves, how easy it is to notice. */
+export type { ShotOrder } from '../combat/Ordnance';
+
+/**
+ * What the defenses know about an aircraft: which one it is and whose side it is on, where it is,
+ * how it moves, and how easy it is to notice. The network only ever sees aircraft like this, so the
+ * player's plane, an AI plane and (later) another player's plane are all the same to it.
+ */
 export interface Target {
+  id: string;
+  side: Side;
   x: number;
   y: number;
   z: number;
@@ -25,27 +34,15 @@ export interface Target {
  */
 export type InstallationState = 'idle' | 'tracking' | 'locking' | 'firing' | 'destroyed';
 
-/** A round or rocket leaving a weapon. */
-export interface ShotOrder {
-  kind: 'ink' | 'rocket';
-  source: string;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-}
-
 export type DefenseEvent =
-  /** A territory noticed the plane: through its radar, or one of its weapons saw it. */
-  | { type: 'spotted'; territoryId: string; by: 'radar' | 'weapon' }
+  /** A territory noticed an aircraft: through its radar, or one of its weapons saw it. */
+  | { type: 'spotted'; territoryId: string; target: string; by: 'radar' | 'weapon' }
   /** …and has lost it again. */
-  | { type: 'lost'; territoryId: string }
-  | { type: 'lock'; id: string }
-  | { type: 'lock-broken'; id: string }
-  | { type: 'launch'; id: string }
-  | { type: 'fire'; id: string };
+  | { type: 'lost'; territoryId: string; target: string }
+  | { type: 'lock'; id: string; target: string }
+  | { type: 'lock-broken'; id: string; target: string }
+  | { type: 'launch'; id: string; target: string }
+  | { type: 'fire'; id: string; target: string };
 
 /**
  * One defensive installation's rules: health, and for weapons, how they notice, follow and shoot at
@@ -73,6 +70,8 @@ export class Installation {
   sinceShot = Infinity;
   /** A radar dish's turn, for show. */
   spin = 0;
+  /** The aircraft it is following (or last followed), or null. */
+  targetId: string | null = null;
   /** Its idea of the plane's velocity, which lags behind the real one. */
   private readonly estimate = { x: 0, y: 0, z: 0 };
   private fresh = true;
@@ -95,6 +94,10 @@ export class Installation {
 
   get health(): number {
     return this.durability.health;
+  }
+
+  get side(): Side {
+    return this.spec.side;
   }
 
   get isWeapon(): boolean {
@@ -158,16 +161,27 @@ export class Installation {
     this.unseen = Infinity;
     this.sinceShot = Infinity;
     this.fresh = true;
+    this.targetId = null;
   }
 
   /**
-   * One step. `target` is the plane, or null when there is nothing to shoot at. `alerted` means
-   * the territory's radar sees it, which counts as seeing it and gets a fix at once. `scale`
-   * shrinks detection once the radar is gone. Returns a shot, or null.
+   * One step. `target` is the aircraft it is after, or null when there is nothing to shoot at.
+   * `alerted` means the territory's radar sees it, which counts as seeing it and gets a fix at
+   * once. `scale` shrinks detection once the radar is gone. Switching to another aircraft starts
+   * the fix and the lock over. Returns a shot, or null.
    */
   update(dt: number, target: Target | null, alerted = false, scale = 1): ShotOrder | null {
     this.sinceShot += dt;
     if (!this.alive) return null;
+    if (target && target.id !== this.targetId) {
+      if (this.targetId !== null) {
+        this.fresh = true;
+        this.acquire = 0;
+        this.lock = 0;
+        if (this.state !== 'destroyed') this.state = 'tracking';
+      }
+      this.targetId = target.id;
+    }
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (this.spec.kind === 'radar') {
       this.spin += DEFENSES.radar.spin * dt;
@@ -266,7 +280,10 @@ export class Installation {
   private order(kind: ShotOrder['kind'], yaw: number, pitch: number, speed: number): ShotOrder {
     const m = this.muzzle();
     const cp = Math.cos(pitch);
-    return { kind, source: this.id, x: m.x, y: m.y, z: m.z, vx: -Math.sin(yaw) * cp * speed, vy: Math.sin(pitch) * speed, vz: -Math.cos(yaw) * cp * speed };
+    return {
+      kind, source: this.id, side: this.side, target: this.targetId,
+      x: m.x, y: m.y, z: m.z, vx: -Math.sin(yaw) * cp * speed, vy: Math.sin(pitch) * speed, vz: -Math.cos(yaw) * cp * speed,
+    };
   }
 
   /** Turns towards a heading and elevation at the weapon's rates, never through the blind spot behind it. */
@@ -288,17 +305,19 @@ export class Installation {
 }
 
 /**
- * Every installation on the map, grouped by territory. A territory's radar, while it stands and
- * sees the plane, alerts all its weapons at once; once the radar is destroyed they only notice
- * planes from closer in. Reports when territories spot or lose the plane, and when launchers lock
- * on and launch.
+ * Every installation on the map, grouped by territory. Each weapon picks one aircraft of the other
+ * side to deal with: it sticks with the one it is following while it can still see or remember it,
+ * otherwise it takes the nearest one it can see (or that its territory's radar sees). A territory's
+ * radar, while it stands, alerts all its weapons at once; once the radar is destroyed they only
+ * notice aircraft from closer in. Reports when territories spot or lose an aircraft, and when
+ * launchers lock on and launch.
  */
 export class DefenseNetwork {
   readonly installations: Installation[];
   private readonly byId = new Map<string, Installation>();
   private readonly byTerritory = new Map<string, Installation[]>();
-  /** Territories currently aware of the plane. */
-  private readonly aware = new Set<string>();
+  /** Per territory, the aircraft it currently knows about. */
+  private readonly aware = new Map<string, Set<string>>();
 
   constructor(specs: readonly InstallationSpec[], rng: Rng = Math.random) {
     this.installations = specs.map((spec) => new Installation(spec, rng));
@@ -323,10 +342,10 @@ export class DefenseNetwork {
     return this.on(territoryId).find((i) => i.spec.kind === 'radar') ?? null;
   }
 
-  /** The territory's radar stands and sees the plane. */
+  /** The territory's radar stands and sees the aircraft. */
   alerted(territoryId: string, target: Target | null): boolean {
     const radar = this.radar(territoryId);
-    return !!target && !!radar?.alive && radar.sees(target);
+    return !!target && !!radar?.alive && radar.side !== target.side && radar.sees(target);
   }
 
   /** 1, or less once the territory's radar has been destroyed. */
@@ -335,44 +354,52 @@ export class DefenseNetwork {
     return radar && !radar.alive ? DEFENSES.radarLostDetection : 1;
   }
 
-  /** Does the territory know where the plane is? */
-  isAware(territoryId: string): boolean {
-    return this.aware.has(territoryId);
+  /** Does the territory know where aircraft `targetId` is? */
+  isAware(territoryId: string, targetId: string): boolean {
+    return this.aware.get(territoryId)?.has(targetId) ?? false;
   }
 
-  /** Weapons following, locking onto or shooting at the plane. */
-  engaged(): Installation[] {
-    return this.installations.filter((i) => i.isWeapon && i.alive && i.engaged);
+  /** Weapons following, locking onto or shooting at aircraft `targetId`. */
+  engagedWith(targetId: string): Installation[] {
+    return this.installations.filter((i) => i.isWeapon && i.alive && i.engaged && i.targetId === targetId);
   }
 
-  /** One step for every installation. `target` is null when there is nothing they may shoot at. */
-  update(dt: number, target: Target | null): { orders: ShotOrder[]; events: DefenseEvent[] } {
+  /** One step for every installation. `targets` are the aircraft in the air that may be shot at. */
+  update(dt: number, targets: readonly Target[]): { orders: ShotOrder[]; events: DefenseEvent[] } {
     const orders: ShotOrder[] = [];
     const events: DefenseEvent[] = [];
     for (const [territoryId, group] of this.byTerritory) {
-      const alerted = this.alerted(territoryId, target);
       const scale = this.detectionScale(territoryId);
-      let sees = false;
+      const sees = new Set<string>();
+      const radarSees = new Set<string>();
+      for (const t of targets) if (this.alerted(territoryId, t)) radarSees.add(t.id);
       for (const i of group) {
         const was = i.state;
+        const target = this.choose(i, targets, radarSees, scale);
+        const alerted = !!target && radarSees.has(target.id);
         const order = i.update(dt, target, alerted, scale);
-        if (i.isWeapon && i.alive && i.unseen === 0) sees = true;
+        if (target && i.isWeapon && i.alive && i.unseen === 0) sees.add(target.id);
+        const about = i.targetId ?? '';
         if (order) {
           orders.push(order);
-          events.push({ type: order.kind === 'rocket' ? 'launch' : 'fire', id: i.id });
+          events.push({ type: order.kind === 'rocket' ? 'launch' : 'fire', id: i.id, target: about });
         } else if (was !== 'locking' && i.state === 'locking') {
-          events.push({ type: 'lock', id: i.id });
+          events.push({ type: 'lock', id: i.id, target: about });
         } else if (was === 'locking' && i.state !== 'locking' && i.alive) {
-          events.push({ type: 'lock-broken', id: i.id });
+          events.push({ type: 'lock-broken', id: i.id, target: about });
         }
       }
-      const awareNow = alerted || sees;
-      if (awareNow && !this.aware.has(territoryId)) {
-        this.aware.add(territoryId);
-        events.push({ type: 'spotted', territoryId, by: alerted ? 'radar' : 'weapon' });
-      } else if (!awareNow && this.aware.has(territoryId) && group.every((i) => !i.engaged)) {
-        this.aware.delete(territoryId);
-        events.push({ type: 'lost', territoryId });
+      const known = this.aware.get(territoryId) ?? new Set<string>();
+      this.aware.set(territoryId, known);
+      for (const id of new Set([...sees, ...radarSees])) {
+        if (known.has(id)) continue;
+        known.add(id);
+        events.push({ type: 'spotted', territoryId, target: id, by: radarSees.has(id) ? 'radar' : 'weapon' });
+      }
+      for (const id of [...known]) {
+        if (sees.has(id) || radarSees.has(id) || group.some((i) => i.engaged && i.targetId === id)) continue;
+        known.delete(id);
+        events.push({ type: 'lost', territoryId, target: id });
       }
     }
     return { orders, events };
@@ -381,6 +408,34 @@ export class DefenseNetwork {
   restoreAll(): void {
     for (const i of this.installations) i.restore();
     this.aware.clear();
+  }
+
+  /**
+   * The aircraft installation `i` deals with this step: the one it is following while it can still
+   * see it, else the nearest one of the other side it (or its radar) sees, else the one it is
+   * following, which it remembers for a moment before giving up.
+   */
+  private choose(i: Installation, targets: readonly Target[], radarSees: ReadonlySet<string>, scale: number): Target | null {
+    if (!i.alive || i.spec.kind === 'supply') return null;
+    const p = i.pivot(tmp);
+    let current: Target | null = null;
+    let best: Target | null = null;
+    let bestDistance = Infinity;
+    for (const t of targets) {
+      if (t.side === i.side) continue;
+      const following = t.id === i.targetId && i.state !== 'idle';
+      const d = distance(p, t);
+      const visible = radarSees.has(t.id) || d <= i.detectionRange(t, scale) * (following ? DEFENSES.keepTrack : 1);
+      if (following) {
+        current = t;
+        if (visible) return t;
+      }
+      if (visible && d < bestDistance) {
+        best = t;
+        bestDistance = d;
+      }
+    }
+    return best ?? current;
   }
 }
 

@@ -6,6 +6,12 @@
 
 const DEG = Math.PI / 180;
 
+/** Whose side something is on: the player's (their plane, T1's guns, a friendly AI bomber) or the enemy's. */
+export type Side = 'player' | 'enemy';
+
+/** How targets, shots and kills refer to the player's own plane. */
+export const PLAYER_ID = 'player';
+
 export const ECONOMY = {
   startingPaper: 100,
   /** Home produces `incomeAmount` paper every `incomeInterval` seconds… */
@@ -13,6 +19,8 @@ export const ECONOMY = {
   incomeInterval: 2,
   /** …while the player holds less than this. It is a safety net; missions are how you get rich. */
   incomeCap: 150,
+  /** Enemy raids never take the balance below this, so the player can always fold a plane. */
+  protectedPaper: 50,
 } as const;
 
 export const WORLD = {
@@ -329,6 +337,12 @@ export const WEAPONS = {
   projectileRadius: 0.12,
   /** Wing guns converge on a point this far ahead of the nose. */
   convergence: 45,
+  /**
+   * Aim assistance against aircraft, which are hard to hit with mouse steering: a round counts as a
+   * hit if it passes within this cone of the target (growing with the distance flown), up to `max`
+   * metres beyond the plane's own size. No automatic targeting: the round still flies where aimed.
+   */
+  aimAssist: { cone: 1.6 * DEG, max: 1 },
 } as const;
 
 /** Practice targets (paper planes on pencil stands) and cardboard props on the unclaimed territories. */
@@ -470,6 +484,19 @@ export const DEFENSES = {
     inkFactor: 0.25,
     footprint: 2.6,
   },
+  /**
+   * T1's own defenses, predefined until players can build their own: two ink turrets that shoot at
+   * hostile aircraft (never at the player), and the paper store enemy bombers aim for. Positions are
+   * (along the runway towards the world centre, to its right), from the middle of the platform.
+   */
+  home: {
+    turrets: [[4, 12.5], [4, -12.5]] as ReadonlyArray<readonly [number, number]>,
+    store: [-6, 12.5] as readonly [number, number],
+    storeName: 'Paper store',
+    storeRole: 'Your stores · raid target',
+    storeHealth: 120,
+    turretRole: 'Defends T1 · hostile aircraft',
+  },
   /** Once a territory's radar is gone, its weapons only notice planes this much closer. */
   radarLostDetection: 0.7,
   /** Hysteresis: a weapon keeps a plane it is tracking out to this times its detection range. */
@@ -493,6 +520,177 @@ export const DEFENSES = {
 } as const;
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
+
+/** What an AI aircraft is for: scouts look and run, fighters hunt, bombers bomb. */
+export type AiRole = 'scout' | 'fighter' | 'bomber';
+
+/** How an AI pilot of one skill level flies and fights. Difficulty changes behaviour, not health. */
+export interface PilotSkill {
+  label: string;
+  /** Seconds from noticing an aircraft to doing something about it. */
+  reaction: number;
+  /** Seconds it takes to notice a change of course: its idea of the target's velocity lags this much. */
+  trackingLag: number;
+  /** Share of the target's motion it leads its shots by. */
+  lead: number;
+  /** Scatter of its rounds (radians, either way), before distance, speed, manoeuvring and tracking time. */
+  aimError: number;
+  /** It only fires with the nose within this of where it wants to shoot (plus the target's apparent size). */
+  fireCone: number;
+  /** Trigger discipline: bursts this long, then a pause this long. */
+  burst: number;
+  pause: number;
+  /** Share of the way from cruise to top speed it uses when chasing or running. */
+  throttle: number;
+  boost: boolean;
+  /** Chance per second of a hard evasive turn while something is on its tail. */
+  evasive: number;
+  /** Breaks off a fight below this share of health (0: never), boosting and weaving away if `cleanBreak`. */
+  disengageHealth: number;
+  cleanBreak: boolean;
+  /** Chance per attack of working its way behind the target first, instead of turning straight at it. */
+  positioning: number;
+  /** Lowest it follows a target down to, above the platforms. Low flying shakes off rookies. */
+  floor: number;
+  /** Bombers: how far off (metres, either way) its idea of the release point can be. */
+  bombError: number;
+}
+
+/**
+ * AI-controlled aircraft. They fly the same designs, with the same flight model, health and guns
+ * as the player's; a pilot only decides where to point, how fast to go and when to shoot or drop.
+ */
+export const AI: {
+  roles: Record<AiRole, AircraftId>;
+  roleLabels: Record<AiRole, string>;
+  skill: Record<Difficulty, PilotSkill>;
+  accuracy: { distance: number; speed: number; manoeuvre: number; unsettled: number; settle: number };
+  maxActive: number;
+  ambient: { count: number; firstDelay: number; respawn: readonly [number, number]; lifetime: readonly [number, number]; weights: Record<AiRole, number>; minThreat: ThreatLevel };
+  patrolAltitude: readonly [number, number];
+  clearance: number;
+  gapFloor: number;
+  lookAhead: readonly number[];
+  separation: number;
+  detection: number;
+  maxPursuit: number;
+  leash: number;
+  disengageTime: number;
+  launchShield: number;
+  gunReach: number;
+  gunDistance: number;
+  overshoot: number;
+  flee: number;
+  safe: number;
+  bombingAltitude: number;
+  runIn: number;
+  abortHealth: number;
+  jink: number;
+  formation: readonly [number, number, number];
+  exitMargin: number;
+  hiddenDistance: number;
+  waypointReach: number;
+} = {
+  /** The plan's line-up: Dart scouts, Falcon fighters, Widewing bombers. */
+  roles: { scout: 'dart', fighter: 'falcon', bomber: 'widewing' },
+  roleLabels: { scout: 'Scout', fighter: 'Fighter', bomber: 'Bomber' },
+  skill: {
+    easy: {
+      label: 'Rookie', reaction: 1.0, trackingLag: 0.6, lead: 0.5, aimError: 6.5 * DEG, fireCone: 5 * DEG, burst: 0.35, pause: 1.5,
+      throttle: 0.45, boost: false, evasive: 0, disengageHealth: 0, cleanBreak: false, positioning: 0, floor: 10, bombError: 10,
+    },
+    medium: {
+      label: 'Regular', reaction: 0.6, trackingLag: 0.38, lead: 0.8, aimError: 4.5 * DEG, fireCone: 4 * DEG, burst: 0.45, pause: 1,
+      throttle: 0.75, boost: true, evasive: 0.35, disengageHealth: 0.25, cleanBreak: false, positioning: 0.5, floor: 7, bombError: 6,
+    },
+    hard: {
+      label: 'Veteran', reaction: 0.32, trackingLag: 0.22, lead: 0.95, aimError: 3.5 * DEG, fireCone: 3.5 * DEG, burst: 0.6, pause: 0.8,
+      throttle: 1, boost: true, evasive: 0.7, disengageHealth: 0.35, cleanBreak: true, positioning: 1, floor: 4.5, bombError: 2.5,
+    },
+  },
+  /**
+   * The scatter grows by `distance` per 10 m to the target, by `speed` per 10 m/s of speed
+   * difference, and by `manoeuvre` per rad/s the target is turning; on first sight it is
+   * (1 + `unsettled`) times bigger, settling over `settle` seconds of tracking the same target.
+   */
+  accuracy: { distance: 0.15, speed: 0.2, manoeuvre: 3, unsettled: 1.5, settle: 2 },
+  /** At most this many AI aircraft in the air at once: missions and raids first, then ambient patrols. */
+  maxActive: 4,
+  /**
+   * Patrols that keep the world busy outside missions, over enemy country (threat `minThreat` and
+   * up). Each flies for `lifetime` seconds, then leaves; a new one comes `respawn` seconds after one
+   * is gone. They pay nothing when shot down: there is no farming them.
+   */
+  ambient: {
+    count: 2, firstDelay: 5, respawn: [30, 60], lifetime: [80, 140],
+    weights: { scout: 0.45, fighter: 0.4, bomber: 0.15 },
+    minThreat: 2,
+  },
+  /** Cruising heights. */
+  patrolAltitude: [20, 30],
+  /** Height kept above platforms when not fighting, and above platform level over the gaps. */
+  clearance: 12,
+  gapFloor: 4,
+  /** Seconds ahead it checks for platforms. */
+  lookAhead: [0.4, 0.8, 1.2, 1.6],
+  /** Keeps this far from other aircraft. */
+  separation: 9,
+  /** Notices aircraft at this range times their signature. */
+  detection: 85,
+  /** A fighter chases this far from where the chase began, and no further than `leash` from what it guards. */
+  maxPursuit: 140,
+  leash: 110,
+  /** After breaking off, it ignores everything for this long. */
+  disengageTime: 6,
+  /** Hostile aircraft hold their fire at the player over home and for this long after take-off. */
+  launchShield: 6,
+  /** Opens fire inside this share of its gun's range, likes to sit `gunDistance` behind its target, and breaks away and comes round again inside `overshoot`. */
+  gunReach: 0.85,
+  gunDistance: 18,
+  overshoot: 9,
+  /** Scouts run from anything this close, and calm down beyond `safe`. */
+  flee: 75,
+  safe: 140,
+  /** Bombers: bombing height, and how far out they line up for the run. */
+  bombingAltitude: 16,
+  runIn: 75,
+  /** A bomber below this share of health gives up and turns for home (medium and hard pilots). */
+  abortHealth: 0.3,
+  /** Seconds a bomber or scout jinks when something attacks it. */
+  jink: 1.4,
+  /** An escort holds this slot off its bomber's wing: (right, up, behind). */
+  formation: [10, 4, 12],
+  /** Aircraft enter and leave the world this far beyond the airspace edge. */
+  exitMargin: 45,
+  /** Out of view: aircraft only appear or vanish behind the camera, or at least this far away. */
+  hiddenDistance: 170,
+  /** A waypoint counts as reached this close (horizontally). */
+  waypointReach: 14,
+};
+
+/**
+ * Enemy bombing raids on T1. Every so often a Widewing sets out from a far enemy territory for
+ * the paper store on T1, announced as soon as it sets out. Shoot it down (T1's guns help) for the
+ * defense reward; if its bomb hits the store, some paper is lost, never below ECONOMY.protectedPaper.
+ */
+export const RAIDS = {
+  /** The first raid of a visit comes after the player has finished this many sorties, at least `first` seconds in. */
+  afterSorties: 1,
+  first: [60, 110] as readonly [number, number],
+  /** Seconds between raids, counted only while the game runs (not on the report or paused). */
+  interval: [170, 280] as readonly [number, number],
+  /** Where raids set out from. */
+  origins: ['T9', 'T8', 'T6', 'T3'],
+  /** Paid for shooting the raider down (or helping to), and taken when its bomb hits. */
+  reward: 60,
+  penalty: 20,
+  /** The first two raids come alone; after that, a raid has this chance of a fighter escort. */
+  escortAfter: 2,
+  escortChance: 0.3,
+  /** The bomber's target: how close (beyond the store's own size) the blast must come. */
+  hitRadius: 2.5,
+} as const;
+
 
 export const MISSIONS = {
   /** Mission cards offered at home. */
@@ -518,6 +716,12 @@ export const MISSIONS = {
     'multi-stage': 45,
     survival: 35,
     'low-attack': 45,
+    dogfight: 45,
+    'scout-intercept': 40,
+    'bomber-intercept': 50,
+    escort: 45,
+    patrol: 40,
+    combined: 50,
   },
   /**
    * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
@@ -538,9 +742,25 @@ export const MISSIONS = {
     'multi-stage': 1.4,
     survival: 1.6,
     'low-attack': 1.2,
+    dogfight: 1,
+    'scout-intercept': 0.6,
+    'bomber-intercept': 0.5,
+    escort: 1.2,
+    patrol: 1,
+    combined: 1.2,
   },
   /** Mission types built around defenses need targets with at least this threat level. */
-  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2 },
+  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1 },
+  /** Extra reward for each enemy aircraft a mission sends up, by its pilot's skill. */
+  airBonus: { easy: 10, medium: 18, hard: 28 },
+  /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
+  raidOrigins: { easy: ['T3', 'T7'], medium: ['T6', 'T8'], hard: ['T9'] } as Record<Difficulty, readonly string[]>,
+  /** Escort missions only go as far as guarded ground: the bomber has to survive the guns too. */
+  escortMaxThreat: 2,
+  /** Airspace patrol: seconds to spend over the territory, and how far out and how high the patrol area reaches. */
+  patrolTime: { easy: 20, medium: 25, hard: 30 },
+  patrolMargin: 15,
+  patrolCeiling: 45,
   /** Extra paper per metre between the launch pad and the objective. */
   distanceReward: 0.15,
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
@@ -603,12 +823,18 @@ export const SUITABILITY = {
     'multi-stage': { payload: 1, firepower: 1, durability: 1, maneuverability: 1 },
     survival: { maneuverability: 3, durability: 2, speed: 1 },
     'low-attack': { payload: 2, maneuverability: 2, durability: 1 },
+    dogfight: { firepower: 3, maneuverability: 3, speed: 1 },
+    'scout-intercept': { speed: 3, firepower: 2, stealth: 1 },
+    'bomber-intercept': { firepower: 3, speed: 2, durability: 1 },
+    escort: { firepower: 3, maneuverability: 2, durability: 1, range: 1 },
+    patrol: { firepower: 2, maneuverability: 2, range: 1, speed: 1 },
+    combined: { payload: 1, firepower: 1, durability: 1, maneuverability: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus
    * one) instead of the average, so a specialist with one poor stat doesn't come out on top.
    */
-  balanced: ['multi-stage'],
+  balanced: ['multi-stage', 'combined'],
   recommended: 4,
   good: 2.75,
 } as const;

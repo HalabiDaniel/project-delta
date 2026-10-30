@@ -4,9 +4,9 @@ import { layoutTargetRange } from '../combat/Destructibles';
 import { AIRCRAFT, DEFENSES, MISSIONS, THREAT, type AircraftId, type ThreatLevel } from '../config';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
-import { EnemyFire, isRocket, steerRocket, sweepMoving, type EnemyShot } from './EnemyFire';
+import { isRocket, Ordnance, steerRocket, sweepMoving, type AircraftTarget, type Shot, type ShotOrder } from '../combat/Ordnance';
 import { DefenseNetwork, Installation, leadTime, wrapAngle, type DefenseEvent, type Target } from './Installation';
-import { departurePoint, layoutDefenses, overHome, reachesHome, type InstallationSpec } from './Layout';
+import { departurePoint, homeDefenses, layoutDefenses, overHome, reachesHome, type InstallationSpec } from './Layout';
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
@@ -18,13 +18,13 @@ const DT = 1 / 60;
 function weapon(kind: 'turret' | 'launcher'): InstallationSpec {
   const c = DEFENSES[kind];
   return {
-    id: kind, kind, territoryId: 'T0', name: c.name, role: c.role, x: 0, z: 0, ground: 0,
+    id: kind, kind, territoryId: 'T0', side: 'enemy', name: c.name, role: c.role, x: 0, z: 0, ground: 0,
     pivot: c.pivot, facing: 0, arc: kind === 'turret' ? DEFENSES.turret.arc : null, range: c.range,
     maxHealth: c.health, footprint: c.footprint, shapes: [], solids: [],
   };
 }
 
-const still = (x: number, y: number, z: number, signature = 1): Target => ({ x, y, z, vx: 0, vy: 0, vz: 0, signature });
+const still = (x: number, y: number, z: number, signature = 1, id = 'plane'): Target => ({ id, side: 'player', x, y, z, vx: 0, vy: 0, vz: 0, signature });
 
 /** Runs an installation for `seconds`; returns the time of its first shot, or null. */
 function firstShot(i: Installation, target: Target | null, seconds: number, alerted = false, scale = 1): number | null {
@@ -52,15 +52,16 @@ describe('threat levels', () => {
 describe('layoutDefenses', () => {
   const on = (id: string) => layout.installations.filter((i) => i.territoryId === id);
 
-  it("puts each territory's profile on it: none at home or on unprotected ground", () => {
+  it("puts each territory's profile on it, none on unprotected ground, and home's own guns and store at home", () => {
     for (const t of territories) {
       const own = on(t.id);
       const profile = THREAT.levels[t.threat];
       const count = (kind: string) => own.filter((i) => i.kind === kind).length;
-      expect(count('turret')).toBe(t.isHome ? 0 : profile.turrets);
+      expect(count('turret')).toBe(t.isHome ? DEFENSES.home.turrets.length : profile.turrets);
       expect(count('launcher')).toBe(t.isHome ? 0 : profile.launchers);
       expect(count('radar')).toBe(!t.isHome && profile.radar ? 1 : 0);
-      expect(count('supply')).toBe(!t.isHome && profile.supply ? 1 : 0);
+      expect(count('supply')).toBe(t.isHome || profile.supply ? 1 : 0);
+      for (const i of own) expect(i.side).toBe(t.isHome ? 'player' : 'enemy');
       expect(layout.flags.filter((f) => f.territoryId === t.id)).toHaveLength(!t.isHome && t.threat > 0 ? 1 : 0);
     }
     expect(new Set(layout.installations.map((i) => i.id)).size).toBe(layout.installations.length);
@@ -78,8 +79,10 @@ describe('layoutDefenses', () => {
     }
   });
 
-  it("no weapon reaches home or the first stretch after take-off", () => {
-    for (const i of layout.installations) if (i.kind === 'turret' || i.kind === 'launcher') expect(reachesHome(home, i.x, i.z, i.range)).toBe(false);
+  it("no enemy weapon reaches home or the first stretch after take-off", () => {
+    for (const i of layout.installations) {
+      if ((i.kind === 'turret' || i.kind === 'launcher') && i.side === 'enemy') expect(reachesHome(home, i.x, i.z, i.range)).toBe(false);
+    }
     // The departure point lies between home and the middle of the map.
     const d = departurePoint(home);
     expect(Math.abs(d.x)).toBeLessThan(Math.abs(home.x));
@@ -87,7 +90,7 @@ describe('layoutDefenses', () => {
   });
 
   it('weapons face the middle of their territory, and territories are laid out differently', () => {
-    for (const i of layout.installations.filter((x) => x.kind === 'turret')) {
+    for (const i of layout.installations.filter((x) => x.kind === 'turret' && x.side === 'enemy')) {
       const t = territories.find((x) => x.id === i.territoryId)!;
       const toward = Math.atan2(-(t.x - i.x), -(t.z - i.z));
       expect(Math.abs(wrapAngle(i.facing - toward))).toBeLessThan(1e-9);
@@ -99,7 +102,7 @@ describe('layoutDefenses', () => {
   });
 
   it('turrets are walled in at the back and sides, open to the front', () => {
-    for (const turret of layout.installations.filter((i) => i.kind === 'turret')) {
+    for (const turret of layout.installations.filter((i) => i.kind === 'turret' && i.side === 'enemy')) {
       const walls = layout.barriers.filter((b) => b.id.startsWith(`${turret.id}-`));
       expect(walls).toHaveLength(3);
       const ahead = { x: turret.x - Math.sin(turret.facing) * 2.4, z: turret.z - Math.cos(turret.facing) * 2.4 };
@@ -193,8 +196,8 @@ describe('Installation: rocket launchers', () => {
   it('report the lock, and its loss when the plane gets away', () => {
     const net = new DefenseNetwork([weapon('launcher')]);
     const events: DefenseEvent['type'][] = [];
-    for (let t = 0; t < 1; t += DT) events.push(...net.update(DT, still(0, 30, -60)).events.map((e) => e.type));
-    for (let t = 0; t < 1; t += DT) events.push(...net.update(DT, still(0, 30, -200)).events.map((e) => e.type));
+    for (let t = 0; t < 1; t += DT) events.push(...net.update(DT, [still(0, 30, -60)]).events.map((e) => e.type));
+    for (let t = 0; t < 1; t += DT) events.push(...net.update(DT, [still(0, 30, -200)]).events.map((e) => e.type));
     expect(events).toContain('spotted');
     expect(events).toContain('lock');
     expect(events).toContain('lock-broken');
@@ -211,8 +214,8 @@ describe('DefenseNetwork', () => {
     // Beyond every weapon's own reach, but inside the radar's.
     const far = still(radar.spec.x, 30, radar.spec.z - DEFENSES.radar.range * 0.95);
     expect(net.alerted('T8', far)).toBe(true);
-    const { events } = net.update(DT, far);
-    expect(events).toContainEqual({ type: 'spotted', territoryId: 'T8', by: 'radar' });
+    const { events } = net.update(DT, [far]);
+    expect(events).toContainEqual({ type: 'spotted', territoryId: 'T8', target: 'plane', by: 'radar' });
     expect(net.detectionScale('T8')).toBe(1);
     radar.damage(999);
     expect(net.alerted('T8', far)).toBe(false);
@@ -224,25 +227,100 @@ describe('DefenseNetwork', () => {
   it('with nothing to shoot at, everything stands down', () => {
     const net = new DefenseNetwork(t8);
     const radar = net.radar('T8')!;
-    for (let t = 0; t < 1; t += DT) net.update(DT, still(radar.spec.x, 30, radar.spec.z - 20));
-    expect(net.engaged().length).toBeGreaterThan(0);
+    for (let t = 0; t < 1; t += DT) net.update(DT, [still(radar.spec.x, 30, radar.spec.z - 20)]);
+    expect(net.engagedWith('plane').length).toBeGreaterThan(0);
     const events: DefenseEvent[] = [];
-    for (let t = 0; t < DEFENSES.memory + 0.5; t += DT) events.push(...net.update(DT, null).events);
-    expect(net.engaged()).toHaveLength(0);
-    expect(events).toContainEqual({ type: 'lost', territoryId: 'T8' });
+    for (let t = 0; t < DEFENSES.memory + 0.5; t += DT) events.push(...net.update(DT, []).events);
+    expect(net.engagedWith('plane')).toHaveLength(0);
+    expect(events).toContainEqual({ type: 'lost', territoryId: 'T8', target: 'plane' });
+  });
+});
+
+describe('sides', () => {
+  const homeGuns = homeDefenses(home);
+  const t1 = homeGuns.find((i) => i.kind === 'turret')!;
+  const aircraft = (id: string, side: 'player' | 'enemy', x: number, z: number, signature = 1.25): Target => ({ id, side, x, y: 15, z, vx: 0, vy: 0, vz: 0, signature });
+
+  it("home has the player's own guns either side of the runway and a store, clear of the launch pad and facing out", () => {
+    expect(homeGuns.filter((i) => i.kind === 'turret')).toHaveLength(2);
+    const store = homeGuns.find((i) => i.kind === 'supply')!;
+    expect(store.name).toBe(DEFENSES.home.storeName);
+    for (const i of homeGuns) {
+      expect(i.side).toBe('player');
+      expect(home.containsXZ(i.x, i.z, -i.footprint)).toBe(true);
+    }
+    // Every turret faces towards the world centre, where raids come from.
+    for (const i of homeGuns.filter((x) => x.kind === 'turret')) {
+      const toward = Math.atan2(home.x, home.z);
+      expect(Math.abs(wrapAngle(i.facing - toward))).toBeLessThan(1e-9);
+    }
+  });
+
+  it("T1's turrets shoot at hostile aircraft, never at the player", () => {
+    const fire = (targets: Target[]) => {
+      const net = new DefenseNetwork(homeGuns, seededRng(2));
+      const orders: ShotOrder[] = [];
+      for (let t = 0; t < 3; t += DT) orders.push(...net.update(DT, targets).orders);
+      return orders;
+    };
+    const ahead = { x: t1.x - Math.sin(t1.facing) * 25, z: t1.z - Math.cos(t1.facing) * 25 };
+    expect(fire([aircraft('plane', 'player', ahead.x, ahead.z)])).toHaveLength(0);
+    const shots = fire([aircraft('plane', 'player', ahead.x, ahead.z), aircraft('bandit', 'enemy', ahead.x + 3, ahead.z)]);
+    expect(shots.length).toBeGreaterThan(0);
+    for (const o of shots) expect(o).toMatchObject({ side: 'player', target: 'bandit' });
+  });
+
+  it("enemy guns shoot at the player and friendly aircraft, not at their own side's", () => {
+    const turret = layout.installations.find((i) => i.id === 'T8-turret1')!;
+    const ahead = { x: turret.x - Math.sin(turret.facing) * 25, z: turret.z - Math.cos(turret.facing) * 25 };
+    const net = new DefenseNetwork([turret], seededRng(2));
+    const orders: ShotOrder[] = [];
+    for (let t = 0; t < 3; t += DT) orders.push(...net.update(DT, [aircraft('enemy-scout', 'enemy', ahead.x, ahead.z)]).orders);
+    expect(orders).toHaveLength(0);
+    for (let t = 0; t < 3; t += DT) orders.push(...net.update(DT, [aircraft('enemy-scout', 'enemy', ahead.x, ahead.z), aircraft('escort-bomber', 'player', ahead.x, ahead.z + 4)]).orders);
+    expect(orders.length).toBeGreaterThan(0);
+    expect(net.engagedWith('escort-bomber')).toHaveLength(1);
+  });
+
+  it('a weapon sticks with the aircraft it follows while it sees it, then takes the nearest other one', () => {
+    const i = layout.installations.find((x) => x.id === 'T8-turret1')!;
+    const net = new DefenseNetwork([i], seededRng(4));
+    const dir = { x: -Math.sin(i.facing), z: -Math.cos(i.facing) };
+    const at = (d: number) => ({ x: i.x + dir.x * d, z: i.z + dir.z * d });
+    const a = aircraft('a', 'player', at(30).x, at(30).z, 1);
+    for (let t = 0; t < 1; t += DT) net.update(DT, [a]);
+    expect(net.installations[0].targetId).toBe('a');
+    // A second plane closer in doesn't steal its attention while it still sees the first.
+    const b = aircraft('b', 'player', at(15).x, at(15).z + 2, 1);
+    for (let t = 0; t < 1; t += DT) net.update(DT, [a, b]);
+    expect(net.installations[0].targetId).toBe('a');
+    // Once the first is gone, it turns to the other.
+    for (let t = 0; t < 1; t += DT) net.update(DT, [b]);
+    expect(net.installations[0].targetId).toBe('b');
+  });
+
+  it('rounds only hit aircraft of the other side, and rockets home on the aircraft they were fired at', () => {
+    const fire = new Ordnance();
+    const at = (id: string, side: 'player' | 'enemy', x: number, z: number): AircraftTarget => ({ id, side, x, y: 10, z, px: x, py: 10, pz: z, radius: 1 });
+    fire.spawn({ kind: 'ink', source: 'gun', side: 'enemy', x: 0, y: 10, z: 0, vx: 50, vy: 0, vz: 0 });
+    const events = fire.update(0.5, [at('friend', 'enemy', 10, 0), at('foe', 'player', 20, 0)], []);
+    expect(events).toMatchObject([{ type: 'hit', target: 'foe' }]);
+    fire.spawn({ kind: 'rocket', source: 'launcher', side: 'enemy', target: 'b', x: 0, y: 10, z: 0, vx: 10, vy: 0, vz: 0 });
+    for (let t = 0; t < 0.5; t += DT) fire.update(DT, [at('a', 'player', 0, -40), at('b', 'player', 0, 40)], []);
+    expect(fire.shots[0].vz).toBeGreaterThan(0);
   });
 });
 
 /** Flies a plane in a straight line through T8's turrets; returns the damage it takes from ink. */
 function straightPass(id: AircraftId, speed: number, seed: number, line = 0): number {
   const net = new DefenseNetwork(layout.installations.filter((i) => i.territoryId === 'T8' && i.kind !== 'launcher'), seededRng(seed));
-  const fire = new EnemyFire();
+  const fire = new Ordnance();
   let damage = 0;
   for (let z = -40; z < 190; ) {
     const before = z;
     z += speed * DT;
-    for (const o of net.update(DT, { x: line, y: 20, z, vx: 0, vy: 0, vz: speed, signature: AIRCRAFT[id].signature }).orders) fire.spawn(o);
-    for (const e of fire.update(DT, { x: line, y: 20, z, px: line, py: 20, pz: before, radius: AIRCRAFT[id].hitRadius }, true, territories)) {
+    for (const o of net.update(DT, [{ id: 'plane', side: 'player', x: line, y: 20, z, vx: 0, vy: 0, vz: speed, signature: AIRCRAFT[id].signature }]).orders) fire.spawn(o);
+    for (const e of fire.update(DT, [{ id: 'plane', side: 'player', x: line, y: 20, z, px: line, py: 20, pz: before, radius: AIRCRAFT[id].hitRadius }], territories)) {
       if (e.type === 'hit') damage += e.shot.damage;
     }
   }
@@ -277,7 +355,7 @@ describe('accuracy', () => {
       for (let seed = 1; seed <= 8; seed++) {
         const net = new DefenseNetwork(layout.installations.filter((i) => i.id === 'T8-turret2'), seededRng(seed));
         const turret = net.installations[0].spec;
-        const fire = new EnemyFire();
+        const fire = new Ordnance();
         let x = turret.x - 50;
         let z = turret.z + 25;
         for (let t = 0; t < 4; t += DT) {
@@ -287,8 +365,8 @@ describe('accuracy', () => {
           const pz = z;
           x += vx * DT;
           z += vz * DT;
-          for (const o of net.update(DT, { x, y: 12, z, vx, vy: 0, vz, signature: 1 }).orders) fire.spawn(o);
-          for (const e of fire.update(DT, { x, y: 12, z, px, py: 12, pz, radius: 1 }, true, [])) if (e.type === 'hit') damage += e.shot.damage;
+          for (const o of net.update(DT, [{ id: 'plane', side: 'player', x, y: 12, z, vx, vy: 0, vz, signature: 1 }]).orders) fire.spawn(o);
+          for (const e of fire.update(DT, [{ id: 'plane', side: 'player', x, y: 12, z, px, py: 12, pz, radius: 1 }], [])) if (e.type === 'hit') damage += e.shot.damage;
         }
       }
       return damage;
@@ -297,23 +375,23 @@ describe('accuracy', () => {
   });
 });
 
-describe('EnemyFire', () => {
+describe('Ordnance', () => {
   const t5 = territories.find((t) => t.id === 'T5')!;
-  const plane = (x: number, y: number, z: number, px = x, py = y, pz = z, radius = 1) => ({ x, y, z, px, py, pz, radius });
-  const ink = (x: number, y: number, z: number, vx: number, vy: number, vz: number) =>
-    ({ kind: 'ink', source: 'test', x, y, z, vx, vy, vz }) as const;
+  const plane = (x: number, y: number, z: number, px = x, py = y, pz = z, radius = 1): AircraftTarget => ({ id: 'plane', side: 'player', x, y, z, px, py, pz, radius });
+  const ink = (x: number, y: number, z: number, vx: number, vy: number, vz: number): ShotOrder => ({ kind: 'ink', source: 'test', side: 'enemy', x, y, z, vx, vy, vz });
+  const rocket = (vx: number): ShotOrder => ({ kind: 'rocket', source: 'x', side: 'enemy', target: 'plane', x: 0, y: 10, z: 0, vx, vy: 0, vz: 0 });
 
   it('ink flies straight, hits a plane in its path, splats on platforms and dries up', () => {
-    const fire = new EnemyFire();
+    const fire = new Ordnance();
     fire.spawn(ink(0, 20, 0, 44, 0, 0));
-    let events = fire.update(0.5, plane(22, 20, 0), true, territories);
-    expect(events).toMatchObject([{ type: 'hit' }]);
+    let events = fire.update(0.5, [plane(22, 20, 0)], territories);
+    expect(events).toMatchObject([{ type: 'hit', target: 'plane' }]);
     fire.spawn(ink(t5.x, 5, t5.z, 0, -44, 0));
-    events = fire.update(0.2, null, true, territories);
+    events = fire.update(0.2, [], territories);
     expect(events).toMatchObject([{ type: 'ground', territoryId: 'T5' }]);
     fire.spawn(ink(0, 60, 0, 44, 0, 0));
     events = [];
-    for (let t = 0; t < 2; t += DT) events.push(...fire.update(DT, null, true, []));
+    for (let t = 0; t < 2; t += DT) events.push(...fire.update(DT, [], []));
     expect(events).toMatchObject([{ type: 'spent' }]);
     expect(fire.shots).toHaveLength(0);
   });
@@ -324,7 +402,10 @@ describe('EnemyFire', () => {
   });
 
   it('rockets speed up and turn no faster than their turn rate', () => {
-    const r: EnemyShot = { id: 1, kind: 'rocket', source: 'x', x: 0, y: 0, z: 0, vx: 10, vy: 0, vz: 0, px: 0, py: 0, pz: 0, age: 0, travelled: 0, damage: 0, radius: 0.3, active: true };
+    const r: Shot = {
+      id: 1, kind: 'rocket', source: 'x', side: 'enemy', target: 'plane', x: 0, y: 0, z: 0, vx: 10, vy: 0, vz: 0, px: 0, py: 0, pz: 0,
+      age: 0, travelled: 0, travel: 0, damage: 0, radius: 0.3, active: true,
+    };
     steerRocket(r, { x: 0, y: 0, z: 100 }, 0.1);
     expect(Math.hypot(r.vx, r.vz)).toBeCloseTo(10 + DEFENSES.launcher.rocket.accel * 0.1);
     expect(Math.atan2(r.vz, r.vx)).toBeCloseTo(DEFENSES.launcher.rocket.turnRate * 0.1);
@@ -332,8 +413,8 @@ describe('EnemyFire', () => {
 
   /** A rocket fired at a plane 30 m ahead; does it catch it? */
   const chase = (speed: number, turnRate: number) => {
-    const fire = new EnemyFire();
-    fire.spawn({ kind: 'rocket', source: 'x', x: 0, y: 10, z: 0, vx: DEFENSES.launcher.rocket.speed, vy: 0, vz: 0 });
+    const fire = new Ordnance();
+    fire.spawn(rocket(DEFENSES.launcher.rocket.speed));
     let heading = 0;
     let x = 30;
     let z = 0;
@@ -343,7 +424,7 @@ describe('EnemyFire', () => {
       heading += turnRate * DT;
       x += Math.cos(heading) * speed * DT;
       z += Math.sin(heading) * speed * DT;
-      if (fire.update(DT, plane(x, 10, z, px, 10, pz), true, []).some((e) => e.type === 'hit')) return true;
+      if (fire.update(DT, [plane(x, 10, z, px, 10, pz)], []).some((e) => e.type === 'hit')) return true;
     }
     return false;
   };
@@ -356,9 +437,9 @@ describe('EnemyFire', () => {
   });
 
   it('rockets can be shot down; rockets over home fly straight on', () => {
-    const fire = new EnemyFire();
-    fire.spawn({ kind: 'rocket', source: 'x', x: 0, y: 10, z: 0, vx: 10, vy: 0, vz: 0 });
-    fire.update(DT, plane(0, 10, 50), false, []);
+    const fire = new Ordnance();
+    fire.spawn(rocket(10));
+    fire.update(DT, [{ ...plane(0, 10, 50), shielded: true }], []);
     expect(fire.shots[0].vz).toBeCloseTo(0);
     const [collider] = fire.rocketColliders();
     expect(isRocket(collider.id)).toBe(true);

@@ -250,3 +250,36 @@ describe('objectives against defenses', () => {
     expect(m.allDone).toBe(true);
   });
 });
+
+describe('objectives in the air', () => {
+  const base = { difficulty: 'medium', title: '', description: '', reward: 50, bombs: 0, timeLimit: null, ordered: false } as const;
+
+  it('intercepts count aircraft destroyed, once each, and fail only for their own targets', () => {
+    const m = new Mission({ ...base, type: 'patrol', objectives: [{ kind: 'intercept', territoryId: 'T5', targets: ['a', 'b'], count: 2, what: 'aircraft', before: 'escape' }] });
+    m.start();
+    expect(m.lostTo('c', 'escape')).toBe(false);
+    expect(m.lostTo('a', 'release')).toBe(false);
+    expect(m.lostTo('a', 'escape')).toBe(true);
+    m.completeDestroy('a');
+    expect(m.lostTo('a', 'escape')).toBe(false);
+    expect(m.progress[0]).toBe(0.5);
+    expect(m.completeDestroy('b')).toEqual([0]);
+  });
+
+  it('patrols fill up inside the patrol area only', () => {
+    const m = new Mission({ ...base, type: 'patrol', objectives: [{ kind: 'patrol', territoryId: 'T5', airspace: { x: 0, z: 0, half: 35, ceiling: 45 }, duration: 10 }] });
+    m.start();
+    m.updateFlight({ x: 0, y: 20, z: 0 }, { x: 0, y: 20, z: 0 }, 5);
+    m.updateFlight({ x: 0, y: 60, z: 0 }, { x: 0, y: 60, z: 0 }, 5);
+    expect(m.patrolProgress).toBe(0.5);
+  });
+
+  it('an escort completes when its bomber hits, for its own bomber only', () => {
+    const m = new Mission({ ...base, type: 'escort', objectives: [{ kind: 'escort', territoryId: 'T5', escort: 'friend', zone: { x: 0, z: 0, radius: 5, top: 0.3 } }] });
+    m.start();
+    expect(m.escorting('friend')).toBe(true);
+    expect(m.completeEscort('stranger')).toBe(-1);
+    expect(m.completeEscort('friend')).toBe(0);
+    expect(m.escorting('friend')).toBe(false);
+  });
+});

@@ -1,4 +1,5 @@
-import type { Difficulty, ThreatLevel } from '../config';
+import type { AirSpawn } from '../ai/AirTraffic';
+import type { AiRole, Difficulty, ThreatLevel } from '../config';
 
 export type MissionType =
   | 'bombing'
@@ -14,7 +15,13 @@ export type MissionType =
   | 'fortified'
   | 'multi-stage'
   | 'survival'
-  | 'low-attack';
+  | 'low-attack'
+  | 'dogfight'
+  | 'scout-intercept'
+  | 'bomber-intercept'
+  | 'escort'
+  | 'patrol'
+  | 'combined';
 
 export type MissionStatus = 'available' | 'active' | 'succeeded' | 'failed';
 
@@ -23,8 +30,11 @@ export type MissionStatus = 'available' | 'active' | 'succeeded' | 'failed';
  * out-of-time    – the mission clock ran out.
  * aircraft-lost  – the plane crashed before the mission was done.
  * abandoned      – the plane landed back home before the mission was done.
+ * target-escaped – an enemy aircraft the mission was after got away.
+ * target-bombed  – the bomber to intercept released its bomb.
+ * escort-lost    – the friendly bomber to protect was shot down.
  */
-export type MissionFailure = 'missed' | 'out-of-time' | 'aircraft-lost' | 'abandoned';
+export type MissionFailure = 'missed' | 'out-of-time' | 'aircraft-lost' | 'abandoned' | 'target-escaped' | 'target-bombed' | 'escort-lost';
 
 export interface Point3 {
   x: number;
@@ -86,7 +96,17 @@ export type Objective =
   /** Spend `duration` seconds in total inside a defended territory's airspace. */
   | { kind: 'survive'; territoryId: string; airspace: Airspace; duration: number }
   /** Get at least `distance` (horizontally) away from (x, z): clear of a territory's weapons. */
-  | { kind: 'escape'; territoryId: string; x: number; z: number; distance: number };
+  | { kind: 'escape'; territoryId: string; x: number; z: number; distance: number }
+  /**
+   * Shoot down `count` of the AI aircraft `targets` the mission sends up, wherever they fly
+   * (`territoryId` is where the fight is expected). With `before`, it fails if one of them gets
+   * away ('escape') or releases its bomb ('release') first.
+   */
+  | { kind: 'intercept'; territoryId: string; targets: string[]; count: number; what: AiRole | 'aircraft'; before?: 'escape' | 'release' }
+  /** Keep friendly bomber `escort` flying until its bomb hits `zone` on `territoryId`. */
+  | { kind: 'escort'; territoryId: string; escort: string; zone: TargetZone }
+  /** Spend `duration` seconds in total inside a patrol area. */
+  | { kind: 'patrol'; territoryId: string; airspace: Airspace; duration: number };
 
 /** The danger a mission leads into, as the mission card shows it. */
 export interface MissionThreat {
@@ -97,6 +117,8 @@ export interface MissionThreat {
   turrets: number;
   launchers: number;
   radars: number;
+  /** Enemy aircraft the mission sends up, and how good their pilots are. */
+  air?: { fighters: number; scouts: number; bombers: number; skill: Difficulty };
 }
 
 export interface MissionSpec {
@@ -116,6 +138,8 @@ export interface MissionSpec {
   threat?: MissionThreat;
   /** "Operation Paper Storm". */
   codename?: string;
+  /** AI aircraft the mission puts in the air once launched: enemies to fight, a bomber to escort. */
+  aircraft?: AirSpawn[];
 }
 
 /**
@@ -262,6 +286,7 @@ export class Mission {
       switch (objective.kind) {
         case 'recon':
         case 'survive':
+        case 'patrol':
           if (insideAirspace(objective.airspace, pos)) {
             this.progress[i] = Math.min(1, this.progress[i] + dt / objective.duration);
           }
@@ -297,15 +322,15 @@ export class Mission {
   }
 
   /**
-   * Brings open destroy objectives up to date with everything destroyed so far, and completes
-   * those now satisfied. Call it after any objective completes: in an ordered mission that may open
+   * Brings open destroy and intercept objectives up to date with everything destroyed so far, and
+   * completes those now satisfied. Call it after any objective completes: in an ordered mission that may open
    * one whose targets are already down. Returns the indices completed.
    */
   settle(): number[] {
     const completed: number[] = [];
     if (!this.isActive) return completed;
     this.objectives.forEach((o, i) => {
-      if (o.kind !== 'destroy' || !this.isOpen(i)) return;
+      if ((o.kind !== 'destroy' && o.kind !== 'intercept') || !this.isOpen(i)) return;
       this.progress[i] = Math.min(1, this.destroyedTargets(i).size / o.count);
       if (this.isDone(i)) completed.push(i);
     });
@@ -315,7 +340,35 @@ export class Mission {
   /** Targets of objective `index` already destroyed. */
   destroyedTargets(index: number): ReadonlySet<string> {
     const o = this.objectives[index];
-    return new Set(o?.kind === 'destroy' ? o.targets.filter((id) => this.destroyed.has(id)) : []);
+    return new Set(o?.kind === 'destroy' || o?.kind === 'intercept' ? o.targets.filter((id) => this.destroyed.has(id)) : []);
+  }
+
+  /**
+   * Aircraft `id` got away (`escape`) or released its bomb (`release`). True if that loses the
+   * mission: an unfinished intercept objective was after it, and it is still flying.
+   */
+  lostTo(id: string, how: 'escape' | 'release'): boolean {
+    if (!this.isActive || this.destroyed.has(id)) return false;
+    return this.objectives.some((o, i) => o.kind === 'intercept' && o.before === how && o.targets.includes(id) && !this.isDone(i));
+  }
+
+  /** Is aircraft `id` the friendly bomber an unfinished escort objective protects? */
+  escorting(id: string): boolean {
+    return this.isActive && this.objectives.some((o, i) => o.kind === 'escort' && o.escort === id && !this.isDone(i));
+  }
+
+  /** The escorted bomber `id` hit its target. Returns the index of the escort objective completed, or -1. */
+  completeEscort(id: string): number {
+    if (!this.isActive) return -1;
+    const index = this.objectives.findIndex((o, i) => o.kind === 'escort' && o.escort === id && this.isOpen(i));
+    if (index >= 0) this.progress[index] = 1;
+    return index;
+  }
+
+  /** Progress of the patrol objective, if there is one (0 otherwise). */
+  get patrolProgress(): number {
+    const i = this.objectives.findIndex((o) => o.kind === 'patrol');
+    return i >= 0 ? this.progress[i] : 0;
   }
 
   /** The plane landed on `territoryId`. Returns true if that completed a landing objective. */

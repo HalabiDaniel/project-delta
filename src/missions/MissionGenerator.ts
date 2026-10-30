@@ -1,4 +1,8 @@
-import { MISSIONS, THREAT, WORLD, type Difficulty, type ThreatLevel } from '../config';
+import type { Strike } from '../ai/AiAircraft';
+import type { AirSpawn } from '../ai/AirTraffic';
+import { flightTime, friendlyBomberPlan, interceptorPlan, patrolPlan, raidPlan, scoutPlan } from '../ai/FlightPlans';
+import { neighbours } from '../ai/Navigation';
+import { AI, MISSIONS, RAIDS, THREAT, WORLD, type AiRole, type Difficulty, type Side, type ThreatLevel } from '../config';
 import { pick, randRange, shuffled, type Rng } from '../systems/Random';
 import type { Territory } from '../world/Territory';
 import { Mission, type MissionSpec, type MissionThreat, type MissionType, type Objective, type RingGate, type TargetZone } from './Mission';
@@ -6,10 +10,14 @@ import { Mission, type MissionSpec, type MissionThreat, type MissionType, type O
 export const MISSION_TYPES: readonly MissionType[] = [
   'bombing', 'precision', 'recon', 'delivery', 'return', 'multi-bomb', 'rings', 'practice',
   'suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack',
+  'dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined',
 ];
 
 /** Mission types built around the defenses. Every deal includes one, when the world has defenses. */
 export const DEFENSE_TYPES: readonly MissionType[] = ['suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack'];
+
+/** Mission types against (or with) AI aircraft. Every deal includes one. */
+export const AIR_TYPES: readonly MissionType[] = ['dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined'];
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 
@@ -18,6 +26,8 @@ export interface InstallationInfo {
   id: string;
   kind: 'turret' | 'launcher' | 'radar' | 'supply';
   territoryId: string;
+  /** T1's own guns and store are the player's; missions only ever go up against the enemy's. */
+  side?: Side;
   x: number;
   z: number;
   range: number;
@@ -42,21 +52,24 @@ export interface MissionContext {
 
 /**
  * Offers `count` mission cards with different mission types. With three cards there is one of
- * each difficulty: the easy one always goes to unprotected or lightly defended ground, so there is
- * always a safe choice, and the hard one into guarded or fortified ground. When the world has
- * defenses, at least one card is a mission against them.
+ * each difficulty: the easy one always goes to unprotected or lightly defended ground (with rookie
+ * pilots, if any), so there is always a safe choice, and the hard one into guarded or fortified
+ * ground. When the world has defenses, one card is a mission against them, and one is a mission
+ * in the air.
  */
 export function generateOffers(ctx: MissionContext, rng: Rng, count: number = MISSIONS.offers): Mission[] {
   const order = shuffled(rng, DIFFICULTIES);
   const slots = Array.from({ length: count }, (_, i) => order[i % order.length]);
   const chosen: Array<MissionType | null> = slots.map(() => null);
   const used = new Set<MissionType>();
-  for (const type of shuffled(rng, DEFENSE_TYPES)) {
-    const slot = shuffled(rng, slots.map((_, i) => i)).find((i) => supports(type, slots[i], ctx));
-    if (slot === undefined) continue;
-    chosen[slot] = type;
-    used.add(type);
-    break;
+  for (const pool of [DEFENSE_TYPES, AIR_TYPES]) {
+    for (const type of shuffled(rng, pool)) {
+      const slot = shuffled(rng, slots.map((_, i) => i)).find((i) => !chosen[i] && supports(type, slots[i], ctx));
+      if (slot === undefined) continue;
+      chosen[slot] = type;
+      used.add(type);
+      break;
+    }
   }
   slots.forEach((difficulty, i) => {
     if (chosen[i]) return;
@@ -75,8 +88,12 @@ export function supports(type: MissionType, difficulty: Difficulty, ctx: Mission
   return eligible(type, difficulty, ctx).filter((t) => inWindow(t.threat, type, difficulty)).length >= needed;
 }
 
-/** The threat levels (lowest, highest) a mission of this type and difficulty may go into. */
+/**
+ * The threat levels (lowest, highest) a mission of this type and difficulty may go into. A bomber
+ * interception is fought over home ground, wherever the raider sets out from.
+ */
 export function threatWindow(type: MissionType, difficulty: Difficulty): [ThreatLevel, ThreatLevel] {
+  if (type === 'bomber-intercept') return [0, 0];
   const [lo, hi] = THREAT.byDifficulty[difficulty];
   const min = (MISSIONS.minThreat as Partial<Record<MissionType, number>>)[type] ?? 0;
   return [Math.max(lo, min) as ThreatLevel, hi];
@@ -271,7 +288,140 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
         objectives: [objective],
       });
     }
+    case 'dogfight': {
+      const t = target();
+      const id = airId(type, 'fighter');
+      return make(distanceTo(t), {
+        title: `Dogfight over ${t.id}`,
+        description: `A ${pilot(difficulty)} enemy Falcon patrols ${t.id}. Shoot it down: it fights back.`,
+        objectives: [{ kind: 'intercept', territoryId: t.id, targets: [id], count: 1, what: 'fighter' }],
+        aircraft: [{ orders: patrolPlan(ctx.territories, [t.id], 'fighter', difficulty, id, rng, 'mission') }],
+      });
+    }
+    case 'scout-intercept': {
+      const path = flightPath(target(), type, difficulty, ctx, rng);
+      const id = airId(type, 'scout');
+      const last = path[path.length - 1];
+      return make(distanceTo(path[Math.floor(path.length / 2)]), {
+        title: 'Intercept the scout',
+        description: `A ${pilot(difficulty)} enemy Dart is scouting ${listing(path.map((t) => t.id))}. Shoot it down before it slips away beyond ${last.id}: once it spots you, it runs.`,
+        objectives: [{ kind: 'intercept', territoryId: path[0].id, targets: [id], count: 1, what: 'scout', before: 'escape' }],
+        aircraft: [{ orders: scoutPlan(ctx.territories, path.map((t) => t.id), difficulty, id, rng, 'mission', true), delay: 2 }],
+      });
+    }
+    case 'bomber-intercept': {
+      const origin = target();
+      const store = homeStore(ctx);
+      if (!store) throw new Error('A bomber interception needs the paper store on home');
+      const id = airId(type, 'bomber');
+      const escort = difficulty === 'hard';
+      const plan = raidPlan(origin, store, difficulty, id, rng, escort);
+      return make(distanceTo(origin) * 0.6, {
+        title: `Stop the raid on ${home.id}`,
+        description: `A ${pilot(difficulty)} enemy Widewing${escort ? ' with a fighter escort' : ''} sets out from beyond ${origin.id} for your paper store. Shoot it down before it releases its bomb.`,
+        objectives: [{ kind: 'intercept', territoryId: home.id, targets: [id], count: 1, what: 'bomber', before: 'release' }],
+        aircraft: plan.map((orders) => ({ orders, raid: true })),
+      });
+    }
+    case 'escort': {
+      const t = target();
+      const zone = bombObjective(t, MISSIONS.bullseyeRadius[difficulty]);
+      if (zone.kind !== 'bomb') throw new Error('expected a bullseye');
+      const id = airId(type, 'bomber');
+      const bomber = friendlyBomberPlan(home, t, zone.zone, 'hard', id);
+      const from = farSide(t, home, ctx);
+      const count = difficulty === 'easy' ? 1 : 2;
+      const eta = flightTime(bomber);
+      const fighters = Array.from({ length: count }, (_, i) => ({
+        orders: interceptorPlan(from, id, difficulty, airId(type, 'fighter'), rng, 'mission'),
+        delay: Math.round(eta * 0.35 + i * 7),
+      }));
+      return make(distanceTo(t) * 1.5, {
+        title: `Escort the bomber to ${t.id}`,
+        description: `Your Widewing is going to bomb ${t.id}. ${count === 1 ? `A ${pilot(difficulty)} enemy fighter` : `Two ${pilot(difficulty)} enemy fighters`} will come for it: keep them off until its bomb hits.`,
+        objectives: [{ kind: 'escort', territoryId: t.id, escort: id, zone: zone.zone }],
+        aircraft: [{ orders: bomber }, ...fighters],
+      });
+    }
+    case 'patrol': {
+      const t = target();
+      const duration = MISSIONS.patrolTime[difficulty];
+      const plan: Array<[AiRole, number]> =
+        difficulty === 'easy' ? [['scout', 0.2]] : difficulty === 'medium' ? [['scout', 0.15], ['fighter', 0.5]] : [['fighter', 0.1], ['scout', 0.35], ['fighter', 0.6]];
+      const crossing = [...shuffled(rng, neighbours(ctx.territories, t).filter((n) => n.id !== ctx.homeId))];
+      const intruders: AirSpawn[] = plan.map(([role, after]) => {
+        const id = airId(type, role);
+        const orders =
+          role === 'scout'
+            ? scoutPlan(ctx.territories, [...crossing.slice(0, 1), t, ...crossing.slice(1, 2)].map((x) => x.id), difficulty, id, rng, 'mission')
+            : patrolPlan(ctx.territories, [t.id], 'fighter', difficulty, id, rng, 'mission');
+        return { orders, afterPatrol: after };
+      });
+      const ids = intruders.map((i) => i.orders.id);
+      return make(distanceTo(t), {
+        title: `Patrol over ${t.id}`,
+        description: `Fly ${duration} s in the airspace over ${t.id} and shoot down every intruder: ${ids.length === 1 ? 'one is' : `${ids.length} are`} expected.`,
+        objectives: [
+          { kind: 'patrol', territoryId: t.id, airspace: { x: t.x, z: t.z, half: t.half + MISSIONS.patrolMargin, ceiling: MISSIONS.patrolCeiling }, duration },
+          { kind: 'intercept', territoryId: t.id, targets: ids, count: ids.length, what: 'aircraft', before: 'escape' },
+        ],
+        aircraft: intruders,
+      });
+    }
+    case 'combined': {
+      const t = target();
+      const id = airId(type, 'fighter');
+      return make(distanceTo(t), {
+        title: `Combined strike: ${t.id}`,
+        description: `Hit the bullseye on ${t.id}. Its guns are manned, and a ${pilot(difficulty)} Falcon patrols overhead: dodge it or shoot it down.`,
+        bombs: 1 + spareBombs,
+        objectives: [bombObjective(t, MISSIONS.bullseyeRadius[difficulty])],
+        aircraft: [{ orders: patrolPlan(ctx.territories, [t.id], 'fighter', difficulty, id, rng, 'mission') }],
+      });
+    }
   }
+}
+
+let airSerial = 0;
+
+/** A unique id for an aircraft a mission sends up. */
+function airId(type: MissionType, role: string): string {
+  return `${type}-${++airSerial}-${role}`;
+}
+
+/** "rookie", "regular" or "veteran". */
+function pilot(difficulty: Difficulty): string {
+  return AI.skill[difficulty].label.toLowerCase();
+}
+
+/** "T3, T6 and T9". */
+function listing(ids: readonly string[]): string {
+  return ids.length <= 1 ? ids.join('') : `${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+}
+
+/** What raiders bomb: the paper store on home. */
+function homeStore(ctx: MissionContext): Strike | null {
+  const store = (ctx.installations ?? []).find((i) => i.territoryId === ctx.homeId && i.kind === 'supply');
+  return store ? { territoryId: ctx.homeId, x: store.x, y: 0, z: store.z, radius: RAIDS.hitRadius } : null;
+}
+
+/** Up to three neighbouring territories, starting at `start`, all fit for the mission: a scout's beat. */
+function flightPath(start: Territory, type: MissionType, difficulty: Difficulty, ctx: MissionContext, rng: Rng): Territory[] {
+  const path = [start];
+  while (path.length < 3) {
+    const next = shuffled(rng, neighbours(ctx.territories, path[path.length - 1])).find(
+      (t) => t.id !== ctx.homeId && !path.includes(t) && inWindow(t.threat, type, difficulty),
+    );
+    if (!next) break;
+    path.push(next);
+  }
+  return path;
+}
+
+/** Where enemy fighters come from to meet a bomber heading for `t`: its neighbour furthest from home. */
+function farSide(t: Territory, home: Territory, ctx: MissionContext): Territory {
+  const away = (x: Territory) => Math.hypot(x.x - home.x, x.z - home.z);
+  return neighbours(ctx.territories, t).reduce((best, n) => (away(n) > away(best) ? n : best), t);
 }
 
 /**
@@ -280,7 +430,7 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
  */
 export function missionThreat(objectives: readonly Objective[], ctx: MissionContext): MissionThreat {
   const ids = new Set<string>();
-  const installations = ctx.installations ?? [];
+  const installations = (ctx.installations ?? []).filter((i) => i.side !== 'player');
   for (const o of objectives) {
     if (o.kind === 'ring') {
       for (const w of installations) {
@@ -315,13 +465,21 @@ export function defenseList(turrets: number, launchers: number, article: 'counts
 }
 
 /**
- * Reward = (type base + distance bonus + threat bonus) × difficulty multiplier, rounded to a
- * multiple of 5. The threat bonus adds up each defended territory's level bonus, scaled by how long
- * the mission type keeps the player under fire, so danger pays without being the only thing that does.
+ * Reward = (type base + distance bonus + threat bonus + air bonus) × difficulty multiplier, rounded
+ * to a multiple of 5. The threat bonus adds up each defended territory's level bonus, scaled by how
+ * long the mission type keeps the player under fire, so danger pays without being the only thing
+ * that does; the air bonus pays for each enemy aircraft by its pilot's skill.
  */
-export function missionReward(type: MissionType, difficulty: Difficulty, distance: number, threats: readonly ThreatLevel[] = []): number {
+export function missionReward(
+  type: MissionType,
+  difficulty: Difficulty,
+  distance: number,
+  threats: readonly ThreatLevel[] = [],
+  pilots: readonly Difficulty[] = [],
+): number {
   const danger = threats.reduce<number>((sum, level) => sum + THREAT.rewardBonus[level], 0) * MISSIONS.exposure[type];
-  const raw = (MISSIONS.baseReward[type] + distance * MISSIONS.distanceReward + danger) * MISSIONS.difficulty[difficulty].multiplier;
+  const air = pilots.reduce((sum, skill) => sum + MISSIONS.airBonus[skill], 0);
+  const raw = (MISSIONS.baseReward[type] + distance * MISSIONS.distanceReward + danger + air) * MISSIONS.difficulty[difficulty].multiplier;
   return Math.max(5, Math.round(raw / 5) * 5);
 }
 
@@ -346,6 +504,10 @@ function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext
         return on(t).some((i) => i.kind === 'supply');
       case 'multi-stage':
         return on(t).some((i) => i.kind === 'radar') && on(t).some((i) => i.kind === 'supply');
+      case 'bomber-intercept':
+        return MISSIONS.raidOrigins[difficulty].includes(t.id) && homeStore(ctx) !== null;
+      case 'escort':
+        return t.threat <= MISSIONS.escortMaxThreat;
       default:
         return t.threat >= ((MISSIONS.minThreat as Partial<Record<MissionType, number>>)[type] ?? 0);
     }
@@ -369,6 +531,8 @@ function candidates(type: MissionType, difficulty: Difficulty, ctx: MissionConte
 }
 
 function inWindow(level: ThreatLevel, type: MissionType, difficulty: Difficulty): boolean {
+  // A raider can set out from anywhere far: the fight comes to home.
+  if (type === 'bomber-intercept') return true;
   const [lo, hi] = threatWindow(type, difficulty);
   return level >= lo && level <= hi;
 }
@@ -403,15 +567,20 @@ function precisionSpot(t: Territory, radius: number, obstacles: ReadonlyArray<{ 
   return best;
 }
 
-type Parts = Pick<MissionSpec, 'title' | 'description' | 'objectives'> & Partial<Pick<MissionSpec, 'bombs' | 'timeLimit' | 'ordered'>>;
+type Parts = Pick<MissionSpec, 'title' | 'description' | 'objectives'> & Partial<Pick<MissionSpec, 'bombs' | 'timeLimit' | 'ordered' | 'aircraft'>>;
 
 function spec(type: MissionType, difficulty: Difficulty, distance: number, parts: Parts, ctx: MissionContext, rng: Rng): MissionSpec {
   const threat = missionThreat(parts.objectives, ctx);
   const levels = threat.territories.map((id) => ctx.territories.find((t) => t.id === id)!.threat);
+  const enemies = (parts.aircraft ?? []).map((a) => a.orders).filter((o) => o.side === 'enemy');
+  if (enemies.length > 0) {
+    const count = (role: AiRole) => enemies.filter((o) => o.role === role).length;
+    threat.air = { fighters: count('fighter'), scouts: count('scout'), bombers: count('bomber'), skill: difficulty };
+  }
   return {
     type,
     difficulty,
-    reward: missionReward(type, difficulty, distance, levels),
+    reward: missionReward(type, difficulty, distance, levels, enemies.map((o) => o.skill)),
     bombs: 0,
     timeLimit: null,
     ordered: false,

@@ -1,57 +1,15 @@
 import * as pc from 'playcanvas';
-import { sphereContact, type Collider, type Contact } from '../combat/Collision';
-import { handlingFactor, wobbleAmount } from '../combat/Damage';
-import { AIRCRAFT, BOMB, DAMAGE, LANDING, PALETTE, PLANE, WORLD, type AircraftId, type AircraftSpec, type FlightProfile } from '../config';
+import type { Collider } from '../combat/Collision';
+import { AIRCRAFT, BOMB, PALETTE, PLANE, type AircraftId, type AircraftSpec, type FlightProfile } from '../config';
 import type { Territory } from '../world/Territory';
-import { Boost } from './Boost';
-import { assessTouchdown, type TouchdownCheck, type TouchdownState } from './Landing';
+import type { Boost } from './Boost';
+import { FlightModel, type AircraftStatus, type FlightControls, type FlightResult } from './FlightModel';
+import type { TouchdownCheck, TouchdownState } from './Landing';
 import { buildPaperBallMesh, createPaperMaterial, FoldablePlane, inkBlotMaterial, planeMaterials } from './PlaneModel';
 import { PLANE_SHAPES } from './PlaneShapes';
 
-/**
- * hidden  – no plane exists (at the desk with an empty pad).
- * parked  – on the launch pad: being folded, waiting to launch, or recovered and waiting for a refit.
- * flying  – airborne and steerable.
- * rolling – touched down at home and braking along the platform.
- * stopped – came to rest after landing.
- * crashed – destroyed; the wreck is no longer drawn.
- */
-export type AircraftStatus = 'hidden' | 'parked' | 'flying' | 'rolling' | 'stopped' | 'crashed';
-
-export type FlightOutcome = 'flying' | 'touchdown' | 'void';
-
-/**
- * Something the plane flew into this step. The plane has already been pushed clear and deflected;
- * the game decides what the hit costs from the closing speed (the speed straight into the surface).
- */
-export type Collision =
-  | { kind: 'platform'; id: string; closing: number }
-  | { kind: 'object'; id: string; closing: number }
-  /** Came down on the home runway outside the landing limits, and bounced. */
-  | { kind: 'rough-landing'; id: string; closing: number; state: TouchdownState; check: TouchdownCheck };
-
-export interface FlightResult {
-  outcome: FlightOutcome;
-  collisions: Collision[];
-}
-
-export interface FlightControls {
-  /** Mouse movement since the last frame, in pixels. */
-  mouseDX: number;
-  mouseDY: number;
-  /** +1 speed up (W), -1 slow down (S). */
-  throttle: number;
-  /** +1 bank left (A), -1 bank right (D). */
-  bank: number;
-  /** Shift held. */
-  boost: boolean;
-  /** Ease the aim back to level flight while the mouse is idle. Off on the landing approach. */
-  autoLevel: boolean;
-  /** When set, the autopilot flies this heading and pitch and the player's steering is ignored. */
-  autopilot: { yaw: number; pitch: number } | null;
-  /** Out of range: the plane can only glide, with no boost and no climbing. */
-  gliding: boolean;
-}
+export { clamp, forwardFromAngles, wrapAngle, yawFromDirection } from './FlightModel';
+export type { AircraftStatus, Collision, FlightControls, FlightOutcome, FlightResult } from './FlightModel';
 
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -63,46 +21,21 @@ interface Airframe {
 }
 
 /**
- * The aircraft: movement, steering, launch, landing and collisions. It flies "mouse-aim" style:
- * the mouse moves an aim direction and the plane chases it. To turn, the plane first rolls into a
- * bank and the heading follows the bank, which gives turns a little inertia and lets the wings
- * level out on their own when the turn is done. Flight is still arcade: no stalls and artificial
- * lift, so the plane goes where it is pointed, but climbing bleeds a little speed and diving adds
- * some. How fast, nimble and heavy it is comes entirely from the chosen design's FlightProfile.
+ * The player's aircraft as seen in the scene: the folded-paper model of each design, its bomb rack,
+ * and the flight model that moves it (see FlightModel, which AI aircraft fly through too). This
+ * class keeps the model's pose in step with the physics and answers where the muzzles, wingtips
+ * and tail are.
  */
 export class PlaneController {
   readonly root: pc.Entity;
-  readonly boost = new Boost(1, 1);
+  /** The physics: where the plane is, where it points and how fast it goes. */
+  readonly motion: FlightModel;
   private readonly airframes = new Map<AircraftId, Airframe>();
   private airframe: Airframe;
-
-  status: AircraftStatus = 'hidden';
-  readonly position = new pc.Vec3();
-  /** Position at the start of the last flight step, for ring and airspace checks. */
-  readonly prevPosition = new pc.Vec3();
-  yaw = 0;
-  pitch = 0;
-  roll = 0;
-  speed = 0;
-  /** The speed W and S set. The actual speed settles on it (plus any boost). */
-  throttleSpeed = 0;
-  aimYaw = 0;
-  aimPitch = 0;
-  /** The last touchdown's assessment, so a hard landing can say what went wrong. */
-  lastTouchdown: TouchdownCheck | null = null;
-
-  private homeId = '';
-  private airborneTime = 0;
-  private idleTime = 0;
-  private pitchRate = 0;
-  private bounceGrace = 0;
-  private handling = 1;
-  private wobble = 0;
   private readonly rotation = new pc.Quat();
   private readonly qYaw = new pc.Quat();
   private readonly qPitch = new pc.Quat();
   private readonly qRoll = new pc.Quat();
-  private readonly fwd = new pc.Vec3();
 
   constructor(app: pc.AppBase, initial: AircraftId = 'falcon') {
     this.root = new pc.Entity('plane');
@@ -126,6 +59,7 @@ export class PlaneController {
       });
       this.airframes.set(spec.id, { spec, model, bombs });
     }
+    this.motion = new FlightModel(AIRCRAFT[initial]);
     this.airframe = this.airframes.get(initial)!;
     this.setAircraft(initial);
     this.root.enabled = false;
@@ -144,6 +78,54 @@ export class PlaneController {
     return this.airframe.model;
   }
 
+  get status(): AircraftStatus {
+    return this.motion.status;
+  }
+
+  get position(): pc.Vec3 {
+    return this.motion.position;
+  }
+
+  /** Position at the start of the last flight step, for ring and airspace checks. */
+  get prevPosition(): pc.Vec3 {
+    return this.motion.prevPosition;
+  }
+
+  get yaw(): number {
+    return this.motion.yaw;
+  }
+
+  get pitch(): number {
+    return this.motion.pitch;
+  }
+
+  get roll(): number {
+    return this.motion.roll;
+  }
+
+  get speed(): number {
+    return this.motion.speed;
+  }
+
+  /** The speed W and S set. The actual speed settles on it (plus any boost). */
+  get throttleSpeed(): number {
+    return this.motion.throttleSpeed;
+  }
+
+  get boost(): Boost {
+    return this.motion.boost;
+  }
+
+  /** The last touchdown's assessment, so a hard landing can say what went wrong. */
+  get lastTouchdown(): TouchdownCheck | null {
+    return this.motion.lastTouchdown;
+  }
+
+  /** Seconds since launch. */
+  get airborneFor(): number {
+    return this.motion.airborneFor;
+  }
+
   /** Swaps in another design's model, bomb rack and boost. */
   setAircraft(id: AircraftId): void {
     const next = this.airframes.get(id)!;
@@ -153,28 +135,18 @@ export class PlaneController {
     }
     this.airframe = next;
     next.model.entity.enabled = true;
-    this.boost.duration = next.spec.flight.boostDuration;
-    this.boost.cooldown = next.spec.flight.boostCooldown;
-    this.boost.reset();
+    this.motion.setAircraft(next.spec);
   }
 
   /** Health 1 → 0: the paper crumples and stains, and below a threshold the plane gets harder to fly. */
   setDamage(healthFraction: number): void {
     this.airframe.model.setDamage(healthFraction);
-    this.handling = handlingFactor(healthFraction);
-    this.wobble = wobbleAmount(healthFraction);
+    this.motion.setHealth(healthFraction);
   }
 
   /** Puts the plane on the launch pad. `fold` 0 is a flat sheet, 1 the finished plane. */
   park(position: pc.Vec3, yaw: number, homeId: string, fold = 1): void {
-    this.status = 'parked';
-    this.homeId = homeId;
-    this.position.copy(position);
-    this.prevPosition.copy(position);
-    this.yaw = this.aimYaw = yaw;
-    this.pitch = this.aimPitch = 0;
-    this.roll = 0;
-    this.speed = 0;
+    this.motion.park(position, yaw, homeId);
     this.root.enabled = true;
     this.airframe.model.setFold(fold);
     this.applyTransform();
@@ -192,187 +164,34 @@ export class PlaneController {
   /** From the launch pad, or from wherever the plane stopped after landing: a short automatic climb-out. */
   launch(): void {
     if (this.status !== 'parked' && this.status !== 'stopped') return;
-    const f = this.flight;
-    this.status = 'flying';
-    this.airborneTime = 0;
-    this.idleTime = 0;
-    this.speed = this.throttleSpeed = f.cruiseSpeed;
-    // Climb out at launchPitch, then level off unless the player has aimed elsewhere meanwhile.
-    this.pitch = PLANE.launchPitch;
-    this.pitchRate = 0;
-    this.aimYaw = this.yaw;
-    this.aimPitch = 0;
-    this.roll = 0;
-    this.bounceGrace = 0;
-    this.lastTouchdown = null;
-    this.boost.reset();
+    this.motion.launch();
     this.airframe.model.setFold(1);
   }
 
   fly(dt: number, controls: FlightControls, territories: readonly Territory[], obstacles: readonly Collider[]): FlightResult {
-    const collisions: Collision[] = [];
-    if (this.status !== 'flying') return { outcome: 'flying', collisions };
-    const f = this.flight;
-    this.prevPosition.copy(this.position);
-    this.airborneTime += dt;
-    this.bounceGrace = Math.max(0, this.bounceGrace - dt);
-    const climbingOut = this.airborneTime < PLANE.launchGrace;
-
-    // Aim: the mouse and A/D move where the plane wants to go, unless the autopilot has it.
-    const autopilot = controls.autopilot;
-    if (autopilot) {
-      this.aimYaw = autopilot.yaw;
-      this.aimPitch = autopilot.pitch;
-      this.idleTime = 0;
-    } else {
-      this.idleTime = controls.mouseDX !== 0 || controls.mouseDY !== 0 ? 0 : this.idleTime + dt;
-      this.aimYaw -= controls.mouseDX * PLANE.mouseSensitivity;
-      this.aimPitch -= controls.mouseDY * PLANE.mouseSensitivity;
-      this.aimYaw += controls.bank * PLANE.keyTurnRate * dt;
-      // Automatic levelling: a climb or dive the player has let go of eases back to level flight.
-      if (controls.autoLevel && this.idleTime > PLANE.autoLevelDelay) this.aimPitch *= Math.exp(-PLANE.autoLevelRate * dt);
-    }
-    this.aimYaw = this.yaw + clamp(wrapAngle(this.aimYaw - this.yaw), -PLANE.maxAimLead, PLANE.maxAimLead);
-    this.aimPitch = clamp(this.aimPitch, -PLANE.maxPitch, PLANE.maxPitch);
-
-    let targetPitch = climbingOut ? PLANE.launchPitch : this.aimPitch;
-    // Out of range the plane can only glide.
-    if (controls.gliding && !climbingOut) targetPitch = Math.min(targetPitch, -PLANE.glideAngle);
-    // Level off smoothly near the ceiling.
-    const headroom = (WORLD.ceilingY - this.position.y) / 5;
-    targetPitch = Math.min(targetPitch, PLANE.maxPitch * clamp(headroom, -1, 1));
-
-    // Turning: the wings roll towards the bank the wanted turn needs, and the heading follows the
-    // bank. When the nose reaches the aim, the wanted bank drops to zero and the wings level out.
-    // A badly damaged plane responds more slowly and its wings wobble.
-    const turnRate = f.maxTurnRate * this.handling;
-    const wantYawRate = clamp(wrapAngle(this.aimYaw - this.yaw) * f.aimGain, -turnRate, turnRate);
-    const wobble = this.wobble * (Math.sin(this.airborneTime * 7.1) + 0.6 * Math.sin(this.airborneTime * 3.3));
-    const targetRoll = (wantYawRate / f.maxTurnRate) * f.maxBank + wobble;
-    this.roll += (targetRoll - this.roll) * (1 - Math.exp(-f.rollResponse * this.handling * dt));
-    this.yaw = wrapAngle(this.yaw + (this.roll / f.maxBank) * f.maxTurnRate * dt);
-    const wantPitchRate = clamp((targetPitch - this.pitch) * f.aimGain, -f.maxPitchRate, f.maxPitchRate);
-    this.pitchRate += (wantPitchRate - this.pitchRate) * (1 - Math.exp(-f.pitchResponse * dt));
-    this.pitch = clamp(this.pitch + this.pitchRate * dt, -PLANE.maxPitch, PLANE.maxPitch);
-
-    // Speed: settle on the throttle setting (plus boost); climbing costs speed, diving adds it.
-    this.boost.update(dt, controls.boost && !autopilot && !controls.gliding);
-    const topThrottle = controls.gliding ? f.cruiseSpeed : f.maxSpeed;
-    this.throttleSpeed = clamp(this.throttleSpeed + controls.throttle * f.throttleAccel * dt, f.minSpeed, topThrottle);
-    const targetSpeed = this.throttleSpeed + (this.boost.active ? f.boostSpeed : 0);
-    const response = this.boost.active ? f.boostResponse : f.speedResponse;
-    this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-response * dt)) - Math.sin(this.pitch) * f.pitchSpeedEffect * dt;
-    this.speed = clamp(this.speed, f.minSpeed, f.maxSpeed + f.boostSpeed);
-
-    const forward = forwardFromAngles(this.yaw, this.pitch, this.fwd);
-    this.position.add(forward.mulScalar(this.speed * dt));
-
-    if (this.position.y < WORLD.voidY) {
-      this.applyTransform();
-      return { outcome: 'void', collisions };
-    }
-
-    const r = f.collisionRadius;
-    for (const territory of territories) {
-      const home = territory.id === this.homeId;
-      if (home && (climbingOut || this.bounceGrace > 0)) continue;
-      const { x, y, z } = this.position;
-      const contact = sphereContact(x, y, z, r, territory.shape);
-      if (!contact) continue;
-      // Coming down onto the top of the home platform is a landing attempt.
-      if (home && contact.ny > 0.7 && territory.containsXZ(x, z, -1) && this.prevPosition.y > territory.top + 0.3) {
-        const state = this.touchdownState();
-        this.lastTouchdown = assessTouchdown(state);
-        if (this.lastTouchdown.ok) {
-          this.status = 'rolling';
-          this.position.y = territory.top + PLANE.parkedHeight;
-          this.applyTransform();
-          return { outcome: 'touchdown', collisions };
-        }
-        collisions.push({ kind: 'rough-landing', id: territory.id, closing: Math.max(0, state.sink), state, check: this.lastTouchdown });
-        this.deflect(contact);
-        // Bounce back up and climb away rather than slamming into the runway again.
-        this.pitch = Math.max(this.pitch, DAMAGE.bouncePitch);
-        this.aimPitch = Math.max(this.aimPitch, this.pitch);
-        this.bounceGrace = DAMAGE.bounceGrace;
-        continue;
-      }
-      collisions.push({ kind: 'platform', id: territory.id, closing: this.deflect(contact) });
-    }
-    for (const obstacle of obstacles) {
-      for (const shape of obstacle.shapes) {
-        const contact = sphereContact(this.position.x, this.position.y, this.position.z, r, shape);
-        if (!contact) continue;
-        collisions.push({ kind: 'object', id: obstacle.id, closing: this.deflect(contact) });
-        break;
-      }
-    }
+    const result = this.motion.fly(dt, controls, territories, obstacles);
     this.applyTransform();
-    return { outcome: 'flying', collisions };
-  }
-
-  /**
-   * Pushes the plane clear of a surface and turns its heading away from it, keeping some of the
-   * speed along the surface. Returns the closing speed (how fast it was flying into the surface).
-   */
-  private deflect(contact: Contact): number {
-    const n = contact;
-    this.position.x += n.nx * (n.depth + 0.02);
-    this.position.y += n.ny * (n.depth + 0.02);
-    this.position.z += n.nz * (n.depth + 0.02);
-    const fwd = forwardFromAngles(this.yaw, this.pitch, this.fwd);
-    const dot = fwd.x * n.nx + fwd.y * n.ny + fwd.z * n.nz;
-    if (dot >= 0) return 0;
-    const closing = -dot * this.speed;
-    const k = dot * (1 + DAMAGE.bounce);
-    fwd.set(fwd.x - n.nx * k, fwd.y - n.ny * k, fwd.z - n.nz * k).normalize();
-    this.yaw = yawFromDirection(fwd.x, fwd.z);
-    this.pitch = clamp(Math.asin(clamp(fwd.y, -1, 1)), -PLANE.maxPitch, PLANE.maxPitch);
-    this.pitchRate = 0;
-    this.aimYaw = this.yaw;
-    this.aimPitch = this.pitch;
-    // A head-on hit loses half the speed; a glancing one hardly any.
-    this.speed = Math.max(this.flight.minSpeed, this.speed * (1 + 0.5 * dot));
-    return closing;
+    return result;
   }
 
   /** Brakes along the home platform after touchdown. Returns true once the plane has stopped. */
   rollout(dt: number, home: Territory): boolean {
-    if (this.status !== 'rolling') return this.status === 'stopped';
-    this.speed = Math.max(0, this.speed - LANDING.rolloutDecel * dt);
-    const k = 1 - Math.exp(-8 * dt);
-    this.pitch += (0 - this.pitch) * k;
-    this.roll += (0 - this.roll) * k;
-    this.aimYaw = this.yaw;
-    this.aimPitch = 0;
-    this.position.x += -Math.sin(this.yaw) * this.speed * dt;
-    this.position.z += -Math.cos(this.yaw) * this.speed * dt;
-    // Never roll off the edge: brake hard at the rim instead.
-    const limit = home.half - 2;
-    const cx = clamp(this.position.x, home.x - limit, home.x + limit);
-    const cz = clamp(this.position.z, home.z - limit, home.z + limit);
-    if (cx !== this.position.x || cz !== this.position.z) this.speed = 0;
-    this.position.set(cx, home.top + PLANE.parkedHeight, cz);
-    this.applyTransform();
-    if (this.speed <= 0) this.status = 'stopped';
-    return this.status === 'stopped';
-  }
-
-  /** Seconds since launch. */
-  get airborneFor(): number {
-    return this.airborneTime;
+    const rolling = this.status === 'rolling';
+    const stopped = this.motion.rollout(dt, home);
+    if (rolling) this.applyTransform();
+    return stopped;
   }
 
   /** Speed, sink rate and bank: what decides whether a touchdown is a landing. */
   touchdownState(): TouchdownState {
-    return { speed: this.speed, sink: -Math.sin(this.pitch) * this.speed, roll: this.roll };
+    return this.motion.touchdownState();
   }
 
   /** Where carried bomb `slot` hangs, in world space. With n bombs aboard, slots 0…n-1 are filled. */
   getBombPosition(out: pc.Vec3, slot: number): pc.Vec3 {
     const bombs = this.airframe.bombs;
     if (bombs.length === 0) return out.copy(this.position);
-    return out.copy(bombs[clamp(slot, 0, bombs.length - 1)].getPosition());
+    return out.copy(bombs[Math.min(Math.max(slot, 0), bombs.length - 1)].getPosition());
   }
 
   /** World position of gun muzzle `barrel`. */
@@ -400,27 +219,25 @@ export class PlaneController {
   }
 
   crash(): void {
-    this.status = 'crashed';
+    this.motion.crash();
     this.root.enabled = false;
-    this.boost.reset();
   }
 
   hide(): void {
-    this.status = 'hidden';
+    this.motion.hide();
     this.root.enabled = false;
-    this.boost.reset();
   }
 
   getForward(out: pc.Vec3): pc.Vec3 {
-    return forwardFromAngles(this.yaw, this.pitch, out);
+    return this.motion.getForward(out);
   }
 
   getAimDirection(out: pc.Vec3): pc.Vec3 {
-    return forwardFromAngles(this.aimYaw, this.aimPitch, out);
+    return this.motion.getAimDirection(out);
   }
 
   getVelocity(out: pc.Vec3): pc.Vec3 {
-    return this.getForward(out).mulScalar(this.status === 'flying' || this.status === 'rolling' ? this.speed : 0);
+    return this.motion.getVelocity(out);
   }
 
   private applyTransform(): void {
@@ -434,27 +251,3 @@ export class PlaneController {
 }
 
 const tmpLocal = new pc.Vec3();
-
-/** Unit vector the nose points along. Yaw 0 faces -Z; positive yaw turns left, positive pitch climbs. */
-export function forwardFromAngles(yaw: number, pitch: number, out: pc.Vec3): pc.Vec3 {
-  const cp = Math.cos(pitch);
-  return out.set(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
-}
-
-/** Yaw that faces along the horizontal direction (dx, dz). */
-export function yawFromDirection(dx: number, dz: number): number {
-  return Math.atan2(-dx, -dz);
-}
-
-/** Wraps an angle into (-π, π]. */
-export function wrapAngle(a: number): number {
-  const twoPi = Math.PI * 2;
-  a %= twoPi;
-  if (a <= -Math.PI) a += twoPi;
-  else if (a > Math.PI) a -= twoPi;
-  return a;
-}
-
-export function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
-}
