@@ -3,6 +3,8 @@ export interface MiniMapView {
   /** Precision spots and bullseyes still to hit. */
   zones: Array<{ x: number; z: number; precision: boolean }>;
   rings: Array<{ x: number; z: number; yaw: number; state: 'open' | 'waiting' }>;
+  /** Practice planes the mission still wants shot down. */
+  targets: Array<{ x: number; z: number }>;
   plane: { x: number; z: number; yaw: number; autopilot: boolean } | null;
   /** The point the target marker is showing, for a guide line from the plane. */
   objective: { x: number; z: number } | null;
@@ -98,6 +100,19 @@ export class MiniMap {
       ctx.beginPath();
       ctx.arc(sx(z.x, z.z), sy(z.x, z.z), 2.6, 0, Math.PI * 2);
       ctx.fillStyle = z.precision ? COLORS.precision : COLORS.zone;
+      ctx.fill();
+    }
+
+    for (const t of v.targets) {
+      const x = sx(t.x, t.z);
+      const y = sy(t.x, t.z);
+      ctx.beginPath();
+      ctx.moveTo(x, y - 3.5);
+      ctx.lineTo(x + 3.5, y);
+      ctx.lineTo(x, y + 3.5);
+      ctx.lineTo(x - 3.5, y);
+      ctx.closePath();
+      ctx.fillStyle = COLORS.zone;
       ctx.fill();
     }
 

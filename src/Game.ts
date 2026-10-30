@@ -1,30 +1,42 @@
 import * as pc from 'playcanvas';
-import { BOMB, BOOST, CAMERA, ECONOMY, LANDING, MISSIONS, PLANE, WORLD } from './config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, LANDING, MISSIONS, PALETTE, PLANE, TARGETS, WEAPONS, WORLD, type AircraftId } from './config';
+import { aircraftRatings, RATING_KEYS, RATING_LABELS } from './aircraft/Aircraft';
 import { Bombs, type BombImpact, type ZoneRef } from './aircraft/Bomb';
 import { ChaseCamera } from './aircraft/ChaseCamera';
 import { FlightTrails } from './aircraft/FlightTrails';
 import { HangarPreview } from './aircraft/HangarPreview';
 import { assessTouchdown, hardLandingReason } from './aircraft/Landing';
-import { clamp, PlaneController, yawFromDirection } from './aircraft/PlaneController';
+import { clamp, PlaneController, yawFromDirection, type Collision } from './aircraft/PlaneController';
+import { distanceToShape, footprint } from './combat/Collision';
+import { blastDamage, impactDamage, roughLandingDamage } from './combat/Damage';
+import type { Destructible } from './combat/Destructibles';
+import { layoutTargetRange } from './combat/Destructibles';
+import { Projectiles, type ShotImpact } from './combat/Projectiles';
 import type { Mission, Objective } from './missions/Mission';
 import { generateOffers } from './missions/MissionGenerator';
 import { Boundary } from './systems/Boundary';
-import { GameState, type CrashCause } from './systems/GameState';
-import { Input } from './systems/Input';
+import { GameState, type BuildKind, type CrashCause } from './systems/GameState';
+import { Input, MOUSE_LEFT, MOUSE_RIGHT } from './systems/Input';
+import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
+import type { GarageView } from './ui/Garage';
 import {
   HUD,
+  type AircraftStatusView,
+  type GroundView,
   type HudView,
   type ObjectiveView,
   type ResultView,
   type ScreenPoint,
   type TargetIndicator,
+  type TargetLabelView,
   type TerritoryLabel,
   type TrackerView,
 } from './ui/HUD';
 import type { MiniMapView } from './ui/MiniMap';
 import { Effects } from './world/Effects';
 import { MissionMarkers } from './world/MissionMarkers';
+import { TargetRange } from './world/TargetRange';
 import { buildWorld, type World } from './world/WorldGenerator';
 
 /** Ignore an Esc key press this soon after the browser released pointer lock (it was the same press). */
@@ -33,6 +45,10 @@ const ESC_AFTER_UNLOCK_MS = 300;
 const RETICLE_RANGE = 60;
 /** The autopilot cruises home at this height. */
 const AUTOPILOT_ALTITUDE = 22;
+/** The sortie report waits this long after a crash, so the wreck can be seen. */
+const CRASH_REPORT_DELAY = 1.2;
+/** At most this many target labels at once, nearest first. */
+const MAX_TARGET_LABELS = 6;
 const KEY_TO_CARD: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 };
 
 /**
@@ -44,14 +60,17 @@ export class Game {
   paused = false;
 
   private lastAutoPause = -Infinity;
-  private lastRecallHint = -Infinity;
-  private crashCause: CrashCause | null = null;
-  /** The landing rollout has finished and the sortie report is up. */
+  private lastHint = -Infinity;
+  /** The landing rollout has finished and the ground crew can work. */
   private rolledToStop = false;
+  private crashTime = 0;
+  private crashCause: CrashCause | null = null;
   private readonly crashPoint = new pc.Vec3();
   /** Where the last bomb landed, and how much longer the camera keeps it in view. */
   private readonly impactPoint = new pc.Vec3();
   private impactCamTime = 0;
+  /** Health of the plane being refitted when the refit began, to animate the repair. */
+  private refitFrom = 1;
   private readonly v1 = new pc.Vec3();
   private readonly v2 = new pc.Vec3();
   private readonly v3 = new pc.Vec3();
@@ -63,8 +82,11 @@ export class Game {
     readonly world: World,
     readonly resources: ResourceManager,
     readonly state: GameState,
+    readonly career: LocalStats,
+    readonly range: TargetRange,
     readonly plane: PlaneController,
     readonly bombs: Bombs,
+    readonly projectiles: Projectiles,
     readonly camera: ChaseCamera,
     readonly effects: Effects,
     readonly markers: MissionMarkers,
@@ -92,14 +114,33 @@ export class Game {
     window.addEventListener('resize', () => app.resizeCanvas());
 
     const world = buildWorld(app);
+    const targetSpecs = layoutTargetRange(world.territories);
+    const range = new TargetRange(app, targetSpecs);
     const resources = new ResourceManager();
-    const missionContext = { territories: world.territories, homeId: world.home.id, launch: world.launchPosition };
+    const missionContext = {
+      territories: world.territories,
+      homeId: world.home.id,
+      launch: world.launchPosition,
+      dummies: targetSpecs.filter((s) => s.kind === 'dummy'),
+      obstacles: targetSpecs.flatMap((s) => s.shapes.map(footprint)),
+    };
     const state = new GameState(resources, () => generateOffers(missionContext, Math.random));
+    const career = LocalStats.browser();
+    if (career.data.lastAircraft) state.aircraft = career.data.lastAircraft;
+
+    const ground = (x: number, z: number) => {
+      const t = world.territories.find((p) => p.containsXZ(x, z));
+      return t ? t.top : null;
+    };
 
     let game: Game | undefined;
     const hud = new HUD(hudRoot, {
       build: () => game?.build(),
       select: (index) => game?.select(index),
+      selectAircraft: (id) => game?.selectAircraft(id),
+      rearm: () => game?.rearm(),
+      takeOff: () => game?.takeOff(),
+      endSortie: () => game?.endSortie(),
       continueToDesk: () => game?.continueToDesk(),
       resume: () => game?.resume(),
     });
@@ -108,17 +149,21 @@ export class Game {
       world,
       resources,
       state,
-      new PlaneController(app),
+      career,
+      range,
+      new PlaneController(app, state.aircraft),
       new Bombs(app),
+      new Projectiles(app),
       new ChaseCamera(app),
-      new Effects(app),
-      new MissionMarkers(app, world),
+      new Effects(app, ground),
+      new MissionMarkers(app, world, (id) => range.get(id)?.spec ?? null),
       new FlightTrails(app),
       new HangarPreview(app),
       new Input(canvas),
       hud,
     );
     game.bindEvents();
+    game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
     app.start();
@@ -131,14 +176,35 @@ export class Game {
     if (!this.paused) this.state.select(index);
   }
 
-  /** Fold a new plane, or refit the recovered one, on the launch pad. */
+  selectAircraft(id: AircraftId): void {
+    if (this.paused) return;
+    if (this.state.phase === 'building') {
+      this.hint('Folding in progress', 'Wait for this plane, or launch it and land to switch.');
+      return;
+    }
+    this.state.selectAircraft(id);
+  }
+
+  /** Q / E: the previous or next design in the garage. */
+  cycleAircraft(step: number): void {
+    const i = AIRCRAFT_ORDER.indexOf(this.state.aircraft);
+    this.selectAircraft(AIRCRAFT_ORDER[(i + step + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length]);
+  }
+
+  /** Fold a new plane, refit a recovered one or roll a stowed one out, on the launch pad. */
   build(): void {
-    if (this.paused || !this.state.build()) return;
-    if (!this.state.refitting) this.parkPlane(0);
+    if (this.paused) return;
+    const waiting = this.state.hangar.get(this.state.aircraft);
+    this.refitFrom = waiting ? waiting.health / AIRCRAFT[this.state.aircraft].maxHealth : 1;
+    if (!this.state.build()) return;
+    this.plane.setAircraft(this.state.plane!.id);
+    this.plane.setDamage(this.refitFrom);
+    this.parkPlane(this.state.buildKind === 'fold' ? 0 : 1);
   }
 
   launch(): void {
     if (this.paused || !this.state.launch()) return;
+    this.plane.setDamage(1);
     this.plane.launch();
     this.boundary.reset();
     this.input.consumeMouse(); // ignore mouse travel from before take-off
@@ -148,22 +214,57 @@ export class Game {
   dropBomb(): void {
     if (this.paused || !this.state.dropBomb()) return;
     // The ball released is the one that disappears from the rack: slot `bombsLoaded` after the drop.
-    this.bombs.release(this.plane.getBombPosition(this.v1, this.state.bombsLoaded), this.plane.getVelocity(this.v2));
+    const kind = this.state.plane!.bombs.kind;
+    this.bombs.release(this.plane.getBombPosition(this.v1, this.state.bombsLoaded), this.plane.getVelocity(this.v2), kind);
   }
 
-  /** After landing (once the plane has stopped) or a crash: back to the desk for the next sortie. */
+  /** Fires one ink round from the next barrel, towards the point the guns converge on. */
+  private fire(): void {
+    const barrel = this.state.fire();
+    if (barrel === null) return;
+    const gun = this.state.plane!.gun;
+    const muzzle = this.plane.getMuzzle(this.v1, barrel);
+    const aimPoint = this.plane.getForward(this.v2).mulScalar(WEAPONS.convergence).add(this.plane.position);
+    const velocity = aimPoint.sub(muzzle).normalize().mulScalar(gun.speed).add(this.plane.getVelocity(this.v3));
+    this.projectiles.fire(muzzle, velocity, gun.damage, gun.range);
+  }
+
+  /** On the ground at home: the ground crew tops up ink and range. */
+  rearm(): void {
+    if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
+    if (!this.state.rearm() && this.state.rearmProgress === null) this.hint('Fully armed', 'Ink and range are already topped up.');
+  }
+
+  /** From wherever the plane stopped after landing. */
+  takeOff(): void {
+    if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
+    if (!this.state.takeOff()) return;
+    this.plane.launch();
+    this.rolledToStop = false;
+    this.boundary.reset();
+    this.input.consumeMouse();
+    this.input.requestPointerLock();
+  }
+
+  /** After landing: the plane goes into the hangar and the report comes up. */
+  endSortie(): void {
+    if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
+    if (this.state.endSortie()) this.input.exitPointerLock();
+  }
+
+  /** From the report: back to the desk for the next sortie. */
   continueToDesk(): void {
     if (this.paused) return;
-    if (this.state.phase === 'landed' && !this.rolledToStop) return;
+    if (this.state.phase === 'crashed' && this.crashTime < CRASH_REPORT_DELAY) return;
     if (!this.state.continueToDesk()) return;
     this.impactCamTime = 0;
-    this.crashCause = null;
     this.rolledToStop = false;
     this.bombs.clear();
+    this.projectiles.clear();
     this.trails.clear();
     this.boundary.reset();
-    if (this.state.hangarPlane) this.parkPlane(1);
-    else this.plane.hide();
+    this.range.restoreAll();
+    this.refreshPad();
     this.input.exitPointerLock();
     this.camera.updateDesk(0, this.world.launchPosition, this.world.launchYaw, true);
   }
@@ -193,38 +294,49 @@ export class Game {
   private simulate(dt: number, mouse: { dx: number; dy: number }): void {
     const { world, plane, camera, state } = this;
     state.tick(dt);
+    const atDesk = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready';
     switch (state.phase) {
       case 'desk':
       case 'building':
       case 'ready':
-        if (state.phase === 'building') plane.setFold(foldPose(state.buildProgress, state.refitting));
+        if (state.phase === 'building') {
+          plane.setFold(foldPose(state.buildProgress, state.buildKind));
+          if (state.buildKind === 'refit') plane.setDamage(this.refitFrom + (1 - this.refitFrom) * state.buildProgress);
+        }
+        // Dragging on the canvas turns the preview.
+        if (this.input.isButtonHeld(MOUSE_LEFT) && !this.input.pointerLocked) this.preview.drag(mouse.dx, mouse.dy);
         camera.updateDesk(dt, world.launchPosition, world.launchYaw);
         break;
       case 'flying':
         this.fly(dt, mouse);
         break;
       case 'landed':
+      case 'debrief':
         if (plane.rollout(dt, world.home) && !this.rolledToStop) {
           this.rolledToStop = true;
-          this.input.exitPointerLock(); // free the cursor for the Continue button
+          this.input.exitPointerLock(); // free the cursor for the ground crew's buttons
         }
         camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
       case 'crashed':
+        this.crashTime += dt;
         camera.updateWatch(dt, this.crashPoint);
         break;
     }
 
     // The bombs are loaded at take-off; on the pad they would only sit in the way of the fold.
-    plane.setBombs(state.phase === 'flying' ? state.bombsLoaded : 0);
-    const choosing = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready';
-    const shown = choosing ? state.selectedMission : state.mission;
+    plane.setBombs(state.phase === 'flying' || state.phase === 'landed' ? state.bombsLoaded : 0);
+    if (state.durability && !atDesk) plane.setDamage(state.durability.fraction);
+    const shown = atDesk ? state.selectedMission : state.mission;
     if (this.markers.shown !== shown) this.markers.show(shown);
 
-    for (const impact of this.bombs.update(dt, this.openZones(), world.territories)) this.onBombImpact(impact);
+    for (const impact of this.bombs.update(dt, this.openZones(), world.territories, this.range.colliders)) this.onBombImpact(impact);
+    for (const impact of this.projectiles.update(dt, this.range.colliders, world.territories)) this.onShotImpact(impact);
+    this.range.update(dt);
     this.markers.update(dt);
-    this.trails.update(dt, plane);
-    this.preview.update(dt, world.launchPosition, state.phase === 'desk' && !state.hangarPlane);
+    this.trails.update(dt, plane, state.durability?.fraction ?? 1);
+    const parked = atDesk && plane.status === 'parked' && plane.spec.id === state.aircraft;
+    this.preview.update(dt, world.launchPosition, state.aircraft, state.phase === 'desk', parked ? 1.6 : 0);
     this.effects.update(dt);
   }
 
@@ -239,7 +351,7 @@ export class Game {
       boundary === 'autopilot'
         ? { yaw: yawFromDirection(world.home.x - p.x, world.home.z - p.z), pitch: clamp((AUTOPILOT_ALTITUDE - p.y) * 0.04, -0.35, 0.35) }
         : null;
-    const outcome = plane.fly(
+    const result = plane.fly(
       dt,
       {
         mouseDX: mouse.dx,
@@ -249,12 +361,19 @@ export class Game {
         boost: input.isHeld('ShiftLeft') || input.isHeld('ShiftRight'),
         autoLevel: !this.onApproach(),
         autopilot,
+        gliding: state.outOfRange,
       },
       world.territories,
+      this.range.solids,
     );
-    switch (outcome) {
+    for (const collision of result.collisions) {
+      this.onCollision(collision);
+      if (state.phase !== 'flying') return; // that one destroyed the plane
+    }
+    switch (result.outcome) {
       case 'flying':
         state.updateFlight(plane.prevPosition, plane.position, dt);
+        if (input.isButtonHeld(MOUSE_LEFT) && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
       case 'touchdown':
@@ -263,15 +382,32 @@ export class Game {
         state.land(world.home.id);
         this.camera.updateFollow(dt, plane, world.territories, null);
         break;
-      case 'hard-landing':
-        this.loseAircraft('hard-landing');
+      case 'void':
+        state.crash('void');
         break;
-      case 'crashed-void':
-        this.loseAircraft('void');
-        break;
-      case 'crashed-impact':
-        this.loseAircraft('impact');
-        break;
+    }
+  }
+
+  /** Flew into something: what it costs depends on how hard. Props take a beating too. */
+  private onCollision(c: Collision): void {
+    const { state, plane } = this;
+    let damage = c.kind === 'rough-landing' ? roughLandingDamage(c.state) : impactDamage(c.closing);
+    if (c.kind === 'object') {
+      const target = this.range.get(c.id);
+      const ram = Math.round(impactDamage(c.closing) * DAMAGE.ramMultiplier);
+      // Paper and cardboard give way: they hurt less than a platform does.
+      if (target) damage = Math.round(damage * TARGETS.hardness[target.spec.kind]);
+      if (target && ram > 0) this.damageTarget(target, ram, this.range.centre(target, this.v3));
+    }
+    if (damage <= 0) return;
+    this.effects.burst(plane.position, 'thud');
+    const { dealt, destroyed } = state.damageAircraft(damage, c.kind === 'rough-landing' ? 'landing' : 'impact');
+    if (destroyed || dealt <= 0) return;
+    if (c.kind === 'rough-landing') {
+      this.hud.banner(`Rough landing! −${dealt}`, `${hardLandingReason(c.check)} Go around and try again.`, 'bad', 3);
+    } else {
+      const what = c.kind === 'object' ? (this.range.get(c.id)?.spec.name.toLowerCase() ?? 'a prop') : c.id;
+      this.hud.banner(`Ouch! −${dealt}`, `You hit ${what}. Keep clear of platforms and props.`, 'bad', 2.2);
     }
   }
 
@@ -294,16 +430,62 @@ export class Game {
     return zones;
   }
 
-  private onBombImpact(impact: BombImpact): void {
+  private onBombImpact(impact: BombImpact & { bomb: keyof typeof BOMB.kinds }): void {
     const point = this.impactPoint.set(impact.x, impact.y, impact.z);
+    let struck = false;
     if (impact.kind !== 'void') {
       const hit = impact.kind === 'target';
-      this.effects.bombImpact(point, hit);
+      this.effects.bombImpact(point, hit || impact.kind === 'object');
       const at = this.projectOnScreen(this.v3.copy(point));
-      if (at) this.hud.pop(hit ? 'BOOM!' : 'SPLAT!', hit ? 'good' : 'bad', at);
+      if (at) this.hud.pop(hit ? 'BOOM!' : impact.kind === 'object' ? 'WHAM!' : 'SPLAT!', hit || impact.kind === 'object' ? 'good' : 'bad', at);
+      // The blast damages every prop and practice plane around the impact.
+      const kind = BOMB.kinds[impact.bomb];
+      for (const target of this.range.targets) {
+        if (!target.alive) continue;
+        const distance = Math.min(...target.spec.shapes.map((s) => distanceToShape(point, s)));
+        const damage = blastDamage(kind.damage, kind.blastRadius, distance);
+        if (damage > 0 && this.damageTarget(target, damage, this.range.labelPoint(target, this.v2)) > 0) struck = true;
+      }
     }
     this.impactCamTime = impact.kind === 'void' ? 0 : CAMERA.bombCamLinger;
-    this.state.resolveBomb(impact.kind === 'target' ? impact.objective : null);
+    this.state.resolveBomb(impact.kind === 'target' ? impact.objective : null, struck);
+  }
+
+  private onShotImpact(impact: ShotImpact & { damage: number }): void {
+    const point = this.v1.set(impact.x, impact.y, impact.z);
+    if (impact.kind === 'platform') {
+      this.effects.inkHit(point, true);
+      return;
+    }
+    this.effects.inkHit(point, false);
+    const target = this.range.get(impact.id);
+    if (!target) return;
+    this.state.recordShotHit();
+    const alive = target.alive;
+    const dealt = this.damageTarget(target, impact.damage, point);
+    if (dealt > 0) this.hud.hitMarker(alive && !target.alive);
+  }
+
+  /** Damages a prop or practice plane, with numbers, effects and the bookkeeping. Returns the damage dealt. */
+  private damageTarget(target: Destructible, amount: number, at: pc.Vec3): number {
+    const { dealt, destroyed } = this.range.damage(target.id, amount);
+    if (dealt <= 0) return 0;
+    const screen = this.projectOnScreen(this.v3.copy(at));
+    if (screen) this.hud.damageNumber(dealt, screen, destroyed);
+    if (destroyed) {
+      const centre = this.range.centre(target, this.v3);
+      if (target.spec.kind === 'dummy') {
+        this.effects.wreck(centre, pc.Vec3.ZERO, PALETTE.dummyAccent, 0.8, PALETTE.dummyPaper);
+        const p = this.projectOnScreen(centre);
+        if (p) this.hud.pop('SHOT DOWN!', 'good', p);
+      } else {
+        this.effects.burst(centre, 'cardboard');
+        const p = this.projectOnScreen(centre);
+        if (p) this.hud.pop('CRUNCH!', 'good', p);
+      }
+    }
+    this.state.recordDamage(dealt, destroyed ? target.id : null);
+    return dealt;
   }
 
   /** The newest falling bomb, or for a moment after it lands, the impact point. */
@@ -315,19 +497,34 @@ export class Game {
     return this.impactPoint;
   }
 
-  private loseAircraft(cause: CrashCause): void {
-    this.crashPoint.copy(this.plane.position);
-    this.crashCause = cause;
-    if (cause !== 'void') this.effects.burst(this.plane.position, 'crash');
-    this.plane.crash();
-    this.state.crash(cause);
-    this.input.exitPointerLock(); // free the cursor for the Continue button
+  /**
+   * At the desk, the pad shows the chosen design if one is waiting in the hangar (crumpled if it
+   * came back damaged); otherwise it is empty and only the blueprint preview turns above it.
+   */
+  private refreshPad(): void {
+    const { state, plane } = this;
+    if (state.phase !== 'desk') return;
+    const waiting = state.hangar.get(state.aircraft);
+    if (!waiting) {
+      plane.hide();
+      return;
+    }
+    plane.setAircraft(state.aircraft);
+    plane.setDamage(waiting.health / AIRCRAFT[state.aircraft].maxHealth);
+    this.parkPlane(1);
   }
 
   private parkPlane(fold: number): void {
     const pad = this.v1.copy(this.world.launchPosition);
     pad.y = PLANE.parkedHeight;
     this.plane.park(pad, this.world.launchYaw, this.world.home.id, fold);
+  }
+
+  /** A short banner for "you can't do that now" moments, not repeated in quick succession. */
+  private hint(title: string, subtitle: string): void {
+    if (performance.now() - this.lastHint < 2500) return;
+    this.lastHint = performance.now();
+    this.hud.banner(title, subtitle, 'info', 2.5);
   }
 
   // ---- Wiring ---------------------------------------------------------------------------------
@@ -344,15 +541,23 @@ export class Game {
       }
       if (this.paused) return;
       if (code in KEY_TO_CARD) this.select(KEY_TO_CARD[code]);
+      else if (code === 'KeyQ') this.cycleAircraft(-1);
+      else if (code === 'KeyE') this.cycleAircraft(1);
       else if (code === 'KeyF') this.build();
-      else if (code === 'Space') this.launch();
-      else if (code === 'KeyR' || code === 'Enter') {
-        if (state.phase === 'flying') this.recallHint();
+      else if (code === 'Space') {
+        if (state.phase === 'landed') this.takeOff();
+        else this.launch();
+      } else if (code === 'KeyR') {
+        if (state.phase === 'landed') this.rearm();
+        else if (state.phase === 'flying') this.hint('Rearm at home', 'Land on T1, then press R to top up ink and range.');
+      } else if (code === 'Enter' || code === 'NumpadEnter') {
+        if (state.phase === 'landed') this.endSortie();
         else this.continueToDesk();
       }
     });
-    input.onCanvasClick(() => {
-      if (state.phase === 'flying') this.dropBomb();
+    input.onCanvasClick((button) => {
+      if (state.phase !== 'flying' || this.paused) return;
+      if (button === MOUSE_RIGHT) this.dropBomb();
     });
     input.onPointerLockChange((locked) => {
       // Losing the lock mid-flight (Esc, alt-tab) pauses rather than leaving the plane unattended.
@@ -370,17 +575,44 @@ export class Game {
     });
     state.onEvent((event) => {
       switch (event.type) {
+        case 'aircraft-selected':
+          this.career.rememberAircraft(event.aircraft);
+          this.refreshPad();
+          break;
+        case 'stowed':
+          hud.banner(`${AIRCRAFT[event.aircraft].name} stowed`, 'It waits in the hangar, ready to roll out for free.', 'info', 2.2);
+          break;
         case 'build-refused':
-          hud.banner('Not enough paper', `You need ${event.cost}. Your home territory keeps producing paper.`, 'bad', 2.5);
+          if (event.reason === 'incompatible') {
+            hud.banner(`The ${state.chosen.name} can't fly this mission`, `${event.detail}. Pick another plane (Q/E) or mission.`, 'bad', 3);
+          } else {
+            hud.banner('Not enough paper', `You need ${event.cost}. Your home territory keeps producing paper.`, 'bad', 2.5);
+          }
+          break;
+        case 'launch-refused':
+          hud.banner(`Wrong plane for this mission`, `${event.detail}. Choose another mission, or switch planes (Q/E).`, 'bad', 3);
           break;
         case 'ready':
           this.effects.burst(this.plane.position, 'fold');
           break;
         case 'launched':
-          hud.banner('Mission active', this.state.mission!.title, 'info', 1.8);
+          this.career.recordSortie(state.plane!.id);
+          hud.banner('Mission active', state.mission!.title, 'info', 1.8);
+          break;
+        case 'out-of-ammo':
+          hud.banner('Out of ink!', 'Land on T1 and press R to rearm.', 'bad', 2.5);
+          break;
+        case 'range-exhausted':
+          hud.banner('Out of range!', 'The plane can only glide now. Head home and land to rearm.', 'bad', 3.5);
+          break;
+        case 'damaged':
+          hud.damageFlash(event.amount);
+          break;
+        case 'target-destroyed':
+          this.career.recordTargetDestroyed();
           break;
         case 'bomb-missed':
-          if (event.remaining > 0 || this.state.bombsFalling > 0) {
+          if (event.remaining > 0 || state.bombsFalling > 0) {
             hud.banner('Missed!', `${event.remaining} bomb${event.remaining === 1 ? '' : 's'} left. Line up and try again.`, 'bad', 2);
           }
           break;
@@ -388,10 +620,11 @@ export class Game {
           this.onObjectiveComplete(event.objective, event.index);
           break;
         case 'mission-succeeded':
-          if (this.state.phase === 'landed') break; // the touchdown banner reports it
+          this.career.recordMissionCompleted();
+          if (state.phase === 'landed') break; // the touchdown banner reports it
           hud.banner(
             'Mission complete!',
-            this.state.phase === 'flying' ? `+${event.reward} paper · Land on T1 to recover your plane` : `+${event.reward} paper`,
+            state.phase === 'flying' ? `+${event.reward} paper · Land on T1 to recover your plane` : `+${event.reward} paper`,
             'good',
             3.5,
           );
@@ -401,36 +634,46 @@ export class Game {
           else if (event.reason === 'out-of-time') hud.banner('Out of time!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
           break;
         case 'crashed':
-          if (event.cause === 'hard-landing') {
-            hud.banner('Hard landing!', hardLandingReason(this.plane.lastTouchdown ?? assessTouchdown(this.plane.touchdownState())), 'bad', 4);
-          } else if (event.cause === 'void') {
-            hud.banner('Plane lost in the void', 'No reward for an unfinished mission. Press R to continue.', 'bad', 4);
-          } else {
-            const hit = this.plane.lastImpactId;
-            hud.banner(
-              'Plane crashed!',
-              hit === this.world.home.id
-                ? `Hit the edge of ${hit}. Come in over the top of the platform to land.`
-                : `Flew into ${hit}. Planes can only land on your home, ${this.world.home.id}.`,
-              'bad',
-              4,
-            );
-          }
+          this.onCrashed(event.cause);
           break;
         case 'landed': {
-          const mission = this.state.mission;
+          const mission = state.mission;
           if (mission?.status === 'succeeded' && mission.objectives.some((o) => o.kind === 'land')) {
             hud.banner('Mission complete!', `+${mission.reward} paper · Plane recovered`, 'good', 3.5);
           } else {
-            hud.banner('Touchdown!', `Plane recovered. A refit costs ${ECONOMY.refitCost} instead of ${ECONOMY.planeCost}.`, 'good', 3);
+            hud.banner('Touchdown!', 'Safe on T1. The ground crew is ready.', 'good', 2.5);
           }
           break;
         }
+        case 'rearmed':
+          hud.banner('Rearmed', 'Ink and range topped up. Space to take off.', 'good', 2);
+          break;
         case 'paper-reset':
           hud.banner('Paper reset', `${this.resources.paper} paper restored`, 'info', 1.6);
           break;
       }
     });
+  }
+
+  /** The plane is gone: it bursts into paper and its crumpled remains tumble away. */
+  private onCrashed(cause: CrashCause): void {
+    const { plane, hud } = this;
+    this.crashPoint.copy(plane.position);
+    this.crashTime = 0;
+    this.crashCause = cause;
+    if (cause !== 'void') this.effects.wreck(plane.position, plane.getVelocity(this.v2), plane.spec.accent, 1);
+    const at = this.projectOnScreen(this.v3.copy(plane.position));
+    if (at && cause !== 'void') hud.pop('CRUMPLED!', 'bad', at);
+    plane.crash();
+    this.career.recordPlaneLost();
+    this.input.exitPointerLock(); // free the cursor for the Continue button
+    if (cause === 'hard-landing') {
+      hud.banner('Hard landing!', `${hardLandingReason(plane.lastTouchdown ?? assessTouchdown(plane.touchdownState()))} The plane is wrecked.`, 'bad', 4);
+    } else if (cause === 'void') {
+      hud.banner('Plane lost in the void', 'No reward for an unfinished mission.', 'bad', 4);
+    } else {
+      hud.banner('Plane destroyed!', 'It hit too hard and crumpled. Fast impacts tear paper apart.', 'bad', 4);
+    }
   }
 
   private onObjectiveComplete(objective: Objective, index: number): void {
@@ -454,12 +697,6 @@ export class Game {
     }
   }
 
-  private recallHint(): void {
-    if (performance.now() - this.lastRecallHint < 3000) return;
-    this.lastRecallHint = performance.now();
-    this.hud.banner('No recall', 'Land on T1 to bring your plane home: slow down and descend gently.', 'info', 2.5);
-  }
-
   // ---- HUD view -------------------------------------------------------------------------------
 
   private view(): HudView {
@@ -475,14 +712,14 @@ export class Game {
       aim = this.projectOnScreen(plane.getAimDirection(this.v1).mulScalar(RETICLE_RANGE).add(plane.position));
     }
 
-    const from = flying || state.phase === 'landed' || state.phase === 'crashed' ? plane.position : world.launchPosition;
+    const from = choosing ? world.launchPosition : plane.position;
     const goal = this.currentGoal(mission, from);
     let target: TargetIndicator | null = null;
     if (goal) {
-      const distance = goal.ring
+      const distance = goal.solid
         ? this.v2.copy(goal.point).sub(from).length()
         : Math.hypot(goal.point.x - from.x, goal.point.z - from.z);
-      target = { ...this.indicator(goal.point), label: `${goal.label} · ${Math.round(distance)} m`, tone: goal.tone, near: !goal.ring && distance < 15 };
+      target = { ...this.indicator(goal.point), label: `${goal.label} · ${Math.round(distance)} m`, tone: goal.tone, near: !goal.solid && distance < 15 };
     }
 
     const labels: TerritoryLabel[] = [];
@@ -496,19 +733,30 @@ export class Game {
       if (p) labels.push({ id: t.id, role: t.isHome ? 'home' : objectiveTerritories.get(t.id) === false ? 'objective' : 'neutral', x: p.x, y: p.y });
     }
 
+    const kind = state.phase === 'desk' ? state.buildKindFor(state.aircraft) : state.buildKind;
+    const name = (state.plane ?? state.chosen).name;
     const buildCost = state.buildCost;
     let buildNote: string | null = null;
     let noteTone: 'bad' | 'info' = 'info';
-    if (state.phase === 'desk') {
+    const fit = state.phase === 'desk' || state.phase === 'ready' ? state.suitability(state.plane?.id ?? state.aircraft) : null;
+    if (fit?.level === 'unsuitable') {
+      noteTone = 'bad';
+      buildNote = `The ${name} can't fly this mission: ${fit.reason}. Choose another plane (Q/E) or mission.`;
+    } else if (state.phase === 'desk') {
+      const waiting = state.hangar.get(state.aircraft);
       if (!resources.canAfford(buildCost)) {
         const wait = state.income.timeToAfford(resources.paper, buildCost);
         noteTone = 'bad';
         buildNote =
-          `Need ${buildCost} paper to ${state.hangarPlane ? 'refit' : 'fold'}, you have ${resources.paper}.` +
+          `Need ${buildCost} paper to ${kind === 'refit' ? 'refit' : 'fold'} a ${name}, you have ${resources.paper}.` +
           (wait !== null ? ` Your home makes paper: ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.');
-      } else if (state.hangarPlane) {
-        buildNote = `Your recovered plane is in the hangar: a refit costs ${state.refitCost} instead of ${state.planeCost}.`;
+      } else if (waiting?.condition === 'recovered') {
+        buildNote = `Your recovered ${name} is in the hangar: a refit costs ${buildCost} instead of ${AIRCRAFT[state.aircraft].cost}.`;
+      } else if (waiting?.condition === 'ready') {
+        buildNote = `Your ${name} is stowed in the hangar, ready to roll out for free.`;
       }
+    } else if (state.phase === 'ready') {
+      buildNote = 'Q / E stows this plane in the hangar and switches to another.';
     }
 
     const landing = this.onApproach()
@@ -518,9 +766,16 @@ export class Game {
         })()
       : null;
 
+    const f = plane.flight;
+    const favorite = this.career.favorite;
     return {
       paper: resources.paper,
-      stats: state.stats,
+      career: {
+        missionsCompleted: this.career.data.missionsCompleted,
+        planesLost: this.career.data.planesLost,
+        targetsDestroyed: this.career.data.targetsDestroyed,
+        favorite: favorite ? AIRCRAFT[favorite].name : null,
+      },
       phase: state.phase,
       paused: this.paused,
       income: {
@@ -530,15 +785,8 @@ export class Game {
         progress: state.income.progress,
         cap: state.income.cap,
       },
-      build: {
-        cost: buildCost,
-        refit: state.hangarPlane,
-        canBuild: state.canBuild(),
-        note: buildNote,
-        noteTone,
-        progress: state.buildProgress,
-        refitting: state.refitting,
-      },
+      build: { cost: buildCost, kind, name, canBuild: state.canBuild(), note: buildNote, noteTone, progress: state.buildProgress },
+      garage: choosing ? this.garageView() : null,
       cards: choosing
         ? state.offers.map((m) => {
             const d = MISSIONS.difficulty[m.spec.difficulty];
@@ -553,6 +801,12 @@ export class Game {
               reward: m.reward,
               bombs: m.spec.bombs,
               timeLimit: m.spec.timeLimit,
+              fits: AIRCRAFT_ORDER.map((id) => ({
+                id,
+                name: AIRCRAFT[id].name,
+                level: state.suitability(id, m).level,
+                selected: id === (state.plane?.id ?? state.aircraft),
+              })),
             };
           })
         : null,
@@ -561,20 +815,15 @@ export class Game {
       flight: flying
         ? {
             speed: plane.speed,
-            speedFrac: (plane.speed - PLANE.minSpeed) / (PLANE.maxSpeed + BOOST.speed - PLANE.minSpeed),
-            throttleFrac: (plane.throttleSpeed - PLANE.minSpeed) / (PLANE.maxSpeed + BOOST.speed - PLANE.minSpeed),
+            speedFrac: (plane.speed - f.minSpeed) / (f.maxSpeed + f.boostSpeed - f.minSpeed),
+            throttleFrac: (plane.throttleSpeed - f.minSpeed) / (f.maxSpeed + f.boostSpeed - f.minSpeed),
             altitude: plane.position.y,
             boost: { state: plane.boost.state, level: plane.boost.level },
-            bombs: {
-              loaded: state.bombsLoaded,
-              capacity: state.mission?.spec.bombs ?? 0,
-              falling: state.bombsFalling,
-              cooldown: state.bombCooldown / BOMB.dropCooldown,
-              ready: state.canDropBomb(),
-            },
             autopilot: this.boundary.state === 'autopilot',
           }
         : null,
+      aircraft: this.aircraftStatus(),
+      ground: this.groundView(),
       landing,
       boundary: { state: this.boundary.state, countdown: this.boundary.countdown },
       result: this.result(),
@@ -583,43 +832,184 @@ export class Game {
       aim,
       target,
       labels,
+      targets: flying || state.phase === 'landed' ? this.targetLabels(mission, target?.onScreen ? goal?.targetId ?? null : null) : [],
       minimap: this.minimapView(mission, goal?.point ?? null),
     };
+  }
+
+  private garageView(): GarageView {
+    const { state, resources } = this;
+    const mission = state.selectedMission;
+    const chosen = state.chosen;
+    const ratings = aircraftRatings(chosen);
+    const fit = state.suitability(chosen.id, mission);
+    const bombKind = BOMB.kinds[chosen.bombs.kind];
+    return {
+      cards: AIRCRAFT_ORDER.map((id) => {
+        const spec = AIRCRAFT[id];
+        const waiting = state.hangar.get(id);
+        const cost = state.buildCostFor(id);
+        return {
+          id,
+          name: spec.name,
+          roleLabel: spec.roleLabel,
+          accent: css(spec.accent),
+          cost: spec.cost,
+          buildCost: cost,
+          buildKind: state.buildKindFor(id),
+          hangar: waiting?.condition ?? null,
+          hangarHealth: waiting ? waiting.health / spec.maxHealth : null,
+          suitability: state.suitability(id, mission).level,
+          selected: id === state.aircraft,
+          affordable: resources.canAfford(cost),
+        };
+      }),
+      inspector: {
+        name: chosen.name,
+        roleLabel: chosen.roleLabel,
+        accent: css(chosen.accent),
+        tagline: chosen.tagline,
+        ratings: RATING_KEYS.map((key) => ({ key, label: RATING_LABELS[key], value: ratings[key] })),
+        loadout: [
+          `${chosen.gunLabel} · ${chosen.gun.ammo} ink`,
+          `${chosen.bombs.capacity} ${bombKind.label.toLowerCase()}${chosen.bombs.capacity === 1 ? '' : 's'}`,
+          `${chosen.maxHealth} health · ${(chosen.range / 1000).toFixed(1)} km range`,
+        ],
+        suitability: { level: fit.level, reason: fit.reason, missionTitle: mission.title },
+      },
+      locked: state.phase === 'building',
+    };
+  }
+
+  private aircraftStatus(): AircraftStatusView | null {
+    const { state } = this;
+    const spec = state.plane;
+    if (!spec || !state.durability || !state.gun || (state.phase !== 'flying' && state.phase !== 'landed')) return null;
+    const bomb = BOMB.kinds[spec.bombs.kind];
+    return {
+      name: spec.name,
+      roleLabel: spec.roleLabel,
+      accent: css(spec.accent),
+      health: state.durability.health,
+      maxHealth: spec.maxHealth,
+      rangeLeft: state.rangeLeft,
+      range: spec.range,
+      gun: { label: spec.gunLabel, ammo: state.gun.ammo, capacity: state.gun.capacity, ready: state.canFire() },
+      bombs: {
+        label: bomb.label + 's',
+        loaded: state.bombsLoaded,
+        capacity: Math.min(spec.bombs.capacity, state.mission?.spec.bombs ?? 0),
+        falling: state.bombsFalling,
+        cooldown: state.bombCooldown / BOMB.dropCooldown,
+        ready: state.canDropBomb(),
+      },
+      airborne: state.phase === 'flying',
+    };
+  }
+
+  private groundView(): GroundView | null {
+    const { state } = this;
+    if (state.phase !== 'landed') return null;
+    const mission = state.mission;
+    let missionLine = '';
+    let missionTone: GroundView['missionTone'] = 'info';
+    if (mission?.status === 'succeeded') {
+      missionLine = `Mission complete · +${mission.reward} paper. End the sortie for your report.`;
+      missionTone = 'good';
+    } else if (mission?.status === 'failed') {
+      missionLine = 'Mission failed. End the sortie to recover the plane.';
+      missionTone = 'bad';
+    } else if (mission) {
+      const left = mission.timeLeft;
+      missionLine = `Mission still in progress${left !== null ? ` · ${Math.ceil(left)} s left` : ''}. Ending the sortie abandons it.`;
+    }
+    return { stopped: this.rolledToStop, rearming: state.rearmProgress, canRearm: state.canRearm(), missionLine, missionTone };
+  }
+
+  /** Names, roles and health over nearby practice planes, and over props once they are damaged. */
+  private targetLabels(mission: Mission | null, skip: string | null): TargetLabelView[] {
+    const eye = this.camera.entity.getPosition();
+    const wanted = new Set<string>();
+    mission?.objectives.forEach((o, i) => {
+      if (o.kind !== 'destroy' || !mission.isOpen(i) || !mission.isActive) return;
+      const done = mission.destroyedTargets(i);
+      for (const id of o.targets) if (!done.has(id)) wanted.add(id);
+    });
+    const near: Array<{ target: Destructible; distance: number }> = [];
+    for (const target of this.range.targets) {
+      if (!target.alive || target.id === skip) continue;
+      if (target.spec.kind !== 'dummy' && target.health >= target.spec.maxHealth) continue;
+      const p = this.range.labelPoint(target, this.v3);
+      const distance = Math.hypot(p.x - eye.x, p.y - eye.y, p.z - eye.z);
+      if (distance <= TARGETS.labelRange) near.push({ target, distance });
+    }
+    near.sort((a, b) => a.distance - b.distance);
+    const views: TargetLabelView[] = [];
+    for (const { target, distance } of near) {
+      if (views.length >= MAX_TARGET_LABELS) break;
+      const p = this.projectOnScreen(this.range.labelPoint(target, this.v3));
+      if (!p) continue;
+      views.push({
+        id: target.id,
+        x: p.x,
+        y: p.y,
+        name: target.spec.name,
+        role: target.spec.role,
+        health: target.durability.fraction,
+        mission: wanted.has(target.id),
+        far: clamp((distance - 30) / (TARGETS.labelRange - 30), 0, 1),
+      });
+    }
+    return views;
   }
 
   /** What the target marker points at: the nearest open objective, or home once the mission is over. */
   private currentGoal(
     mission: Mission | null,
     from: pc.Vec3,
-  ): { point: pc.Vec3; label: string; tone: TargetIndicator['tone']; ring: boolean; territoryId: string | null } | null {
+  ): Goal | null {
     const { state, world } = this;
-    if (state.phase === 'landed' || state.phase === 'crashed' || !mission) return null;
+    if (state.phase === 'debrief' || state.phase === 'crashed' || !mission) return null;
     const point = new pc.Vec3();
-    if (state.phase === 'flying' && !mission.isActive) {
+    if ((state.phase === 'flying' || state.phase === 'landed') && !mission.isActive) {
+      if (state.phase === 'landed') return null;
       point.set(world.home.x, 0.5, world.home.z);
-      return { point, label: `${world.home.id} · Land`, tone: 'home', ring: false, territoryId: world.home.id };
+      return { point, label: `${world.home.id} · Land`, tone: 'home', solid: false, territoryId: world.home.id };
     }
-    let best: { point: pc.Vec3; label: string; tone: TargetIndicator['tone']; ring: boolean; territoryId: string | null } | null = null;
+    let best: Goal | null = null;
     let bestDistance = Infinity;
     for (const i of mission.openObjectives()) {
       const o = mission.objectives[i];
+      if (o.kind === 'destroy') {
+        // Point at the nearest practice plane still to shoot down.
+        const done = mission.destroyedTargets(i);
+        for (const id of o.targets) {
+          const t = this.range.get(id);
+          if (!t || done.has(id)) continue;
+          const d = Math.hypot(t.spec.x - from.x, t.spec.z - from.z);
+          if (d >= bestDistance) continue;
+          bestDistance = d;
+          best = { point: new pc.Vec3(t.spec.x, t.spec.y, t.spec.z), label: t.spec.name, tone: 'target', solid: true, territoryId: o.territoryId, targetId: id };
+        }
+        continue;
+      }
       const p = objectivePoint(o, world, new pc.Vec3());
       const d = Math.hypot(p.x - from.x, p.z - from.z);
       if (d >= bestDistance) continue;
       bestDistance = d;
       switch (o.kind) {
         case 'bomb':
-          best = { point: p, label: o.precision ? `${o.territoryId} spot` : o.territoryId, tone: 'target', ring: false, territoryId: o.territoryId };
+          best = { point: p, label: o.precision ? `${o.territoryId} spot` : o.territoryId, tone: 'target', solid: false, territoryId: o.territoryId };
           break;
         case 'recon':
         case 'reach':
-          best = { point: p, label: o.territoryId, tone: 'target', ring: false, territoryId: o.territoryId };
+          best = { point: p, label: o.territoryId, tone: 'target', solid: false, territoryId: o.territoryId };
           break;
         case 'ring':
-          best = { point: p, label: `Ring ${o.number}/${mission.objectives.length}`, tone: 'ring', ring: true, territoryId: null };
+          best = { point: p, label: `Ring ${o.number}/${mission.objectives.length}`, tone: 'ring', solid: true, territoryId: null };
           break;
         case 'land':
-          best = { point: p, label: `${world.home.id} · Land`, tone: 'home', ring: false, territoryId: world.home.id };
+          best = { point: p, label: `${world.home.id} · Land`, tone: 'home', solid: false, territoryId: world.home.id };
           break;
       }
     }
@@ -630,7 +1020,7 @@ export class Game {
   private objectiveTerritories(mission: Mission | null): Map<string, boolean> {
     const result = new Map<string, boolean>();
     mission?.objectives.forEach((o, i) => {
-      if (o.kind !== 'bomb' && o.kind !== 'recon' && o.kind !== 'reach') return;
+      if (o.kind !== 'bomb' && o.kind !== 'recon' && o.kind !== 'reach' && o.kind !== 'destroy') return;
       result.set(o.territoryId, (result.get(o.territoryId) ?? true) && mission.isDone(i));
     });
     return result;
@@ -645,6 +1035,7 @@ export class Game {
       case 'reach': return `Reach ${o.territoryId}'s airspace`;
       case 'ring': return `Ring ${o.number} of ${mission.objectives.length}`;
       case 'land': return `Land on ${o.territoryId}`;
+      case 'destroy': return `Shoot down practice planes on ${o.territoryId} (${mission.destroyedTargets(index).size}/${o.count})`;
     }
   }
 
@@ -671,7 +1062,7 @@ export class Game {
           label: this.objectiveLabel(mission, i),
           done: mission.isDone(i),
           open: mission.isOpen(i) && mission.isActive,
-          progress: o.kind === 'recon' ? mission.progress[i] : null,
+          progress: o.kind === 'recon' || o.kind === 'destroy' ? mission.progress[i] : null,
           distance: Math.hypot(p.x - from.x, p.z - from.z),
         });
       });
@@ -692,19 +1083,26 @@ export class Game {
   }
 
   private trackerHint(mission: Mission, phase: string): string {
-    if (phase === 'landed' || phase === 'crashed') return '';
-    if (mission.status === 'succeeded') return `Now land on T1 to recover your plane: the next refit costs ${ECONOMY.refitCost} instead of ${ECONOMY.planeCost}.`;
+    if (phase === 'debrief' || phase === 'crashed') return '';
+    const spec = this.state.plane;
+    if (mission.status === 'succeeded') {
+      return phase === 'landed'
+        ? 'Rearm (R) and take off (Space) to keep practising, or end the sortie (Enter).'
+        : `Now land on T1 to recover your plane: a refit costs ${spec?.refitCost ?? 0} instead of ${spec?.cost ?? 0}.`;
+    }
     if (mission.status === 'failed') {
       const why = mission.failure === 'out-of-time' ? 'The clock ran out.' : 'Every bomb is gone.';
       return `${why} Land on T1 to recover the plane anyway.`;
     }
+    if (phase === 'landed') return 'R rearms ink and range for free. Space takes off again.';
     const next = mission.objectives[mission.openObjectives()[0]];
     switch (next?.kind) {
-      case 'bomb': return 'Line up on the target and left-click. The ball keeps your speed, so release before you are over it.';
-      case 'recon': return `Stay low over ${next.territoryId}: time only counts inside the blue zone, below ${next.airspace.ceiling} m.`;
+      case 'bomb': return 'Line up on the target and right-click to drop. The ball keeps your speed, so release before you are over it.';
+      case 'recon': return `Stay low over ${next.territoryId}: time only counts inside the blue zone, below ${next.airspace.ceiling} m. Mind the pencil stands.`;
       case 'reach': return `Get into ${next.territoryId}'s airspace before the clock runs out. Shift boosts.`;
       case 'ring': return 'Fly through the orange ring. The next one lights up when you pass.';
       case 'land': return 'Slow down (S), line up with T1 and descend gently.';
+      case 'destroy': return 'Hold left-click to fire ink along your nose. Slow down, line up and lead the target a little.';
       default: return '';
     }
   }
@@ -712,9 +1110,10 @@ export class Game {
   private result(): ResultView | null {
     const { state } = this;
     const mission = state.mission;
-    if (!mission) return null;
-    const recovered = state.phase === 'landed';
-    if (!(recovered && this.rolledToStop) && state.phase !== 'crashed') return null;
+    const sortie = state.sortie;
+    if (!mission || !sortie || !state.plane) return null;
+    const recovered = state.phase === 'debrief';
+    if (!recovered && !(state.phase === 'crashed' && this.crashTime >= CRASH_REPORT_DELAY)) return null;
     const failure: Record<string, string> = {
       missed: 'Failed: out of bombs',
       'out-of-time': 'Failed: out of time',
@@ -722,13 +1121,25 @@ export class Game {
       abandoned: 'Failed: landed before finishing',
     };
     const succeeded = mission.status === 'succeeded';
+    const spec = state.plane;
     return {
       recovered,
-      headline: recovered ? 'Plane recovered' : this.crashCause === 'hard-landing' ? 'Hard landing' : 'Plane lost',
+      headline: recovered ? 'Plane recovered' : this.crashCause === 'hard-landing' ? 'Hard landing' : this.crashCause === 'void' ? 'Lost in the void' : 'Plane destroyed',
+      aircraftName: spec.name,
       missionTitle: mission.title,
-      missionLine: succeeded ? `Complete · +${mission.reward} paper` : failure[mission.failure ?? 'abandoned'],
+      missionLine: succeeded ? `Complete · +${mission.reward}` : failure[mission.failure ?? 'abandoned'],
       missionTone: succeeded ? 'good' : 'bad',
-      planeLine: recovered ? `In the hangar · refit for ${state.refitCost}` : `Destroyed · next one costs ${state.planeCost}`,
+      planeLine: recovered ? `in the hangar, refit ${spec.refitCost}` : `destroyed, next costs ${spec.cost}`,
+      time: mission.elapsed,
+      damageDealt: sortie.damageDealt,
+      damageTaken: sortie.damageTaken,
+      targetsDestroyed: sortie.targetsDestroyed,
+      bombsDropped: sortie.bombsDropped,
+      bombHits: sortie.bombHits,
+      shotsFired: sortie.shotsFired,
+      shotsHit: sortie.shotsHit,
+      paperSpent: sortie.paperSpent,
+      paperEarned: sortie.paperEarned,
     };
   }
 
@@ -737,10 +1148,18 @@ export class Game {
     const roles = this.objectiveTerritories(mission);
     const zones: MiniMapView['zones'] = [];
     const rings: MiniMapView['rings'] = [];
+    const targets: MiniMapView['targets'] = [];
     mission?.objectives.forEach((o, i) => {
       if (mission.isDone(i)) return;
       if (o.kind === 'bomb') zones.push({ x: o.zone.x, z: o.zone.z, precision: o.precision });
       if (o.kind === 'ring') rings.push({ x: o.gate.x, z: o.gate.z, yaw: o.gate.yaw, state: mission.isOpen(i) ? 'open' : 'waiting' });
+      if (o.kind === 'destroy') {
+        const done = mission.destroyedTargets(i);
+        for (const id of o.targets) {
+          const t = this.range.get(id);
+          if (t && !done.has(id)) targets.push({ x: t.spec.x, z: t.spec.z });
+        }
+      }
     });
     const showPlane = state.phase === 'flying' || state.phase === 'landed';
     return {
@@ -750,6 +1169,7 @@ export class Game {
       }),
       zones,
       rings,
+      targets,
       plane: showPlane ? { x: plane.position.x, z: plane.position.z, yaw: plane.yaw, autopilot: this.boundary.state === 'autopilot' } : null,
       objective: showPlane && objective ? { x: objective.x, z: objective.z } : null,
       boundaryRadius: WORLD.boundaryRadius,
@@ -795,6 +1215,19 @@ export class Game {
   }
 }
 
+/**
+ * What the target marker points at. `solid` goals (rings, practice planes) are measured in 3D;
+ * the rest by ground distance. `targetId` names the practice plane, if it is one.
+ */
+interface Goal {
+  point: pc.Vec3;
+  label: string;
+  tone: TargetIndicator['tone'];
+  solid: boolean;
+  territoryId: string | null;
+  targetId?: string;
+}
+
 /** Where an objective is, for markers and distances. */
 function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
   switch (o.kind) {
@@ -803,14 +1236,23 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
     case 'reach': return out.set(o.airspace.x, 0.5, o.airspace.z);
     case 'ring': return out.set(o.gate.x, o.gate.y, o.gate.z);
     case 'land': return out.set(world.home.x, 0.5, world.home.z);
+    case 'destroy': {
+      const t = world.territories.find((x) => x.id === o.territoryId)!;
+      return out.set(t.x, 0.5, t.z);
+    }
   }
 }
 
 /**
  * The fold pose while building. A new plane goes from a flat sheet to finished; a refit re-creases
- * a recovered plane: wings up, then back down.
+ * a recovered plane: wings up, then back down. A stowed plane just rolls out finished.
  */
-function foldPose(progress: number, refit: boolean): number {
-  if (!refit) return progress;
+function foldPose(progress: number, kind: BuildKind): number {
+  if (kind === 'fold') return progress;
+  if (kind === 'rollout') return 1;
   return progress < 0.35 ? 1 - (progress / 0.35) * 0.5 : 0.5 + ((progress - 0.35) / 0.65) * 0.5;
+}
+
+function css(color: readonly [number, number, number]): string {
+  return `rgb(${color.map((c) => Math.round(c * 255)).join(', ')})`;
 }

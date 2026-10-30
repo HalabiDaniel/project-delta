@@ -9,9 +9,13 @@ const LOCK_SETTLE_MS = 100;
 const LOCK_REQUEST_CAP_MS = 500;
 
 const GAME_KEYS = new Set([
-  'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'Escape', 'Enter',
+  'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'Escape', 'Enter', 'NumpadEnter',
   'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
 ]);
+
+/** Mouse buttons as reported by MouseEvent.button. */
+export const MOUSE_LEFT = 0;
+export const MOUSE_RIGHT = 2;
 
 /**
  * Keyboard and mouse for the game, using physical key codes (so WASD works on any layout).
@@ -20,11 +24,12 @@ const GAME_KEYS = new Set([
  */
 export class Input {
   private readonly held = new Set<string>();
+  private readonly buttons = new Set<number>();
   private dx = 0;
   private dy = 0;
   private ignoreMouseUntil = 0;
   private readonly keyHandlers: Array<(code: string) => void> = [];
-  private readonly clickHandlers: Array<() => void> = [];
+  private readonly clickHandlers: Array<(button: number) => void> = [];
   private readonly lockHandlers: Array<(locked: boolean) => void> = [];
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -35,7 +40,10 @@ export class Input {
       if (!e.repeat) for (const handler of this.keyHandlers) handler(e.code);
     });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
-    window.addEventListener('blur', () => this.held.clear());
+    window.addEventListener('blur', () => {
+      this.held.clear();
+      this.buttons.clear();
+    });
 
     document.addEventListener('mousemove', (e) => {
       if (performance.now() < this.ignoreMouseUntil) return;
@@ -43,9 +51,11 @@ export class Input {
       this.dy += clamp(e.movementY, -MAX_MOUSE_STEP, MAX_MOUSE_STEP);
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      for (const handler of this.clickHandlers) handler();
+      if (e.button !== MOUSE_LEFT && e.button !== MOUSE_RIGHT) return;
+      this.buttons.add(e.button);
+      for (const handler of this.clickHandlers) handler(e.button);
     });
+    window.addEventListener('mouseup', (e) => this.buttons.delete(e.button));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockerror', () => {
       this.ignoreMouseUntil = 0;
@@ -60,9 +70,14 @@ export class Input {
     this.keyHandlers.push(handler);
   }
 
-  /** Left mouse button pressed on the game canvas. */
-  onCanvasClick(handler: () => void): void {
+  /** Left or right mouse button pressed on the game canvas. */
+  onCanvasClick(handler: (button: number) => void): void {
     this.clickHandlers.push(handler);
+  }
+
+  /** Is this mouse button held down (pressed on the canvas and not yet released)? */
+  isButtonHeld(button: number): boolean {
+    return this.buttons.has(button);
   }
 
   onPointerLockChange(handler: (locked: boolean) => void): void {

@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { BOOST, PLANE, TRAILS } from '../config';
+import { DAMAGE, PALETTE, TRAILS } from '../config';
 import type { PlaneController } from './PlaneController';
 
 /** Most samples one ribbon keeps (about one per frame over its lifetime). */
@@ -27,6 +27,9 @@ function trailMaterial(): pc.StandardMaterial {
  */
 class Ribbon {
   readonly entity: pc.Entity;
+  /** Lifetime and width of this ribbon's samples. */
+  private readonly life: number;
+  private readonly width: number;
   private readonly mesh: pc.Mesh;
   private readonly points: pc.Vec3[] = [];
   private readonly sides: pc.Vec3[] = [];
@@ -35,7 +38,15 @@ class Ribbon {
   private readonly colors = new Float32Array(MAX_SAMPLES * 2 * 4);
   private count = 0;
 
-  constructor(app: pc.AppBase, material: pc.Material) {
+  constructor(
+    app: pc.AppBase,
+    material: pc.Material,
+    private readonly color: readonly [number, number, number] = [1, 1, 1],
+    life: number = TRAILS.life,
+    width: number = TRAILS.width,
+  ) {
+    this.life = life;
+    this.width = width;
     this.mesh = new pc.Mesh(app.graphicsDevice);
     const indices: number[] = [];
     for (let i = 0; i < MAX_SAMPLES - 1; i++) {
@@ -61,7 +72,7 @@ class Ribbon {
   /** Ages the trail and, if `point` is given, adds a new sample at the head. */
   update(dt: number, point: pc.Vec3 | null, side: pc.Vec3, strength: number): void {
     for (let i = 0; i < this.count; i++) this.ages[i] += dt;
-    while (this.count > 0 && this.ages[this.count - 1] > TRAILS.life) this.count--;
+    while (this.count > 0 && this.ages[this.count - 1] > this.life) this.count--;
     if (point) {
       // Shift everything back one slot and write the new head at index 0.
       const last = Math.min(this.count, MAX_SAMPLES - 1);
@@ -85,13 +96,14 @@ class Ribbon {
     for (let i = 0; i < MAX_SAMPLES; i++) {
       // Unused samples collapse onto the tail, so they draw nothing.
       const k = Math.min(i, this.count - 1);
-      const life = 1 - this.ages[k] / TRAILS.life;
-      const half = (TRAILS.width / 2) * life;
+      const life = 1 - this.ages[k] / this.life;
+      const half = (this.width / 2) * (this.width > TRAILS.width ? 0.4 + 0.6 * (1 - life) : life);
       const pt = this.points[k];
       const sd = this.sides[k];
       const alpha = i < this.count ? TRAILS.opacity * strength * life * life : 0;
       p.set([pt.x - sd.x * half, pt.y - sd.y * half, pt.z - sd.z * half, pt.x + sd.x * half, pt.y + sd.y * half, pt.z + sd.z * half], i * 6);
-      c.set([1, 1, 1, alpha, 1, 1, 1, alpha], i * 8);
+      const [r, g, b] = this.color;
+      c.set([r, g, b, alpha, r, g, b, alpha], i * 8);
     }
     this.mesh.setPositions(p);
     this.mesh.setColors(c, 4);
@@ -112,11 +124,14 @@ interface Streak {
 /**
  * Speed cues: a ribbon behind each wingtip, and faint streaks of wind hanging in the air that the
  * plane rushes past. The streaks are almost invisible at cruise and stand out at top speed and
- * while boosting.
+ * while boosting. A damaged plane also trails a widening smudge of ink from its tail.
  */
 export class FlightTrails {
   private readonly left: Ribbon;
   private readonly right: Ribbon;
+  private readonly smudge: Ribbon;
+  private readonly tail = new pc.Vec3();
+  private readonly flat = new pc.Vec3();
   private readonly streaks: Streak[] = [];
   private readonly streakMaterial: pc.StandardMaterial;
   private readonly tipL = new pc.Vec3();
@@ -131,6 +146,7 @@ export class FlightTrails {
     const material = trailMaterial();
     this.left = new Ribbon(app, material);
     this.right = new Ribbon(app, material);
+    this.smudge = new Ribbon(app, material, PALETTE.damageTrail, 1.6, 0.9);
 
     this.streakMaterial = new pc.StandardMaterial();
     this.streakMaterial.useLighting = false;
@@ -149,19 +165,25 @@ export class FlightTrails {
     }
   }
 
-  update(dt: number, plane: PlaneController): void {
+  /** `health` is the plane's health fraction; below the trail threshold it trails ink. */
+  update(dt: number, plane: PlaneController, health = 1): void {
     const airborne = plane.status === 'flying';
     const moving = airborne || plane.status === 'rolling';
     plane.getForward(this.fwd);
     this.side.copy(plane.root.right);
 
-    const fast = clamp((plane.speed - PLANE.cruiseSpeed) / (PLANE.maxSpeed + BOOST.speed - PLANE.cruiseSpeed), 0, 1);
+    const f = plane.flight;
+    const fast = clamp((plane.speed - f.cruiseSpeed) / (f.maxSpeed + f.boostSpeed - f.cruiseSpeed), 0, 1);
     const boosting = plane.boost.active ? 1 : 0;
     // Ribbons: always faintly there in flight, brighter when fast.
     const ribbon = moving ? 0.55 + 0.45 * Math.max(fast, boosting) : 0;
     if (moving) plane.getWingtips(this.tipL, this.tipR);
     this.left.update(dt, moving ? this.tipL : null, this.side, ribbon);
     this.right.update(dt, moving ? this.tipR : null, this.side, ribbon);
+    // The ink smudge lies flat (across the flight path, level with the horizon) so it reads from behind.
+    const smudge = airborne ? clamp((DAMAGE.trailThreshold - health) / DAMAGE.trailThreshold, 0, 1) : 0;
+    this.flat.set(-this.fwd.z, 0, this.fwd.x).normalize();
+    this.smudge.update(dt, smudge > 0 ? plane.getTail(this.tail) : null, this.flat, 0.35 + 1.1 * smudge);
 
     const target = airborne ? TRAILS.streakBase + (TRAILS.streakMax - TRAILS.streakBase) * Math.max(fast, boosting) : 0;
     this.streakOpacity += (target - this.streakOpacity) * (1 - Math.exp(-4 * dt));
@@ -171,6 +193,7 @@ export class FlightTrails {
   clear(): void {
     this.left.clear();
     this.right.clear();
+    this.smudge.clear();
     for (const s of this.streaks) {
       s.entity.enabled = false;
       s.position.set(Infinity, 0, 0);

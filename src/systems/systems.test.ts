@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BOOST, ECONOMY, LANDING } from '../config';
+import { ECONOMY, LANDING } from '../config';
+
+const BOOST = { duration: 1.2, cooldown: 3.5 };
 import { Boost } from '../aircraft/Boost';
 import { assessTouchdown, hardLandingReason } from '../aircraft/Landing';
 import { Boundary } from './Boundary';
@@ -34,7 +36,7 @@ describe('HomeIncome', () => {
 
 describe('Boost', () => {
   it('boosts while held, up to its duration, then cools down', () => {
-    const b = new Boost();
+    const b = new Boost(BOOST.duration, BOOST.cooldown);
     b.update(0.016, true);
     expect(b.state).toBe('active');
     b.update(BOOST.duration, true);
@@ -47,7 +49,7 @@ describe('Boost', () => {
   });
 
   it('letting go ends the burst early, and the full cooldown still applies', () => {
-    const b = new Boost();
+    const b = new Boost(BOOST.duration, BOOST.cooldown);
     b.update(0.1, true);
     b.update(0.1, false);
     expect(b.state).toBe('cooldown');

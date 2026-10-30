@@ -1,4 +1,6 @@
 import * as pc from 'playcanvas';
+import { buildPaperBallMesh, createPaperMaterial } from '../aircraft/PlaneModel';
+import { PALETTE } from '../config';
 
 interface Scrap {
   entity: pc.Entity;
@@ -25,6 +27,17 @@ interface Splat {
   maxLife: number;
 }
 
+/** A destroyed plane, crumpled into a ball, tumbling down and bouncing on whatever it lands on. */
+interface Wreck {
+  entity: pc.Entity;
+  velocity: pc.Vec3;
+  spin: pc.Vec3;
+  angles: pc.Vec3;
+  life: number;
+  size: number;
+  bounces: number;
+}
+
 interface Puff {
   entity: pc.Entity;
   velocity: pc.Vec3;
@@ -33,34 +46,84 @@ interface Puff {
   size: number;
 }
 
-export type BurstStyle = 'hit' | 'thud' | 'crash' | 'fold' | 'ring' | 'dust';
+export type BurstStyle = 'hit' | 'thud' | 'crash' | 'fold' | 'ring' | 'dust' | 'ink' | 'cardboard';
 
-const STYLES: Record<BurstStyle, { colors: Array<[number, number, number]>; count: number; speed: number; ring: number }> = {
+/** Height of the ground under (x, z), or null over a gap. */
+export type GroundFn = (x: number, z: number) => number | null;
+
+type Color3 = readonly [number, number, number];
+
+const STYLES: Record<BurstStyle, { colors: readonly Color3[]; count: number; speed: number; ring: number }> = {
   hit: { colors: [[0.98, 0.97, 0.94], [0.86, 0.15, 0.15], [0.98, 0.56, 0.16], [1, 0.84, 0.2]], count: 36, speed: 14, ring: 9 },
   thud: { colors: [[0.95, 0.93, 0.86], [0.7, 0.7, 0.72]], count: 12, speed: 6, ring: 3 },
   crash: { colors: [[0.97, 0.96, 0.92], [0.2, 0.45, 0.95]], count: 22, speed: 9, ring: 0 },
   fold: { colors: [[0.97, 0.96, 0.92]], count: 10, speed: 3, ring: 0 },
   ring: { colors: [[0.98, 0.97, 0.94], [0.18, 0.66, 0.32], [1, 0.55, 0.1]], count: 18, speed: 7, ring: 0 },
   dust: { colors: [[0.97, 0.96, 0.92], [0.82, 0.84, 0.88]], count: 8, speed: 3, ring: 0 },
+  ink: { colors: [PALETTE.inkShot, PALETTE.ink], count: 5, speed: 4, ring: 0 },
+  cardboard: { colors: [PALETTE.cardboard, PALETTE.cardboardDark, PALETTE.tape], count: 26, speed: 10, ring: 6 },
 };
 
 const PUFF_COLORS: Array<[number, number, number]> = [[1, 1, 1], [1, 0.93, 0.55], [1, 0.62, 0.2]];
 
 /**
  * Short-lived effects: paper-scrap bursts and shock rings for impacts, crashes and folding, a
- * cartoon puff cloud for bomb hits, and ink splats that stain the platform for a few seconds.
+ * cartoon puff cloud for bomb hits, ink splats that stain the platform for a few seconds, ink
+ * specks where rounds land, and crumpled wrecks of destroyed planes.
  */
 export class Effects {
   private readonly scraps: Scrap[] = [];
   private readonly rings: Ring[] = [];
   private readonly splats: Splat[] = [];
   private readonly puffs: Puff[] = [];
+  private readonly wrecks: Wreck[] = [];
   private readonly materials = new Map<string, pc.StandardMaterial>();
   private readonly splatMeshes: pc.Mesh[];
+  private readonly ballMesh: pc.Mesh;
   private splatLayer = 0;
 
-  constructor(private readonly app: pc.AppBase) {
+  constructor(
+    private readonly app: pc.AppBase,
+    private readonly ground: GroundFn = () => null,
+  ) {
     this.splatMeshes = [0, 1, 2, 3].map(() => buildSplatMesh(app.graphicsDevice));
+    this.ballMesh = buildPaperBallMesh(app.graphicsDevice, 1);
+  }
+
+  /** An ink round landing: a few specks, and a small stain if it hit the ground. */
+  inkHit(position: pc.Vec3, onGround: boolean): void {
+    this.burst(position, 'ink');
+    if (onGround) this.splat(position, 0.55, PALETTE.inkShot, 4);
+  }
+
+  /**
+   * A plane destroyed: it bursts into stylised paper scraps in its own colours, and what is left
+   * crumples into a ball that tumbles on along its flight path, bounces and rolls to a stop.
+   */
+  wreck(position: pc.Vec3, velocity: pc.Vec3, accent: Color3, size = 1, paper: Color3 = PALETTE.paper): void {
+    this.burstColors(position, [paper, accent, paper], 34, 10);
+    this.puff(position, 0.5);
+    const entity = new pc.Entity('wreck');
+    const material = createPaperMaterial(new pc.Color(paper[0], paper[1], paper[2]));
+    entity.addComponent('render', { meshInstances: [new pc.MeshInstance(this.ballMesh, material)], castShadows: true });
+    const accentBall = new pc.Entity('wreck-accent');
+    accentBall.addComponent('render', { meshInstances: [new pc.MeshInstance(this.ballMesh, this.material(accent))], castShadows: false });
+    accentBall.setLocalPosition(0.35, 0.2, 0.1);
+    accentBall.setLocalScale(0.6, 0.6, 0.6);
+    entity.addChild(accentBall);
+    entity.setPosition(position);
+    const s = 0.55 * size;
+    entity.setLocalScale(s, s, s);
+    this.app.root.addChild(entity);
+    this.wrecks.push({
+      entity,
+      velocity: new pc.Vec3().copy(velocity).mulScalar(0.45),
+      spin: new pc.Vec3(rand(-540, 540), rand(-540, 540), rand(-540, 540)),
+      angles: new pc.Vec3(),
+      life: 4,
+      size: s,
+      bounces: 0,
+    });
   }
 
   /**
@@ -75,6 +138,11 @@ export class Effects {
 
   burst(position: pc.Vec3, style: BurstStyle): void {
     const { colors, count, speed, ring } = STYLES[style];
+    this.burstColors(position, colors, count, speed, style === 'ink' ? 0.35 : 1);
+    if (ring > 0) this.ring(position, ring, colors[1] ?? colors[0]);
+  }
+
+  private burstColors(position: pc.Vec3, colors: readonly Color3[], count: number, speed: number, sizeScale = 1): void {
     for (let i = 0; i < count; i++) {
       const entity = new pc.Entity('scrap');
       entity.addComponent('render', {
@@ -82,7 +150,7 @@ export class Effects {
         material: this.material(colors[i % colors.length]),
         castShadows: false,
       });
-      const size = 0.25 + Math.random() * 0.35;
+      const size = (0.25 + Math.random() * 0.35) * sizeScale;
       entity.setLocalScale(size, size * 0.15, size);
       entity.setPosition(position);
       this.app.root.addChild(entity);
@@ -100,10 +168,37 @@ export class Effects {
         size,
       });
     }
-    if (ring > 0) this.ring(position, ring, colors[1] ?? colors[0]);
   }
 
   update(dt: number): void {
+    for (let i = this.wrecks.length - 1; i >= 0; i--) {
+      const w = this.wrecks[i];
+      w.life -= dt;
+      if (w.life <= 0) {
+        w.entity.destroy();
+        this.wrecks.splice(i, 1);
+        continue;
+      }
+      w.velocity.y -= 22 * dt;
+      const p = w.entity.getPosition();
+      let x = p.x + w.velocity.x * dt, y = p.y + w.velocity.y * dt, z = p.z + w.velocity.z * dt;
+      const floor = this.ground(x, z);
+      if (floor !== null && y < floor + w.size && p.y >= floor + w.size - 0.05) {
+        // Bounce, losing most of the energy each time, then roll to a stop.
+        y = floor + w.size;
+        w.velocity.y = Math.abs(w.velocity.y) * 0.35;
+        w.velocity.x *= 0.6;
+        w.velocity.z *= 0.6;
+        w.spin.mulScalar(0.6);
+        w.bounces++;
+        if (w.bounces === 1) this.burst(w.entity.getPosition(), 'dust');
+      }
+      w.entity.setPosition(x, y, z);
+      w.angles.add(w.spin.clone().mulScalar(dt));
+      w.entity.setEulerAngles(w.angles);
+      const k = Math.min(1, w.life / 0.6);
+      w.entity.setLocalScale(w.size * k, w.size * k, w.size * k);
+    }
     for (let i = this.scraps.length - 1; i >= 0; i--) {
       const s = this.scraps[i];
       s.life -= dt;
@@ -193,7 +288,7 @@ export class Effects {
   }
 
   /** A flat, ragged blot of ink lying on the surface. */
-  private splat(position: pc.Vec3, size: number, color: [number, number, number]): void {
+  private splat(position: pc.Vec3, size: number, color: Color3, life = 8): void {
     const material = new pc.StandardMaterial();
     material.diffuse = new pc.Color(...color);
     material.useMetalness = true;
@@ -215,10 +310,10 @@ export class Effects {
     holder.addChild(blot);
     holder.setLocalScale(0.001, 1, 0.001);
     this.app.root.addChild(holder);
-    this.splats.push({ entity: holder, material, life: 8, maxLife: 8 });
+    this.splats.push({ entity: holder, material, life, maxLife: life });
   }
 
-  private ring(position: pc.Vec3, radius: number, color: [number, number, number]): void {
+  private ring(position: pc.Vec3, radius: number, color: Color3): void {
     const material = new pc.StandardMaterial();
     material.diffuse = new pc.Color(0, 0, 0);
     material.emissive = new pc.Color(...color);
@@ -233,7 +328,7 @@ export class Effects {
     this.rings.push({ entity, material, life: 0.6, maxLife: 0.6, radius });
   }
 
-  private material(color: [number, number, number], glow = false): pc.StandardMaterial {
+  private material(color: Color3, glow = false): pc.StandardMaterial {
     const key = `${color.join(',')}${glow ? ':glow' : ''}`;
     let material = this.materials.get(key);
     if (!material) {

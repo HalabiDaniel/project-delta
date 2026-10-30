@@ -30,7 +30,12 @@ interface Marker {
   /** Bullseye rings that turn green once hit. */
   paint: pc.Entity[];
   beacon: pc.Entity | null;
+  /** For target practice: a ring under each practice plane, by target id. */
+  rings: Map<string, pc.Entity>;
 }
+
+/** Where a practice target stands, so its marker ring can go under it. */
+export type TargetLookup = (id: string) => { x: number; z: number } | null;
 
 /**
  * Draws the selected (or active) mission into the world: bullseyes on bombing targets, a column of
@@ -57,6 +62,7 @@ export class MissionMarkers {
     airRecon: glowMaterial(PALETTE.recon, 0.09),
     airDelivery: glowMaterial(PALETTE.delivery, 0.09),
     ringNext: glowMaterial(PALETTE.ringNext, 0.95),
+    practiceRing: glowMaterial(PALETTE.target, 0.85),
     ringWaiting: flatMaterial(PALETTE.paper),
     platformTarget: flatMaterial(PALETTE.target),
     platformDone: flatMaterial(PALETTE.targetDone),
@@ -66,6 +72,7 @@ export class MissionMarkers {
   constructor(
     private readonly app: pc.AppBase,
     private readonly world: World,
+    private readonly targetAt: TargetLookup = () => null,
   ) {
     this.root = new pc.Entity('mission-markers');
     app.root.addChild(this.root);
@@ -85,7 +92,7 @@ export class MissionMarkers {
       return;
     }
     mission.objectives.forEach((objective, index) => {
-      const marker: Marker = { index, objective, state: null, body: null, paint: [], beacon: null };
+      const marker: Marker = { index, objective, state: null, body: null, paint: [], beacon: null, rings: new Map() };
       switch (objective.kind) {
         case 'bomb': {
           const [body, paint] = this.bullseye(objective.zone, objective.precision);
@@ -119,6 +126,20 @@ export class MissionMarkers {
           marker.beacon = this.beacon(home.x, home.z, this.mat.beaconHome, 0.8);
           break;
         }
+        case 'destroy': {
+          const t = this.world.territories.find((x) => x.id === objective.territoryId)!;
+          marker.beacon = this.beacon(t.x, t.z, this.mat.beaconBomb, 0.6);
+          for (const id of objective.targets) {
+            const at = this.targetAt(id);
+            if (!at) continue;
+            const ring = new pc.Entity('practice-ring');
+            ring.addComponent('render', { meshInstances: [new pc.MeshInstance(this.torus(2.1, 0.18), this.mat.practiceRing)], castShadows: false });
+            ring.setPosition(at.x, t.top + 0.12, at.z);
+            this.root.addChild(ring);
+            marker.rings.set(id, ring);
+          }
+          break;
+        }
       }
       this.markers.push(marker);
     });
@@ -144,6 +165,15 @@ export class MissionMarkers {
       if (m.objective.kind === 'ring' && m.state === 'open' && m.body) {
         const s = 1 + 0.06 * Math.sin(this.time * 6);
         m.body.setLocalScale(s, s, s);
+      }
+      if (m.rings.size > 0) {
+        // A ring stays under each practice plane until it has been shot down once.
+        const destroyed = mission.destroyedTargets(m.index);
+        const s = 1 + 0.08 * Math.sin(this.time * 5);
+        for (const [id, ring] of m.rings) {
+          ring.enabled = (m.state === 'open' || m.state === 'waiting') && !destroyed.has(id);
+          ring.setLocalScale(s, 1, s);
+        }
       }
     }
   }
@@ -179,7 +209,7 @@ export class MissionMarkers {
     const status = new Map<string, boolean>();
     if (this.mission) {
       this.mission.objectives.forEach((o, i) => {
-        if (o.kind !== 'bomb' && o.kind !== 'recon' && o.kind !== 'reach') return;
+        if (o.kind !== 'bomb' && o.kind !== 'recon' && o.kind !== 'reach' && o.kind !== 'destroy') return;
         const done = this.mission!.isDone(i);
         status.set(o.territoryId, (status.get(o.territoryId) ?? true) && done);
       });
@@ -227,14 +257,20 @@ export class MissionMarkers {
     return beacon;
   }
 
+  private torus(radius: number, tube = 0.32): pc.Mesh {
+    const key = radius * 1000 + tube;
+    let mesh = this.ringMeshes.get(key);
+    if (!mesh) {
+      const geometry = new pc.TorusGeometry({ tubeRadius: tube, ringRadius: radius, segments: 36, sides: 8 });
+      mesh = pc.Mesh.fromGeometry(this.app.graphicsDevice, geometry);
+      this.ringMeshes.set(key, mesh);
+    }
+    return mesh;
+  }
+
   /** A paper hoop standing upright, facing along `yaw`. */
   private ring(x: number, y: number, z: number, yaw: number, radius: number): pc.Entity {
-    let mesh = this.ringMeshes.get(radius);
-    if (!mesh) {
-      const geometry = new pc.TorusGeometry({ tubeRadius: 0.32, ringRadius: radius, segments: 36, sides: 8 });
-      mesh = pc.Mesh.fromGeometry(this.app.graphicsDevice, geometry);
-      this.ringMeshes.set(radius, mesh);
-    }
+    const mesh = this.torus(radius);
     const root = new pc.Entity('ring-gate');
     root.setPosition(x, y, z);
     root.setEulerAngles(0, (yaw * 180) / Math.PI, 0);
