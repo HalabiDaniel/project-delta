@@ -10,6 +10,7 @@ import { WorldRoom } from './WorldRoom';
  *   npm run server                 # ws://localhost:2567
  *   PORT=3000 npm run server
  *   LATENCY=120 npm run server     # every message delayed by 120 ms (testing)
+ *   PROTECTION=20 npm run server   # new players can be raided after 20 s instead of 5 min (testing)
  */
 
 const port = Number(process.env.PORT ?? 2567);
@@ -25,7 +26,9 @@ const routes = createRouter({
 });
 
 const server = defineServer({
-  rooms: { [ROOM]: defineRoom(WorldRoom) },
+  rooms: {
+    [ROOM]: defineRoom(WorldRoom, process.env.PROTECTION !== undefined ? { newPlayerProtection: Number(process.env.PROTECTION) } : {}),
+  },
   routes,
   transport: new WebSocketTransport({ pingInterval: 3000, pingMaxRetries: 3 }),
   greet: false,

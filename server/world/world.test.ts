@@ -267,3 +267,132 @@ describe('what clients may send', () => {
     expect(world.command('a', { a: 'launch' })).toBe(false);
   });
 });
+
+describe('missions in a shared world', () => {
+  it('pays a mission reward only when the server sees the objective done (recon of a rival base)', () => {
+    const world = quietWorld(5);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const b = player(world, 'b', 'T9', 'Bo');
+    run(world, 1.5);
+    const card = a.pvp.find((c) => c.tag.kind === 'recon' && c.tag.target === 'b');
+    expect(card).toBeDefined();
+    a.state!.select(a.state!.offers.indexOf(card!.mission));
+    world.command('a', { a: 'aircraft', id: 'dart' });
+    world.command('a', { a: 'build' });
+    run(world, 2.2);
+    expect(world.command('a', { a: 'launch' })).toBe(true);
+    run(world, 3.5);
+    const paper = a.resources.paper;
+    expect(a.state!.mission!.status).toBe('active');
+    // Low over Bo's base, circling so it stays inside.
+    const home = b.home!;
+    let t = 0;
+    while (a.state!.mission!.status === 'active' && t < 20) {
+      place(a, home.x + Math.cos(t) * 8, 10, home.z + Math.sin(t) * 8, t + Math.PI / 2);
+      run(world, 0.5);
+      t += 0.5;
+    }
+    expect(a.state!.mission!.status).toBe('succeeded');
+    expect(a.resources.paper).toBeGreaterThan(paper);
+    expect(a.stats.missions).toBe(1);
+  });
+
+  it("puts each player's mission aircraft up under their own names, and sends them home when the mission ends", () => {
+    const world = quietWorld(9);
+    const a = player(world, 'a', 'T1');
+    const st = a.state!;
+    const withAir = st.offers.findIndex((m) => (m.spec.aircraft?.length ?? 0) > 0 && m.spec.aircraft!.every((s) => (s.delay ?? 0) < 3 && s.afterPatrol === undefined));
+    if (withAir < 0) return; // this seed dealt no air mission: nothing to check
+    st.select(withAir);
+    launch(world, a, world.suits(a, 'falcon') ? 'falcon' : 'swift');
+    run(world, 3);
+    const mine = world.air.aircraft.filter((x) => x.id.startsWith('a/'));
+    expect(mine.length).toBeGreaterThan(0);
+    world.command('a', { a: 'end' });
+    st.crash('impact');
+    expect(mine.every((x) => x.leaving)).toBe(true);
+  });
+});
+
+describe('connections', () => {
+  it('a player who drops mid-flight keeps flying (and keeps their desk) until they come back or leave', () => {
+    const world = quietWorld();
+    const a = player(world, 'a', 'T1');
+    launch(world, a);
+    world.setConnected('a', false);
+    const start = a.flight.model.position.clone();
+    run(world, 3);
+    expect(a.state!.phase).toBe('flying');
+    expect(start.distance(a.flight.model.position)).toBeGreaterThan(20);
+    expect(world.owners.get('T1')).toBe('a');
+    world.setConnected('a', true);
+    expect(a.connected).toBe(true);
+    world.remove('a');
+    expect(world.pilots.has('a')).toBe(false);
+    expect(world.owners.has('T1')).toBe(false);
+    expect(world.history.at(planeId('a'), world.time, { x: 0, y: 0, z: 0 })).toBe(false);
+  });
+
+  it('limits emotes to one every so often', () => {
+    const world = quietWorld();
+    const a = player(world, 'a', 'T1');
+    launch(world, a);
+    expect(world.emote('a', 'waggle')).toBe(true);
+    expect(world.emote('a', 'heart')).toBe(false);
+    run(world, NET.emoteCooldown + 0.1);
+    expect(world.emote('a', 'confetti')).toBe(true);
+  });
+});
+
+describe('recovery and defense', () => {
+  it('a player with no paper can always fold the free emergency Dart', () => {
+    const world = quietWorld();
+    const a = player(world, 'a', 'T1');
+    a.resources.restore(0);
+    const st = a.state!;
+    const bombless = st.offers.findIndex((m) => m.spec.bombs === 0);
+    if (bombless >= 0) st.select(bombless);
+    expect(st.emergencyAvailable()).toBe(true);
+    expect(world.command('a', { a: 'build' })).toBe(bombless >= 0);
+    if (bombless >= 0) expect(st.emergency).toBe(true);
+  });
+
+  it('shooting down a raider on its way in pays the defender and counts as a defense', () => {
+    const world = quietWorld(4);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const b = player(world, 'b', 'T3', 'Bo');
+    b.protectUntil = 0;
+    run(world, 1.5);
+    const card = a.pvp.find((c) => c.tag.kind === 'raid')!;
+    a.state!.select(a.state!.offers.indexOf(card.mission));
+    world.command('a', { a: 'aircraft', id: 'widewing' });
+    world.command('a', { a: 'build' });
+    run(world, 2.2);
+    world.command('a', { a: 'launch' });
+    launch(world, b);
+    run(world, 2);
+    // Bo sits behind Ann over open ground and opens fire.
+    place(a, 0, 40, 60, 0);
+    place(b, 0, 40, 75, 0);
+    const paper = b.resources.paper;
+    run(world, 8, (id) => (id === 'b' ? { fire: true } : {}));
+    expect(a.state!.phase).toBe('crashed');
+    expect(b.stats.defends).toBe(1);
+    expect(b.resources.paper).toBeGreaterThan(paper);
+    expect(world.attacks.on('b')).toBeUndefined();
+    expect(b.report?.outcome).toBe('repelled');
+  });
+
+  it("a player who hurts you stays a target for your base's guns for a while", () => {
+    const world = quietWorld();
+    const a = player(world, 'a', 'T1');
+    const b = player(world, 'b', 'T9');
+    const turret = world.network.on('T9').find((i) => i.spec.kind === 'turret')!;
+    expect(world.hostile(turret, { side: a.side, x: 0, z: 0 })).toBe(false);
+    a.aggression.set('b', world.time);
+    expect(world.hostile(turret, { side: a.side, x: 0, z: 0 })).toBe(true);
+    run(world, PVP.aggression + 1, () => null);
+    expect(world.hostile(turret, { side: a.side, x: 0, z: 0 })).toBe(false);
+    void b;
+  });
+});

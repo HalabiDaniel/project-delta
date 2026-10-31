@@ -48,6 +48,8 @@ export interface ServerWorldOptions {
   seed?: number;
   /** Ambient AI patrols over unclaimed territory (tests turn them off). */
   ambient?: boolean;
+  /** Seconds of new-player protection (default PVP.newPlayerProtection; lower it to test raids alone). */
+  newPlayerProtection?: number;
 }
 
 /** An event to send: to one player, to everyone but one, or to everyone. */
@@ -110,7 +112,10 @@ export class ServerWorld {
   private readonly v1 = new Vec3();
   private readonly v2 = new Vec3();
 
+  private readonly protection: number;
+
   constructor(options: ServerWorldOptions = {}) {
+    this.protection = options.newPlayerProtection ?? PVP.newPlayerProtection;
     this.seed = options.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = seededRng(this.seed);
     this.shared = sharedWorld();
@@ -165,7 +170,7 @@ export class ServerWorld {
     p.state = state;
     state.onEvent((e) => this.onGameEvent(p, e));
     base.onEvent((e) => this.onBaseEvent(p, e));
-    p.protectUntil = this.time + PVP.newPlayerProtection;
+    p.protectUntil = this.time + this.protection;
     p.flight.model.hide();
     this.solidsCache = null;
     this.news(`${p.name} claimed ${territoryName(territoryId)}`, 'good');
@@ -954,7 +959,7 @@ export class ServerWorld {
   }
 
   /** A raid ended: the outcome for both sides, the paper, the shield, the reports. */
-  private endAttack(attack: Attack, outcome: 'bombed' | 'repelled' | 'abandoned'): void {
+  private endAttack(attack: Attack, outcome: 'bombed' | 'repelled' | 'abandoned', defenseReward = 0): void {
     if (!this.attacks.active.includes(attack)) return;
     const attacker = this.pilots.get(attack.attacker);
     const victim = this.pilots.get(attack.victim);
@@ -974,7 +979,7 @@ export class ServerWorld {
     if (victim) {
       victim.report = {
         id: attack.id, role: 'defender', other: attacker?.name ?? '?', territoryId: attack.territoryId, outcome, paperLost: lost,
-        reward: 0, structures: attack.structures, defenseReward: 0,
+        reward: 0, structures: attack.structures, defenseReward,
       };
       if (outcome === 'bombed') this.note(victim, 'raid', `Raided by ${attacker?.name ?? '?'}`, lost > 0 ? `−${lost}` : null, 'bad');
       else if (outcome === 'repelled') this.note(victim, 'ok', 'Raid repelled', null, 'good');
@@ -1125,9 +1130,10 @@ export class ServerWorld {
       case 'mission-failed':
         this.endMissionAi(p);
         if (e.reason !== 'aircraft-lost' && e.reason !== 'abandoned') this.note(p, 'close', failureWord(e.reason), null, 'bad');
-        {
+        // A raider that crashes is dealt with with the crash (who shot it down matters).
+        if (e.reason !== 'aircraft-lost') {
           const attack = this.attacks.by(p.id);
-          if (attack) this.endAttack(attack, e.reason === 'aircraft-lost' && attack.defended ? 'repelled' : e.reason === 'aircraft-lost' ? 'repelled' : 'abandoned');
+          if (attack) this.endAttack(attack, 'abandoned');
         }
         break;
       case 'crashed':
@@ -1202,13 +1208,21 @@ export class ServerWorld {
       if (bounty > 0) k.state.payBonus(bounty, `Shot down ${p.name}`);
       k.state.aircraftDestroyed(p.plane, role, true);
       this.note(k, 'crumple', `Shot down ${p.name}`, bounty > 0 ? `+${bounty}` : null, 'good');
-      // A raider shot down by the player they were raiding: a defense.
-      const attack = this.attacks.by(p.id);
-      if (attack?.victim === k.id) {
-        k.stats.defends++;
-        k.addScore(PVP.score.defend);
-        k.state.payBonus(PVP.defenseReward, `Defended against ${p.name}`);
-        attack.defended = true;
+    }
+    // A raider down: a defense if the player being raided brought it down (their plane or their guns).
+    const attack = this.attacks.by(p.id);
+    if (attack) {
+      const defender = this.pilots.get(attack.victim);
+      const byDefender = !!defender && killer === defender.id;
+      if (byDefender && defender.state) {
+        defender.stats.defends++;
+        defender.addScore(PVP.score.defend);
+        // Paid for flying up to meet the raider, not for the base's guns alone (as single-player's raids).
+        const flew = defender.state.phase === 'flying' || defender.state.phase === 'landed';
+        if (flew) defender.state.payBonus(PVP.defenseReward, `Defended against ${p.name}`);
+        this.endAttack(attack, 'repelled', flew ? PVP.defenseReward : 0);
+      } else {
+        this.endAttack(attack, 'repelled');
       }
     }
     for (const id of assists) {

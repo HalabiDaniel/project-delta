@@ -93,10 +93,11 @@
 .hud.mp-pregame .zone,
 .hud.mp-pregame .world-layer { display: none; }
 
+/* The left column, under the paper strip and its buttons: connection, raid banner, kill feed. */
 .mp-net {
   position: absolute;
-  top: 14px;
-  right: 158px;
+  top: 120px;
+  left: 14px;
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -116,7 +117,7 @@
 .mp-keys { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); }
 .mp-keys kbd { font: 700 10px var(--font); padding: 0 4px; border-radius: 3px; background: var(--paper-2); border: 1px solid var(--edge); }
 
-.mp-feed { position: absolute; left: 14px; top: 38%; display: flex; flex-direction: column; gap: 3px; max-width: 320px; }
+.mp-feed { position: absolute; left: 14px; top: max(210px, 34%); display: flex; flex-direction: column; gap: 3px; max-width: 320px; }
 .mp-line {
   display: inline-flex;
   align-items: center;
@@ -155,9 +156,8 @@
 
 .mp-banner {
   position: absolute;
-  top: 14px;
+  top: 156px;
   left: 14px;
-  margin-top: 64px;
   display: flex;
   align-items: center;
   gap: var(--s2);
