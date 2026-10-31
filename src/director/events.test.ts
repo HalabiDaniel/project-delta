@@ -30,7 +30,7 @@ function setup(seed = 1, room = 4) {
 }
 
 const raid = (over: Partial<Raid> = {}): Raid => ({
-  id: 1, bomber: 'raider-1', escorts: [], origin: 'T9', skill: 'medium', mission: false, stage: 'inbound', outcome: null, eta: 30, participated: false, ...over,
+  id: 1, bomber: 'raider-1', escorts: [], origin: 'T9', skill: 'medium', mission: false, stage: 'inbound', outcome: null, eta: 30, participated: false, strike: null, detected: true, ...over,
 });
 
 describe('WorldEvents: pacing', () => {

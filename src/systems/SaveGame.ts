@@ -287,7 +287,7 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     ledger: {
       entries: check.list(ledger.entries, 'ledger.entries', (e) => {
         if (!isObject(e)) return null;
-        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'raid', 'reset'] as const, null);
+        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'refund', 'raid', 'reset'] as const, null);
         if (!source) return null;
         return {
           at: check.num(e.at, 'ledger at', 0, Number.MAX_SAFE_INTEGER, 0),

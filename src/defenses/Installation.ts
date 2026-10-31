@@ -23,6 +23,8 @@ export interface Target {
   vz: number;
   /** Detection ranges are multiplied by this. */
   signature: number;
+  /** What kind of aircraft it is, for weapons that deal with bombers first. */
+  role?: 'player' | 'scout' | 'fighter' | 'bomber';
 }
 
 /**
@@ -70,6 +72,9 @@ export class Installation {
   sinceShot = Infinity;
   /** A radar dish's turn, for show. */
   spin = 0;
+  /** Turrets with a magazine: rounds left, and seconds until a reload completes (0 when not reloading). */
+  rounds: number;
+  reloading = 0;
   /** The aircraft it is following (or last followed), or null. */
   targetId: string | null = null;
   /** Its idea of the plane's velocity, which lags behind the real one. */
@@ -82,6 +87,7 @@ export class Installation {
   ) {
     this.durability = new Durability(spec.maxHealth);
     this.yaw = spec.facing;
+    this.rounds = spec.stats?.magazine ?? Infinity;
   }
 
   get id(): string {
@@ -105,6 +111,19 @@ export class Installation {
 
   get isWeapon(): boolean {
     return this.spec.kind === 'turret' || this.spec.kind === 'launcher';
+  }
+
+  /** Neither a weapon nor a radar: a depot, the paper store, a workshop or a storage box. */
+  get isPassive(): boolean {
+    return this.spec.kind === 'supply' || this.spec.kind === 'workshop' || this.spec.kind === 'storage';
+  }
+
+  /** Magazine left, 0–1 (1 for weapons without one); reload progress shows as it refills. */
+  get ammoFraction(): number {
+    const mag = this.spec.stats?.magazine;
+    if (!mag) return 1;
+    if (this.reloading > 0) return 1 - this.reloading / (this.spec.stats?.reloadTime ?? 1);
+    return this.rounds / mag;
   }
 
   /** It is following the plane, locking on or shooting. */
@@ -152,9 +171,9 @@ export class Installation {
     return { dealt, destroyed };
   }
 
-  /** Back to full health, at rest. */
-  restore(): void {
-    this.durability.repair();
+  /** Back to full health, at rest. With `keepHealth`, only at rest (reloaded, nothing tracked). */
+  restore(keepHealth = false): void {
+    if (!keepHealth) this.durability.repair();
     this.state = 'idle';
     this.yaw = this.spec.facing;
     this.pitch = 0;
@@ -165,6 +184,8 @@ export class Installation {
     this.sinceShot = Infinity;
     this.fresh = true;
     this.targetId = null;
+    this.rounds = this.spec.stats?.magazine ?? Infinity;
+    this.reloading = 0;
   }
 
   /**
@@ -186,12 +207,16 @@ export class Installation {
       this.targetId = target.id;
     }
     this.cooldown = Math.max(0, this.cooldown - dt);
+    if (this.reloading > 0) {
+      this.reloading = Math.max(0, this.reloading - dt);
+      if (this.reloading === 0) this.rounds = this.spec.stats?.magazine ?? Infinity;
+    }
     if (this.spec.kind === 'radar') {
       this.spin += DEFENSES.radar.spin * dt;
       this.state = target && this.sees(target) ? 'tracking' : 'idle';
       return null;
     }
-    if (this.spec.kind === 'supply') return null;
+    if (this.isPassive) return null;
 
     const turret = this.spec.kind === 'turret';
     const w = turret ? DEFENSES.turret : DEFENSES.launcher;
@@ -251,15 +276,17 @@ export class Installation {
         return null;
       }
       this.state = 'firing';
-      if (this.cooldown > 0) return null;
-      this.cooldown = c.interval;
+      if (this.cooldown > 0 || this.reloading > 0) return null;
+      this.cooldown = this.spec.stats?.interval ?? c.interval;
       this.sinceShot = 0;
+      // A turret with a magazine reloads once it is empty.
+      if (Number.isFinite(this.rounds) && --this.rounds <= 0) this.reloading = this.spec.stats?.reloadTime ?? 3;
       // The faster the plane, the more the aim scatters.
       const speed = Math.hypot(target.vx, target.vy, target.vz);
       const sigma = c.spread + (c.speedSpread * Math.max(0, speed - DEFENSES.spreadFreeSpeed)) / 10;
       const yaw = this.yaw + (this.rng() + this.rng() - 1) * sigma;
       const pitch = this.pitch + (this.rng() + this.rng() - 1) * sigma;
-      return this.order('ink', yaw, pitch, c.shot.speed);
+      return this.order('ink', yaw, pitch, c.shot.speed, this.spec.stats?.damage);
     }
 
     const c = DEFENSES.launcher;
@@ -268,10 +295,10 @@ export class Installation {
       this.state = 'locking';
       if (this.lock >= 1) {
         this.lock = 0;
-        this.cooldown = c.reload;
+        this.cooldown = this.spec.stats?.reload ?? c.reload;
         this.sinceShot = 0;
         this.state = 'firing';
-        return this.order('rocket', this.yaw, Math.max(this.pitch, 25 * DEG), c.rocket.launchSpeed);
+        return this.order('rocket', this.yaw, Math.max(this.pitch, 25 * DEG), c.rocket.launchSpeed, this.spec.stats?.damage);
       }
       return null;
     }
@@ -280,12 +307,13 @@ export class Installation {
     return null;
   }
 
-  private order(kind: ShotOrder['kind'], yaw: number, pitch: number, speed: number): ShotOrder {
+  private order(kind: ShotOrder['kind'], yaw: number, pitch: number, speed: number, damage?: number): ShotOrder {
     const m = this.muzzle();
     const cp = Math.cos(pitch);
     return {
       kind, source: this.id, side: this.side, target: this.targetId,
       x: m.x, y: m.y, z: m.z, vx: -Math.sin(yaw) * cp * speed, vy: Math.sin(pitch) * speed, vz: -Math.cos(yaw) * cp * speed,
+      ...(damage !== undefined ? { damage } : {}),
     };
   }
 
@@ -316,24 +344,57 @@ export class Installation {
  * launchers lock on and launch.
  */
 export class DefenseNetwork {
-  readonly installations: Installation[];
+  readonly installations: Installation[] = [];
   private readonly byId = new Map<string, Installation>();
   private readonly byTerritory = new Map<string, Installation[]>();
   /** Per territory, the aircraft it currently knows about. */
   private readonly aware = new Map<string, Set<string>>();
 
-  constructor(specs: readonly InstallationSpec[], rng: Rng = Math.random) {
-    this.installations = specs.map((spec) => new Installation(spec, rng));
-    for (const i of this.installations) {
-      this.byId.set(i.id, i);
-      const list = this.byTerritory.get(i.spec.territoryId) ?? [];
-      list.push(i);
-      this.byTerritory.set(i.spec.territoryId, list);
-    }
+  constructor(specs: readonly InstallationSpec[], private readonly rng: Rng = Math.random) {
+    for (const spec of specs) this.add(spec);
   }
 
   get(id: string): Installation | undefined {
     return this.byId.get(id);
+  }
+
+  /** Puts up a new installation (a building the player just built), at `health` (default: full). */
+  add(spec: InstallationSpec, health = spec.maxHealth): Installation {
+    if (this.byId.has(spec.id)) this.remove(spec.id);
+    const i = new Installation(spec, this.rng);
+    i.durability.health = Math.max(0, Math.min(spec.maxHealth, health));
+    if (!i.alive) i.state = 'destroyed';
+    this.installations.push(i);
+    this.byId.set(i.id, i);
+    const list = this.byTerritory.get(spec.territoryId) ?? [];
+    list.push(i);
+    this.byTerritory.set(spec.territoryId, list);
+    return i;
+  }
+
+  /** Takes an installation away (a building the player removed). */
+  remove(id: string): void {
+    const i = this.byId.get(id);
+    if (!i) return;
+    this.byId.delete(id);
+    this.installations.splice(this.installations.indexOf(i), 1);
+    const list = this.byTerritory.get(i.spec.territoryId) ?? [];
+    list.splice(list.indexOf(i), 1);
+  }
+
+  /**
+   * Swaps an installation's spec for another (an upgrade): same place, new numbers. It keeps the
+   * share of health it had, and whatever it was following.
+   */
+  replace(spec: InstallationSpec): Installation {
+    const old = this.byId.get(spec.id);
+    const fraction = old ? old.durability.fraction : 1;
+    const i = this.add(spec, old && !old.alive ? 0 : Math.ceil(spec.maxHealth * fraction));
+    if (old) {
+      i.yaw = old.yaw;
+      i.pitch = old.pitch;
+    }
+    return i;
   }
 
   /** The installations on a territory. */
@@ -408,9 +469,19 @@ export class DefenseNetwork {
     return { orders, events };
   }
 
-  /** Everything back to full health, except the wrecks in `keep` (the world remembers those for a while). */
+  /**
+   * Everything back to full health between sorties, except the wrecks in `keep` (the world
+   * remembers those for a while) and the player's own buildings, which stay as they are until the
+   * player repairs them.
+   */
   restoreAll(keep: ReadonlySet<string> = new Set()): void {
-    for (const i of this.installations) if (!keep.has(i.id) || i.alive) i.restore();
+    for (const i of this.installations) {
+      if (i.side === 'player') {
+        if (i.alive) i.restore(true);
+        continue;
+      }
+      if (!keep.has(i.id) || i.alive) i.restore();
+    }
     this.aware.clear();
   }
 
@@ -425,11 +496,13 @@ export class DefenseNetwork {
    * following, which it remembers for a moment before giving up.
    */
   private choose(i: Installation, targets: readonly Target[], radarSees: ReadonlySet<string>, scale: number): Target | null {
-    if (!i.alive || i.spec.kind === 'supply') return null;
+    if (!i.alive || i.isPassive) return null;
     const p = i.pivot(tmp);
+    const bombersFirst = i.spec.prefer === 'bomber';
     let current: Target | null = null;
+    let currentVisible = false;
     let best: Target | null = null;
-    let bestDistance = Infinity;
+    let bestScore = Infinity;
     for (const t of targets) {
       if (t.side === i.side) continue;
       const following = t.id === i.targetId && i.state !== 'idle';
@@ -437,13 +510,17 @@ export class DefenseNetwork {
       const visible = radarSees.has(t.id) || d <= i.detectionRange(t, scale) * (following ? DEFENSES.keepTrack : 1);
       if (following) {
         current = t;
-        if (visible) return t;
+        currentVisible = visible;
       }
-      if (visible && d < bestDistance) {
+      // Bombers first for weapons that prefer them: any bomber in sight scores ahead of anything else.
+      const score = d - (bombersFirst && t.role === 'bomber' ? 1e6 : 0);
+      if (visible && score < bestScore) {
         best = t;
-        bestDistance = d;
+        bestScore = score;
       }
     }
+    // Stick with the one being followed while it is in sight, unless a bomber turns up for a weapon that wants bombers.
+    if (current && currentVisible && !(bombersFirst && best?.role === 'bomber' && current.role !== 'bomber')) return current;
     return best ?? current;
   }
 }

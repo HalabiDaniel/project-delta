@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
-import { AIRCRAFT, DEFENSES, MISSIONS, THREAT, type AircraftId, type ThreatLevel } from '../config';
+import { AIRCRAFT, BASE, DEFENSES, MISSIONS, THREAT, WORLD, type AircraftId, type ThreatLevel } from '../config';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
 import { isRocket, Ordnance, steerRocket, sweepMoving, type AircraftTarget, type Shot, type ShotOrder } from '../combat/Ordnance';
 import { DefenseNetwork, Installation, leadTime, wrapAngle, type DefenseEvent, type Target } from './Installation';
-import { departurePoint, homeDefenses, layoutDefenses, overHome, reachesHome, type InstallationSpec } from './Layout';
+import { buildingSpec, departurePoint, homeDefenses, layoutDefenses, overHome, reachesHome, type InstallationSpec } from './Layout';
+import { fits } from '../base/Base';
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
@@ -52,12 +53,12 @@ describe('threat levels', () => {
 describe('layoutDefenses', () => {
   const on = (id: string) => layout.installations.filter((i) => i.territoryId === id);
 
-  it("puts each territory's profile on it, none on unprotected ground, and home's own guns and store at home", () => {
+  it("puts each territory's profile on it, none on unprotected ground, and home's paper store at home", () => {
     for (const t of territories) {
       const own = on(t.id);
       const profile = THREAT.levels[t.threat];
       const count = (kind: string) => own.filter((i) => i.kind === kind).length;
-      expect(count('turret')).toBe(t.isHome ? DEFENSES.home.turrets.length : profile.turrets);
+      expect(count('turret')).toBe(t.isHome ? 0 : profile.turrets);
       expect(count('launcher')).toBe(t.isHome ? 0 : profile.launchers);
       expect(count('radar')).toBe(!t.isHome && profile.radar ? 1 : 0);
       expect(count('supply')).toBe(t.isHome || profile.supply ? 1 : 0);
@@ -237,22 +238,32 @@ describe('DefenseNetwork', () => {
 });
 
 describe('sides', () => {
-  const homeGuns = homeDefenses(home);
+  const homeGuns = [...homeDefenses(home), buildingSpec(home, 'D1', 'turret', 1), buildingSpec(home, 'D2', 'turret', 1)];
   const t1 = homeGuns.find((i) => i.kind === 'turret')!;
-  const aircraft = (id: string, side: 'player' | 'enemy', x: number, z: number, signature = 1.25): Target => ({ id, side, x, y: 15, z, vx: 0, vy: 0, vz: 0, signature });
+  const aircraft = (id: string, side: 'player' | 'enemy', x: number, z: number, signature = 1.25, role?: Target['role']): Target => ({ id, side, x, y: 15, z, vx: 0, vy: 0, vz: 0, signature, role });
 
-  it("home has the player's own guns either side of the runway and a store, clear of the launch pad and facing out", () => {
-    expect(homeGuns.filter((i) => i.kind === 'turret')).toHaveLength(2);
-    const store = homeGuns.find((i) => i.kind === 'supply')!;
+  it("home has the paper store, and every slot holds its buildings on the platform, clear of the runway, weapons facing out", () => {
+    const store = homeDefenses(home).find((i) => i.kind === 'supply')!;
     expect(store.name).toBe(DEFENSES.home.storeName);
-    for (const i of homeGuns) {
+    expect(store.side).toBe('player');
+    const launch = { x: home.x - (-home.x / Math.hypot(home.x, home.z)) * 9, z: home.z - (-home.z / Math.hypot(home.x, home.z)) * 9 };
+    const specs = BASE.slots.flatMap((slot) => BASE.order.filter((k) => fits(k, slot.kind)).map((k) => buildingSpec(home, slot.id, k, 3)));
+    for (const i of [store, ...specs]) {
       expect(i.side).toBe('player');
-      expect(home.containsXZ(i.x, i.z, -i.footprint)).toBe(true);
+      expect(home.containsXZ(i.x, i.z, -Math.min(i.footprint, 2.5))).toBe(true);
+      // Off the runway (7 m wide, along the diagonal through the middle) with room for a wing.
+      const u = { x: -home.x / Math.hypot(home.x, home.z), z: -home.z / Math.hypot(home.x, home.z) };
+      const side = Math.abs((i.x - home.x) * -u.z + (i.z - home.z) * u.x);
+      expect(side - i.footprint).toBeGreaterThan(WORLD.runwayWidth / 2);
+      expect(Math.hypot(i.x - launch.x, i.z - launch.z)).toBeGreaterThan(6);
     }
-    // Every turret faces towards the world centre, where raids come from.
-    for (const i of homeGuns.filter((x) => x.kind === 'turret')) {
-      const toward = Math.atan2(home.x, home.z);
-      expect(Math.abs(wrapAngle(i.facing - toward))).toBeLessThan(1e-9);
+    // Slots keep apart from each other and from the store.
+    const points = [store, ...BASE.slots.map((s) => buildingSpec(home, s.id, 'storage', 1))];
+    for (const a of points) for (const b of points) if (a !== b) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(8);
+    // A weapon faces away from the middle of T1, so where it stands decides what it covers.
+    for (const i of specs.filter((x) => x.kind === 'turret')) {
+      const out = Math.atan2(home.x - i.x, home.z - i.z);
+      expect(Math.abs(wrapAngle(i.facing - out))).toBeLessThan(1e-9);
     }
   });
 
@@ -268,6 +279,61 @@ describe('sides', () => {
     const shots = fire([aircraft('plane', 'player', ahead.x, ahead.z), aircraft('bandit', 'enemy', ahead.x + 3, ahead.z)]);
     expect(shots.length).toBeGreaterThan(0);
     for (const o of shots) expect(o).toMatchObject({ side: 'player', target: 'bandit' });
+  });
+
+  it('a player turret empties its magazine, then pauses to reload; upgrades hit harder', () => {
+    const spec = buildingSpec(home, 'D1', 'turret', 1);
+    const net = new DefenseNetwork([spec], seededRng(3));
+    const ahead = { x: spec.x - Math.sin(spec.facing) * 20, z: spec.z - Math.cos(spec.facing) * 20 };
+    const times: number[] = [];
+    for (let t = 0; t < 20; t += DT) if (net.update(DT, [aircraft('bandit', 'enemy', ahead.x, ahead.z)]).orders.length) times.push(t);
+    const gaps = times.slice(1).map((t, i) => t - times[i]);
+    const mag = BASE.buildings.turret.levels[0].magazine!;
+    expect(times.length).toBeGreaterThan(mag);
+    // The longest gap is the reload, every magazine.
+    expect(Math.max(...gaps)).toBeGreaterThan(BASE.buildings.turret.levels[0].reloadTime! * 0.9);
+    expect(gaps[mag - 1]).toBeGreaterThan(BASE.buildings.turret.levels[0].reloadTime! * 0.9);
+    const l3 = new DefenseNetwork([buildingSpec(home, 'D1', 'turret', 3)], seededRng(3));
+    let order: ShotOrder | undefined;
+    for (let t = 0; t < 5 && !order; t += DT) order = l3.update(DT, [aircraft('bandit', 'enemy', ahead.x, ahead.z)]).orders[0];
+    expect(order!.damage).toBe(BASE.buildings.turret.levels[2].damage);
+  });
+
+  it('a player launcher deals with bombers first; a turret takes the nearest', () => {
+    const launcher = buildingSpec(home, 'D1', 'launcher', 1);
+    const turret = buildingSpec(home, 'D2', 'turret', 1);
+    const dir = (s: InstallationSpec, d: number) => ({ x: s.x - Math.sin(s.facing) * d, z: s.z - Math.cos(s.facing) * d });
+    const net = new DefenseNetwork([launcher, turret], seededRng(5));
+    const near = dir(launcher, 30);
+    const far = dir(launcher, 60);
+    const fighter = aircraft('fighter', 'enemy', near.x, near.z, 1, 'fighter');
+    const bomber = aircraft('bomber', 'enemy', far.x, far.z, 1.25, 'bomber');
+    for (let t = 0; t < 1; t += DT) net.update(DT, [fighter]);
+    expect(net.get(launcher.id)!.targetId).toBe('fighter');
+    // A bomber turns up further out: the launcher switches to it.
+    for (let t = 0; t < 1; t += DT) net.update(DT, [fighter, bomber]);
+    expect(net.get(launcher.id)!.targetId).toBe('bomber');
+    expect(launcher.prefer).toBe('bomber');
+    expect(turret.prefer).toBeUndefined();
+  });
+
+  it('buildings can be added, upgraded in place and removed; between sorties the player\'s keep their damage', () => {
+    const net = new DefenseNetwork(homeDefenses(home), seededRng(1));
+    const spec = buildingSpec(home, 'D1', 'turret', 1);
+    net.add(spec);
+    expect(net.on(home.id)).toHaveLength(2);
+    net.get(spec.id)!.damage(45);
+    const up = net.replace(buildingSpec(home, 'D1', 'turret', 2));
+    expect(up.spec.level).toBe(2);
+    expect(up.durability.fraction).toBeCloseTo(45 / 90, 1);
+    net.restoreAll();
+    expect(net.get(spec.id)!.durability.health).toBe(up.durability.health);
+    net.get(spec.id)!.damage(1000);
+    net.restoreAll();
+    expect(net.get(spec.id)!.alive).toBe(false);
+    net.remove(spec.id);
+    expect(net.get(spec.id)).toBeUndefined();
+    expect(net.on(home.id)).toHaveLength(1);
   });
 
   it("enemy guns shoot at the player and friendly aircraft, not at their own side's", () => {

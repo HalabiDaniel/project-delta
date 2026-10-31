@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ECONOMY, LANDING } from '../config';
+import { BASE, ECONOMY, LANDING } from '../config';
 
 const BOOST = { duration: 1.2, cooldown: 3.5 };
 import { Boost } from '../aircraft/Boost';
@@ -10,25 +10,29 @@ import { Ledger } from './Ledger';
 import { ResourceManager } from './ResourceManager';
 
 describe('HomeIncome', () => {
-  it('pays a small amount every interval', () => {
+  it('pays base production per minute, faster below the protected reserve', () => {
     const income = new HomeIncome();
-    const r = new ResourceManager(0);
-    expect(income.update(ECONOMY.incomeInterval * 0.9, r)).toBe(0);
-    expect(income.update(ECONOMY.incomeInterval * 0.1, r)).toBe(ECONOMY.incomeAmount);
-    income.update(ECONOMY.incomeInterval * 3, r);
-    expect(r.paper).toBe(4 * ECONOMY.incomeAmount);
+    const r = new ResourceManager(ECONOMY.protectedPaper);
+    const interval = 60 / BASE.production;
+    expect(income.update(interval * 0.9, r)).toBe(0);
+    expect(income.update(interval * 0.1, r)).toBe(1);
+    income.update(interval * 3, r);
+    expect(r.paper).toBe(ECONOMY.protectedPaper + 4);
+    expect(income.ratePerMinute(10)).toBe(BASE.production * BASE.lowBoost);
+    expect(income.stateFor(10)).toBe('boosted');
   });
 
-  it('pauses at the cap', () => {
-    const income = new HomeIncome(1, 1, 10);
+  it('pauses at capacity', () => {
+    const income = new HomeIncome({ perMinute: 60, capacity: 10 });
     const r = new ResourceManager(9);
     income.update(5, r);
     expect(r.paper).toBe(10);
     expect(income.isProducing(r.paper)).toBe(false);
+    expect(income.stateFor(r.paper)).toBe('full');
   });
 
   it('estimates the wait until the player can afford something', () => {
-    const income = new HomeIncome(1, 2, 150);
+    const income = new HomeIncome({ perMinute: 30, capacity: 150, reserve: 0 });
     expect(income.timeToAfford(20, 20)).toBe(0);
     expect(income.timeToAfford(15, 20)).toBe(10);
     expect(income.timeToAfford(0, 500)).toBeNull();
@@ -92,18 +96,18 @@ describe('Boundary', () => {
 });
 
 describe('HomeIncome: storage', () => {
-  it('slows to half rate as the store fills, and pauses when it is full', () => {
-    const income = new HomeIncome(1, 3, 120, 60);
-    expect(income.stateFor(10)).toBe('producing');
-    expect(income.stateFor(60)).toBe('slowed');
+  it('runs faster below the reserve, normally above it, and stops at capacity', () => {
+    const income = new HomeIncome({ perMinute: 10, capacity: 120, reserve: 60, boost: 2 });
+    expect(income.stateFor(10)).toBe('boosted');
+    expect(income.stateFor(60)).toBe('producing');
     expect(income.stateFor(120)).toBe('full');
     expect(income.ratePerMinute(10)).toBe(20);
     expect(income.ratePerMinute(80)).toBe(10);
     expect(income.ratePerMinute(130)).toBe(0);
     const r = new ResourceManager(58);
-    income.update(6, r); // two payouts at full rate: 58 → 60
+    income.update(6, r); // two payouts at the boosted rate: 58 → 60
     expect(r.paper).toBe(60);
-    income.update(5.9, r); // half rate now: not quite one payout
+    income.update(5.9, r); // normal rate now: not quite one payout
     expect(r.paper).toBe(60);
     income.update(0.1, r);
     expect(r.paper).toBe(61);
@@ -113,8 +117,30 @@ describe('HomeIncome: storage', () => {
   });
 
   it('counts the slower rate when estimating a wait', () => {
-    const income = new HomeIncome(1, 3, 120, 60);
+    const income = new HomeIncome({ perMinute: 10, capacity: 120, reserve: 60, boost: 2 });
     expect(income.timeToAfford(58, 62)).toBe(2 * 3 + 2 * 6);
+  });
+});
+
+describe('ResourceManager: capacity', () => {
+  it('earnings beyond capacity are lost and reported; spending makes room again', () => {
+    const r = new ResourceManager(90);
+    r.capacity = 100;
+    const lost: number[] = [];
+    r.onOverflow((n) => lost.push(n));
+    expect(r.earn(25, 'reward')).toBe(10);
+    expect(r.paper).toBe(100);
+    expect(lost).toEqual([15]);
+    r.spend(30);
+    expect(r.earn(5, 'income')).toBe(5);
+    expect(r.room).toBe(25);
+  });
+
+  it('a balance above capacity (an old save) is kept, but nothing more comes in', () => {
+    const r = new ResourceManager(500);
+    r.capacity = 300;
+    expect(r.earn(20)).toBe(0);
+    expect(r.paper).toBe(500);
   });
 });
 

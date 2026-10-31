@@ -30,7 +30,7 @@ export type RaidStage = 'inbound' | 'released' | 'over';
 /**
  * intercepted – shot down before it released.
  * driven-off  – turned back, too badly damaged to carry on.
- * bombed      – its bomb hit the paper store.
+ * bombed      – its bomb hit what it was aimed at on T1.
  * missed      – its bomb missed.
  * cancelled   – the world was reset under it.
  */
@@ -51,6 +51,13 @@ export interface Raid {
   eta: number;
   /** The player damaged the bomber: the defense was theirs, not just the guns'. */
   participated: boolean;
+  /** What on T1 the bomber is aimed at. */
+  strike: Strike | null;
+  /**
+   * T1 knows it is coming: its radar (or, without one, its lookouts close in) has seen the bomber,
+   * or a mission sent it. Until then the player gets no warning.
+   */
+  detected: boolean;
 }
 
 export type AirEvent =
@@ -81,6 +88,8 @@ export interface AirInput {
   raids: boolean;
   /** How far along (0–1) the active mission's patrol objective is, for intruders that wait for it. */
   patrol: number;
+  /** How fast the clock to the next raid runs (the mission director's pacing; default 1). */
+  raidPace?: number;
 }
 
 /** Ambient pilots are mostly regulars. */
@@ -110,8 +119,8 @@ export class AirTraffic {
   constructor(
     private readonly territories: readonly Territory[],
     private readonly home: Territory,
-    /** What raiders bomb: the paper store on T1. */
-    private readonly store: Strike,
+    /** What the next raider bombs: one of T1's structures, chosen when the raid sets out. */
+    private readonly target: () => Strike,
     private readonly rng: Rng = Math.random,
     /** Ambient patrols at all (tests turn them off). */
     private readonly ambient = true,
@@ -172,8 +181,18 @@ export class AirTraffic {
       ? this.territories.find((t) => t.id === origin)!
       : (shuffled(this.rng, RAIDS.origins.map((o) => this.territories.find((t) => t.id === o)!)).find((t) => !visible(edgePoint(t.x, t.z, 30))) ??
         this.territories.find((t) => t.id === RAIDS.origins[0])!);
-    const plan = raidPlan(from, this.store, skill, id ?? `raider-${++this.serial}`, this.rng, escort);
+    const plan = raidPlan(from, this.target(), skill, id ?? `raider-${++this.serial}`, this.rng, escort);
     return this.launchRaid(plan, from.id, skill, mission);
+  }
+
+  /** The next raid waits at least `seconds` (time for T1 to recover after a damaging one). */
+  delayRaids(seconds: number): void {
+    this.raidTimer = Math.max(this.raidTimer, seconds);
+  }
+
+  /** Seconds (of raid clock) until the next raid sets out. */
+  get nextRaid(): number {
+    return this.raidTimer;
   }
 
   /**
@@ -283,7 +302,7 @@ export class AirTraffic {
 
     // Raids: only while the world may send them, one at a time, and only with room in the air.
     if (input.raids && !this.activeRaid) {
-      this.raidTimer -= dt;
+      this.raidTimer -= dt * (input.raidPace ?? 1);
       if (this.raidTimer <= 0) {
         if (this.reserved() + 1 <= AI.maxActive) {
           this.raidCount++;
@@ -368,6 +387,8 @@ export class AirTraffic {
       outcome: null,
       eta: flightTime(bomber.orders),
       participated: false,
+      strike: bomber.orders.strike ?? null,
+      detected: mission,
     };
     this.raids.push(raid);
     this.events.push({ type: 'raid', raid });

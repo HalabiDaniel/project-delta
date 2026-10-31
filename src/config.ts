@@ -14,14 +14,10 @@ export const PLAYER_ID = 'player';
 
 export const ECONOMY = {
   startingPaper: 100,
-  /** Home produces `incomeAmount` paper every `incomeInterval` seconds… */
-  incomeAmount: 1,
-  incomeInterval: 3,
-  /** …at half that rate once the player holds this much (the home store is filling up)… */
-  incomeTaper: 60,
-  /** …and not at all from this much on: the store is full. It is a safety net; missions are how you get rich. */
-  incomeCap: 120,
-  /** Enemy raids never take the balance below this, so the player can always fold a plane. */
+  /**
+   * Enemy raids never take the balance below this, so the player can always fold a plane. Storage
+   * boxes protect more on top (BASE.buildings.storage).
+   */
   protectedPaper: 50,
   /**
    * The free emergency Dart, offered only when the player can afford no plane at all: folded from
@@ -494,17 +490,15 @@ export const DEFENSES = {
     footprint: 2.6,
   },
   /**
-   * T1's own defenses, predefined until players can build their own: two ink turrets that shoot at
-   * hostile aircraft (never at the player), and the paper store enemy bombers aim for. Positions are
-   * (along the runway towards the world centre, to its right), from the middle of the platform.
+   * T1's fixed structure: the paper store, where the player's paper is kept. Everything else on T1
+   * is built by the player (BASE). The position is (along the runway towards the world centre, to
+   * its right), from the middle of the platform.
    */
   home: {
-    turrets: [[4, 12.5], [4, -12.5]] as ReadonlyArray<readonly [number, number]>,
     store: [-6, 12.5] as readonly [number, number],
     storeName: 'Paper store',
-    storeRole: 'Your stores · raid target',
+    storeRole: 'Your paper · raid target',
     storeHealth: 120,
-    turretRole: 'Defends T1 · hostile aircraft',
   },
   /** Once a territory's radar is gone, its weapons only notice planes this much closer. */
   radarLostDetection: 0.7,
@@ -519,7 +513,7 @@ export const DEFENSES = {
   /** Weapons are placed so their reach stays clear of home and the first stretch after take-off. */
   departureClearance: 8,
   /** Share of the normal impact damage a plane takes flying into each kind. */
-  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, barrier: 0.85 },
+  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, workshop: 0.75, storage: 0.7, barrier: 0.85 },
   /** Name and health labels show for installations this close. */
   labelRange: 110,
   /** The threat panel shows a defended territory once the plane is this close to its weapons' reach. */
@@ -715,14 +709,150 @@ export const RAIDS = {
   interval: [170, 280] as readonly [number, number],
   /** Where raids set out from. */
   origins: ['T9', 'T8', 'T6', 'T3'],
-  /** Paid for shooting the raider down (or helping to), and taken when its bomb hits. */
+  /** Paid for shooting the raider down (or helping to). */
   reward: 60,
-  penalty: 20,
+  /**
+   * A raider's bomb on target destroys this share of the vulnerable paper (above the protected
+   * reserve), up to `max`: more when it hits the paper store itself than another building.
+   */
+  loss: { store: { share: 0.2, max: 80 }, building: { share: 0.1, max: 40 } },
   /** The first two raids come alone; after that, a raid has this chance of a fighter escort. */
   escortAfter: 2,
   escortChance: 0.3,
-  /** The bomber's target: how close (beyond the store's own size) the blast must come. */
+  /** The bomber's target: how close (beyond the building's own size) the blast must come. */
   hitRadius: 2.5,
+  /**
+   * How attractive each T1 structure is as a raid target (standing ones only). The paper store
+   * gets `perPaper` more for every vulnerable paper in it: a full store draws raids.
+   */
+  targetWeights: { store: 2, storage: 2, workshop: 2, radar: 2, launcher: 1.5, turret: 1 } as Record<string, number>,
+  storePerPaper: 0.01,
+  /** After a raid that cost paper or wrecked a building, the next waits at least this long (recovery time). */
+  recovery: 150,
+} as const;
+
+/** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */
+export type BuildingKind = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage';
+/** defense – weapons. radar – the radar station. economy – workshops and storage. utility – anything but a radar. */
+export type SlotKind = 'defense' | 'radar' | 'economy' | 'utility';
+
+export interface BuildingLevel {
+  /** Paper to reach this level from the one before (level 1: the building's cost). */
+  cost: number;
+  health: number;
+  /** Weapons: engagement range. Radar: early-warning range. */
+  range?: number;
+  /** Weapons: damage per round or rocket. */
+  damage?: number;
+  /** Turrets: seconds between rounds, rounds per magazine and seconds to reload it. */
+  interval?: number;
+  magazine?: number;
+  reloadTime?: number;
+  /** Launchers: seconds between rockets. */
+  reload?: number;
+  /** Workshops: extra paper per minute. */
+  production?: number;
+  /** Storage boxes: extra capacity, and extra paper protected from raids. */
+  capacity?: number;
+  protection?: number;
+}
+
+export interface BuildingSpec {
+  kind: BuildingKind;
+  name: string;
+  /** One word, for buttons and tight spaces. */
+  short: string;
+  /** Which slots it can go in. */
+  slots: readonly SlotKind[];
+  levels: readonly BuildingLevel[];
+  /** What it is for, in a few words (tooltips). */
+  purpose: string;
+}
+
+export const BASE = {
+  /** Paper T1 holds with no storage boxes. Earnings beyond the capacity are lost. */
+  capacity: 300,
+  /** Paper per minute with no workshop… */
+  production: 5,
+  /** …times this while the balance is below the protected reserve: the crew scavenges scraps. */
+  lowBoost: 3,
+  /** …and times this while the paper store lies wrecked. */
+  wreckedStore: 0.5,
+  /** Without a radar, raiders are only noticed this close to T1 (m from its middle). */
+  detection: 55,
+  /** Share of the paper put into a building given back when it is removed (scaled by its health). */
+  refund: 0.5,
+  /** Repairs cost this share of a building's value per share of health missing… */
+  repairShare: 0.5,
+  /** …and bringing a wreck back this share of its value. Still cheaper than building it again. */
+  rebuildShare: 0.7,
+  /** The paper store's value, for its repairs. */
+  storeValue: 80,
+  /** Seconds a new building takes to fold up into place (just for show). */
+  assembleTime: 0.9,
+  /** At most one of these on a territory. */
+  unique: ['radar'] as readonly BuildingKind[],
+  /**
+   * T1's construction slots, as (along the runway towards the world centre, to its right) from the
+   * middle of the platform, in metres. Kept clear of the runway and the take-off path.
+   */
+  slots: [
+    { id: 'D1', kind: 'defense', at: [9, 11] },
+    { id: 'D2', kind: 'defense', at: [9, -11] },
+    { id: 'R1', kind: 'radar', at: [-2, -12] },
+    { id: 'E1', kind: 'economy', at: [-15, 8] },
+    { id: 'E2', kind: 'economy', at: [-15, -8] },
+    { id: 'U1', kind: 'utility', at: [1, 20] },
+    { id: 'U2', kind: 'utility', at: [2, -21] },
+  ] as ReadonlyArray<{ id: string; kind: SlotKind; at: readonly [number, number] }>,
+  /** What a brand-new game starts with: one ink turret. */
+  starter: [{ slot: 'D1', kind: 'turret' }] as ReadonlyArray<{ slot: string; kind: BuildingKind }>,
+  buildings: {
+    turret: {
+      kind: 'turret', name: 'Ink turret', short: 'Turret', slots: ['defense', 'utility'], purpose: 'Short-range air defense',
+      levels: [
+        { cost: 60, health: 90, range: 45, damage: 4, interval: 0.34, magazine: 24, reloadTime: 3 },
+        { cost: 45, health: 110, range: 50, damage: 5, interval: 0.31, magazine: 28, reloadTime: 2.6 },
+        { cost: 70, health: 130, range: 55, damage: 6, interval: 0.28, magazine: 32, reloadTime: 2.2 },
+      ],
+    },
+    launcher: {
+      kind: 'launcher', name: 'Paper rocket launcher', short: 'Rockets', slots: ['defense', 'utility'], purpose: 'Long-range defense, bombers first',
+      levels: [
+        { cost: 110, health: 110, range: 75, damage: 28, reload: 7 },
+        { cost: 80, health: 130, range: 80, damage: 32, reload: 6 },
+        { cost: 120, health: 150, range: 88, damage: 36, reload: 5 },
+      ],
+    },
+    radar: {
+      kind: 'radar', name: 'Radar station', short: 'Radar', slots: ['radar'], purpose: 'Early warning of raids',
+      levels: [
+        { cost: 70, health: 80, range: 110 },
+        { cost: 50, health: 95, range: 150 },
+        { cost: 80, health: 110, range: 210 },
+      ],
+    },
+    workshop: {
+      kind: 'workshop', name: 'Paper workshop', short: 'Workshop', slots: ['economy', 'utility'], purpose: 'More paper per minute',
+      levels: [
+        { cost: 80, health: 90, production: 2 },
+        { cost: 60, health: 105, production: 5 },
+        { cost: 90, health: 120, production: 9 },
+      ],
+    },
+    storage: {
+      kind: 'storage', name: 'Storage box', short: 'Storage', slots: ['economy', 'utility'], purpose: 'Holds and protects more paper',
+      levels: [
+        { cost: 50, health: 100, capacity: 200, protection: 25 },
+        { cost: 50, health: 115, capacity: 500, protection: 50 },
+        { cost: 80, health: 130, capacity: 900, protection: 80 },
+      ],
+    },
+  } as Record<BuildingKind, BuildingSpec>,
+  /** The order buildings are listed in. */
+  order: ['turret', 'launcher', 'radar', 'workshop', 'storage'] as readonly BuildingKind[],
+  /** Sorties during which key hints show on the HUD (after that, hold H). */
+  hintSorties: 3,
 } as const;
 
 

@@ -59,6 +59,8 @@ export interface SortieLog {
   objectivesProtected: number;
   /** Paper taken by enemy raids that got through. */
   paperLost: number;
+  /** Paper earned that didn't fit in the store (it was full). */
+  paperOverflow: number;
   rearms: number;
   /** Metres flown, over every take-off of the sortie. */
   distanceFlown: number;
@@ -123,7 +125,7 @@ export type GameEvent =
   | { type: 'aircraft-destroyed'; id: string; role: AiRole; credit: boolean }
   /** A raid on T1 was beaten off. Paid (outside missions) only when the player took part. */
   | { type: 'raid-defended'; reward: number; participated: boolean }
-  /** A raider's bomb hit the paper store. */
+  /** A raider's bomb hit T1. */
   | { type: 'raid-hit'; lost: number };
 
 export interface GameStats {
@@ -282,8 +284,11 @@ export class GameState {
   /** A bonus on top of a reward (a streak, an operation, an optional objective, a bounty). */
   payBonus(amount: number, label: string): void {
     if (amount <= 0) return;
-    this.resources.earn(Math.round(amount), 'bonus', label);
-    if (this.sortie) this.sortie.paperEarned += Math.round(amount);
+    const added = this.resources.earn(Math.round(amount), 'bonus', label);
+    if (this.sortie) {
+      this.sortie.paperEarned += added;
+      this.sortie.paperOverflow += Math.round(amount) - added;
+    }
   }
 
   /** Missions can be chosen any time before launch. */
@@ -522,18 +527,22 @@ export class GameState {
    */
   raidDefended(participated: boolean, mission = false): void {
     const reward = participated && !mission ? RAIDS.reward : 0;
-    if (reward > 0) this.resources.earn(reward, 'reward', 'Raid beaten off');
+    const added = reward > 0 ? this.resources.earn(reward, 'reward', 'Raid beaten off') : 0;
     if (participated && this.sortie) {
-      this.sortie.paperEarned += reward;
+      this.sortie.paperEarned += added;
+      this.sortie.paperOverflow += reward - added;
       this.sortie.objectivesProtected++;
     }
     this.emit({ type: 'raid-defended', reward, participated });
   }
 
-  /** A raider's bomb hit the paper store: some paper is lost, never below the protected minimum. */
-  raidHit(): number {
-    const lost = this.resources.lose(RAIDS.penalty, ECONOMY.protectedPaper);
-    if (this.sortie) this.sortie.paperLost += lost;
+  /**
+   * A raider's bomb hit T1: `amount` paper is destroyed, never below `floor` (the protected
+   * reserve). Returns what was actually lost.
+   */
+  raidHit(amount: number, floor: number, label = 'Raid on T1'): number {
+    const lost = this.resources.lose(Math.max(0, Math.round(amount)), floor, label);
+    if (this.sortie && (this.phase === 'flying' || this.phase === 'landed')) this.sortie.paperLost += lost;
     this.emit({ type: 'raid-hit', lost });
     return lost;
   }
@@ -694,8 +703,11 @@ export class GameState {
     // Finishing one may open the next, whose targets may already be down.
     for (const next of mission.settle()) this.objectiveComplete(next);
     if (mission.allDone && mission.succeed()) {
-      this.resources.earn(mission.reward, 'reward', `Mission completed: ${mission.title}`);
-      if (this.sortie) this.sortie.paperEarned += mission.reward;
+      const added = this.resources.earn(mission.reward, 'reward', `Mission completed: ${mission.title}`);
+      if (this.sortie) {
+        this.sortie.paperEarned += added;
+        this.sortie.paperOverflow += mission.reward - added;
+      }
       this.stats.successes++;
       this.emit({ type: 'mission-succeeded', reward: mission.reward });
     }
@@ -717,7 +729,7 @@ function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): S
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
     bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0,
-    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0,
+    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0,
     rearms: 0, distanceFlown: 0, landings: 0, emergency: false, outcome: 'flying',
   };
 }

@@ -1,5 +1,5 @@
 import type { Shape } from '../combat/Collision';
-import { DEFENSES, MISSIONS, THREAT, WORLD, type Side, type ThreatLevel } from '../config';
+import { BASE, DEFENSES, MISSIONS, THREAT, WORLD, type BuildingKind, type Side, type ThreatLevel } from '../config';
 import type { Territory } from '../world/Territory';
 
 /**
@@ -7,8 +7,22 @@ import type { Territory } from '../world/Territory';
  * launcher – a paper rocket launcher: slow, long range, homing rockets.
  * radar    – a radar station: spots planes early for every weapon on its territory.
  * supply   – a supply depot: no weapon, but the marked target of fortified and multi-stage strikes.
+ *            On T1 it is the player's paper store.
+ * workshop – a paper workshop (T1, player-built): more paper per minute.
+ * storage  – a storage box (T1, player-built): holds and protects more paper.
  */
-export type InstallationKind = 'turret' | 'launcher' | 'radar' | 'supply';
+export type InstallationKind = 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage';
+
+/** A weapon's numbers where they differ from the defaults in DEFENSES (player buildings by level). */
+export interface WeaponStats {
+  damage?: number;
+  /** Turrets: seconds between rounds; rounds per magazine and seconds to reload it. */
+  interval?: number;
+  magazine?: number;
+  reloadTime?: number;
+  /** Launchers: seconds between rockets. */
+  reload?: number;
+}
 
 export interface InstallationSpec {
   id: string;
@@ -40,6 +54,12 @@ export interface InstallationSpec {
   shapes: Shape[];
   /** What a plane flies into. */
   solids: Shape[];
+  /** Player buildings: the construction slot it stands in, and its level (1–3). */
+  slot?: string;
+  level?: number;
+  stats?: WeaponStats;
+  /** Which aircraft it deals with first: the nearest (default), or bombers before anything else. */
+  prefer?: 'nearest' | 'bomber';
 }
 
 /** A low cardboard wall around a turret's back: scenery, but solid. */
@@ -117,13 +137,14 @@ export function layoutDefenses(territories: readonly Territory[], occupied: read
       const taken: Footprint[] = occupied.filter((o) => t.containsXZ(o.x, o.z, 2));
       const slots = orderedSlots(t, k);
       const weapons: Footprint[] = [];
-      const plan: InstallationKind[] = [
-        ...Array<InstallationKind>(profile.launchers).fill('launcher'),
-        ...Array<InstallationKind>(profile.turrets).fill('turret'),
+      type Placed = 'turret' | 'launcher' | 'radar' | 'supply';
+      const plan: Placed[] = [
+        ...Array<Placed>(profile.launchers).fill('launcher'),
+        ...Array<Placed>(profile.turrets).fill('turret'),
         ...(profile.radar ? (['radar'] as const) : []),
         ...(profile.supply ? (['supply'] as const) : []),
       ];
-      const counts: Partial<Record<InstallationKind, number>> = {};
+      const counts: Partial<Record<Placed, number>> = {};
       for (const kind of plan) {
         const slot = pickSlot(t, kind, slots, taken, weapons, home);
         if (!slot) continue;
@@ -151,26 +172,54 @@ export function layoutDefenses(territories: readonly Territory[], occupied: read
 }
 
 /**
- * T1's own defenses: two ink turrets either side of the runway, facing out towards the world
- * centre where raids come from, and the paper store enemy bombers aim for. They belong to the
- * player: they shoot at hostile aircraft only.
+ * T1's fixed structure: the paper store, where the player's paper is kept and raiders aim. It
+ * belongs to the player. Everything else on T1 is built by the player in its slots (buildingSpec).
  */
 export function homeDefenses(home: Territory): InstallationSpec[] {
   const c = DEFENSES.home;
+  const store = installation(home, 'supply', homePoint(home, c.store), 'store', 'player');
+  return [{ ...store, name: c.storeName, role: c.storeRole, maxHealth: c.storeHealth }];
+}
+
+/**
+ * A point on T1 given as (along the runway towards the world centre, to its right) from the
+ * middle of the platform.
+ */
+export function homePoint(home: Territory, [u, v]: readonly [number, number]): { x: number; z: number; tag: SlotTag } {
   const len = Math.hypot(home.x, home.z) || 1;
-  // Along the runway (towards the world centre) and to its right.
   const fx = -home.x / len;
   const fz = -home.z / len;
-  const at = ([u, v]: readonly [number, number]): Slot => ({ x: home.x + u * fx - v * fz, z: home.z + u * fz + v * fx, tag: 'inner' });
-  const facing = Math.atan2(-fx, -fz);
-  const specs: InstallationSpec[] = c.turrets.map((p, n) => ({
-    ...installation(home, 'turret', at(p), `turret${n + 1}`, 'player'),
-    role: c.turretRole,
-    facing,
-  }));
-  const store = installation(home, 'supply', at(c.store), 'store', 'player');
-  specs.push({ ...store, name: c.storeName, role: c.storeRole, maxHealth: c.storeHealth });
-  return specs;
+  return { x: home.x + u * fx - v * fz, z: home.z + u * fz + v * fx, tag: 'inner' };
+}
+
+/** Where T1's construction slot `slotId` is, or null if there is no such slot. */
+export function slotPoint(home: Territory, slotId: string): { x: number; z: number } | null {
+  const slot = BASE.slots.find((s) => s.id === slotId);
+  return slot ? homePoint(home, slot.at) : null;
+}
+
+/**
+ * A building the player put up on T1: a building of `kind` at `level` in slot `slotId`. Weapons
+ * face outward from the middle of T1 (so where a slot is decides what a turret covers), take their
+ * numbers from the level, and shoot only at hostile aircraft. Launchers deal with bombers first.
+ */
+export function buildingSpec(home: Territory, slotId: string, kind: BuildingKind, level: number): InstallationSpec {
+  const at = homePoint(home, BASE.slots.find((s) => s.id === slotId)?.at ?? [0, 0]);
+  const b = BASE.buildings[kind];
+  const lv = b.levels[Math.max(0, Math.min(b.levels.length, level) - 1)];
+  const outward = Math.atan2(home.x - at.x, home.z - at.z);
+  const base = installation(home, kind, at, slotId, 'player');
+  const spec: InstallationSpec = { ...base, name: b.name, role: b.purpose, facing: outward, maxHealth: lv.health, slot: slotId, level };
+  switch (kind) {
+    case 'turret':
+      return { ...spec, range: lv.range!, stats: { damage: lv.damage, interval: lv.interval, magazine: lv.magazine, reloadTime: lv.reloadTime } };
+    case 'launcher':
+      return { ...spec, range: lv.range!, stats: { damage: lv.damage, reload: lv.reload }, prefer: 'bomber' };
+    case 'radar':
+      return { ...spec, range: lv.range! };
+    default:
+      return spec;
+  }
 }
 
 /** Is (x, z) over home or close enough to it that nothing may shoot there? */
@@ -221,7 +270,7 @@ function orderedSlots(t: Territory, k: number): Slot[] {
  */
 function pickSlot(
   t: Territory,
-  kind: InstallationKind,
+  kind: 'turret' | 'launcher' | 'radar' | 'supply',
   slots: readonly Slot[],
   taken: readonly Footprint[],
   weapons: readonly Footprint[],
@@ -292,6 +341,24 @@ function installation(t: Territory, kind: InstallationKind, slot: Slot, suffix: 
       const box: Shape = { kind: 'box', x, y: g + 1.3, z, hx: 1.9, hy: 1.3, hz: 1.6, yaw: facing };
       return {
         ...base, name: c.name, role: c.role, pivot: 2.6, arc: null, range: 0, maxHealth: c.health, footprint: c.footprint,
+        shapes: [box],
+        solids: [box],
+      };
+    }
+    case 'workshop': {
+      const b = BASE.buildings.workshop;
+      const box: Shape = { kind: 'box', x, y: g + 1.2, z, hx: 1.8, hy: 1.2, hz: 1.5, yaw: facing };
+      return {
+        ...base, name: b.name, role: b.purpose, pivot: 2.4, arc: null, range: 0, maxHealth: b.levels[0].health, footprint: 2.8,
+        shapes: [box, { kind: 'box', x, y: g + 3, z, hx: 0.35, hy: 0.6, hz: 0.35, yaw: facing }],
+        solids: [box],
+      };
+    }
+    case 'storage': {
+      const b = BASE.buildings.storage;
+      const box: Shape = { kind: 'box', x, y: g + 1.1, z, hx: 1.7, hy: 1.1, hz: 1.7, yaw: facing };
+      return {
+        ...base, name: b.name, role: b.purpose, pivot: 2.2, arc: null, range: 0, maxHealth: b.levels[0].health, footprint: 2.6,
         shapes: [box],
         solids: [box],
       };

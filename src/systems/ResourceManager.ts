@@ -1,22 +1,30 @@
 import { ECONOMY } from '../config';
 
 /**
- * Why the balance changed: a purchase, a mission reward, a bonus (operations, streaks, optional
- * objectives, bounties), home income, a successful enemy raid, the dev reset, or a saved game
- * being restored.
+ * Why the balance changed: a purchase (planes, buildings, upgrades, repairs), a mission reward, a
+ * bonus (operations, streaks, optional objectives, bounties), home income, a refund for a removed
+ * building, a successful enemy raid, the dev reset, or a saved game being restored.
  */
-export type PaperSource = 'spend' | 'reward' | 'bonus' | 'income' | 'raid' | 'reset' | 'restore';
+export type PaperSource = 'spend' | 'reward' | 'bonus' | 'income' | 'refund' | 'raid' | 'reset' | 'restore';
+
+/** Paper that didn't fit: the store was at capacity. */
+export type OverflowListener = (lost: number, source: PaperSource, label: string) => void;
 
 /** `label` says what it was for, for the paper log: "Folded Falcon", "Mission completed". */
 export type PaperListener = (paper: number, delta: number, source: PaperSource, label: string) => void;
 
 /**
  * Owns the player's paper. All costs and rewards go through here, so the total can never become
- * negative: a purchase the player cannot afford is refused and leaves the balance untouched.
+ * negative: a purchase the player cannot afford is refused and leaves the balance untouched. The
+ * home store holds at most `capacity`: earnings beyond it are lost (storage boxes raise it). A
+ * balance already above capacity (an old save) is kept, but nothing more is added until it drops.
  */
 export class ResourceManager {
   private _paper: number;
+  /** The most paper the store holds. Infinity: no limit (the economy simulation, most tests). */
+  capacity = Infinity;
   private readonly listeners: PaperListener[] = [];
+  private readonly overflowListeners: OverflowListener[] = [];
 
   constructor(private readonly startingPaper: number = ECONOMY.startingPaper) {
     assertAmount(startingPaper);
@@ -39,9 +47,18 @@ export class ResourceManager {
     return true;
   }
 
-  earn(amount: number, source: PaperSource = 'reward', label = source === 'income' ? 'Home production' : 'Mission completed'): void {
+  /** Adds up to `amount`, as much as fits under the capacity. Returns what was actually added. */
+  earn(amount: number, source: PaperSource = 'reward', label = source === 'income' ? 'Home production' : 'Mission completed'): number {
     assertAmount(amount);
-    this.set(this._paper + amount, source, label);
+    const added = Math.min(amount, Math.max(0, this.capacity - this._paper));
+    if (added > 0) this.set(this._paper + added, source, label);
+    if (added < amount) for (const listener of this.overflowListeners) listener(amount - added, source, label);
+    return added;
+  }
+
+  /** Room left under the capacity. */
+  get room(): number {
+    return Math.max(0, this.capacity - this._paper);
   }
 
   /**
@@ -69,6 +86,11 @@ export class ResourceManager {
 
   onChange(listener: PaperListener): void {
     this.listeners.push(listener);
+  }
+
+  /** Called with what was lost whenever earnings don't fit under the capacity. */
+  onOverflow(listener: OverflowListener): void {
+    this.overflowListeners.push(listener);
   }
 
   private set(value: number, source: PaperSource, label: string): void {
