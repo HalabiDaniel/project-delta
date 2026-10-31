@@ -23,7 +23,7 @@ function mission(spec: Partial<MissionSpec> = {}, succeed = true, elapsed = 30):
 const log = (over: Partial<SortieLog> = {}): SortieLog => ({
   aircraft: 'widewing', kind: 'fold', paperSpent: 40, paperEarned: 0, damageDealt: 0, damageTaken: 0, bombsDropped: 1, bombHits: 1,
   shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0, enemyShots: 0, enemyHits: 0, killedBy: null,
-  aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, rearms: 0, distanceFlown: 400, landings: 1,
+  aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, rearms: 0, distanceFlown: 400, landings: 1,
   emergency: false, outcome: 'recovered', ...over,
 });
 

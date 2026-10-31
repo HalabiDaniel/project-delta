@@ -72,7 +72,7 @@ export class Ledger {
   record(delta: number, balance: number, source: PaperSource, label: string): void {
     if (source === 'restore' || delta === 0) return;
     if (source === 'income') this.totals.income += delta;
-    else if (source === 'bonus') this.totals.bonuses += delta;
+    else if (source === 'bonus' || source === 'refund') this.totals.bonuses += delta;
     else if (source === 'raid') this.totals.raids -= delta;
     if (delta > 0) this.totals.earned += delta;
     else if (source === 'spend') this.totals.spent -= delta;

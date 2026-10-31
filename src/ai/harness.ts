@@ -23,7 +23,7 @@ export const at = (id: string) => territories.find((t) => t.id === id)!;
 export type Script = (t: number) => { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null;
 
 export function traffic(seed: number, ambient = false): AirTraffic {
-  return new AirTraffic(territories, home, store, seededRng(seed), ambient);
+  return new AirTraffic(territories, home, () => store, seededRng(seed), ambient);
 }
 
 export interface RunResult {

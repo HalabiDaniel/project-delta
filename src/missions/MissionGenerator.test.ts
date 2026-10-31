@@ -3,7 +3,7 @@ import { MISSIONS, THREAT, WORLD, type Difficulty } from '../config';
 import { seededRng } from '../systems/Random';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
-import { layoutDefenses } from '../defenses/Layout';
+import { buildingSpec, layoutDefenses } from '../defenses/Layout';
 import { generateTerritories } from '../world/WorldGenerator';
 import { insideAirspace, type Objective } from './Mission';
 import { AI, DEFENSES } from '../config';
@@ -296,7 +296,6 @@ describe('missions in the air', () => {
       return Math.hypot(bomber.route[0].x - home.x, bomber.route[0].z - home.z);
     };
     expect(dist('easy')).toBeLessThan(dist('hard'));
-    expect(DEFENSES.home.turrets.length).toBeGreaterThan(0);
   });
 
   it('escorts and patrols stay out of fortified ground, patrols reach above the turrets, and enemy pilots pay', () => {
@@ -376,7 +375,9 @@ describe('missionReward', () => {
     expect(missionThreat([{ kind: 'ring', gate, number: 1 }], ctx).territories).toContain(near.territoryId);
     expect(missionThreat([{ kind: 'ring', gate: far, number: 1 }], ctx)).toMatchObject({ level: 0, territories: [] });
     // T1's own guns are no threat to the player.
-    const own = installations.find((i) => i.kind === 'turret' && i.side === 'player')!;
-    expect(missionThreat([{ kind: 'ring', gate: { ...gate, x: own.x + 10, z: own.z }, number: 1 }], ctx).territories).toEqual([]);
+    const homeT = ctx.territories.find((t) => t.isHome)!;
+    const own = buildingSpec(homeT, 'D1', 'turret', 1);
+    const withOwn = { ...ctx, installations: [...(ctx.installations ?? []), own] };
+    expect(missionThreat([{ kind: 'ring', gate: { ...gate, x: own.x + 10, z: own.z }, number: 1 }], withOwn).territories).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
-import { DEFENSES, PALETTE, type ThreatLevel } from '../config';
-import type { DefenseNetwork, Installation } from '../defenses/Installation';
-import type { DefenseLayout } from '../defenses/Layout';
+import { BASE, DEFENSES, PALETTE, type ThreatLevel } from '../config';
+import { Installation, type DefenseNetwork } from '../defenses/Installation';
+import type { DefenseLayout, InstallationSpec } from '../defenses/Layout';
 import { flatMaterial, type World } from './WorldGenerator';
 
 type Color3 = readonly [number, number, number];
@@ -16,7 +16,12 @@ const FALL: Record<string, { tilt: number; squash: number; sink: number }> = {
   launcher: { tilt: 28, squash: 0.65, sink: 0.3 },
   radar: { tilt: 82, squash: 1, sink: 0.1 },
   supply: { tilt: 8, squash: 0.35, sink: 0 },
+  workshop: { tilt: 12, squash: 0.4, sink: 0 },
+  storage: { tilt: 6, squash: 0.3, sink: 0 },
 };
+
+/** How a construction slot on T1 looks: a faint pad, or lit up while building. */
+export type SlotHighlight = 'none' | 'fit' | 'no' | 'selected' | 'built';
 
 interface View {
   inst: Installation;
@@ -44,6 +49,8 @@ interface View {
   wrecked: boolean;
   fallX: number;
   fallZ: number;
+  /** 0 → 1 while a new building folds up into place (1 for everything else). */
+  assemble: number;
 }
 
 /**
@@ -58,6 +65,9 @@ export class DefenseModels {
   private readonly views: View[] = [];
   private readonly byId = new Map<string, View>();
   private time = 0;
+  private readonly root: pc.Entity;
+  private preview: { key: string; entity: pc.Entity } | null = null;
+  private readonly pads = new Map<string, { entity: pc.Entity; material: pc.StandardMaterial; state: SlotHighlight }>();
 
   private readonly mat = {
     dark: flatMaterial(PALETTE.defenseDark),
@@ -75,6 +85,12 @@ export class DefenseModels {
     pencil: flatMaterial(PALETTE.pencil),
     graphite: flatMaterial(PALETTE.graphite),
     flash: glow([1, 0.45, 0.85], 0.9),
+    blueFlash: glow([0.45, 0.75, 1], 0.9),
+    friendlyInk: flatMaterial(PALETTE.inkShot),
+    paperWhite: flatMaterial(PALETTE.paper),
+    level: flatMaterial(PALETTE.pencil),
+    ghostOk: glow([0.35, 0.95, 0.55], 0.42),
+    ghostNo: glow([1, 0.3, 0.25], 0.42),
     threat: {
       1: flatMaterial(PALETTE.threat1),
       2: flatMaterial(PALETTE.threat2),
@@ -89,15 +105,10 @@ export class DefenseModels {
     world: World,
   ) {
     const root = new pc.Entity('defenses');
+    this.root = root;
     app.root.addChild(root);
     for (const t of world.territories) if (t.threat > 0) root.addChild(this.trim(t.x, t.z, t.size, t.threat as Exclude<ThreatLevel, 0>));
-    for (const inst of network.installations) {
-      const view = this.build(inst);
-      root.addChild(view.root);
-      if (view.ring) root.addChild(view.ring.entity);
-      this.views.push(view);
-      this.byId.set(inst.id, view);
-    }
+    for (const inst of network.installations) this.addView(inst, false);
     for (const b of layout.barriers) {
       const wall = new pc.Entity('barrier');
       wall.setPosition(b.x, 0, b.z);
@@ -122,11 +133,17 @@ export class DefenseModels {
    * plane's position in flight, or null; range rings show for the weapons on `territoryId` (the
    * territory being approached) as the plane nears their reach.
    */
-  update(dt: number, focus: { x: number; z: number } | null, territoryId: string | null = null): void {
+  update(dt: number, focus: { x: number; z: number } | null, territoryId: string | null = null, showRingsOf: string | null = null): void {
     this.time += dt;
     for (const v of this.views) {
       const i = v.inst;
+      // A wreck the player paid to repair stands up again.
+      if (i.alive && v.wrecked) this.restoreView(v);
       if (!i.alive && !v.wrecked) this.startCollapse(v);
+      if (v.assemble < 1) {
+        v.assemble = Math.min(1, v.assemble + dt / BASE.assembleTime);
+        this.poseAssemble(v);
+      }
       if (v.wrecked) {
         if (v.collapse < 1) {
           v.collapse = Math.min(1, v.collapse + dt / COLLAPSE);
@@ -153,14 +170,15 @@ export class DefenseModels {
       }
       const shake = v.shudder > 0 ? Math.sin(v.shudder * 80) * 5 * (v.shudder / SHUDDER) : 0;
       v.shudder = Math.max(0, v.shudder - dt);
-      v.body.setLocalEulerAngles(shake * 0.5, v.bodyYaw * RAD_TO_DEG, shake * 0.4);
+      if (v.assemble >= 1) v.body.setLocalEulerAngles(shake * 0.5, v.bodyYaw * RAD_TO_DEG, shake * 0.4);
 
       if (v.ring) {
         const d = focus ? Math.hypot(focus.x - i.spec.x, focus.z - i.spec.z) - i.spec.range : Infinity;
-        const show = d < DEFENSES.ringMargin && i.spec.territoryId === territoryId;
+        const always = i.spec.territoryId === showRingsOf;
+        const show = always || (d < DEFENSES.ringMargin && i.spec.territoryId === territoryId);
         v.ring.entity.enabled = show;
         if (show) {
-          const near = 1 - Math.max(0, d) / DEFENSES.ringMargin;
+          const near = always ? 0.7 : 1 - Math.max(0, d) / DEFENSES.ringMargin;
           const pulse = i.engaged ? 0.12 * (0.5 + 0.5 * Math.sin(this.time * 8)) : 0;
           v.ring.material.opacity = 0.12 + 0.3 * near + pulse;
           v.ring.material.update();
@@ -169,26 +187,127 @@ export class DefenseModels {
     }
   }
 
-  /** Everything standing again, between sorties, except the wrecks in `keep`. */
+  /** Everything standing again, between sorties, except the wrecks in `keep` and the player's own (they wait for repairs). */
   restoreAll(keep: ReadonlySet<string> = new Set()): void {
     for (const v of this.views) {
-      if (keep.has(v.inst.id) && !v.inst.alive) continue;
-      v.wrecked = false;
-      v.collapse = 0;
-      v.shudder = 0;
-      v.shownHealth = -1;
-      for (const { render, material } of v.parts) render.material = material;
-      v.body.setLocalPosition(0, 0, 0);
-      v.body.setLocalScale(1, 1, 1);
-      v.body.setLocalEulerAngles(0, v.bodyYaw * RAD_TO_DEG, 0);
+      if (!v.inst.alive && (keep.has(v.inst.id) || v.inst.side === 'player')) continue;
+      this.restoreView(v);
+    }
+  }
+
+  /**
+   * Follows the network after the player built, upgraded or removed something: new installations
+   * get a model (folding up into place if in `fresh`), replaced ones a new model, removed ones lose theirs.
+   */
+  sync(fresh: ReadonlySet<string> = new Set()): void {
+    for (const v of [...this.views]) {
+      if (this.network.get(v.inst.id) === v.inst) continue;
+      this.removeView(v);
+    }
+    for (const inst of this.network.installations) {
+      if (this.byId.get(inst.id)?.inst === inst) continue;
+      this.addView(inst, fresh.has(inst.id));
+    }
+  }
+
+  /**
+   * A see-through model of a building where it would go (green if it can be built there, red if
+   * not), or nothing.
+   */
+  showPreview(spec: InstallationSpec | null, valid = true): void {
+    const key = spec ? `${spec.id}:${spec.kind}:${spec.level ?? 1}:${valid}` : '';
+    if (this.preview?.key === key) return;
+    if (this.preview) {
+      this.preview.entity.destroy();
+      this.preview = null;
+    }
+    if (!spec) return;
+    const view = this.build(new Installation(spec));
+    const ghost = valid ? this.mat.ghostOk : this.mat.ghostNo;
+    for (const { render } of view.parts) {
+      render.material = ghost;
+      render.castShadows = false;
+    }
+    if (view.flash) view.flash.enabled = false;
+    view.root.setLocalScale(1.02, 1.02, 1.02);
+    this.root.addChild(view.root);
+    this.preview = { key, entity: view.root };
+  }
+
+  /** Painted pads for T1's construction slots, lit up as `highlight` says. */
+  setSlots(slots: ReadonlyArray<{ id: string; x: number; z: number; highlight: SlotHighlight }>): void {
+    for (const s of slots) {
+      let pad = this.pads.get(s.id);
+      if (!pad) {
+        const material = glow([0.85, 0.92, 1], 0.35);
+        const entity = new pc.Entity(`slot-${s.id}`);
+        entity.setPosition(s.x, 0.04, s.z);
+        const size = 5.6;
+        const t = 0.32;
+        for (const [x, z, sx, sz] of [[0, size / 2, size, t], [0, -size / 2, size, t], [size / 2, 0, t, size], [-size / 2, 0, t, size]] as const) {
+          const strip = new pc.Entity('tape');
+          strip.addComponent('render', { type: 'box', material, castShadows: false, receiveShadows: false });
+          strip.setLocalPosition(x, 0, z);
+          strip.setLocalScale(sx, 0.03, sz);
+          entity.addChild(strip);
+        }
+        this.root.addChild(entity);
+        pad = { entity, material, state: 'none' };
+        this.pads.set(s.id, pad);
+      }
+      if (pad.state === s.highlight) continue;
+      pad.state = s.highlight;
+      const color: Color3 =
+        s.highlight === 'fit' ? [0.3, 0.9, 0.5] : s.highlight === 'no' ? [1, 0.35, 0.3] : s.highlight === 'selected' ? [1, 0.85, 0.25] : [0.85, 0.92, 1];
+      pad.material.emissive.set(color[0], color[1], color[2]);
+      pad.material.opacity = s.highlight === 'none' ? 0.3 : s.highlight === 'built' ? 0.18 : 0.85;
+      pad.material.update();
     }
   }
 
   /** Where an installation's label floats, and where effects for it go. */
   labelPoint(id: string, out: pc.Vec3): pc.Vec3 {
     const i = this.network.get(id)!;
-    const top = i.spec.kind === 'radar' ? i.spec.pivot + 2.2 : i.spec.kind === 'supply' ? 3.6 : i.spec.pivot + 2;
+    const top = i.spec.kind === 'radar' ? i.spec.pivot + 2.2 : i.spec.kind === 'supply' ? 3.6 : i.spec.kind === 'workshop' ? 4.2 : i.spec.kind === 'storage' ? 3.2 : i.spec.pivot + 2;
     return out.set(i.spec.x, i.spec.ground + top, i.spec.z);
+  }
+
+  private addView(inst: Installation, fresh: boolean): void {
+    const view = this.build(inst);
+    this.root.addChild(view.root);
+    if (view.ring) this.root.addChild(view.ring.entity);
+    this.views.push(view);
+    this.byId.set(inst.id, view);
+    if (fresh) {
+      view.assemble = 0;
+      this.poseAssemble(view);
+    }
+  }
+
+  private removeView(v: View): void {
+    v.root.destroy();
+    v.ring?.entity.destroy();
+    this.views.splice(this.views.indexOf(v), 1);
+    if (this.byId.get(v.inst.id) === v) this.byId.delete(v.inst.id);
+  }
+
+  private restoreView(v: View): void {
+    v.wrecked = false;
+    v.collapse = 0;
+    v.shudder = 0;
+    v.shownHealth = -1;
+    for (const { render, material } of v.parts) render.material = material;
+    v.body.setLocalPosition(0, 0, 0);
+    v.body.setLocalScale(1, 1, 1);
+    v.body.setLocalEulerAngles(0, v.bodyYaw * RAD_TO_DEG, 0);
+  }
+
+  /** A new building folds up from a flat sheet: it rises, unfolds and settles with a little bounce. */
+  private poseAssemble(v: View): void {
+    const t = v.assemble;
+    const rise = t < 0.7 ? (t / 0.7) ** 2 : 1 + 0.12 * Math.sin(((t - 0.7) / 0.3) * Math.PI);
+    v.body.setLocalScale(1, Math.max(0.04, rise), 1);
+    v.body.setLocalEulerAngles((1 - Math.min(1, t / 0.7)) * 70, v.bodyYaw * RAD_TO_DEG + (1 - t) * 90, 0);
   }
 
   centre(id: string, out: pc.Vec3): pc.Vec3 {
@@ -226,7 +345,9 @@ export class DefenseModels {
     root.setPosition(s.x, s.ground, s.z);
     const body = new pc.Entity('body');
     root.addChild(body);
-    const paintColor: Color3 = s.kind === 'supply' ? PALETTE.cardboard : s.side === 'player' ? PALETTE.friendlyDefense : PALETTE.defense;
+    const paintColor: Color3 =
+      s.kind === 'supply' || s.kind === 'workshop' || s.kind === 'storage' ? PALETTE.cardboard : s.side === 'player' ? PALETTE.friendlyDefense : PALETTE.defense;
+    const friendly = s.side === 'player';
     const paint = flatMaterial(paintColor);
     let turn: pc.Entity | null = null;
     let elevate: pc.Entity | null = null;
@@ -242,15 +363,15 @@ export class DefenseModels {
         turn.setLocalPosition(0, s.pivot, 0);
         turn.addChild(part('box', paint, 0, 0, 0.15, 1.5, 0.95, 1.7));
         // The ink pot that feeds the gun.
-        turn.addChild(part('sphere', this.mat.ink, 0, 0.6, 0.45, 0.85, 0.6, 0.85));
+        turn.addChild(part('sphere', friendly ? this.mat.friendlyInk : this.mat.ink, 0, 0.6, 0.45, 0.85, 0.6, 0.85));
         elevate = new pc.Entity('barrel');
         const barrel = part('cylinder', this.mat.barrel, 0, 0, -0.9, 0.34, 1.2, 0.34);
         barrel.setLocalEulerAngles(90, 0, 0);
         elevate.addChild(barrel);
-        const tip = part('cylinder', this.mat.ink, 0, 0, -1.45, 0.46, 0.14, 0.46);
+        const tip = part('cylinder', friendly ? this.mat.friendlyInk : this.mat.ink, 0, 0, -1.45, 0.46, 0.14, 0.46);
         tip.setLocalEulerAngles(90, 0, 0);
         elevate.addChild(tip);
-        flash = part('sphere', this.mat.flash, 0, 0, -1.75, 0.7, 0.7, 0.9);
+        flash = part('sphere', friendly ? this.mat.blueFlash : this.mat.flash, 0, 0, -1.75, 0.7, 0.7, 0.9);
         flash.enabled = false;
         elevate.addChild(flash);
         turn.addChild(elevate);
@@ -315,15 +436,49 @@ export class DefenseModels {
           body.addChild(ring);
         });
         body.addChild(part('cylinder', this.mat.pencil, 1.55, 2.4, 1, 0.12, 2.6, 0.12));
-        body.addChild(part('box', this.mat.red, 1.95, 3.35, 1, 0.8, 0.5, 0.03));
+        body.addChild(part('box', friendly ? this.mat.friendlyInk : this.mat.red, 1.95, 3.35, 1, 0.8, 0.5, 0.03));
+        break;
+      }
+      case 'workshop': {
+        // A cardboard shed with a sawtooth roof, a paper roll on the side and a pencil chimney.
+        bodyYaw = s.facing;
+        body.addChild(part('box', paint, 0, 1, 0, 3.4, 2, 2.8));
+        for (const x of [-1.1, 0, 1.1]) {
+          const tooth = part('box', this.mat.cardboardDark, x, 2.25, 0, 1.05, 0.55, 2.9);
+          tooth.setLocalEulerAngles(0, 0, 28);
+          body.addChild(tooth);
+        }
+        const roll = part('cylinder', this.mat.paperWhite, -2, 0.55, 0.6, 1, 1.1, 1);
+        roll.setLocalEulerAngles(90, 0, 0);
+        body.addChild(roll);
+        body.addChild(part('cylinder', this.mat.pencil, 1.2, 3.1, -0.8, 0.45, 1.6, 0.45));
+        body.addChild(part('cone', this.mat.graphite, 1.2, 4.05, -0.8, 0.45, 0.35, 0.45));
+        body.addChild(part('box', this.mat.friendlyInk, 0, 0.8, 1.41, 1.2, 1.4, 0.04));
+        body.addChild(part('box', this.mat.tape, 0, 2.01, 0, 3.42, 0.08, 0.5));
+        break;
+      }
+      case 'storage': {
+        // A big taped box with its flaps open and a stack of paper peeking out.
+        bodyYaw = s.facing;
+        body.addChild(part('box', paint, 0, 1, 0, 3.2, 2, 3.2));
+        body.addChild(part('box', this.mat.tape, 0, 1, 0, 3.22, 0.5, 3.22));
+        body.addChild(part('box', this.mat.paperWhite, 0, 2.15, 0, 2.6, 0.3, 2.6));
+        for (const [x, z, rx, rz] of [[0, 1.75, 35, 0], [0, -1.75, -35, 0], [1.75, 0, 0, -35], [-1.75, 0, 0, 35]] as const) {
+          const flap = part('box', this.mat.cardboardDark, x, 2.3, z, Math.abs(x) > 0 ? 0.08 : 3, 0.9, Math.abs(z) > 0 ? 0.08 : 3);
+          flap.setLocalEulerAngles(rx, 0, rz);
+          body.addChild(flap);
+        }
+        body.addChild(part('box', this.mat.friendlyInk, 0, 1.2, 1.61, 1.4, 0.8, 0.04));
         break;
       }
     }
+    // Upgraded player buildings wear a pencil-yellow band per level above the first.
+    for (let n = 1; n < (s.level ?? 1); n++) body.addChild(part('cylinder', this.mat.level, 0, 0.12 + n * 0.16, 0, 3, 0.1, 3));
     body.setLocalEulerAngles(0, bodyYaw * RAD_TO_DEG, 0);
 
     let ring: View['ring'] = null;
     if (inst.isWeapon) {
-      const material = glow(s.kind === 'turret' ? PALETTE.rangeTurret : PALETTE.rangeLauncher, 0.3);
+      const material = glow(friendly ? PALETTE.friendlyAccent : s.kind === 'turret' ? PALETTE.rangeTurret : PALETTE.rangeLauncher, 0.3);
       const arc = s.arc ?? Math.PI;
       const mesh = pc.Mesh.fromGeometry(
         this.app.graphicsDevice,
@@ -342,7 +497,7 @@ export class DefenseModels {
     for (const r of root.findComponents('render') as pc.RenderComponent[]) parts.push({ render: r, material: r.material });
     return {
       inst, root, body, turn, elevate, flash, rockets, ring, paint, paintColor, parts, bodyYaw,
-      shownHealth: -1, shudder: 0, collapse: 0, wrecked: false, fallX: 0, fallZ: 0,
+      shownHealth: -1, shudder: 0, collapse: 0, wrecked: false, fallX: 0, fallZ: 0, assemble: 1,
     };
   }
 

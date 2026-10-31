@@ -39,7 +39,7 @@ const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 /** A defensive installation, as far as missions care. */
 export interface InstallationInfo {
   id: string;
-  kind: 'turret' | 'launcher' | 'radar' | 'supply';
+  kind: 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage';
   territoryId: string;
   /** T1's own guns and store are the player's; missions only ever go up against the enemy's. */
   side?: Side;

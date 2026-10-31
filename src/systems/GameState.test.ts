@@ -72,7 +72,7 @@ const FALCON = AIRCRAFT.falcon.cost;
  * so paper totals are exact; the last test covers it.
  */
 function setup(...kinds: string[]) {
-  return setupWith(new HomeIncome(1, Infinity), ...kinds);
+  return setupWith(new HomeIncome({ perMinute: 0 }), ...kinds);
 }
 
 function setupWith(income: HomeIncome, ...kinds: string[]) {
@@ -576,11 +576,11 @@ describe('GameState: aircraft and raids', () => {
 
   it('a raid that hits costs paper, but never below the protected minimum', () => {
     const { state, resources } = setup();
-    expect(state.raidHit()).toBe(RAIDS.penalty);
-    expect(resources.paper).toBe(ECONOMY.startingPaper - RAIDS.penalty);
+    expect(state.raidHit(20, ECONOMY.protectedPaper)).toBe(20);
+    expect(resources.paper).toBe(ECONOMY.startingPaper - 20);
     resources.spend(resources.paper - ECONOMY.protectedPaper - 5);
-    expect(state.raidHit()).toBe(5);
-    expect(state.raidHit()).toBe(0);
+    expect(state.raidHit(20, ECONOMY.protectedPaper)).toBe(5);
+    expect(state.raidHit(20, ECONOMY.protectedPaper)).toBe(0);
     expect(resources.paper).toBe(ECONOMY.protectedPaper);
     // Enough left to fold a fighter and go hunting.
     expect(ECONOMY.protectedPaper).toBeGreaterThanOrEqual(AIRCRAFT.falcon.cost);
@@ -589,8 +589,8 @@ describe('GameState: aircraft and raids', () => {
   it('raid losses during a sortie show in its report', () => {
     const { state } = setup();
     sortie(state);
-    state.raidHit();
-    expect(state.sortie!.paperLost).toBe(RAIDS.penalty);
+    state.raidHit(12, ECONOMY.protectedPaper);
+    expect(state.sortie!.paperLost).toBe(12);
   });
 });
 

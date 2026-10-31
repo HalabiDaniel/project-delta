@@ -9,7 +9,7 @@ import type { MissionType } from '../missions/Mission';
 import { EVENT_TYPES, MISSION_TYPES } from '../missions/MissionGenerator';
 import { seededRng } from '../systems/Random';
 import { bindButton, esc } from './dom';
-import { MISSION_TYPE_LABELS } from './HUD';
+import { MISSION_TYPE_LABELS } from './strings';
 
 /**
  * The developer panel (` key, or ?dev in the address): why the director dealt what it dealt, the

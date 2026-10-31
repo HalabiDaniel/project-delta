@@ -1,17 +1,17 @@
-# paperwars.io: v0.0.6, Dynamic Missions, Progression & Game Balance
+# paperwars.io: v0.0.7, Territory Management, Base Building & a New HUD
 
-Through v0.0.5 the game gained its action: four aircraft, ground defenses, AI fighters, scouts and
-bombers, raids on T1. v0.0.6 ties those pieces into a **connected, replayable game**: a mission
-director deals cards from the player's situation and the world, difficulty follows how you fly,
-the economy is balanced around plane costs, the world throws up events of its own, short
-operations span several sorties, and progress (records, medals, achievements, the hangar, your
-paper) is **saved in the browser**. The plan is in the
+Through v0.0.6 the game became a connected single-player campaign: a mission director, adaptive
+difficulty, world events, operations and a local save. v0.0.7 turns **T1 into a base**. Paper can
+now go into planes *or* infrastructure: turrets and rocket launchers that defend T1 on their own,
+a radar for early warning, workshops for production and storage boxes for capacity and protected
+paper. Raids go for those buildings, damage stays until you pay to repair it, and every raid ends
+with a defense report. The **HUD is rebuilt** at the same time: fixed zones, icons and numbers
+instead of words, short alerts, and tips the first time something matters. The plan is in the
 [game design document](docs/GDD.md#17-development-roadmap).
 
 It is still single-player and runs entirely in the browser (PlayCanvas + TypeScript, no backend).
-The AI pilots fly the same flight model, health and guns as the player's planes, and the defenses,
-rounds and pilots only ever see an aircraft as a position, a velocity and a side, so the same
-systems can take human opponents when multiplayer arrives.
+Buildings, raids, AI pilots and defenses only ever see an aircraft as a position, a velocity and a
+side, so the same systems can take human opponents when multiplayer arrives.
 
 ## Run it
 
@@ -41,7 +41,114 @@ npm run preview    # serve the production build
 
 The game needs a desktop browser with WebGL 2.
 
-## What's new in v0.0.6
+## What's new in v0.0.7
+
+### T1 is a base
+
+Press **B** at home (at the desk, or landed and stopped) for **base management**: the camera rises
+above T1, every construction slot gets a marker, and the HUD switches to the build tray (bottom
+left), the slot inspector (bottom centre) and Repair all / Done (bottom right). It is the normal 3D
+world, only from higher up; flying stays third-person.
+
+**Fixed slots** (`BASE.slots` in `src/config.ts`): two **defense** slots at the front of the
+platform, one **radar** slot, two **economy** slots at the back and two **utility** slots on the
+flanks that take anything but a radar. Weapons face outward from the middle of T1, so where a
+turret stands decides what it covers. Slots are limited on purpose: a utility slot holds a turret
+*or* a workshop, never both. The **paper store** always stands (it can be wrecked and repaired).
+
+| Building | Cost | Upgrades | Slots | Level 1 → 3 |
+|---|---|---|---|---|
+| Ink turret | 60 | 45, 70 | Defense, utility | Range 45 → 55 m, 4 → 6 damage, 2.9 → 3.6 rounds/s, 24 → 32-round magazine, then a 3 → 2.2 s reload |
+| Paper rocket launcher | 110 | 80, 120 | Defense, utility | Range 75 → 88 m, 28 → 36 damage, reload 7 → 5 s; deals with **bombers first** |
+| Radar station | 70 | 50, 80 | Radar (one per base) | Early warning at 140 → 260 m; alerts T1's weapons (instant fix) |
+| Paper workshop | 80 | 60, 90 | Economy, utility | +2 → +9 paper per minute (5 → 7 → 10 → 14 with one) |
+| Storage box | 50 | 50, 80 | Economy, utility | +200 → +900 capacity (300 → 500 → 800 → 1,200), +25 → +80 protected paper |
+
+- **Build:** pick a building in the tray (it jumps to a free slot that takes it), see the
+  see-through preview (green fits and is affordable, red not), check the cost and effect in the
+  inspector, press **Build** (Enter). It folds up out of the platform in under a second.
+- **Upgrade** (U) keeps the share of health it had; up to level 3. A wreck must be repaired first.
+- **Repair** (R): half the building's value per share of health missing (a turret at half health
+  costs 15); bringing a wreck back costs 70% of its value, still less than building anew.
+  **Repair all** fixes everything, the store too, if the paper covers it.
+- **Remove** (X, twice): the slot is free again and half of what went in comes back, by condition.
+- Unaffordable buildings show the paper still missing (`−25`), everywhere.
+- Keys in base management: **1–7** pick slots (0 the store), **Enter** build, **U** upgrade,
+  **R** repair, **X** remove, **B** or **Esc** done, **Space** launch / take off.
+
+A new game starts with one turret in a defense slot. A v0.0.6 save keeps its two T1 turrets as
+built turrets in both defense slots.
+
+### Player-built defenses
+
+T1's turrets and launchers are the 0.0.4 defense systems, owned by the player: they detect,
+turn, lead and fire at **hostile aircraft only** (never the player's plane or a friendly bomber),
+take damage and are wrecked. Player turrets fire a magazine, then pause to reload; launchers lock
+on and switch to a bomber the moment one is in sight, turrets take the nearest. Each building's
+inspector shows its health, range, damage, rate, magazine and **aircraft shot down**; kills by
+T1's guns are announced (they still pay no defense reward without the player's help). **Damage
+stays between sorties** until it is repaired.
+
+### Paper: production, capacity, protection
+
+- **Production:** 5 paper a minute, plus the workshops (a damaged one produces less, a wreck
+  nothing), **×3 below 50 paper** so a broke player is never stuck, halved while the paper store is
+  wrecked. It stops when the store is full.
+- **Capacity:** T1 holds 300 paper, more with storage boxes. Earnings beyond it are **lost** (the
+  alert says how much, and the report counts it), so a full store is a reason to spend or build
+  storage. A save with more than the capacity keeps it, but nothing more comes in until it drops.
+- **Protected and vulnerable paper:** 50 paper (a fighter's worth) is always safe, more with
+  storage boxes (damage exposes it). Paper above that is **vulnerable**: a raider's bomb on target
+  destroys **10% of it (at most 40)**, or **20% (at most 80)** if it hits the paper store itself.
+
+### Raids on the base
+
+- **Targets:** each raid picks a standing T1 structure when it sets out: the store (more likely the
+  more vulnerable paper it holds), storage boxes, workshops, the radar, launchers, turrets. The
+  blast damages whatever is near where it lands.
+- **Detection:** a raid is only announced once T1 sees it: within 70 m without a radar, the radar's
+  range with one (140 / 190 / 260 m by level). A wrecked radar is offline. Undetected raiders don't
+  show on the mini-map either.
+- **Early warning:** the raid alert (top centre) shows the bomber, the direction it comes from
+  (N, NE…), the time to target, what it is after, how many weapons are ready, the reward, and what
+  to do now (F fold / Space launch). The emergency card goes on the board when it is detected.
+- **Defense report** after every raid: raiders shot down (by T1's guns and by you), paper lost or
+  saved, structures hit, the repair bill, the defenses' share of the damage, and one line on what
+  decided it. The base view and the logbook keep the numbers.
+- **Pacing:** the mission director slows the raid clock while T1 is battered, the player is
+  struggling or busy on a mission, or there is little paper to take, and speeds it a little for a
+  skilled player. After a raid that cost paper or wrecked something, the next waits at least 150 s.
+- **Active and passive defense:** launch a fighter, trust the guns, or both. Both works best.
+
+### The new HUD
+
+Everything is in fixed zones: paper top left; the objective, threats, the raid alert, alerts and
+tips top centre; the mini-map (with T1's radar ring and sweep) top right; the plane's condition,
+instruments and weapons along the bottom; the centre left clear.
+
+- **Icons and numbers instead of words:** `[speed] 142`, `[ink] 34`, `[bomb] ●●○`, `[paper] 340/500`,
+  `+7/m`. Every icon has a tooltip. Cards, reports, markers and the menu were cut down the same way.
+- **Alerts:** an icon, one to three words and at most one number, coloured by severity; at most
+  three at once, repeats count up (`×2`).
+- **First-time tips** replace the rules on the pause screen: each shows once per save, when it
+  matters (first flight, each kind of objective, first raid, first landing approach, storage full…).
+- **Key hints** show for the first three sorties, then while **H** is held (or always / never in
+  the menu). The menu also sets the **HUD size** (S / M / L).
+- **Sortie report:** headline and medal, four big numbers, bonuses and records as chips, and the
+  full breakdown behind *Details*.
+- **Logbook:** a new **Base** tab (buildings with their records; raids survived, bombers downed by
+  defenses, paper lost, spent on construction and repairs, made by workshops, repairs). Career
+  numbers moved here from the HUD.
+- Under the hood: design tokens and shared components in `src/ui/hud.css`, the HUD split into
+  per-zone modules, all short labels in `src/ui/strings.ts`, the version read from `package.json`.
+
+### Saving
+
+Save format version 2 adds the base (buildings, levels, health, records, statistics) and the new
+settings (key hints, HUD size, tips seen). Version 1 saves are migrated; a damaged base entry is
+dropped or clamped, never trusted.
+
+## Since v0.0.6: dynamic missions, progression and balance
 
 ### The mission director
 
@@ -96,8 +203,8 @@ Paper is still the only resource.
   plan's bands: easy Dart work 25–40, medium ~50–100, hard ~75–150, very hard ~140–230.
 - **Free emergency Dart.** With no plane affordable and none in the hangar, F folds a scrap Dart:
   half the ink, no bomb, shorter range, gone after the sortie. The balance never goes negative.
-- **Home production** fills T1's paper store: +1 every 3 s, half rate from 60 paper, paused at
-  120 (the store is full). It only runs while the game does.
+- **Home production** (v0.0.6: +1 every 3 s up to 120; since v0.0.7 set by the base, see above). It
+  only runs while the game does.
 - **No failure fines.** A failed mission costs the plane (if lost) and nothing else; abandoning
   pays nothing, so launching and abandoning earns nothing (the economy simulation checks it).
 - **Paper log.** Every change with what it was for ("Folded Falcon −25", "Mission completed +80",
@@ -240,7 +347,8 @@ straight with a veteran on your tail is the fastest way to lose a plane.
 ### Raids on T1 and interception
 
 Every three to five minutes (once you have flown a sortie), a Widewing sets out from beyond a far
-enemy territory for the **paper store on T1**. You get the alert straight away, with an ETA:
+enemy territory for **T1** (since v0.0.7 for one of its buildings, announced once detected, see
+above). In v0.0.5 the alert came straight away, with an ETA:
 
 > **INCOMING BOMBER** · Enemy Widewing approaching T1 from T9 · ETA 31 s
 > Target: home territory · paper store. Objective: intercept before bomb release. Defense reward +60 paper.
@@ -248,14 +356,13 @@ enemy territory for the **paper store on T1**. You get the alert straight away, 
 It circles over its territory to form up, crosses the map and makes a straight run at the store,
 about half a minute after the alert, enough to fold a fighter at the desk and take off. Shoot it
 down (or make it turn back) and you earn **+60 paper**, but only if you took part: T1's own guns
-help, but they don't earn you anything by themselves. If its bomb hits the store you lose **20
-paper**, never below a **protected 50**, enough to fold a fighter. After the first two raids, some
-come with a fighter escort.
+help, but they don't earn you anything by themselves. A hit costs paper above the protected
+reserve (since v0.0.7 a share of the vulnerable paper). After the first two raids, some come with a
+fighter escort.
 
-**T1 has its own defenses now:** two ink turrets either side of the runway, painted home blue and
-facing out towards the world centre, and the paper store. They are predefined (player-built
-defenses come later) and only shoot at hostile aircraft. Nothing hostile fires at you over home, or
-in the first six seconds after take-off.
+**T1's defenses** were two predefined ink turrets in v0.0.5; since v0.0.7 the player builds them.
+They only shoot at hostile aircraft. Nothing hostile fires at you over home, or in the first six
+seconds after take-off.
 
 ### Mission types in the air
 
@@ -408,10 +515,13 @@ destroyed.
    the guns if the job will take a while. Against aircraft, aim at the small red lead circle, keep
    turning when one is on your tail (it shows on the threat ring), and boost away to make it give up.
 5. **When the raid alert comes up**, go and meet the bomber: from the desk, fold a fighter and take
-   off; in the air, the marker and the mini-map show where it is and its line to T1.
+   off; in the air, the marker and the mini-map show where it is and its line to T1. Your turrets
+   and launchers fight too.
 6. **Land on T1**: slower than 19, descending less than 5 m/s, wings level. Then **R** to rearm,
    **Space** to take off again, or **Enter** to end the sortie and read the report.
-7. **Enter** (or **Continue**) on the report deals new mission cards and rebuilds the defenses.
+7. **Enter** (or **Continue**) on the report deals new mission cards and rebuilds the enemy's
+   defenses. Yours stay as they are.
+8. **B** at home opens base management: build, upgrade and repair with the paper you earned.
 
 A mission pays as soon as its last objective is done. Landing is only required by Strike & return
 and Multi-stage strike missions, but it's how you avoid paying for a new plane.
@@ -468,8 +578,11 @@ shoot down counts whoever finishes it (T1's guns included).
 | W / S | Throttle up / down |
 | A / D | Assisted banking (turn without the mouse) |
 | Shift | Boost (short burst, then recharge) |
-| R | Rearm ink and range (landed at home only) |
-| 1 – 4 | Choose a mission card (at home, until launch); 4 is a world event's |
+| R | Rearm ink and range (landed at home only); repair in base management |
+| B | Base management at home (at the desk, or landed); B or Esc again to leave |
+| 1 – 4 | Choose a mission card (at home, until launch); 4 is a world event's. In base management 1 – 7 pick slots, 0 the store |
+| Enter / U / X (base) | Build / upgrade / remove (twice) the selected slot's building |
+| H (hold) | Show key hints |
 | X | Swap the chosen card (3 swaps, one back per sortie) |
 | L | Logbook: records, achievements, aircraft, paper log, session |
 | ` | Developer panel |
@@ -479,7 +592,7 @@ shoot down counts whoever finishes it (T1's guns included).
 | Space | Launch from the pad, or take off again after landing |
 | Enter | End the sortie after landing / continue from the report |
 | M | Sound on / off |
-| Esc | Pause / show controls |
+| Esc | Pause: menu, settings (key hints, HUD size), controls |
 
 ### Economy
 
@@ -490,7 +603,11 @@ shoot down counts whoever finishes it (T1's guns included).
 | Refit a recovered plane (and repair it) | −3 / −6 / −7 / −10 |
 | Roll out a stowed plane, or fold the emergency Dart (when nothing is affordable) | 0 |
 | Rearm ink and range after landing | 0 |
-| Home production | +1 every 3 s below 60, every 6 s from 60, paused at 120 |
+| Home production | 5 per minute + workshops (+2 / +5 / +9 each), ×3 below 50, halved with the store wrecked, stops at capacity |
+| Capacity | 300, +200 / +500 / +900 per storage box; earnings beyond it are lost |
+| Build / upgrade | Turret 60 (+45, +70), launcher 110 (+80, +120), radar 70 (+50, +80), workshop 80 (+60, +90), storage box 50 (+50, +80) |
+| Repair | Half the building's value × share of health missing; a wreck 70% of its value; the store as if worth 80 |
+| Remove a building | +half of what went in, × its health |
 | Mission success | B × D × M: about 25–55 easy, 50–115 medium, 95–165 hard, 140–260 very hard; recovery missions at least 30 |
 | Streak bonus | +5% of the reward from 3 in a row, +10% from 5 |
 | Operation stage optional objective / completion bonus | +10–25 / a quarter of the stages' rewards (at least 20) |
@@ -498,7 +615,7 @@ shoot down counts whoever finishes it (T1's guns included).
 | Supply run delivered | +50 |
 | Failed mission, crash, abandoned mission | +0 (no fines) |
 | Raid on T1 beaten off, with your help | +60 (the emergency card pays through the mission instead) |
-| A raider's bomb hits the paper store | −20, never below 50 |
+| A raider's bomb on target | −10% of vulnerable paper (at most 40), −20% (at most 80) on the paper store; never below the protected reserve (50 + storage boxes) |
 | Shooting down an ambient patrol | 0 |
 
 Paper is still the only resource; ink is not a currency. For playtesting,
@@ -512,7 +629,13 @@ src/
   main.ts                 Boots the game; exposes `window.paperwars` for console debugging
   Game.ts                 Wires rules ↔ scene ↔ input ↔ HUD; runs the frame loop; builds the HUD view
   config.ts               Every tuning number: aircraft catalog (AIRCRAFT), threat levels (THREAT), defenses (DEFENSES),
-                          AI pilots (AI), raids (RAIDS)
+                          AI pilots (AI), raids (RAIDS), the base: slots, buildings, levels, production (BASE)
+
+  base/
+    Base.ts               T1 as a base: slots, buildings and levels, build / upgrade / repair / remove and their
+                          prices, production, capacity, protected paper, detection, readiness, statistics, saving
+    Raids.ts              Raid targets on T1, paper losses, the director's raid pacing, the defense report
+    BaseMode.ts           Base management: selection, the tray, previews, slot highlights, the base view
 
   director/
     MissionDirector.ts    The cards: slots and tiers, templates, eligibility, variety, swaps, replacement,
@@ -593,15 +716,26 @@ src/
     Effects.ts            Paper bursts, shock rings, cartoon puffs and explosions, ink splats, tumbling wrecks
 
   ui/
-    HUD.ts, hud.css       Paper and career, mission cards and tracker, gauges, aircraft status, ground crew,
-                          report, target labels, hit markers, damage numbers, banners, menus
+    HUD.ts                The zones and the modules in them; alerts, tips, deltas, pops
+    hud.css               Design tokens and shared components (card, chip, button, bar, stat, pips, keycap)
+    views.ts              Everything the game hands the HUD each frame
+    strings.ts            The short-phrase dictionary and label maps
+    format.ts             Number formatting (1.2k, 1:05, compass directions)
+    icons.ts              One line-icon family, with names for tooltips and screen readers
+    EconomyStrip.ts       Paper, production, storage and protection (top left); Base / Logbook / Menu buttons
+    MissionPanel.ts       Mission cards (desk) and the objective strip (in flight)
+    PlaneHud.ts           Condition, instruments, weapons, landing checks, ground crew, fold / launch
+    BaseHud.ts            Base management (slot markers, overview, tray, inspector) and raid alerts / reports
+    ReportCard.ts         The sortie report
+    Alerts.ts             Alerts (at most three, repeats counted) and first-time tips
+    Menus.ts              Pause menu with settings, and the welcome card
+    WorldLabels.ts        Reticles, objective marker, territory and target tags, hit markers, damage numbers
     ThreatHud.ts          Threat panel, threat ring, rocket lock warning, damage direction
-    AirHud.ts             Aircraft markers and edge chevrons, health bars, the lead sight, the raid alert
+    AirHud.ts             Aircraft markers and edge chevrons, health bars, the lead sight
     Sounds.ts             Synthesised warning sounds and the combat track (Web Audio, no files)
-    icons.ts              The line icons for objectives and defenses
     Garage.ts             Plane cards and the inspector
-    MiniMap.ts            The top-down navigation diagram
-    Logbook.ts            Records and achievements, aircraft, the paper log, the session
+    MiniMap.ts            The top-down navigation diagram, with T1's radar
+    Logbook.ts            Records, the base, aircraft, the paper log, the session
     DevPanel.ts           The mission director's developer panel
     dom.ts                Small DOM helpers
 ```
@@ -636,7 +770,11 @@ All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most w
   economy simulation (developer panel, `src/director/simulation.test.ts`) shows the effect.
 - **How busy the world is:** `EVENTS` (first, cooldown, weights, bounties, alert and disabled times).
 - **Operations and progress:** `OPERATIONS`, `PROGRESS` (medal thresholds, streak bonus).
-- **Home production:** `ECONOMY.incomeInterval`, `incomeTaper`, `incomeCap`; the emergency Dart in `ECONOMY.emergency`.
+- **Home production and the base:** `BASE.production`, `lowBoost`, `capacity`, each building's
+  `levels` (cost, health, range, damage, production, capacity, protection), `repairShare`,
+  `rebuildShare`, `refund`, `detection`; the emergency Dart in `ECONOMY.emergency`.
+- **Raids on the base:** `RAIDS.loss` (share and cap of vulnerable paper), `RAIDS.targetWeights`,
+  `RAIDS.recovery`, and the pacing rules in `src/base/Raids.ts` (`raidPace`).
 
 - **How dangerous enemy pilots are:** `AI.skill` per level (`aimError`, `burst`/`pause`, `lead`,
   `reaction`, `throttle`, `evasive`, `positioning`) and `AI.accuracy` (how much distance, speed
@@ -645,7 +783,7 @@ All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most w
 - **How far they chase:** `AI.maxPursuit`, `AI.leash`, `AI.disengageTime`, `AI.launchShield`.
 - **How busy the sky is:** `AI.maxActive`, `AI.ambient` (count, respawn, lifetime, role mix),
   `RAIDS.first` / `RAIDS.interval`, `RAIDS.escortAfter` / `escortChance`.
-- **What raids are worth:** `RAIDS.reward`, `RAIDS.penalty`, `ECONOMY.protectedPaper`, and the
+- **What raids are worth:** `RAIDS.reward`, `RAIDS.loss`, `ECONOMY.protectedPaper`, and the
   raiders' speeds in `ai/FlightPlans.ts` (which set how much warning you get).
 - **Aim assistance:** `WEAPONS.aimAssist`.
 
@@ -663,6 +801,31 @@ All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most w
 ## Decisions worth knowing
 
 These are judgment calls where the plan left room.
+
+### v0.0.7: the base and the HUD
+
+- **Capacity is a hard cap on all earnings,** not only on home production. Otherwise a storage box
+  would barely matter; with it, a full store is a reason to spend or to build storage, and more
+  stored paper means more for raids to take. The economy simulation still runs without the cap:
+  it measures what missions pay, which the cap doesn't change.
+- **Production is slower, with a safety net.** The plan's 5 → 14 paper a minute replaces v0.0.6's
+  +1 every 3 s; below 50 paper it runs three times faster (and the free emergency Dart remains), so
+  a broke player still gets going quickly. The struggling-player simulation still passes.
+- **A wrecked paper store halves production** rather than doing nothing, so even the fixed
+  building matters, and repairing it is a choice.
+- **Raids are announced when detected,** not when they set out. Without a radar the warning is a
+  few seconds; with one, enough to fold a fighter. The emergency card waits for detection too, so
+  it can't give the raid away.
+- **Damage is not shown as reduced firepower.** A damaged turret fires as well as a healthy one, it
+  is just closer to being wrecked; damaged economy buildings do lose output in proportion. That
+  keeps "is my defense working?" a yes/no question.
+- **Upgrades keep the share of health,** so upgrading isn't a disguised free repair.
+- **Launchers deal with bombers first** only on T1 for now: enemy launchers keep v0.0.4's
+  nearest-first behaviour, so escort missions didn't change difficulty.
+- **The tray picks the slot.** Choosing a building jumps to the first free slot that takes it, so
+  building is two clicks; clicking another slot moves the preview.
+- **First-time tips instead of rules.** The four paragraphs on the pause screen became tips that
+  appear once, when the thing they explain first happens. Key hints follow the same idea.
 
 ### v0.0.6: missions, progression and balance
 
@@ -903,9 +1066,30 @@ regular fighters are fair (`AI.skill.medium`), whether the aim assistance is eno
 mouse, whether raids come too often or give too much warning, and whether the markers and combat
 music help or clutter.
 
+## Definition of done (v0.0.7)
+
+| Requirement | Status |
+|---|---|
+| T1 has construction slots (defense, radar, economy, utility) with limits; management mode at T1 with the plane landed or stored, elevated camera in the 3D world, highlighted slots, preview, confirmation and payment | ✅ |
+| Ink turrets and paper rocket launchers built by the player: detect, rotate, fire, magazine and reload, take damage, repair; launchers bombers first, turrets nearest | ✅ |
+| Friendly / hostile identification by side, never firing at the player; ready for more owners | ✅ |
+| Structure damage, wrecks nonfunctional until repaired; repairs cheaper than rebuilding; per-building statistics | ✅ |
+| Player radar: detection range, early-warning alert (direction, threat, defenses, suggested response), offline when wrecked, radar on the mini-map | ✅ |
+| Paper workshop production (5 / 7 / 10 / 14), storage boxes (300 / 500 / 800), protected and vulnerable paper, losses from bombing with a cap, a guaranteed reserve | ✅ |
+| Raids target buildings with building-specific consequences; active and passive defense; raid outcomes and a defense report; director-paced raid frequency with recovery time | ✅ |
+| Build menu with categories (slot types), placement preview with validity, cost and effect before confirming, inspection, upgrades (3 levels), repair and repair all, missing paper shown, fold-up construction feedback, removal with partial refund | ✅ |
+| Territory overview, building health bars, raid highlight on T1, repair notifications, cost comparison, base statistics, mission results feeding paper at once | ✅ |
+| UI redesign: tokens and new style, expanded icons, fixed HUD zones, icon + number values, short phrases, context-sensitive states, progressive disclosure, compact cards / report / garage / menu / welcome, alerts (max 3, merged), first-time tips, key hints, HUD size, accessibility labels, HUD split into modules | ✅ |
+
+**Not verified on real hardware.** The game was driven in headless Chromium with software WebGL
+(screenshots of the desk, base management, flight, a raid and its report, the menu, the logbook,
+and a save / reload). Feel and balance still need playtesting: how much warning each radar level
+gives at real frame rates, whether capacity feels too tight, and whether the base camera frames
+T1 well on unusual screen shapes.
+
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.7, core multiplayer.** Two or more
+Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.8, core multiplayer.** Two or more
 players sharing a world. The director's rules already run on explicit inputs (a situation, a
 world context) that a server can supply per player, and saves keep recipes rather than missions,
 which is the shape server-side persistence will need.
