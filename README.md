@@ -1,4 +1,10 @@
-# paperwars.io: v0.0.7, Territory Management, Base Building & a New HUD
+# paperwars.io: v0.0.8 in development (visual vertical slice), on top of v0.0.7
+
+> **v0.0.8 checkpoint 1 of 4: the visual vertical slice is ready for art-direction review.** Home
+> Desk (T1) shows the new look: a playable sketchbook with pencil outlines, paper materials and
+> soft cartoon light. See [v0.0.8 in progress](#v008-in-progress-the-visual-vertical-slice) and
+> [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md). Everything below that section describes v0.0.7.
+
 
 Through v0.0.6 the game became a connected single-player campaign: a mission director, adaptive
 difficulty, world events, operations and a local save. v0.0.7 turns **T1 into a base**. Paper can
@@ -12,6 +18,104 @@ instead of words, short alerts, and tips the first time something matters. The p
 It is still single-player and runs entirely in the browser (PlayCanvas + TypeScript, no backend).
 Buildings, raids, AI pilots and defenses only ever see an aircraft as a position, a velocity and a
 side, so the same systems can take human opponents when multiplayer arrives.
+
+## v0.0.8 in progress: the visual vertical slice
+
+v0.0.8 gives the game its permanent look and a world to match (plan in the
+[roadmap](docs/GDD.md#version-008-world-expansion-visual-identity-and-player-experience)). It is
+built in phases with developer checkpoints; this is **phase 1, the visual vertical slice**, which
+the plan asks to be approved before the look is rolled out to the rest of the world.
+
+![Home Desk](docs/checkpoints/0.0.8-visual-slice/01-desk.jpg)
+
+### What is in it
+
+- **Pencil-outline renderer** (`src/render/outline/`): graphite strokes along silhouettes, folds
+  and paper edges, built from each mesh's edges and widened on screen by a shader, with per-object
+  strength (aircraft and rockets boldest, buildings and targets firm, props lighter, trims
+  faintest), distance thinning and fading, and stable hand-drawn irregularity (uneven width,
+  wobble, runs past the corners, grain). Applied to every aircraft (folding and crumpling
+  included), defense, target, bullseye, rocket and platform in the game.
+- **Paper shading and light** (`src/render/shading/`, `lighting.ts`): a soft cel ramp, sky and
+  ground ambient, light coloured shadows, and paper grain on every lit surface.
+- **Material library** (`src/render/style.ts`, `materials/`): paper (white, notebook, graph,
+  sticky, coloured), cardboard, tape, ink, pencil, rubber, wood and plastic, with procedural
+  textures painted at start-up (no image files).
+- **Home Desk** (T1): a wooden desk with a sheet of notebook paper taped down in the player's blue,
+  a margin and binder holes, a taped runway and an index-card launch pad, a **pencil-cup landmark**
+  (with simple colliders, below the AI's cruising height), a **custom cardboard paper store**
+  (gable flap roof, door flap, reams by the door; it still darkens, collapses and is repaired as
+  before), and original stationery props: pencils, a ruler, an eraser, sticky notes, tape, paper
+  balls, paper stacks, folded-paper flags, plus a book stack and a globe as placeholders for
+  licensed models. Nothing sits on the runway, the take-off path, the slots or the store (tests
+  check it).
+- **Licensed asset pipeline** (`src/assets/`): drop Synty (or other licensed) `.glb` files into the
+  git-ignored `assets/licensed/` and they replace their placeholders, adapted to the look (paper
+  shading, matte, outlines, fitted to size). Original Blender models go in `assets/models/`. No
+  licensed files are in the repository; see [assets/licensed/README.md](assets/licensed/README.md).
+- **Graphics settings** in the pause menu: **Graphics** Low / Med / High (outline quality,
+  shadows, decoration, resolution), **Outlines** Off / Low / Med / High and **Lines** Faint /
+  Normal / Bold. Stored per computer, apart from the save.
+- **`?perf`** in the address shows fps, frame time and spikes, draw calls, triangles and strokes;
+  `paperwars.perf()` and `paperwars.assets.report()` in the console.
+
+### Reviewing it
+
+```bash
+npm run dev        # then open http://localhost:5173/?perf
+```
+
+- The opening view is the desk camera over Home Desk; **B** shows the base from above.
+- Fly to see outlines in motion, banking and combat; **Esc** for the graphics settings.
+- Screenshots of every view are in [docs/checkpoints/0.0.8-visual-slice](docs/checkpoints/0.0.8-visual-slice).
+
+| | | |
+|---|---|---|
+| ![Desk with HUD](docs/checkpoints/0.0.8-visual-slice/02-desk-hud.jpg) | ![Base view](docs/checkpoints/0.0.8-visual-slice/03-base.jpg) | ![Take-off](docs/checkpoints/0.0.8-visual-slice/04-takeoff.jpg) |
+| ![Landmark](docs/checkpoints/0.0.8-visual-slice/05-landmark.jpg) | ![Paper store](docs/checkpoints/0.0.8-visual-slice/06-store.jpg) | ![Combat over T8](docs/checkpoints/0.0.8-visual-slice/08-combat.jpg) |
+| ![Banking](docs/checkpoints/0.0.8-visual-slice/07-banking.jpg) | ![Low preset](docs/checkpoints/0.0.8-visual-slice/09-low-preset.jpg) | ![Outlines off](docs/checkpoints/0.0.8-visual-slice/10-outlines-off.jpg) |
+
+### Measurements
+
+Production builds, before (v0.0.7) and after, at 1280×720 in headless Chromium. **This machine has
+no GPU**: rendering is SwiftShader (software), so frame times measure the CPU rasterizer, not a
+graphics card. Draw calls, load stages and memory carry over; real frame times still need
+measuring on hardware with `?perf` (Chrome, Edge, Firefox).
+
+| | v0.0.7 | Slice (High) | Slice (Low) |
+|---|---|---|---|
+| Draw calls, desk view | ~1,010 | ~1,215 | ~690 |
+| Draw calls, in flight | ~795 | ~910 | |
+| Game ready (ms from page start) | ~300 | ~500 | |
+| First frames shown (ms) | ~600 | ~1,070 | |
+| JS heap (MB) | ~18 | ~30–34 | |
+| Bundle (min / gzip, kB) | 1,494 / 416 | 1,618 / 458 | |
+| Frame time, desk, software rendering (ms) | ~225 | ~490 | |
+
+Most of the extra draw calls are strokes for the moving parts of installations; static
+decoration and walls are merged into a handful of meshes. The bundle grows mostly by the engine's
+glTF and texture loaders, for licensed models. The slower first frames are new shader variants
+(textured paper, strokes) compiling, much slower in software than on a GPU.
+
+### Known limitations
+
+- Only Home Desk is themed; the other territories, enemy installations and T1's other buildings
+  keep their v0.0.7 models (now outlined and shaded). Classroom backdrop, themes, names and
+  landmarks for the rest are phases 2 and 3.
+- No GPU measurements yet (see above). Antialiasing can't be changed in-game yet.
+- Effects and most mission markers aren't outlined yet (phase 5).
+- No licensed models were supplied; the book stack and globe are placeholders. The import path
+  was checked end to end with an original test `.glb` (not committed).
+
+### Decisions for the developer
+
+1. **Approve or adjust the art direction**: line weight and colour (`OUTLINE` in
+   `src/render/style.ts`), the cel ramp and shadow strength (`SHADING`, `LIGHTING`), the cream
+   notebook paper and blue tape border for player ownership.
+2. **Which Synty packs** (if any) to buy for the classroom environment, and which props they
+   should fill: the slots are in `src/assets/manifest.ts`.
+3. **Default preset:** High is the default (closest to v0.0.7's shadows and resolution); Medium
+   would be safer on integrated graphics.
 
 ## Run it
 
@@ -737,7 +841,26 @@ src/
     MiniMap.ts            The top-down navigation diagram, with T1's radar
     Logbook.ts            Records, the base, aircraft, the paper log, the session
     DevPanel.ts           The mission director's developer panel
+    PerfOverlay.ts        Frame timing, draw calls and strokes (?perf, paperwars.perf())
     dom.ts                Small DOM helpers
+
+  render/                 The look, rendering only (v0.0.8; see docs/ART_DIRECTION.md)
+    style.ts              Art direction in numbers: outline tiers, shading, light, the material list
+    outline/              Pencil outlines: edge extraction, the stroke shader, the renderer
+    shading/              Paper shading (engine chunk overrides) and procedural textures
+    materials/            The material library
+    lighting.ts           Sun, shadows, haze
+    GraphicsSettings.ts   Presets and the per-computer settings store
+
+  assets/
+    manifest.ts           Every prop: code build, licensed slot, own model, size, outline tier, colliders
+    AssetLibrary.ts       Loads licensed / own .glb files and adapts them to the look
+
+  world/props/            The game's own models in code: MeshBuilder, Model, stationery, buildings, landmarks
+  world/territories/      Territory themes and layouts as data, and the Dressing that builds them
+
+assets/licensed/          Licensed models (git-ignored except its README)
+assets/models/            The game's own Blender models
 ```
 
 The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, `FlightModel`, everything in
@@ -1089,7 +1212,9 @@ T1 well on unusual screen shapes.
 
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.8, core multiplayer.** Two or more
-players sharing a world. The director's rules already run on explicit inputs (a situation, a
-world context) that a server can supply per player, and saves keep recipes rather than missions,
-which is the shape server-side persistence will need.
+Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.8, world expansion, visual identity
+and player experience**, in progress (see the top of this file): after the art direction is
+approved, phase 2 applies it to every territory and adds the classroom. Multiplayer moves to
+v0.0.9; the director's rules already run on explicit inputs (a situation, a world context) that a
+server can supply per player, and saves keep recipes rather than missions, which is the shape
+server-side persistence will need.
