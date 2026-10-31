@@ -82,6 +82,12 @@ export class AircraftModels {
       if (!a.alive) continue;
       seen.add(a.id);
       let v = this.views.get(a.id);
+      // The same id flown by another aircraft now (a player's next plane): a fresh model.
+      if (v && v.aircraft !== a) {
+        this.dispose(v);
+        this.views.delete(a.id);
+        v = undefined;
+      }
       if (!v) {
         v = this.create(a);
         this.views.set(a.id, v);

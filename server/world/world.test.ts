@@ -333,6 +333,23 @@ describe('connections', () => {
     expect(world.history.at(planeId('a'), world.time, { x: 0, y: 0, z: 0 })).toBe(false);
   });
 
+  it('leaving mid-fight counts as being shot down by whoever was fighting you', () => {
+    const world = quietWorld(7);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const b = player(world, 'b', 'T3', 'Bo');
+    launch(world, a);
+    launch(world, b);
+    place(a, 0, 40, 60, 0);
+    place(b, 0, 40, 40, 0);
+    run(world, 0.5, (id) => (id === 'a' ? { fire: true } : {}));
+    expect(b.damageLog.length).toBeGreaterThan(0);
+    world.drainEvents();
+    world.remove('b');
+    expect(a.stats.kills).toBe(1);
+    const kill = world.drainEvents().map((o) => o.e).find((e) => e.t === 'kill');
+    expect(kill).toMatchObject({ killer: 'a', victimName: 'Bo' });
+  });
+
   it('limits emotes to one every so often', () => {
     const world = quietWorld();
     const a = player(world, 'a', 'T1');

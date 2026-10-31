@@ -589,6 +589,9 @@ export class MultiplayerGame {
     if (m.offers) {
       this.offers = m.offers.map((c) => this.missionFor(c));
       st.offers = this.offers;
+      // Forget cards that are gone (keeping the one in the air).
+      const keep = new Set([...m.offers.map((c) => c.key), this.priv.mission?.key]);
+      for (const key of [...this.missions.keys()]) if (!keep.has(key)) this.missions.delete(key);
     }
     if (m.selected !== undefined) st.selected = Math.min(m.selected, Math.max(0, st.offers.length - 1));
     if (m.mission !== undefined) st.mission = m.mission ? this.missionFor(m.mission) : null;

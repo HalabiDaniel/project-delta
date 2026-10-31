@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.8-dev",
+  "version": "0.0.9-dev",
   "private": true,
-  "description": "paperwars.io v0.0.8 (in development) - visual identity: pencil outlines, paper materials, Home Desk",
+  "description": "paperwars.io v0.0.9 (in development) - core multiplayer: shared classroom, territories, PvP, raids",
   "type": "module",
   "scripts": {
     "dev": "vite",

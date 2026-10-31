@@ -198,6 +198,9 @@ export class ServerWorld {
   remove(id: string): void {
     const p = this.pilots.get(id);
     if (!p) return;
+    // Leaving mid-flight counts as going down: whoever hurt the plane lately gets the kill
+    // (quitting can't save a lost fight), and a raid in progress fails.
+    if (p.state?.phase === 'flying') p.state.crash(p.damageLog.length > 0 ? 'shot-down' : 'impact');
     for (const attack of [...this.attacks.active]) if (attack.attacker === id || attack.victim === id) this.endAttack(attack, 'abandoned');
     this.endMissionAi(p);
     this.guns.clear(id);
@@ -1097,7 +1100,6 @@ export class ServerWorld {
         p.flight.boundary.reset();
         p.launchedAt = this.time;
         p.damageLog.length = 0;
-        p.inputs.queue.length = 0;
         const mission = st.mission!;
         p.director?.accepted(mission);
         p.spawns = (mission.spec.aircraft ?? []).map((s) => this.prefixed(p, s));
