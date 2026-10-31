@@ -1,18 +1,21 @@
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, DEFENSES, LANDING, MISSIONS, PALETTE, PLANE, TARGETS, THREAT, WEAPONS, WORLD, type AircraftId } from './config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, DEFENSES, ECONOMY, LANDING, MISSIONS, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, WEAPONS, WORLD, type AircraftId } from './config';
+import type { AiAircraft, BombOrder, Contact, Strike } from './ai/AiAircraft';
+import { AirTraffic, type AirEvent, type Raid } from './ai/AirTraffic';
+import { leadPoint } from './ai/Gunnery';
 import { aircraftRatings, RATING_KEYS, RATING_LABELS } from './aircraft/Aircraft';
-import { Bombs, type BombImpact, type ZoneRef } from './aircraft/Bomb';
+import { Bombs, type BombImpact, type TaggedImpact, type ZoneRef } from './aircraft/Bomb';
 import { ChaseCamera } from './aircraft/ChaseCamera';
 import { FlightTrails } from './aircraft/FlightTrails';
 import { HangarPreview } from './aircraft/HangarPreview';
 import { assessTouchdown, hardLandingReason } from './aircraft/Landing';
 import { clamp, PlaneController, yawFromDirection, type Collision } from './aircraft/PlaneController';
-import { distanceToShape, footprint, type Collider } from './combat/Collision';
+import { distanceToShape, footprint, type Collider, type MovingSphere } from './combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage } from './combat/Damage';
 import type { Destructible } from './combat/Destructibles';
 import { layoutTargetRange } from './combat/Destructibles';
 import { Projectiles, type ShotImpact } from './combat/Projectiles';
-import { EnemyFire, isRocket, type FireEvent } from './defenses/EnemyFire';
+import { isRocket, Ordnance, type AircraftTarget, type FireEvent } from './combat/Ordnance';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from './defenses/Installation';
 import { layoutDefenses, overHome, type DefenseLayout } from './defenses/Layout';
 import type { Mission, Objective } from './missions/Mission';
@@ -40,10 +43,12 @@ import {
 import type { IconName } from './ui/icons';
 import type { MiniMapView } from './ui/MiniMap';
 import { Sounds } from './ui/Sounds';
+import type { AircraftMarkerView, AirView, RaidAlertView } from './ui/AirHud';
 import type { ThreatRingItem, ThreatView } from './ui/ThreatHud';
+import { AircraftModels } from './world/AircraftModels';
 import { DefenseModels } from './world/DefenseModels';
 import { Effects } from './world/Effects';
-import { EnemyFireView } from './world/EnemyFireView';
+import { OrdnanceView } from './world/OrdnanceView';
 import { MissionMarkers } from './world/MissionMarkers';
 import { TargetRange } from './world/TargetRange';
 import { buildWorld, type World } from './world/WorldGenerator';
@@ -60,6 +65,12 @@ const CRASH_REPORT_DELAY = 1.2;
 const MAX_TARGET_LABELS = 8;
 /** Incoming rockets show on the threat ring within this distance. */
 const ROCKET_WARNING_RANGE = 160;
+/** Enemy aircraft get a marker within this distance (mission targets, raiders and friends always). */
+const AIRCRAFT_MARKER_RANGE = 230;
+/** …and an edge chevron when off screen within this one. */
+const AIRCRAFT_EDGE_RANGE = 140;
+/** Sounds of other aircraft (gunfire, crashes) carry this far. */
+const HEARING = 120;
 const KEY_TO_CARD: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 };
 
 /**
@@ -84,6 +95,15 @@ export class Game {
   private warned: string | null = null;
   /** Health of the plane being refitted when the refit began, to animate the repair. */
   private refitFrom = 1;
+  /** Sorties launched this visit: raids only start once the player has flown. */
+  private sortiesFlown = 0;
+  /** When the player last hit each AI aircraft (performance.now()), to show its health bar. */
+  private readonly hitAt = new Map<string, number>();
+  /** Aircraft that have just flashed past the plane, so each pass whooshes once. */
+  private readonly passing = new Set<string>();
+  /** What each AI bomber's bombs are aimed at, and whose side dropped them. */
+  private readonly bombOwners = new Map<string, Pick<BombOrder, 'side' | 'strike'>>();
+  private lastInkSound = 0;
   private readonly v1 = new pc.Vec3();
   private readonly v2 = new pc.Vec3();
   private readonly v3 = new pc.Vec3();
@@ -111,9 +131,12 @@ export class Game {
     readonly hud: HUD,
     readonly defenses: DefenseNetwork,
     readonly defenseModels: DefenseModels,
-    readonly enemyFire: EnemyFire,
-    readonly enemyFireView: EnemyFireView,
+    readonly ordnance: Ordnance,
+    readonly ordnanceView: OrdnanceView,
     readonly sounds: Sounds,
+    readonly airTraffic: AirTraffic,
+    readonly aircraftModels: AircraftModels,
+    readonly aiBombs: Bombs,
     layout: DefenseLayout,
   ) {
     this.barriers = layout.barriers.map((b) => ({ id: b.id, shapes: b.solids }));
@@ -199,9 +222,12 @@ export class Game {
       hud,
       defenses,
       new DefenseModels(app, layout, defenses, world),
-      new EnemyFire(),
-      new EnemyFireView(app),
+      new Ordnance(),
+      new OrdnanceView(app),
       new Sounds(),
+      new AirTraffic(world.territories, world.home, homeStore(layout, world)),
+      new AircraftModels(app),
+      new Bombs(app, 6),
       layout,
     );
     game.bindEvents();
@@ -269,6 +295,7 @@ export class Game {
     const aimPoint = this.plane.getForward(this.v2).mulScalar(WEAPONS.convergence).add(this.plane.position);
     const velocity = aimPoint.sub(muzzle).normalize().mulScalar(gun.speed).add(this.plane.getVelocity(this.v3));
     this.projectiles.fire(muzzle, velocity, gun.damage, gun.range);
+    this.inkSound();
   }
 
   /** On the ground at home: the ground crew tops up ink and range. */
@@ -309,8 +336,12 @@ export class Game {
     // Defenses come back when the scenario resets: a new sortie, a fresh set of targets.
     this.defenses.restoreAll();
     this.defenseModels.restoreAll();
-    this.enemyFire.clear();
-    this.enemyFireView.clear();
+    this.ordnance.clear();
+    this.ordnanceView.clear();
+    // The mission's aircraft are cleared away; patrols and a raid on its way carry on.
+    this.airTraffic.reset();
+    this.aiBombs.clear();
+    this.hitAt.clear();
     this.refreshPad();
     this.input.exitPointerLock();
     this.camera.updateDesk(0, this.world.launchPosition, this.world.launchYaw, true);
@@ -377,11 +408,14 @@ export class Game {
     const shown = atDesk ? state.selectedMission : state.mission;
     if (this.markers.shown !== shown) this.markers.show(shown);
 
+    this.updateAir(dt);
     this.updateDefenses(dt);
     const standing = [...this.range.colliders, ...this.installationColliders()];
     for (const impact of this.bombs.update(dt, this.openZones(), world.territories, standing)) this.onBombImpact(impact);
-    const shootable = [...standing, ...this.enemyFire.rocketColliders()];
-    for (const impact of this.projectiles.update(dt, shootable, world.territories)) this.onShotImpact(impact);
+    for (const impact of this.aiBombs.update(dt, [], world.territories, standing)) this.onAiBombImpact(impact);
+    const shootable = [...standing, ...this.ordnance.rocketColliders()];
+    for (const impact of this.projectiles.update(dt, shootable, world.territories, this.enemyAircraft())) this.onShotImpact(impact);
+    this.aircraftModels.update(dt, this.airTraffic.aircraft);
     this.range.update(dt);
     this.markers.update(dt);
     this.trails.update(dt, plane, state.durability?.fraction ?? 1);
@@ -414,7 +448,7 @@ export class Game {
         gliding: state.outOfRange,
       },
       world.territories,
-      [...this.range.solids, ...this.installationSolids(), ...this.barriers],
+      this.solids(),
     );
     for (const collision of result.collisions) {
       this.onCollision(collision);
@@ -451,7 +485,7 @@ export class Game {
       else if (installation) damage = Math.round(damage * DEFENSES.hardness[installation.spec.kind]);
       else damage = Math.round(damage * DEFENSES.hardness.barrier);
       if (target && ram > 0) this.damageTarget(target, ram, this.range.centre(target, this.v3));
-      if (installation && ram > 0) this.damageInstallation(installation, ram, this.defenseModels.centre(installation.id, this.v3));
+      if (installation?.side === 'enemy' && ram > 0) this.damageInstallation(installation, ram, this.defenseModels.centre(installation.id, this.v3));
     }
     if (damage <= 0) return;
     this.effects.burst(plane.position, 'thud');
@@ -468,46 +502,300 @@ export class Game {
     }
   }
 
+  // ---- Aircraft -------------------------------------------------------------------------------
+
+  /**
+   * The AI aircraft fly a step: missions', raids' and ambient patrols'. Their rounds join the
+   * ordnance in flight and their bombs fall; what happened to them is reported as events.
+   */
+  private updateAir(dt: number): void {
+    const { plane, state, world } = this;
+    const flying = state.phase === 'flying';
+    let player: Contact | null = null;
+    if (flying) {
+      const p = plane.position;
+      const v = plane.getVelocity(this.v2);
+      player = {
+        id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z,
+        signature: plane.spec.signature, radius: plane.spec.hitRadius, shielded: this.playerShielded(), role: 'player',
+      };
+    }
+    const out = this.airTraffic.update(dt, {
+      territories: world.territories,
+      obstacles: this.solids(),
+      player,
+      visible: (q) => this.inView(q),
+      raids: state.phase !== 'debrief' && state.phase !== 'crashed' && this.sortiesFlown >= RAIDS.afterSorties,
+      patrol: state.mission?.isActive ? state.mission.patrolProgress : 0,
+    });
+    const eye = this.camera.entity.getPosition();
+    for (const shot of out.shots) {
+      this.ordnance.spawn(shot);
+      if (shot.target === PLAYER_ID) state.recordIncoming();
+      if (Math.hypot(shot.x - eye.x, shot.y - eye.y, shot.z - eye.z) < HEARING * 0.6) this.inkSound();
+    }
+    for (const bomb of out.bombs) {
+      this.bombOwners.set(bomb.source, { side: bomb.side, strike: bomb.strike });
+      this.aiBombs.release(bomb, { x: bomb.vx, y: bomb.vy, z: bomb.vz }, 'standard', true, bomb.source);
+    }
+    for (const event of out.events) this.onAirEvent(event);
+
+    // A whoosh for every aircraft that flashes past close by.
+    if (flying) {
+      for (const a of this.airTraffic.aircraft) {
+        const near = a.position.distance(plane.position) < 9;
+        if (near && !this.passing.has(a.id)) this.sounds.play('whoosh');
+        if (near) this.passing.add(a.id);
+        else this.passing.delete(a.id);
+      }
+    }
+    // The combat track swells while enemy aircraft are fighting the player, and a little while a raid is coming.
+    const attacked = flying && this.airTraffic.aircraft.some((a) => a.side === 'enemy' && a.attacking && a.targetId === PLAYER_ID);
+    const raid = this.airTraffic.raids.some((r) => r.stage === 'inbound');
+    this.sounds.combat(dt, attacked ? 1 : raid ? 0.35 : 0);
+  }
+
+  /** What anything flying can hit: props, standing installations and walls. */
+  private solids(): Collider[] {
+    return [...this.range.solids, ...this.installationSolids(), ...this.barriers];
+  }
+
+  /** Enemy aircraft, for the player's ink: their spheres and this step's movement. */
+  private enemyAircraft(): MovingSphere[] {
+    return this.airTraffic.aircraft
+      .filter((a) => a.alive && a.side === 'enemy')
+      .map((a) => {
+        const p = a.model.position;
+        const q = a.model.prevPosition;
+        return { id: a.id, x: p.x, y: p.y, z: p.z, px: q.x, py: q.y, pz: q.z, r: a.spec.hitRadius };
+      });
+  }
+
+  /** Could the camera see this point? Aircraft only appear and vanish where it can't. */
+  private inView(p: { x: number; y: number; z: number }): boolean {
+    const cam = this.camera.entity;
+    const eye = cam.getPosition();
+    const dx = p.x - eye.x;
+    const dy = p.y - eye.y;
+    const dz = p.z - eye.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > AI.hiddenDistance) return false;
+    const f = cam.forward;
+    return (dx * f.x + dy * f.y + dz * f.z) / (d || 1) > 0.3;
+  }
+
+  /** Hostile aircraft hold their fire: the plane is over home, or has only just taken off. */
+  private playerShielded(): boolean {
+    const p = this.plane.position;
+    return overHome(this.world.home, p.x, p.z) || this.plane.airborneFor < AI.launchShield;
+  }
+
+  /** Gunfire nearby: a short tick, not too often. */
+  private inkSound(): void {
+    const now = performance.now();
+    if (now - this.lastInkSound < 90) return;
+    this.lastInkSound = now;
+    this.sounds.play('ink');
+  }
+
+  private onAirEvent(e: AirEvent): void {
+    const { state, hud } = this;
+    switch (e.type) {
+      case 'destroyed':
+        this.onAircraftDown(e.aircraft, e.byPlayer, e.cause);
+        break;
+      case 'collision':
+        if (this.near(e.at)) this.effects.burst(this.v1.set(e.at.x, e.at.y, e.at.z), 'thud');
+        break;
+      case 'escaped':
+        state.aircraftEscaped(e.aircraft.id);
+        break;
+      case 'engaging':
+        if (e.target === PLAYER_ID && state.phase === 'flying') {
+          this.sounds.play('bandit');
+          hud.threatNote(`${e.aircraft.skill.label} ${e.aircraft.spec.name} on your tail!`, 'bad');
+        } else if (state.mission?.escorting(e.target)) {
+          hud.threatNote(`Enemy ${e.aircraft.spec.name} going for your bomber!`, 'bad');
+        }
+        break;
+      case 'released':
+        state.bombReleased(e.aircraft.id);
+        if (e.aircraft.side === 'enemy' && this.airTraffic.raids.some((r) => r.bomber === e.aircraft.id)) {
+          hud.banner('Bomb released!', `It is falling on your paper store on ${this.world.home.id}.`, 'bad', 2.5);
+        }
+        break;
+      case 'raid':
+        this.onRaid(e.raid);
+        break;
+    }
+  }
+
+  private onRaid(raid: Raid): void {
+    const { hud, state } = this;
+    if (raid.stage === 'inbound') {
+      this.sounds.play('raid');
+      const escort = raid.escorts.length > 0 ? ', with a fighter escort' : '';
+      hud.banner('Incoming bomber!', `Enemy Widewing from beyond ${raid.origin}${escort} · ETA ${Math.ceil(raid.eta)} s`, 'bad', 4);
+      return;
+    }
+    if (raid.stage !== 'over') return;
+    switch (raid.outcome) {
+      case 'intercepted':
+      case 'driven-off':
+        state.raidDefended(raid.participated, raid.mission);
+        if (!raid.mission) {
+          const how = raid.outcome === 'intercepted' ? 'Raider shot down' : 'Raider turned back';
+          hud.banner(
+            raid.participated ? `${how}! +${RAIDS.reward}` : `${how}`,
+            raid.participated ? 'Your paper store is safe. Defense reward paid.' : `${this.world.home.id}'s guns saw it off. No reward without your help.`,
+            'good',
+            3,
+          );
+        }
+        break;
+      case 'missed':
+        hud.banner('Their bomb missed!', 'Your paper store is untouched.', 'good', 2.5);
+        break;
+    }
+  }
+
+  /** An AI aircraft went down: it crumples, and the player hears about it if it was theirs or mattered. */
+  private onAircraftDown(a: AiAircraft, byPlayer: boolean, cause: 'shot' | 'crash'): void {
+    const { hud, state } = this;
+    const at = a.position;
+    const enemy = a.side === 'enemy';
+    this.effects.wreck(at, a.model.getVelocity(this.v2), enemy ? PALETTE.enemyAccent : PALETTE.friendlyAccent, a.role === 'bomber' ? 1.3 : 1, enemy ? PALETTE.enemyPaper : PALETTE.paper);
+    if (this.near(at)) this.sounds.play('crumple');
+    this.hitAt.delete(a.id);
+    const credit = enemy && (byPlayer || a.playerDamage > 0);
+    const screen = this.projectOnScreen(this.v3.copy(at));
+    if (credit) {
+      this.sounds.play('kill');
+      if (screen) hud.pop('SHOT DOWN!', 'good', screen);
+      this.career.recordAircraftDestroyed(a.role === 'bomber');
+      const detail =
+        a.purpose === 'ambient' ? 'A patrol plane: no bounty, but one less in the sky.'
+        : a.role === 'bomber' && a.purpose === 'raid' ? 'Bomber intercepted. Your paper store is safe.'
+        : `${a.skill.label} ${AI.roleLabels[a.role].toLowerCase()} down.`;
+      hud.banner(`Enemy ${a.spec.name} destroyed`, detail, 'good', 2.6);
+    } else if (enemy && screen) {
+      hud.pop(cause === 'crash' ? 'CRASHED!' : 'DOWN!', 'info', screen);
+    } else if (!enemy) {
+      hud.banner(`Your ${a.spec.name} is down!`, 'Enemy fighters got to it.', 'bad', 3);
+    }
+    state.aircraftDestroyed(a.id, a.role, credit);
+  }
+
+  /** A round or rocket struck an AI aircraft. */
+  private onAircraftHit(target: string, shot: { side: 'player' | 'enemy'; source: string; damage: number; kind: 'ink' | 'rocket' }, point: pc.Vec3): void {
+    if (shot.kind === 'rocket') this.effects.explosion(point, 0.6);
+    else if (shot.side === 'enemy') this.effects.enemyInkHit(point, false);
+    else this.effects.inkHit(point, false);
+    this.airTraffic.damage(target, shot.damage, shot.source, false);
+  }
+
+  /** An AI bomber's bomb landed: did it hit what it was aimed at, and what did the blast catch? */
+  private onAiBombImpact(impact: TaggedImpact): void {
+    const owner = impact.tag ? this.bombOwners.get(impact.tag) : undefined;
+    if (!owner || !impact.tag) return;
+    const point = this.v1.set(impact.x, impact.y, impact.z);
+    const s = owner.strike;
+    const miss = Math.hypot(impact.x - s.x, impact.z - s.z);
+    const hostile = owner.side === 'enemy';
+    const hit = impact.kind !== 'void' && miss <= s.radius + (hostile ? BOMB.kinds.standard.blastRadius / 2 : 0.3);
+    if (impact.kind !== 'void') {
+      this.effects.bombImpact(point, hit);
+      // The blast catches the other side's installations: no credit to the player.
+      const kind = BOMB.kinds.standard;
+      for (const i of this.defenses.installations) {
+        if (!i.alive || i.side === owner.side) continue;
+        const distance = Math.min(...i.spec.shapes.map((shape) => distanceToShape(point, shape)));
+        const damage = blastDamage(kind.damage, kind.blastRadius, distance);
+        if (damage > 0) this.damageInstallation(i, damage, this.defenseModels.labelPoint(i.id, this.v2), false);
+      }
+      const at = this.projectOnScreen(this.v3.copy(point));
+      if (at) this.hud.pop(hit ? 'KABOOM!' : 'SPLAT!', hostile === hit ? 'bad' : 'good', at);
+    }
+    this.airTraffic.bombLanded(impact.tag, hit);
+    if (hostile) {
+      if (!hit) return;
+      const lost = this.state.raidHit();
+      this.hud.banner(
+        'Paper store hit!',
+        lost > 0 ? `The raid cost you ${lost} paper.` : `Your last ${ECONOMY.protectedPaper} paper is protected.`,
+        'bad',
+        3,
+      );
+    } else {
+      this.state.escortStrike(impact.tag, hit);
+      if (!hit) this.hud.banner('Your bomber missed', 'It is going round for another run. Keep it covered.', 'bad', 2.5);
+    }
+  }
+
+  /** Close enough to the camera to hear. */
+  private near(p: { x: number; y: number; z: number }): boolean {
+    const eye = this.camera.entity.getPosition();
+    return Math.hypot(p.x - eye.x, p.y - eye.y, p.z - eye.z) < HEARING;
+  }
+
   // ---- Defenses -------------------------------------------------------------------------------
 
   /**
-   * The defenses look for the plane and shoot; their rounds and rockets fly; the models follow.
-   * Nothing shoots over home, and rockets lose track of a plane that gets there.
+   * The defenses look for aircraft of the other side and shoot; their rounds and rockets fly; the
+   * models follow. Nothing enemy shoots over home, and rockets lose track of a plane that gets there.
    */
   private updateDefenses(dt: number): void {
     const { plane, state, world } = this;
     const flying = state.phase === 'flying';
     const p = plane.position;
     const safe = overHome(world.home, p.x, p.z);
-    let target: Target | null = null;
+    const targets: Target[] = [];
     if (flying && !safe) {
       const v = plane.getVelocity(this.v2);
-      target = { x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature };
+      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature });
     }
-    const { orders, events } = this.defenses.update(dt, target);
+    for (const a of this.airTraffic.aircraft) {
+      if (!a.alive) continue;
+      const c = a.contact();
+      targets.push({ id: c.id, side: c.side, x: c.x, y: c.y, z: c.z, vx: c.vx, vy: c.vy, vz: c.vz, signature: c.signature });
+    }
+    const { orders, events } = this.defenses.update(dt, targets);
     for (const order of orders) {
-      this.enemyFire.spawn(order);
-      if (target) state.recordIncoming();
+      this.ordnance.spawn(order);
+      if (order.target === PLAYER_ID) state.recordIncoming();
       if (order.kind === 'rocket') this.effects.burst(this.v1.set(order.x, order.y, order.z), 'dust');
     }
     for (const event of events) this.onDefenseEvent(event);
-    const planeTarget = flying
-      ? { x: p.x, y: p.y, z: p.z, px: plane.prevPosition.x, py: plane.prevPosition.y, pz: plane.prevPosition.z, radius: plane.spec.hitRadius }
-      : null;
-    for (const event of this.enemyFire.update(dt, planeTarget, !safe, world.territories)) this.onEnemyFire(event);
+    const aircraft: AircraftTarget[] = [];
+    if (flying) {
+      const q = plane.prevPosition;
+      aircraft.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, px: q.x, py: q.y, pz: q.z, radius: plane.spec.hitRadius, shielded: safe });
+    }
+    for (const a of this.airTraffic.aircraft) {
+      if (!a.alive) continue;
+      const m = a.model.position;
+      const q = a.model.prevPosition;
+      aircraft.push({ id: a.id, side: a.side, x: m.x, y: m.y, z: m.z, px: q.x, py: q.y, pz: q.z, radius: a.spec.hitRadius });
+    }
+    for (const event of this.ordnance.update(dt, aircraft, world.territories)) this.onFire(event);
     // A blip when the territory being approached notices the plane (not every radar on the map).
     const approached = flying ? this.approachedTerritory() : null;
-    const spotted = approached !== null && this.defenses.isAware(approached);
+    const spotted = approached !== null && this.defenses.isAware(approached, PLAYER_ID);
     if (spotted && this.warned !== approached) this.sounds.play('spotted');
     this.warned = spotted ? approached : null;
     this.defenseModels.update(dt, flying ? p : null, approached);
-    this.enemyFireView.update(dt, this.enemyFire, this.camera.entity.getPosition());
-    const locking = flying ? this.defenses.installations.filter((i) => i.state === 'locking') : [];
+    this.ordnanceView.update(dt, this.ordnance, this.camera.entity.getPosition());
+    const locking = flying ? this.lockingOnPlayer() : [];
     this.sounds.lockTone(dt, locking.length > 0 ? Math.max(...locking.map((i) => i.lock)) : null);
   }
 
+  /** Launchers locking on to the player's plane. */
+  private lockingOnPlayer(): Installation[] {
+    return this.defenses.installations.filter((i) => i.state === 'locking' && i.targetId === PLAYER_ID);
+  }
+
   private onDefenseEvent(event: DefenseEvent): void {
-    if (this.state.phase !== 'flying') return;
+    if (this.state.phase !== 'flying' || event.target !== PLAYER_ID) return;
     switch (event.type) {
       case 'launch':
         this.sounds.play('launch');
@@ -518,19 +806,25 @@ export class Game {
     }
   }
 
-  /** Enemy fire landed: on the plane (damage, from which way), on a platform, or nowhere. */
-  private onEnemyFire(event: FireEvent): void {
+  /** A round or rocket landed: on the plane (damage, from which way), on a platform, or nowhere. */
+  private onFire(event: FireEvent): void {
     const point = this.v1.set(event.x, event.y, event.z);
     const rocket = event.shot.kind === 'rocket';
     if (event.type === 'hit') {
+      if (event.target !== PLAYER_ID) {
+        this.onAircraftHit(event.target, event.shot, point);
+        return;
+      }
       if (rocket) this.effects.explosion(point, 0.7);
       else this.effects.enemyInkHit(point, false);
       const source = this.defenses.get(event.shot.source);
-      const by = source ? `${source.spec.name} on ${source.spec.territoryId}` : null;
+      const shooter = source ? null : this.airTraffic.get(event.shot.source);
+      const by = source ? `${source.spec.name} on ${source.spec.territoryId}` : shooter ? `enemy ${shooter.skill.label.toLowerCase()} ${shooter.spec.name}` : null;
       const { dealt } = this.state.damageAircraft(event.shot.damage, rocket ? 'blast' : 'projectile', by);
       if (dealt > 0) {
         this.sounds.play('hit');
-        if (source) this.hud.damageDirection(this.bearing(source.spec.x, source.spec.z), dealt);
+        const from = source ? source.spec : shooter?.position;
+        if (from) this.hud.damageDirection(this.bearing(from.x, from.z), dealt);
         if (rocket) {
           const at = this.projectOnScreen(point);
           if (at) this.hud.pop('BANG!', 'bad', at);
@@ -546,10 +840,20 @@ export class Game {
     }
   }
 
-  /** Damages a defense, with numbers, effects, the collapse and the bookkeeping. Returns the damage dealt. */
-  private damageInstallation(i: Installation, amount: number, at: pc.Vec3): number {
+  /**
+   * Damages a defense, with numbers, effects, the collapse and the bookkeeping. Returns the damage
+   * dealt. Without `credit` (an AI bomber's bomb) it counts for nobody, and only shows if it collapses.
+   */
+  private damageInstallation(i: Installation, amount: number, at: pc.Vec3, credit = true): number {
     const { dealt, destroyed } = i.damage(Math.round(amount));
     if (dealt <= 0) return 0;
+    if (!credit) {
+      if (destroyed) {
+        this.effects.explosion(this.defenseModels.centre(i.id, this.v3), 1.1, 'wreck');
+        if (i.side === 'player') this.hud.banner(`Your ${i.spec.name.toLowerCase()} is wrecked`, 'It is rebuilt when the sortie ends.', 'bad', 2.4);
+      }
+      return dealt;
+    }
     const screen = this.projectOnScreen(this.v3.copy(at));
     if (screen) this.hud.damageNumber(dealt, screen, destroyed);
     if (destroyed) {
@@ -652,7 +956,7 @@ export class Game {
         if (damage > 0 && this.damageTarget(target, damage, this.range.labelPoint(target, this.v2)) > 0) struck = true;
       }
       for (const installation of this.defenses.installations) {
-        if (!installation.alive) continue;
+        if (!installation.alive || installation.side !== 'enemy') continue;
         const distance = Math.min(...installation.spec.shapes.map((s) => distanceToShape(point, s)));
         const damage = blastDamage(kind.damage, kind.blastRadius, distance);
         if (damage > 0 && this.damageInstallation(installation, damage, this.defenseModels.labelPoint(installation.id, this.v2)) > 0) struck = true;
@@ -670,7 +974,7 @@ export class Game {
     }
     this.effects.inkHit(point, false);
     if (isRocket(impact.id)) {
-      if (!this.enemyFire.shootDown(impact.id)) return;
+      if (!this.ordnance.shootDown(impact.id)) return;
       this.state.recordShotHit();
       this.effects.explosion(point, 0.45);
       this.sounds.play('pop');
@@ -679,7 +983,20 @@ export class Game {
       if (at) this.hud.pop('POP!', 'good', at);
       return;
     }
+    const ai = this.airTraffic.get(impact.id);
+    if (ai) {
+      this.state.recordShotHit();
+      const { dealt, destroyed } = this.airTraffic.damage(ai.id, impact.damage, PLAYER_ID, true);
+      if (dealt <= 0) return;
+      this.state.recordDamage(dealt, null);
+      this.hitAt.set(ai.id, performance.now());
+      const at = this.projectOnScreen(point);
+      if (at) this.hud.damageNumber(dealt, at, destroyed);
+      this.hud.hitMarker(destroyed);
+      return;
+    }
     const installation = this.defenses.get(impact.id);
+    if (installation?.side === 'player') return; // the player's own guns and stores shrug it off
     if (installation) {
       this.state.recordShotHit();
       // Cardboard depots shrug off most of the ink.
@@ -834,6 +1151,8 @@ export class Game {
           this.effects.burst(this.plane.position, 'fold');
           break;
         case 'launched':
+          this.sortiesFlown++;
+          this.airTraffic.startMission(state.mission!.spec.aircraft ?? []);
           this.career.recordSortie(state.plane!.id);
           hud.banner('Mission active', state.mission!.title, 'info', 1.8);
           break;
@@ -868,6 +1187,7 @@ export class Game {
           this.onObjectiveComplete(event.objective, event.index);
           break;
         case 'mission-succeeded':
+          this.airTraffic.endMission();
           this.career.recordMissionCompleted();
           if (state.phase === 'landed') break; // the touchdown banner reports it
           hud.banner(
@@ -878,8 +1198,12 @@ export class Game {
           );
           break;
         case 'mission-failed':
+          this.airTraffic.endMission();
           if (event.reason === 'missed') hud.banner('Out of bombs!', 'Every target needs a hit. Mission failed.', 'bad', 3);
           else if (event.reason === 'out-of-time') hud.banner('Out of time!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
+          else if (event.reason === 'target-escaped') hud.banner('It got away!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
+          else if (event.reason === 'target-bombed') hud.banner('Too late!', 'The bomber released its bomb. Mission failed.', 'bad', 3);
+          else if (event.reason === 'escort-lost') hud.banner('Your bomber is down!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
           break;
         case 'crashed':
           this.onCrashed(event.cause);
@@ -969,7 +1293,8 @@ export class Game {
     const from = choosing ? world.launchPosition : plane.position;
     const goal = this.currentGoal(mission, from);
     let target: TargetIndicator | null = null;
-    if (goal) {
+    // An aircraft carries its own marker (and edge chevron): no second label on top of it.
+    if (goal && !(goal.targetId && this.airTraffic.get(goal.targetId))) {
       const distance = goal.solid
         ? this.v2.copy(goal.point).sub(from).length()
         : Math.hypot(goal.point.x - from.x, goal.point.z - from.z);
@@ -1035,6 +1360,7 @@ export class Game {
         planesLost: this.career.data.planesLost,
         targetsDestroyed: this.career.data.targetsDestroyed,
         defensesDestroyed: this.career.data.defensesDestroyed,
+        aircraftDestroyed: this.career.data.aircraftDestroyed,
         favorite: favorite ? AIRCRAFT[favorite].name : null,
       },
       phase: state.phase,
@@ -1098,12 +1424,109 @@ export class Game {
       targets: flying || state.phase === 'landed' ? this.targetLabels(mission, target?.onScreen ? goal?.targetId ?? null : null) : [],
       minimap: this.minimapView(mission, goal?.point ?? null),
       threat: flying ? this.threatView() : null,
+      air: this.airView(flying, aim),
+    };
+  }
+
+  /**
+   * The air war on screen: markers on nearby aircraft (with edge chevrons for those off screen),
+   * the lead sight for the enemy nearest the nose, and the incoming-bomber alert.
+   */
+  private airView(flying: boolean, aim: ScreenPoint | null): AirView {
+    const { plane, state } = this;
+    const markers: AircraftMarkerView[] = [];
+    let lead: ScreenPoint | null = null;
+    if (flying) {
+      const p = plane.position;
+      const wanted = state.mission?.isActive ? missionAircraft(state.mission) : new Set<string>();
+      const now = performance.now();
+      const gun = state.plane?.gun ?? plane.spec.gun;
+      const fwd = plane.getForward(new pc.Vec3());
+      let leadTarget: AiAircraft | null = null;
+      let leadAngle = 0.5;
+      for (const a of this.airTraffic.aircraft) {
+        if (!a.alive) continue;
+        const d = a.position.distance(p);
+        const raider = this.airTraffic.raids.some((r) => r.bomber === a.id && r.stage !== 'over');
+        const important = wanted.has(a.id) || raider || a.side === 'player';
+        if (d > AIRCRAFT_MARKER_RANGE && !important) continue;
+        const at = this.indicator(new pc.Vec3().copy(a.position));
+        if (!at.onScreen && d > AIRCRAFT_EDGE_RANGE && !important) continue;
+        const aimedAt = !!aim && at.onScreen && Math.hypot(aim.x - at.x, aim.y - at.y) < 70;
+        const recentlyHit = now - (this.hitAt.get(a.id) ?? -Infinity) < 3000;
+        markers.push({
+          id: a.id, x: at.x, y: at.y, onScreen: at.onScreen, angle: at.angle,
+          side: a.side, icon: a.role, name: `${a.side === 'enemy' ? 'Enemy' : 'Your'} ${a.spec.name}`, detail: this.aircraftDetail(a),
+          distance: d, health: a.durability.fraction, showHealth: recentlyHit || aimedAt || d < 45 || wanted.has(a.id) || raider,
+          far: clamp((d - 40) / 160, 0, 1), mission: wanted.has(a.id) || raider, attacking: a.side === 'enemy' && a.attacking && a.targetId === PLAYER_ID,
+          compact: false,
+        });
+        if (a.side !== 'enemy' || d > gun.range * 1.1) continue;
+        const angle = Math.acos(clamp(((a.position.x - p.x) * fwd.x + (a.position.y - p.y) * fwd.y + (a.position.z - p.z) * fwd.z) / (d || 1), -1, 1));
+        if (angle < leadAngle) {
+          leadAngle = angle;
+          leadTarget = a;
+        }
+      }
+      if (leadTarget) {
+        const t = leadTarget.contact();
+        const point = leadPoint(p, plane.getVelocity(new pc.Vec3()), t, { x: t.vx, y: t.vy, z: t.vz }, gun.speed, 1);
+        lead = this.projectOnScreen(new pc.Vec3(point.x, point.y, point.z));
+      }
+    }
+    // Crowded markers: the most important ones keep their tags, the rest shrink to brackets.
+    const rank = (m: AircraftMarkerView) => (m.attacking ? 0 : m.mission ? 1 : 2) * 1000 + m.distance;
+    const placed: AircraftMarkerView[] = [];
+    for (const m of [...markers].sort((a, b) => rank(a) - rank(b))) {
+      if (!m.onScreen) continue;
+      m.compact = placed.some((o) => Math.abs(o.x - m.x) < 130 && Math.abs(o.y - m.y) < 64);
+      if (!m.compact) placed.push(m);
+    }
+    return { markers, lead, raid: this.raidAlert() };
+  }
+
+  /** What an aircraft's marker says it is doing. */
+  private aircraftDetail(a: AiAircraft): string {
+    const raid = this.airTraffic.raids.find((r) => r.bomber === a.id && r.stage === 'inbound');
+    if (a.side === 'player') return a.state === 'bomb-run' ? 'Bombing run!' : a.leaving ? 'Heading home' : `Escort it to ${a.orders.strike?.territoryId ?? 'its target'}`;
+    if (a.attacking && a.targetId === PLAYER_ID) return 'Attacking you!';
+    if (a.attacking && a.targetId && this.state.mission?.escorting(a.targetId)) return 'Attacking your bomber!';
+    if (raid) return a.state === 'bomb-run' ? 'Bombing run!' : `Raider · ETA ${Math.ceil(raid.eta)} s`;
+    if (a.role === 'scout' && (a.state === 'evade' || (a.leaving && a.purpose === 'mission'))) return 'Running!';
+    if (a.state === 'disengage') return 'Breaking off';
+    if (a.leaving) return 'Heading home';
+    return `${AI.roleLabels[a.role]} · ${a.skill.label}`;
+  }
+
+  /** The most urgent raid on T1 still to be settled, for the alert card. */
+  private raidAlert(): RaidAlertView | null {
+    const raids = this.airTraffic.raids.filter((r) => r.stage !== 'over');
+    if (raids.length === 0) return null;
+    const raid = raids.reduce((a, b) => (b.eta < a.eta ? b : a));
+    const bomber = this.airTraffic.get(raid.bomber);
+    const mission = this.state.mission;
+    return {
+      state: raid.stage === 'released' ? 'released' : 'inbound',
+      title: raid.stage === 'released' ? 'BOMB AWAY!' : 'INCOMING BOMBER',
+      subtitle: `Enemy Widewing approaching ${this.world.home.id} from ${raid.origin}${raid.escorts.length > 0 ? ' · escorted' : ''}`,
+      eta: raid.eta,
+      target: 'Home territory · paper store',
+      objective: `Intercept before bomb release (a hit costs ${RAIDS.penalty} paper)`,
+      rewardLabel: raid.mission ? 'Mission reward' : 'Defense reward',
+      reward: `+${raid.mission && mission ? mission.reward : RAIDS.reward} paper`,
+      distance: this.state.phase === 'flying' && bomber ? bomber.position.distance(this.plane.position) : null,
     };
   }
 
   /** The danger on a mission card or in the tracker. */
   private threatSummary(m: Mission): ThreatSummary {
     const t = m.spec.threat;
+    const air = t?.air ? airList(t.air) : null;
+    if (t?.air && t.level === 0) {
+      // Nothing on the ground: the danger is in the air, as strong as its pilots.
+      const level = ({ easy: 1, medium: 2, hard: 3 } as const)[t.air.skill];
+      return { level, label: 'Air threat', detail: `No ground defenses · ${air}` };
+    }
     if (!t || t.level === 0) {
       return { level: 0, label: THREAT.levels[0].label, detail: m.spec.type === 'rings' ? 'Course clear of defenses' : 'No known defenses' };
     }
@@ -1111,6 +1534,7 @@ export class Game {
     if (t.turrets || t.launchers) parts.push(defenseList(t.turrets, t.launchers));
     if (t.radars) parts.push(t.radars === 1 ? 'radar' : `${t.radars} radars`);
     const where = m.spec.type === 'rings' ? `Course passes ${t.territories.join(', ')}` : t.territories.join(' + ');
+    if (air) parts.push(air);
     return { level: t.level, label: THREAT.levels[t.level].label, detail: `${where}: ${parts.join(' · ')}` };
   }
 
@@ -1126,19 +1550,19 @@ export class Game {
     if (t) {
       const all = defenses.on(t.id);
       const weapons = all.filter((i) => i.isWeapon);
-      const engaged = weapons.some((w) => w.alive && (w.state === 'firing' || w.state === 'locking'));
+      const engaged = weapons.some((w) => w.alive && w.targetId === PLAYER_ID && (w.state === 'firing' || w.state === 'locking'));
       panel = {
         territoryId: t.id,
         level: t.threat,
         label: THREAT.levels[t.threat].label,
-        status: weapons.every((w) => !w.alive) ? 'neutralised' : engaged ? 'engaged' : defenses.isAware(t.id) ? 'spotted' : 'clear',
+        status: weapons.every((w) => !w.alive) ? 'neutralised' : engaged ? 'engaged' : defenses.isAware(t.id, PLAYER_ID) ? 'spotted' : 'clear',
         installations: all.map((i) => ({ id: i.id, kind: i.spec.kind, alive: i.alive, engaged: i.alive && i.engaged })),
       };
     }
 
     // On the ring: weapons shooting or locking on, and those following the plane that it is about to fly into.
     const ring: ThreatRingItem[] = [];
-    for (const i of defenses.engaged()) {
+    for (const i of defenses.engagedWith(PLAYER_ID)) {
       const reach = Math.hypot(i.spec.x - p.x, i.spec.z - p.z) - i.spec.range;
       if (i.state === 'tracking' && reach > 10) continue;
       ring.push({
@@ -1149,9 +1573,15 @@ export class Game {
         distance: Math.hypot(i.spec.x - p.x, i.spec.ground + i.spec.pivot - p.y, i.spec.z - p.z),
       });
     }
+    // Enemy fighters coming for the plane.
+    for (const a of this.airTraffic.aircraft) {
+      if (a.side !== 'enemy' || a.targetId !== PLAYER_ID || !a.attacking) continue;
+      const d = a.position.distance(p);
+      ring.push({ id: a.id, angle: this.bearing(a.position.x, a.position.z), icon: a.role, state: d < a.spec.gun.range ? 'firing' : 'tracking', distance: d });
+    }
     let nearest = Infinity;
     let rockets = 0;
-    for (const shot of this.enemyFire.shots) {
+    for (const shot of this.ordnance.shots) {
       if (shot.kind !== 'rocket') continue;
       const d = Math.hypot(shot.x - p.x, shot.y - p.y, shot.z - p.z);
       if (d > ROCKET_WARNING_RANGE) continue;
@@ -1159,7 +1589,7 @@ export class Game {
       nearest = Math.min(nearest, d);
       ring.push({ id: `rocket-${shot.id}`, angle: this.bearing(shot.x, shot.z), icon: 'rocket', state: 'incoming', distance: d });
     }
-    const locking = defenses.installations.filter((i) => i.state === 'locking');
+    const locking = this.lockingOnPlayer();
     const lock: ThreatView['lock'] =
       rockets > 0
         ? { state: 'incoming', progress: 1, distance: nearest, count: rockets }
@@ -1286,8 +1716,9 @@ export class Game {
       const point = this.defenseModels.labelPoint(i.id, new pc.Vec3());
       const distance = point.distance(eye);
       if (distance > DEFENSES.labelRange) continue;
-      const state = i.isWeapon ? (i.state === 'destroyed' ? 'idle' : i.state) : null;
-      near.push({ id: i.id, name: i.spec.name, role: i.spec.role, health: i.durability.fraction, icon: i.spec.kind, state, point, distance });
+      const state: TargetLabelView['state'] = !i.isWeapon ? null : i.targetId === PLAYER_ID && i.state !== 'destroyed' ? i.state : 'idle';
+      const role = i.side === 'player' && i.engaged ? 'Firing at raiders' : i.spec.role;
+      near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: i.spec.kind, state, point, distance });
     }
     near.sort((a, b) => Number(wanted.has(b.id)) - Number(wanted.has(a.id)) || a.distance - b.distance);
     const views: TargetLabelView[] = [];
@@ -1319,6 +1750,25 @@ export class Game {
     let bestDistance = Infinity;
     for (const i of mission.openObjectives()) {
       const o = mission.objectives[i];
+      if (o.kind === 'intercept' || o.kind === 'escort') {
+        // Point at the aircraft itself while it is in the air: the nearest target, or the bomber to protect.
+        const done = mission.destroyedTargets(i);
+        const ids = o.kind === 'intercept' ? o.targets.filter((id) => !done.has(id)) : [o.escort];
+        let flying = false;
+        for (const id of ids) {
+          const a = this.airTraffic.get(id);
+          if (!a) continue;
+          flying = true;
+          const d = Math.hypot(a.position.x - from.x, a.position.z - from.z);
+          if (d >= bestDistance) continue;
+          bestDistance = d;
+          best =
+            o.kind === 'escort'
+              ? { point: new pc.Vec3().copy(a.position), label: `Your ${a.spec.name}`, tone: 'home', icon: 'escort', solid: true, territoryId: null, targetId: id }
+              : { point: new pc.Vec3().copy(a.position), label: `Enemy ${a.spec.name}`, tone: 'target', icon: a.role, solid: true, territoryId: null, targetId: id };
+        }
+        if (flying) continue;
+      }
       if (o.kind === 'destroy') {
         // Point at the nearest target still standing: a practice plane or an installation.
         const done = mission.destroyedTargets(i);
@@ -1369,6 +1819,15 @@ export class Game {
         case 'land':
           best = { point: p, label: `${world.home.id} · Land`, tone: 'home', icon: 'land', solid: false, territoryId: world.home.id };
           break;
+        case 'intercept':
+          best = { point: p, label: o.territoryId, tone: 'target', icon: o.what === 'aircraft' ? 'fighter' : o.what, solid: false, territoryId: o.territoryId };
+          break;
+        case 'escort':
+          best = { point: p, label: `${o.territoryId} · bomber's target`, tone: 'target', icon: 'bomb', solid: false, territoryId: o.territoryId };
+          break;
+        case 'patrol':
+          best = { point: p, label: `Patrol over ${o.territoryId}`, tone: 'target', icon: 'patrol', solid: false, territoryId: o.territoryId };
+          break;
       }
     }
     return best;
@@ -1406,6 +1865,17 @@ export class Game {
           default: return `Shoot down practice planes on ${o.territoryId} (${n}/${o.count})`;
         }
       }
+      case 'intercept': {
+        const n = mission.destroyedTargets(index).size;
+        switch (o.what) {
+          case 'bomber': return 'Shoot down the bomber before it releases';
+          case 'scout': return 'Shoot down the scout before it gets away';
+          case 'fighter': return `Shoot down the enemy fighter over ${o.territoryId}`;
+          default: return `Shoot down the intruders (${n}/${o.count})`;
+        }
+      }
+      case 'escort': return `Keep the bomber flying until it hits ${o.territoryId}`;
+      case 'patrol': return `Patrol ${o.duration} s over ${o.territoryId} (${Math.floor(mission.progress[index] * o.duration)}/${o.duration})`;
     }
   }
 
@@ -1432,7 +1902,7 @@ export class Game {
           label: this.objectiveLabel(mission, i),
           done: mission.isDone(i),
           open: mission.isOpen(i) && mission.isActive,
-          progress: o.kind === 'recon' || o.kind === 'destroy' || o.kind === 'survive' ? mission.progress[i] : null,
+          progress: o.kind === 'recon' || o.kind === 'destroy' || o.kind === 'survive' || o.kind === 'patrol' || (o.kind === 'intercept' && o.count > 1) ? mission.progress[i] : null,
           distance: Math.hypot(p.x - from.x, p.z - from.z),
         });
       });
@@ -1463,8 +1933,14 @@ export class Game {
         : `Now land on T1 to recover your plane: a refit costs ${spec?.refitCost ?? 0} instead of ${spec?.cost ?? 0}.`;
     }
     if (mission.status === 'failed') {
-      const why = mission.failure === 'out-of-time' ? 'The clock ran out.' : 'Every bomb is gone.';
-      return `${why} Land on T1 to recover the plane anyway.`;
+      const why: Record<string, string> = {
+        'out-of-time': 'The clock ran out.',
+        missed: 'Every bomb is gone.',
+        'target-escaped': 'It got away.',
+        'target-bombed': 'The bomber released its bomb.',
+        'escort-lost': 'Your bomber was shot down.',
+      };
+      return `${why[mission.failure ?? ''] ?? 'The mission is lost.'} Land on T1 to recover the plane anyway.`;
     }
     if (phase === 'landed') return 'R rearms ink and range for free. Space takes off again. Destroyed defenses stay down until the sortie ends.';
     const index = mission.openObjectives()[0];
@@ -1490,6 +1966,15 @@ export class Game {
           case 'defense': return 'Shoot or bomb the ringed defenses. Come in behind a turret: it can\'t turn to face you there.';
           default: return 'Hold left-click to fire ink along your nose. Slow down, line up and lead the target a little.';
         }
+      case 'intercept':
+        switch (next.what) {
+          case 'bomber': return "Fly out to meet the bomber: it holds a steady course. Get behind it and keep firing. T1's guns help near home.";
+          case 'scout': return 'Come up behind it: once it spots you it runs for the edge of the map. Shift boosts to catch it.';
+          case 'fighter': return "It will turn on you. Keep turning so it can't line up, and aim at the small circle to lead your shots.";
+          default: return 'Shoot down every intruder: scouts run for the edge, fighters fight back.';
+        }
+      case 'escort': return 'Stay close to your bomber and shoot down the fighters that go for it. Its bomb run is slow and straight.';
+      case 'patrol': return `Stay over ${next.territoryId}, below ${next.airspace.ceiling} m. Intruders turn up while you patrol.`;
       default: return '';
     }
   }
@@ -1506,6 +1991,9 @@ export class Game {
       'out-of-time': 'Failed: out of time',
       'aircraft-lost': 'Failed: plane lost',
       abandoned: 'Failed: landed before finishing',
+      'target-escaped': 'Failed: it got away',
+      'target-bombed': 'Failed: the bomb was released',
+      'escort-lost': 'Failed: your bomber was lost',
     };
     const succeeded = mission.status === 'succeeded';
     const spec = state.plane;
@@ -1536,6 +2024,10 @@ export class Game {
       defensesDestroyed: sortie.defensesDestroyed,
       enemyShots: sortie.enemyShots,
       enemyHits: sortie.enemyHits,
+      aircraftDestroyed: sortie.aircraftDestroyed,
+      bombersIntercepted: sortie.bombersIntercepted,
+      objectivesProtected: sortie.objectivesProtected,
+      paperLost: sortie.paperLost,
       survival,
       survived: recovered,
       paperSpent: sortie.paperSpent,
@@ -1579,6 +2071,15 @@ export class Game {
       rings,
       targets,
       plane: showPlane ? { x: plane.position.x, z: plane.position.z, yaw: plane.yaw, autopilot: this.boundary.state === 'autopilot' } : null,
+      aircraft: this.airTraffic.aircraft.map((a) => {
+        const raid = this.airTraffic.raids.find((r) => r.bomber === a.id && r.stage === 'inbound');
+        const strike = a.orders.strike;
+        return {
+          x: a.position.x, z: a.position.z, yaw: a.model.yaw, side: a.side, role: a.role,
+          raid: raid && strike ? { x: strike.x, z: strike.z } : null,
+          mission: !!mission?.isActive && missionAircraft(mission).has(a.id),
+        };
+      }),
       objective: showPlane && objective ? { x: objective.x, z: objective.z } : null,
       boundaryRadius: WORLD.boundaryRadius,
       warning: state.phase === 'flying' && this.boundary.state !== 'inside',
@@ -1646,7 +2147,9 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
     case 'bomb': return out.set(o.zone.x, o.zone.top + 0.5, o.zone.z);
     case 'recon':
     case 'reach':
-    case 'survive': return out.set(o.airspace.x, 0.5, o.airspace.z);
+    case 'survive':
+    case 'patrol': return out.set(o.airspace.x, 0.5, o.airspace.z);
+    case 'escort': return out.set(o.zone.x, o.zone.top + 0.5, o.zone.z);
     case 'ring': return out.set(o.gate.x, o.gate.y, o.gate.z);
     case 'land': return out.set(world.home.x, 0.5, world.home.z);
     case 'escape': {
@@ -1655,7 +2158,8 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
       const len = Math.hypot(dx, dz) || 1;
       return out.set(o.x + (dx / len) * o.distance, 0.5, o.z + (dz / len) * o.distance);
     }
-    case 'destroy': {
+    case 'destroy':
+    case 'intercept': {
       const t = world.territories.find((x) => x.id === o.territoryId)!;
       return out.set(t.x, 0.5, t.z);
     }
@@ -1674,4 +2178,32 @@ function foldPose(progress: number, kind: BuildKind): number {
 
 function css(color: readonly [number, number, number]): string {
   return `rgb(${color.map((c) => Math.round(c * 255)).join(', ')})`;
+}
+
+/** What raiders bomb: the paper store on home. */
+function homeStore(layout: DefenseLayout, world: World): Strike {
+  const store = layout.installations.find((i) => i.territoryId === world.home.id && i.kind === 'supply');
+  const at = store ?? { x: world.home.x, z: world.home.z };
+  return { territoryId: world.home.id, x: at.x, y: world.home.top, z: at.z, radius: RAIDS.hitRadius };
+}
+
+/** The AI aircraft a mission is about: the ones to shoot down and the bomber to protect. */
+function missionAircraft(mission: Mission): Set<string> {
+  const ids = new Set<string>();
+  for (const o of mission.objectives) {
+    if (o.kind === 'intercept') for (const id of o.targets) ids.add(id);
+    if (o.kind === 'escort') ids.add(o.escort);
+  }
+  return ids;
+}
+
+/** "Air: 2 regular fighters + 1 scout". */
+function airList(air: { fighters: number; scouts: number; bombers: number; skill: keyof typeof AI.skill }): string {
+  const skill = AI.skill[air.skill].label.toLowerCase();
+  const parts: string[] = [];
+  const add = (n: number, what: string) => n > 0 && parts.push(`${n} ${what}${n === 1 ? '' : 's'}`);
+  add(air.fighters, 'fighter');
+  add(air.scouts, 'scout');
+  add(air.bombers, 'bomber');
+  return `Air: ${parts.join(' + ')} (${skill})`;
 }

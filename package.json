@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
-  "description": "paperwars.io v0.0.4 - automated territory defenses",
+  "description": "paperwars.io v0.0.5 - AI aircraft, dogfighting and interception",
   "type": "module",
   "scripts": {
     "dev": "vite",

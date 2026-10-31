@@ -1,5 +1,5 @@
 import type { Shape } from '../combat/Collision';
-import { DEFENSES, MISSIONS, THREAT, WORLD, type ThreatLevel } from '../config';
+import { DEFENSES, MISSIONS, THREAT, WORLD, type Side, type ThreatLevel } from '../config';
 import type { Territory } from '../world/Territory';
 
 /**
@@ -14,6 +14,8 @@ export interface InstallationSpec {
   id: string;
   kind: InstallationKind;
   territoryId: string;
+  /** The enemy's on T2–T9; the player's own on T1. A weapon only shoots at aircraft of the other side. */
+  side: Side;
   /** Shown on the label: "Ink turret". */
   name: string;
   /** Shown under the name: "Rapid fire · short range". */
@@ -101,11 +103,12 @@ const BARRIER_RING = 2.4;
  * the strictest needs), then the radar and the supply depot. Each territory picks its spots in its
  * own style and rotation, keeps the middle clear for bullseyes, keeps clear of `occupied` ground
  * (the target range), and keeps its weapons' reach off the home platform and the first stretch
- * after take-off where it can.
+ * after take-off where it can. Home gets the player's own guns and paper store (see homeDefenses).
  */
 export function layoutDefenses(territories: readonly Territory[], occupied: readonly Footprint[] = []): DefenseLayout {
   const layout: DefenseLayout = { installations: [], barriers: [], flags: [] };
   const home = territories.find((t) => t.isHome);
+  if (home) layout.installations.push(...homeDefenses(home));
   territories
     .filter((t) => !t.isHome)
     .forEach((t, k) => {
@@ -145,6 +148,29 @@ export function layoutDefenses(territories: readonly Territory[], occupied: read
       }
     });
   return layout;
+}
+
+/**
+ * T1's own defenses: two ink turrets either side of the runway, facing out towards the world
+ * centre where raids come from, and the paper store enemy bombers aim for. They belong to the
+ * player: they shoot at hostile aircraft only.
+ */
+export function homeDefenses(home: Territory): InstallationSpec[] {
+  const c = DEFENSES.home;
+  const len = Math.hypot(home.x, home.z) || 1;
+  // Along the runway (towards the world centre) and to its right.
+  const fx = -home.x / len;
+  const fz = -home.z / len;
+  const at = ([u, v]: readonly [number, number]): Slot => ({ x: home.x + u * fx - v * fz, z: home.z + u * fz + v * fx, tag: 'inner' });
+  const facing = Math.atan2(-fx, -fz);
+  const specs: InstallationSpec[] = c.turrets.map((p, n) => ({
+    ...installation(home, 'turret', at(p), `turret${n + 1}`, 'player'),
+    role: c.turretRole,
+    facing,
+  }));
+  const store = installation(home, 'supply', at(c.store), 'store', 'player');
+  specs.push({ ...store, name: c.storeName, role: c.storeRole, maxHealth: c.storeHealth });
+  return specs;
 }
 
 /** Is (x, z) over home or close enough to it that nothing may shoot there? */
@@ -220,12 +246,12 @@ function pickSlot(
   return null;
 }
 
-function installation(t: Territory, kind: InstallationKind, slot: Slot, suffix: string): InstallationSpec {
+function installation(t: Territory, kind: InstallationKind, slot: Slot, suffix: string, side: Side = 'enemy'): InstallationSpec {
   const { x, z } = slot;
   const g = t.top;
   // Facing the middle of the territory (yaw 0 faces -Z).
   const facing = Math.atan2(-(t.x - x), -(t.z - z));
-  const base = { id: `${t.id}-${suffix}`, kind, territoryId: t.id, x, z, ground: g, facing };
+  const base = { id: `${t.id}-${suffix}`, kind, territoryId: t.id, side, x, z, ground: g, facing };
   switch (kind) {
     case 'turret': {
       const c = DEFENSES.turret;

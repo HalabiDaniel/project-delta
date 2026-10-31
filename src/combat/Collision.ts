@@ -149,3 +149,42 @@ export function firstHit(a: Point3, b: Point3, radius: number, colliders: readon
   }
   return best;
 }
+
+/**
+ * Two points each moving in a straight line over one step (a0 → a1 and b0 → b1): the first
+ * fraction of the step at which they come within `radius` of each other, or null. Worked out in
+ * b's frame, where it is a ball standing still and a moves along a segment.
+ */
+export function sweepMoving(a0: Point3, a1: Point3, b0: Point3, b1: Point3, radius: number): number | null {
+  return segmentHit(
+    { x: a0.x - b0.x, y: a0.y - b0.y, z: a0.z - b0.z },
+    { x: a1.x - b1.x, y: a1.y - b1.y, z: a1.z - b1.z },
+    0,
+    { kind: 'sphere', x: 0, y: 0, z: 0, r: radius },
+  );
+}
+
+/** A sphere that moved from (px, py, pz) to (x, y, z) this step: an aircraft, as rounds see it. */
+export interface MovingSphere {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  px: number;
+  py: number;
+  pz: number;
+  r: number;
+}
+
+/**
+ * The moving sphere a ball of `radius` moving a → b this step touches first (both moving at once),
+ * and when. `extra` widens every sphere: the aim assistance for rounds against aircraft.
+ */
+export function firstMovingHit(a: Point3, b: Point3, radius: number, movers: readonly MovingSphere[], extra = 0): { id: string; t: number } | null {
+  let best: { id: string; t: number } | null = null;
+  for (const m of movers) {
+    const t = sweepMoving(a, b, { x: m.px, y: m.py, z: m.pz }, m, radius + m.r + extra);
+    if (t !== null && (!best || t < best.t)) best = { id: m.id, t };
+  }
+  return best;
+}

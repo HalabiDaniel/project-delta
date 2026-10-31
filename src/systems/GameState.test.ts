@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AIRCRAFT, BOMB, ECONOMY, PLANE } from '../config';
+import { AIRCRAFT, BOMB, ECONOMY, PLANE, RAIDS } from '../config';
 import { Mission, type MissionSpec } from '../missions/Mission';
 import { GameState, type GameEvent } from './GameState';
 import { HomeIncome } from './HomeIncome';
@@ -46,6 +46,18 @@ const SPECS: Record<string, MissionSpec> = {
       { kind: 'destroy', territoryId: 'T8', targets: ['T8-supply'], count: 1, what: 'supply' },
       { kind: 'land', territoryId: 'T1' },
     ],
+  },
+  intercept: {
+    type: 'bomber-intercept', difficulty: 'medium', title: 'Stop the raid', description: '', reward: 100, bombs: 0, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: 'T1', targets: ['raider'], count: 1, what: 'bomber', before: 'release' }],
+  },
+  scout: {
+    type: 'scout-intercept', difficulty: 'easy', title: 'Intercept the scout', description: '', reward: 60, bombs: 0, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: 'T5', targets: ['scout'], count: 1, what: 'scout', before: 'escape' }],
+  },
+  escort: {
+    type: 'escort', difficulty: 'medium', title: 'Escort', description: '', reward: 90, bombs: 0, timeLimit: null, ordered: false,
+    objectives: [{ kind: 'escort', territoryId: 'T5', escort: 'friend', zone: zone(0) }],
   },
   low: {
     type: 'low-attack', difficulty: 'medium', title: 'Low-level strike', description: '', reward: 90, bombs: 2, timeLimit: null, ordered: false,
@@ -499,6 +511,89 @@ describe('GameState: defenses', () => {
   });
 });
 
+describe('GameState: aircraft and raids', () => {
+  it('shooting down the bomber completes an interception; its bomb release first fails it', () => {
+    const { state, resources } = setup('intercept');
+    sortie(state);
+    const before = resources.paper;
+    state.aircraftDestroyed('raider', 'bomber', true);
+    expect(state.mission!.status).toBe('succeeded');
+    expect(resources.paper).toBe(before + 100);
+    expect(state.sortie).toMatchObject({ aircraftDestroyed: 1, bombersIntercepted: 1 });
+    expect(state.stats.bombersIntercepted).toBe(1);
+
+    landAndEnd(state);
+    state.continueToDesk();
+    sortie(state);
+    state.bombReleased('someone-else');
+    expect(state.mission!.isActive).toBe(true);
+    state.bombReleased('raider');
+    expect(state.mission).toMatchObject({ status: 'failed', failure: 'target-bombed' });
+  });
+
+  it("a mission target counts whoever brings it down, but the player's numbers only count their own kills", () => {
+    const { state } = setup('intercept');
+    sortie(state);
+    state.aircraftDestroyed('raider', 'bomber', false);
+    expect(state.mission!.status).toBe('succeeded');
+    expect(state.sortie!.aircraftDestroyed).toBe(0);
+  });
+
+  it('a scout that gets away loses the mission; one shot down first does not', () => {
+    const { state } = setup('scout');
+    sortie(state);
+    state.aircraftEscaped('scout');
+    expect(state.mission).toMatchObject({ status: 'failed', failure: 'target-escaped' });
+  });
+
+  it('an escort succeeds when the bomber hits, and fails if it is shot down', () => {
+    const { state } = setup('escort');
+    sortie(state);
+    state.escortStrike('friend', false);
+    expect(state.mission!.isActive).toBe(true);
+    state.escortStrike('friend', true);
+    expect(state.mission!.status).toBe('succeeded');
+    expect(state.sortie!.objectivesProtected).toBe(1);
+
+    landAndEnd(state);
+    state.continueToDesk();
+    sortie(state);
+    state.aircraftDestroyed('friend', 'bomber', false);
+    expect(state.mission).toMatchObject({ status: 'failed', failure: 'escort-lost' });
+  });
+
+  it('a raid beaten off pays the defense reward only to a player who took part', () => {
+    const { state, resources } = setup();
+    const start = resources.paper;
+    state.raidDefended(false);
+    expect(resources.paper).toBe(start);
+    state.raidDefended(true);
+    expect(resources.paper).toBe(start + RAIDS.reward);
+    // A raid a mission sent pays through the mission instead.
+    state.raidDefended(true, true);
+    expect(resources.paper).toBe(start + RAIDS.reward);
+  });
+
+  it('a raid that hits costs paper, but never below the protected minimum', () => {
+    const { state, resources } = setup();
+    expect(state.raidHit()).toBe(RAIDS.penalty);
+    expect(resources.paper).toBe(ECONOMY.startingPaper - RAIDS.penalty);
+    resources.spend(resources.paper - ECONOMY.protectedPaper - 5);
+    expect(state.raidHit()).toBe(5);
+    expect(state.raidHit()).toBe(0);
+    expect(resources.paper).toBe(ECONOMY.protectedPaper);
+    // Enough left to fold a fighter and go hunting.
+    expect(ECONOMY.protectedPaper).toBeGreaterThanOrEqual(AIRCRAFT.falcon.cost);
+  });
+
+  it('raid losses during a sortie show in its report', () => {
+    const { state } = setup();
+    sortie(state);
+    state.raidHit();
+    expect(state.sortie!.paperLost).toBe(RAIDS.penalty);
+  });
+});
+
 describe('LocalStats', () => {
   const memory = (): KeyValueStore & { data: Record<string, string> } => {
     const data: Record<string, string> = {};
@@ -529,7 +624,10 @@ describe('LocalStats', () => {
     expect(new LocalStats(broken).data.planesLost).toBe(0);
     const junk = memory();
     junk.data['paperwars.career.v1'] = JSON.stringify({ missionsCompleted: -4, planesLost: 'x', sorties: { falcon: 2, jet: 9 }, lastAircraft: 'jet' });
-    expect(new LocalStats(junk).data).toEqual({ missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, sorties: { falcon: 2 }, lastAircraft: null });
+    expect(new LocalStats(junk).data).toEqual({
+      missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, aircraftDestroyed: 0, bombersIntercepted: 0,
+      sorties: { falcon: 2 }, lastAircraft: null,
+    });
     const blocked: KeyValueStore = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     const stats = new LocalStats(blocked);
     stats.recordMissionCompleted();

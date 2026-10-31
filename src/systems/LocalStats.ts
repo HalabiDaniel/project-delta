@@ -12,6 +12,9 @@ export interface CareerStats {
   targetsDestroyed: number;
   /** Turrets, launchers, radars and depots destroyed. */
   defensesDestroyed: number;
+  /** Enemy aircraft shot down (or helped to), and how many of them were bombers. */
+  aircraftDestroyed: number;
+  bombersIntercepted: number;
   /** Sorties launched, per design. The most flown is the favourite. */
   sorties: Partial<Record<AircraftId, number>>;
   /** The design last chosen in the garage, restored next time. */
@@ -74,6 +77,12 @@ export class LocalStats {
     this.save();
   }
 
+  recordAircraftDestroyed(bomber = false): void {
+    this.data.aircraftDestroyed++;
+    if (bomber) this.data.bombersIntercepted++;
+    this.save();
+  }
+
   rememberAircraft(aircraft: AircraftId): void {
     if (this.data.lastAircraft === aircraft) return;
     this.data.lastAircraft = aircraft;
@@ -90,7 +99,10 @@ export class LocalStats {
 }
 
 function load(store: KeyValueStore | null): CareerStats {
-  const empty: CareerStats = { missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, sorties: {}, lastAircraft: null };
+  const empty: CareerStats = {
+    missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, aircraftDestroyed: 0, bombersIntercepted: 0,
+    sorties: {}, lastAircraft: null,
+  };
   let raw: unknown;
   try {
     const text = store?.getItem(KEY);
@@ -113,6 +125,8 @@ function load(store: KeyValueStore | null): CareerStats {
     planesLost: count(r.planesLost),
     targetsDestroyed: count(r.targetsDestroyed),
     defensesDestroyed: count(r.defensesDestroyed),
+    aircraftDestroyed: count(r.aircraftDestroyed),
+    bombersIntercepted: count(r.bombersIntercepted),
     sorties,
     lastAircraft: typeof r.lastAircraft === 'string' && r.lastAircraft in AIRCRAFT ? (r.lastAircraft as AircraftId) : null,
   };

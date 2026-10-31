@@ -120,4 +120,11 @@ describe('assessSuitability', () => {
     expect(assessSuitability(AIRCRAFT.falcon, easy).reason).toContain('1 of 3 bombs, no spare');
     expect(assessSuitability(AIRCRAFT.falcon, mission('multi-bomb')).reason).toBe('Carries 1 bomb; 2 targets need 2');
   });
+
+  it('recommends the Falcon for fighting in the air, and the Swift for a combined attack', () => {
+    for (const type of ['dogfight', 'bomber-intercept', 'scout-intercept', 'escort', 'patrol'] as const) expect(level('falcon', type)).toBe('recommended');
+    expect(['recommended', 'good']).toContain(level('swift', 'bomber-intercept'));
+    expect(level('widewing', 'dogfight')).toBe('possible');
+    expect(level('swift', 'combined')).toBe('recommended');
+  });
 });

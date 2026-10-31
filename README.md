@@ -1,16 +1,15 @@
-# paperwars.io: v0.0.4, Automated Territory Defenses
+# paperwars.io: v0.0.5, Enemy Aircraft and Interception
 
-Through v0.0.3 the world never fought back: you picked a plane, flew to a territory, dropped a bomb
-and collected the reward. v0.0.4 makes **the world react**. Territories now have threat levels and
-the defenses to match: ink turrets, paper rocket launchers and radar stations that notice you,
-turn towards you, lead their shots and fire. You approach carefully, deal with the defenses or slip
-past them, do the job, and get out. Six new mission types are built around them, rewards follow the
-danger, and warnings make every hit readable. The plan is in the
+Through v0.0.4 every threat came from the ground. v0.0.5 puts **other aircraft in the sky**:
+enemy paper planes patrol enemy country, fighters chase and shoot at you, scouts run, and every few
+minutes a bomber sets out to hit the paper store on your home territory. You dogfight, intercept,
+escort a friendly bomber and patrol airspace, and T1 finally has guns of its own. The plan is in the
 [game design document](docs/GDD.md#17-development-roadmap).
 
 It is still single-player and runs entirely in the browser (PlayCanvas + TypeScript, no backend).
-There is no multiplayer and no AI aircraft yet, on purpose: automated defenses are simpler, and they
-are the foundation for the SAM systems players will build later.
+The AI pilots fly the same flight model, health and guns as the player's planes, and the defenses,
+rounds and pilots only ever see an aircraft as a position, a velocity and a side, so the same
+systems can take human opponents when multiplayer arrives.
 
 ## Run it
 
@@ -27,7 +26,7 @@ npm run dev        # http://localhost:5173
 Other scripts:
 
 ```bash
-npm test           # unit tests for the rules (defenses, aircraft, combat, missions, economy, state machine, career stats)
+npm test           # unit tests for the rules (AI pilots, defenses, aircraft, flight, combat, missions, economy, state machine, career stats)
 ```
 
 ```bash
@@ -40,7 +39,126 @@ npm run preview    # serve the production build
 
 The game needs a desktop browser with WebGL 2.
 
-## What's new in v0.0.4
+## What's new in v0.0.5
+
+### Enemy aircraft
+
+AI pilots fly paper planes around the world: the **same designs, flight model, health and ink
+guns** as yours. A pilot only decides where to point (an aim direction, exactly like the mouse
+sets one), how fast to go, when to boost, shoot and drop; the flight model you fly does the rest
+(`src/aircraft/FlightModel.ts`, extracted from the player's controller for this).
+
+| Role | Aircraft | Behaviour | Typical difficulty |
+|---|---|---|---|
+| Scout | Dart | Flies its route, circling what it scouts. Once it spots you it runs for the edge of the map, boosting and jinking. Never shoots. | Easy |
+| Fighter | Falcon | Turns on aircraft it notices, works its way behind them, holds gun distance and fires in bursts when lined up. Breaks off when you get too far, it gets too hurt or runs out of ink, then comes back. | Medium |
+| Bomber | Widewing | Flies to its target, lines up and makes a steady, predictable run at bombing height, then heads home. Jinks when attacked on the way in, takes potshots with its nose gun, turns back when badly hurt. | Medium |
+
+Each pilot is a small **finite-state machine**: patrol → noticed something (a reaction delay) →
+attack, run or carry on (by role) → reposition after overshooting → evade → disengage → leave.
+Routes are waypoints at safe heights; a look-ahead along the flight path climbs away from platforms,
+and a predictive separation check keeps aircraft from flying into each other.
+
+**Skill changes behaviour, not health.**
+
+| | Rookie (easy) | Regular (medium) | Veteran (hard) |
+|---|---|---|---|
+| Reaction time | 1 s | 0.6 s | 0.3 s |
+| Base scatter (either way) | 6.5° | 4.5° | 3.5° |
+| Trigger discipline | 0.35 s bursts, 1.5 s pauses | 0.45 s / 1 s | 0.6 s / 0.8 s |
+| Leads its shots by / anticipates turns | 50% | 80% | 95% |
+| Speed it pushes to (cruise → top) | 45% | 75% | 100%, with boost |
+| Evasive turns with someone on its tail | never | sometimes | often |
+| Breaks off when hurt | never | below 25% | below 35%, boosting and weaving away |
+| Works behind you before attacking | never | half the time | always |
+| Follows you down to | 10 m | 7 m | 4.5 m |
+| A bomber's release error | ±10 m | ±6 m | ±2.5 m |
+
+**No perfect aim.** A pilot's rounds scatter by its skill, and more the further you are, the more
+your speeds differ, the harder you turn, and the less time it has been tracking you; its idea of
+your velocity also lags behind your real one, so a change of course throws its lead off.
+Measured against a Falcon circling at cruise: a rookie does about 0.7 damage a second, a regular
+about 4, a veteran about 11, and flying unpredictably cuts that by a third or much more. Flying
+straight with a veteran on your tail is the fastest way to lose a plane.
+
+### Dogfighting
+
+- **Your ink hits aircraft** through the same swept projectile collisions as everything else,
+  against each plane's movement every step.
+- **Aim assistance:** a round counts as a hit if it passes within a small cone (1.6°) of an
+  aircraft, at most 1 m beyond its size. Close in you still have to hit it. Nothing aims for you.
+- **Markers:** corner brackets, name, distance and what it is doing ("Attacking you!", "Running!",
+  "Bombing run!", "Breaking off"). Far ones fade; crowded ones shrink to brackets. A health bar
+  shows while you aim at one, just hit it, or it matters to the mission. Off screen, a subtle chevron
+  at the edge points to it.
+- **Lead sight:** a small red circle where to shoot at the enemy nearest your nose.
+- **Kill confirmation:** the plane crumples into a tumbling paper ball, "SHOT DOWN!", a banner and
+  a chime; mission progress and career stats update.
+- **Escape:** fighters chase at most 140 m from where they started, and no further than 110 m from
+  what they guard; outrun or outturn them and they break off. They never follow you over home.
+
+### Raids on T1 and interception
+
+Every three to five minutes (once you have flown a sortie), a Widewing sets out from beyond a far
+enemy territory for the **paper store on T1**. You get the alert straight away, with an ETA:
+
+> **INCOMING BOMBER** · Enemy Widewing approaching T1 from T9 · ETA 31 s
+> Target: home territory · paper store. Objective: intercept before bomb release. Defense reward +60 paper.
+
+It circles over its territory to form up, crosses the map and makes a straight run at the store,
+about half a minute after the alert, enough to fold a fighter at the desk and take off. Shoot it
+down (or make it turn back) and you earn **+60 paper**, but only if you took part: T1's own guns
+help, but they don't earn you anything by themselves. If its bomb hits the store you lose **20
+paper**, never below a **protected 50**, enough to fold a fighter. After the first two raids, some
+come with a fighter escort.
+
+**T1 has its own defenses now:** two ink turrets either side of the runway, painted home blue and
+facing out towards the world centre, and the paper store. They are predefined (player-built
+defenses come later) and only shoot at hostile aircraft. Nothing hostile fires at you over home, or
+in the first six seconds after take-off.
+
+### Mission types in the air
+
+| Type | Objective | Fails if | Recommended |
+|---|---|---|---|
+| Dogfight | Shoot down an enemy fighter patrolling a territory. It fights back. | | Falcon |
+| Scout interception | Shoot down a Dart scouting two or three territories before it slips away | It escapes | Falcon (Dart, Swift good) |
+| Bomber interception | Stop a raid on T1: shoot the bomber down before it releases. Hard raids are escorted. | It releases its bomb | Falcon (Swift good) |
+| Bomber escort | Keep your own Widewing flying until its bomb hits a bullseye. Enemy fighters come for it. | Your bomber is shot down | Falcon (Swift good) |
+| Airspace patrol | Spend 20/25/30 s over a territory and shoot down every intruder that turns up | An intruder escapes | Falcon |
+| Combined attack | Hit a bullseye on defended ground while a fighter patrols overhead | | Swift |
+
+Every deal of three cards now has one mission against the defenses and one in the air. Easy cards
+only meet rookie pilots, over unprotected or lightly defended ground. Enemy aircraft add to the
+reward by skill (+10/+18/+28 before the difficulty multiplier), and cards say who is up there:
+"Air threat · No ground defenses · Air: 1 fighter + 1 bomber (veteran)".
+
+### A world with traffic
+
+Up to two **ambient patrols** (scouts, fighters, or a bomber crossing) fly over enemy country (T3,
+T6, T8, T9) even when no mission needs them. They come and go out of sight, stay in their zone, and
+fighters among them will go for you if you trespass. They **pay nothing** when shot down, so there
+is nothing to farm. At most **four** AI aircraft fly at once; missions and raids come first and
+patrols head home to make room. Aircraft only appear and disappear out of view, beyond the edge of
+the map.
+
+### Sound
+
+Warning chirps when a fighter turns on you, an air-raid wail when a bomber sets out, a whoosh as
+planes flash past, a tick of ink fire, a paper crunch when a plane goes down and a chime when you
+got it. A low combat track swells while fighters are on you and fades when you get away (M mutes
+everything).
+
+### Sortie report
+
+New rows: enemy aircraft destroyed, bombers intercepted, friendly objectives protected (raids beaten
+off with your help, escorts seen home), and paper lost to raids, which the net change now includes.
+Damage dealt and taken, shots fired and accuracy were already there. The career panel counts
+aircraft shot down.
+
+## Territory defenses (since v0.0.4)
+
+T2–T9 have threat levels and the defenses to match (T1's own guns are described above).
 
 **Threat levels.** Every territory except home has one, fixed in [`src/config.ts`](src/config.ts)
 (`THREAT.map`). The danger grows towards the far side of the map, where the east column and T8 are
@@ -53,8 +171,9 @@ enemy country:
 | 2 Guarded | T3, T6 | 2 ink turrets, a radar station, a supply depot | Medium or Hard |
 | 3 Fortified | T8, T9 | 2 ink turrets, a rocket launcher, a radar station, a supply depot | Hard |
 
-T1 stays safe: nothing fires over it (or within 12 m of it), rockets lose track of a plane that gets
-there, and no weapon is placed where its reach covers home or the first stretch after take-off. The
+T1 stays safe for you: nothing hostile fires at you over it (or within 12 m of it), rockets lose
+track of a plane that gets there, and no enemy weapon is placed where its reach covers home or the
+first stretch after take-off. (T1's own guns do fire over it, at raiders.) The
 easy card always goes to unprotected or lightly defended ground, so a player who has lost a few
 planes can always earn their way back.
 
@@ -146,10 +265,13 @@ destroyed.
 4. Do the mission: **right-click** drops a bomb, **hold left-click** fires ink. The marker and the
    mini-map's dotted line point at the current objective. Near defended ground, watch the threat
    panel and the ring, keep turning, use blind spots and low approaches, and take out the radar or
-   the guns if the job will take a while.
-5. **Land on T1**: slower than 19, descending less than 5 m/s, wings level. Then **R** to rearm,
+   the guns if the job will take a while. Against aircraft, aim at the small red lead circle, keep
+   turning when one is on your tail (it shows on the threat ring), and boost away to make it give up.
+5. **When the raid alert comes up**, go and meet the bomber: from the desk, fold a fighter and take
+   off; in the air, the marker and the mini-map show where it is and its line to T1.
+6. **Land on T1**: slower than 19, descending less than 5 m/s, wings level. Then **R** to rearm,
    **Space** to take off again, or **Enter** to end the sortie and read the report.
-6. **Enter** (or **Continue**) on the report deals new mission cards and rebuilds the defenses.
+7. **Enter** (or **Continue**) on the report deals new mission cards and rebuilds the defenses.
 
 A mission pays as soon as its last objective is done. Landing is only required by Strike & return
 and Multi-stage strike missions, but it's how you avoid paying for a new plane.
@@ -181,12 +303,20 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 | Multi-stage strike | Radar, then supply depot, then land on T1 | Swift |
 | Survival challenge | Hold out in a defended territory's airspace | Falcon |
 | Low-altitude attack | Bomb a bullseye while staying low near it | Falcon, Swift, Widewing |
+| Dogfight | Shoot down an enemy fighter patrolling a territory | Falcon |
+| Scout interception | Shoot down a scout before it escapes the map | Falcon, Dart, Swift |
+| Bomber interception | Shoot down the raider before it releases (escorted on Hard) | Falcon, Swift |
+| Bomber escort | Keep your Widewing flying until its bomb hits | Falcon, Swift |
+| Airspace patrol | Patrol a territory for 20 / 25 / 30 s and shoot down every intruder | Falcon |
+| Combined attack | Bomb a defended bullseye with a fighter patrolling overhead | Swift |
 
 Bombs offered = one per target (one for a structure to knock down), plus 2 spares on Easy and 1 on
 Medium. Easy cards go to threat 0–1, Medium to 1–2, Hard to 2–3.
 
 A mission **fails** when every bomb is gone with a bullseye still to hit, when the clock runs out,
-when the plane is lost, or when you end the sortie before finishing.
+when the plane is lost, when you end the sortie before finishing, when an aircraft you had to stop
+escapes or releases its bomb, or when the bomber you escort is shot down. An aircraft you had to
+shoot down counts whoever finishes it (T1's guns included).
 
 ### Controls
 
@@ -218,8 +348,12 @@ when the plane is lost, or when you end the sortie before finishing.
 | Roll out a stowed plane | 0 |
 | Rearm ink and range after landing | 0 |
 | Home income (while below 150) | +1 every 2 s |
-| Mission success | +reward on the card: about 35 to 100 on Easy, 70 to 190 on Medium, 110 to 275 on Hard |
+| Mission success | +reward on the card: about 35 to 95 on Easy, 65 to 200 on Medium, 105 to 305 on Hard |
 | Failed mission, crash | +0 |
+| Raid on T1 beaten off, with your help | +60 (missions that send the raider pay through the mission instead) |
+| Raid on T1 beaten off by T1's guns alone | 0 |
+| A raider's bomb hits the paper store | −20, never below 50 |
+| Shooting down an ambient patrol | 0 |
 
 Paper is still the only resource; ink is not a currency. For playtesting,
 `paperwars.state.resetPaper()` in the browser console restores the starting balance.
@@ -230,13 +364,25 @@ Paper is still the only resource; ink is not a currency. For playtesting,
 src/
   main.ts                 Boots the game; exposes `window.paperwars` for console debugging
   Game.ts                 Wires rules ↔ scene ↔ input ↔ HUD; runs the frame loop; builds the HUD view
-  config.ts               Every tuning number: aircraft catalog (AIRCRAFT), threat levels (THREAT), defenses (DEFENSES)
+  config.ts               Every tuning number: aircraft catalog (AIRCRAFT), threat levels (THREAT), defenses (DEFENSES),
+                          AI pilots (AI), raids (RAIDS)
+
+  ai/
+    AiAircraft.ts         One AI plane: flight model, health, guns, bombs, and its pilot (the state machine)
+    AirTraffic.ts         Everything else in the air: mission spawns, raids on T1, ambient patrols, spawn
+                          limits, despawning out of sight; raid outcomes
+    FlightPlans.ts        Routes for raids, patrols, scouts, interceptors and the friendly escort bomber
+    Navigation.ts         Safe heights, terrain look-ahead, waypoints, entry and exit points
+    Gunnery.ts            Lagging target tracking, lead, and the accuracy model
+    harness.ts            Test support: the real world, scripted "players" and fire resolution
 
   aircraft/
     Aircraft.ts           1–5 ratings from the specs (now with stealth); mission suitability and bomb loads
     PlaneShapes.ts        The four folded-paper shapes, bomb slots and gun muzzles (data only)
     PlaneModel.ts         Foldable paper plane mesh: fold animation, crumpling and ink blots
-    PlaneController.ts    Flight from the chosen FlightProfile, collisions that deflect, touchdown and rollout
+    FlightModel.ts        The flight physics for every plane, player's or AI's: steering, speed, boost, collisions
+                          that deflect, touchdown and rollout (no rendering)
+    PlaneController.ts    The player's plane in the scene: its models and bomb rack, posed from the flight model
     Boost.ts              Boost timing: ready → active → cooldown
     Landing.ts            Whether a touchdown is within the landing limits, and why not
     Bomb.ts               Bomb pool; release, gravity, and swept collision against props, target zones and platforms
@@ -248,24 +394,28 @@ src/
     Collision.ts          Spheres and turned boxes: contacts, swept segments, distances
     Damage.ts             Health; impact, rough-landing and blast damage; damaged handling
     Gun.ts                Ammunition, rate of fire, alternating barrels
-    Projectiles.ts        The player's ink rounds: swept hits on targets and platforms, and their pool
+    Projectiles.ts        The player's ink rounds: swept hits on targets, aircraft (with aim assistance) and platforms
+    Ordnance.ts           Every other round and rocket: the defenses' and AI aircraft's, by side, swept against
+                          every aircraft of the other side; homing rockets; shooting rockets down
     Destructibles.ts      Practice targets and props: layout per territory, health, respawning
 
   defenses/
-    Layout.ts             Where each territory's turrets, launchers, radar, depot, walls and flag go; home safety
+    Layout.ts             Where each territory's turrets, launchers, radar, depot, walls and flag go; T1's own
+                          guns and paper store; home safety
     Installation.ts       How each installation notices, turns, leads, scatters, locks on and fires; the
-                          per-territory network with radar alerts
-    EnemyFire.ts          Enemy ink and homing rockets in flight, swept against the moving plane; shooting rockets down
+                          network that picks a hostile aircraft for each weapon, with radar alerts
 
   missions/
-    Mission.ts            Objectives (bomb, low approach, recon, reach, ring, land, destroy, survive, escape), progress
-    MissionGenerator.ts   Mission cards: types, threat windows, targets, known defenses, codenames, rewards
+    Mission.ts            Objectives (bomb, low approach, recon, reach, ring, land, destroy, survive, escape,
+                          intercept, escort, patrol), progress and failure
+    MissionGenerator.ts   Mission cards: types, threat windows, targets, known defenses, the aircraft each one
+                          sends up, codenames, rewards
 
   systems/
     GameState.ts          The rules: garage and hangar, fold/refit/roll-out, launch, weapons, health,
-                          range, land → rearm → take off → end sortie, rewards, the sortie log
+                          range, land → rearm → take off → end sortie, rewards, raids won and lost, the sortie log
     LocalStats.ts         Career numbers in local storage (survives missing or blocked storage)
-    ResourceManager.ts    Paper balance; all costs and rewards go through it
+    ResourceManager.ts    Paper balance; all costs, rewards and raid losses go through it (with a protected floor)
     HomeIncome.ts         T1's paper trickle
     Boundary.ts           Airspace edge: warning countdown and autopilot hand-over
     Random.ts             Seeded random numbers (for repeatable tests)
@@ -276,7 +426,8 @@ src/
     WorldGenerator.ts     Lays out the 3×3 grid with gaps; builds platforms, runway, launch pad, lighting
     TargetRange.ts        Draws the practice planes, crates and boards, with hits, wear and rebuilding
     DefenseModels.ts      Draws the installations, walls, flags, trims and range rings; aiming, damage, collapse
-    EnemyFireView.ts      Draws enemy ink and paper rockets with smoke trails
+    OrdnanceView.ts       Draws enemy (magenta) and friendly (blue) ink and paper rockets with smoke trails
+    AircraftModels.ts     Draws the AI aircraft: enemy newsprint and red, friendly blue; damage, streamers, smudge
     MissionMarkers.ts     Bullseyes, beacons, airspace volumes, ring hoops, target rings, escape lines, low-level sheets
     Effects.ts            Paper bursts, shock rings, cartoon puffs and explosions, ink splats, tumbling wrecks
 
@@ -284,20 +435,22 @@ src/
     HUD.ts, hud.css       Paper and career, mission cards and tracker, gauges, aircraft status, ground crew,
                           report, target labels, hit markers, damage numbers, banners, menus
     ThreatHud.ts          Threat panel, threat ring, rocket lock warning, damage direction
-    Sounds.ts             Synthesised warning sounds (Web Audio, no files)
+    AirHud.ts             Aircraft markers and edge chevrons, health bars, the lead sight, the raid alert
+    Sounds.ts             Synthesised warning sounds and the combat track (Web Audio, no files)
     icons.ts              The line icons for objectives and defenses
     Garage.ts             Plane cards and the inspector
     MiniMap.ts            The top-down navigation diagram
     dom.ts                Small DOM helpers
 ```
 
-The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, everything in `combat/` except
-the projectile pool, everything in `defenses/`, `ResourceManager`, `HomeIncome`, `LocalStats`,
-`Boost`, `Landing`, `Boundary`) contain no rendering or input code, and all of them have unit tests.
-The game reports facts to the rules ("this round hit T8-turret1 for 7", "the plane flew from A to
-B", "a rocket from T8-launcher hit the plane") and the rules decide what they mean, which should
-make it straightforward to move them to a server later. The defense network only ever sees the
-plane as a position, a velocity and a signature, so another player's plane can take its place.
+The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, `FlightModel`, everything in
+`ai/`, everything in `combat/` except the projectile pool, everything in `defenses/`,
+`ResourceManager`, `HomeIncome`, `LocalStats`, `Boost`, `Landing`, `Boundary`) contain no rendering
+or input code, and all of them have unit tests. The game reports facts to the rules ("this round
+hit T8-turret1 for 7", "the plane flew from A to B", "the raider's bomb hit the store") and the
+rules decide what they mean, which should make it straightforward to move them to a server later.
+The defense network, the ordnance and the AI pilots only ever see an aircraft as an id, a side, a
+position, a velocity and a signature, so another player's plane can take the AI's place.
 
 ### Adding a plane
 
@@ -312,6 +465,17 @@ The flight controller, garage, ratings, suitability, defenses, HUD and practice 
 
 All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most worth playtesting first:
 
+- **How dangerous enemy pilots are:** `AI.skill` per level (`aimError`, `burst`/`pause`, `lead`,
+  `reaction`, `throttle`, `evasive`, `positioning`) and `AI.accuracy` (how much distance, speed
+  difference, manoeuvring and tracking time matter). The AI unit tests measure damage per second by
+  skill, so a change shows up there first.
+- **How far they chase:** `AI.maxPursuit`, `AI.leash`, `AI.disengageTime`, `AI.launchShield`.
+- **How busy the sky is:** `AI.maxActive`, `AI.ambient` (count, respawn, lifetime, role mix),
+  `RAIDS.first` / `RAIDS.interval`, `RAIDS.escortAfter` / `escortChance`.
+- **What raids are worth:** `RAIDS.reward`, `RAIDS.penalty`, `ECONOMY.protectedPaper`, and the
+  raiders' speeds in `ai/FlightPlans.ts` (which set how much warning you get).
+- **Aim assistance:** `WEAPONS.aimAssist`.
+
 - **How dangerous defenses are:** `DEFENSES.turret` (`spread`, `speedSpread`, `lead`, `trackingLag`,
   `interval`, `shot.damage`, `arc`, `turnRate`) and `DEFENSES.launcher` (`lockTime`, `reload`,
   `rocket.speed`, `rocket.turnRate`, `rocket.damage`, `minPitch`), plus each plane's `signature` and `hitRadius`.
@@ -325,7 +489,60 @@ All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most w
 
 ## Decisions worth knowing
 
-These are judgment calls where the plan left room:
+These are judgment calls where the plan left room.
+
+### v0.0.5: aircraft
+
+- **One flight model for everyone.** The plan asked AI aircraft to use the existing flight model,
+  so the physics moved out of `PlaneController` into `FlightModel`, which has no rendering and is
+  steered by an aim direction (as the mouse sets one), a throttle and a boost. The player's plane is
+  now a view of a `FlightModel`; nothing about how it flies changed.
+- **Pilots lead the turn, like a player leads the mouse.** The flight model's nose lags a moving aim
+  point, so a pilot that simply aimed at its target would trail it in every turn and never fire. Good
+  pilots aim ahead by the turn they see coming; how much is part of their skill.
+- **Accuracy is a scatter, not a dice roll.** Every AI round flies through the world like the
+  player's; the five factors the plan lists (distance, relative speed, manoeuvring, skill, time
+  tracking) set how far it scatters, and the pilot's lagging idea of your velocity makes turning
+  doubly effective. The numbers were tuned against measured damage per second (see the AI tests).
+- **Sides, not special cases.** Everything that shoots or flies now belongs to the player or the
+  enemy. Each defense weapon picks a hostile aircraft (sticking with the one it follows while it can
+  see it), rounds only hit the other side, rockets home on what they were fired at. That is what lets
+  T1's guns shoot raiders, enemy guns shoot your escorted bomber, and (later) players shoot each other.
+- **T1's guns face out, with the same blind spot.** Raids always come from the world centre side,
+  so T1's turrets face that way; the blind spot behind them faces the empty corner of the map.
+- **The bomber's target is a paper store**, a cardboard depot with a target on its roof on T1,
+  because "a designated target within the player's home territory" needs to be something you can
+  see from the desk. A hit is a bomb within 5 m of it. It takes damage and collapses like any
+  installation, and is rebuilt when the sortie ends.
+- **Raid rewards need you.** "Distinguish player participation from completely automated defense":
+  the +60 is paid only if you damaged the raider. T1's guns alone can still save your paper, but pay
+  nothing. A raid that a bomber-interception mission sends pays through the mission instead (no double
+  pay). Mission targets count whoever finishes them, so a bomber your guns finish off still completes
+  the interception.
+- **Raids start after your first sortie, a minute or two later.** New players aren't bombed before
+  they have flown, and never more often than every three minutes or so. The raider circles its
+  territory before setting out, which is what gives about half a minute of warning.
+- **The grace period is both.** Hostile aircraft don't fire at you over home or in the first six
+  seconds after take-off, and patrols and their fighters keep out of the airspace around T1 (raiders
+  and their escorts excepted).
+- **Ambient fighters guard enemy country.** They will go for you if you trespass in their zone, so
+  the east of the map got more dangerous; easy cards stay on the west and centre, where the air is
+  clear unless a mission puts a rookie there.
+- **Patrol scouts are a step easier than the card.** A scout crossing a patrol runs once it spots
+  you; at the card's own skill, a regular scout with boost outran a Falcon often enough to make
+  medium patrols a coin toss. Scout interception missions keep the full skill: catching it is the job.
+- **Patrols reach above the turrets.** The patrol area goes up to 60 m, out of turret reach, and
+  patrols never go to fortified ground: patrolling is about the fight in the air, and patrolling high
+  is the smart way to do it.
+- **Markers do the pointing for aircraft.** When the objective is an aircraft, its marker (and edge
+  chevron) replaces the objective arrow, so there is never a second label on it. Crowded markers
+  collapse to brackets, the most important (attacking you, mission targets) first.
+- **The raid alert sits under your paper**, not across the middle of the screen: it stays up for
+  half a minute, so it must not cover the view ahead. The career numbers make way for it.
+- **Mid-air collisions are avoided, not simulated.** Pilots keep clear of each other and of you;
+  aircraft don't physically collide.
+
+### v0.0.4: defenses
 
 - **A fixed threat map, not a random one.** The plan let "the world assign threat levels"; a fixed
   map (danger growing away from home) lets players learn the ground, and the two neighbours of home
@@ -366,60 +583,64 @@ These are judgment calls where the plan left room:
 - **Pulling up after a clean low-level release is fine.** The bomb was released clean and counts;
   the "run blown" banner waits until no bomb is falling.
 
-## Definition of done (v0.0.4)
+## Definition of done (v0.0.5)
 
 | Requirement | Status |
 |---|---|
-| Ink turrets and paper rocket launchers (simplified SAM, basic homing) on selected territories | ✅ |
-| Detect within a radius, rotate towards the plane, fire at intervals, limited accuracy, damage, stop when it leaves or is destroyed | ✅ |
-| Accuracy depends on the plane's speed; boosting makes hits rare | ✅ |
-| Visible engagement ranges; estimated defenses on mission selection; warning indicators in flight | ✅ |
-| Destructible defenses (ink or bombs), respawning when the scenario resets | ✅ |
-| Evadable projectiles with travel time; rockets with limited turning; visible rocket trails | ✅ |
-| Visual and audio warnings: turret icons, threat direction, launch alert | ✅ |
-| Threat levels 0–3 with the four profiles on T2–T9; T1 safe; at least two safe or light territories | ✅ |
-| Threat level, known defenses, recommended aircraft and reward on mission cards | ✅ |
-| Risk-based rewards that also weigh distance, the job and exposure | ✅ |
-| Suppression, dangerous recon, fortified bombing, multi-stage strike, survival, low-altitude attack | ✅ |
-| Radar that alerts weapons early; losing it shortens detection | ✅ |
-| Restricted firing arcs and rotation speeds (blind spots) | ✅ |
-| Aircraft role advantages (Dart signature, Falcon agility, Widewing payload and vulnerability, Swift flexibility) | ✅ |
-| Turrets, launchers, radar stations, supply boxes, flags and barriers placed by threat level, with varied layouts | ✅ |
-| Damaged and collapsed states that last until the scenario resets | ✅ |
-| Distinct objective symbols for bombing targets, turrets, radars and reconnaissance | ✅ |
-| Incoming fire indicators, damage direction, health bars, rocket lock warning, territory threat indicator | ✅ |
-| Destruction feedback: impact effect, collapse animation, sound, confirmation | ✅ |
-| Report: defenses destroyed, damage taken, shots fired and hits, survival, paper earned or lost | ✅ |
+| AI aircraft spawn at territories (or beyond them), begin at a safe altitude, follow routes, detect, turn on targets, fire ink, take damage, are destroyed, and leave when done | ✅ |
+| Scout (Dart), fighter (Falcon) and bomber (Widewing) roles, using the player's aircraft health, damage and weapons | ✅ |
+| AI flies the existing flight model: the pilot supplies steering, throttle and boost | ✅ |
+| Waypoint navigation at safe altitudes | ✅ |
+| Finite-state machine: patrol, target detected, attack, evade, disengage/return (plus reposition, bomb run, egress) | ✅ |
+| Collision avoidance: forward obstacle detection with altitude correction, and separation from other aircraft | ✅ |
+| Accuracy from distance, relative speed, player manoeuvring, skill and tracking time; never perfect | ✅ |
+| Aircraft targetable with the existing projectile and collision systems; modest aim assistance, no auto-targeting | ✅ |
+| Health indicators that fade with distance; markers with off-screen indicators | ✅ |
+| Fighters get behind you, fire when aligned, disengage beyond a maximum pursuit distance, reposition | ✅ |
+| Destruction: crumpling, kill confirmation, mission progress, removal, local combat stats | ✅ |
+| Bombers raid T1: warning, interception, release when aligned, escape; −20 on a hit with a protected minimum, +60 for a defense you took part in | ✅ |
+| Interception missions; sufficient warning to launch from the desk | ✅ |
+| T1's guns attack hostile aircraft; friend and foe are told apart | ✅ |
+| Escorted bombers (Hard interceptions, later raids) | ✅ |
+| Dogfight, scout interception, bomber interception, bomber escort, airspace patrol, combined attack | ✅ |
+| Ambient patrols, mission spawns, a spawn limit of 4, activity zones, despawning out of view | ✅ |
+| Rookie, regular and veteran pilots that differ in behaviour; difficulty scaling by pilots, escorts, distance and ground threat | ✅ |
+| No farming ambient enemies; grace period after take-off; easy missions always available | ✅ |
+| Markers, off-screen indicators, health bars, raid alerts, kill confirmations | ✅ |
+| Sounds: passing aircraft, ink fire, hits, plane destruction; optional combat music | ✅ |
+| Report: aircraft destroyed, damage dealt and received, shots and accuracy, bombers intercepted, objectives protected, paper earned and lost | ✅ |
 
-The rules are covered by unit tests (`npm test`, 149 tests), including statistical checks on
-turret accuracy against speed and weaving, and rockets against fleeing and turning planes. Full
-sorties were flown in headless Chromium by a scripted pilot that steers through the aim (as the
-mouse does), with no page errors:
+The rules are covered by unit tests (`npm test`, 199 tests). The AI tests fly real pilots against
+scripted players in the real world: damage per second by skill, unpredictable flying against
+steady circling, getting behind the target, holding fire at a shielded player, giving up a chase,
+staying out of home, scouts escaping, bombers hitting the store (veterans at least 7 times in 8,
+rookies less often), raid outcomes, escorts holding formation and turning on attackers, ambient
+traffic within the limit and out of sight, and low routes without crashes or near misses.
 
-- Widewing fortified strikes on T8: depot bombed, out again with about half its health.
-- Falcon suppression on T3, T5 and T6: a turret destroyed from its blind spot with few or no hits taken.
-- A Dart circling slowly over fortified T9: shot down, and the report credits the T9 ink turret.
-- Low-level strikes on T5 and T7: one blown approach, then a clean run that scores. On a Hard run
-  over fortified T9, the same straight, non-evasive pilot was shot down after a clean release.
-- Multi-stage strikes on T3 and T6: radar, depot, then a real landing on T1.
-- Dangerous recon on T5, T6 and T7, each followed by the escape.
+The game was also played in headless Chromium by a scripted pilot that steers through the aim (as
+the mouse does) and fires when lined up, with no page errors:
 
-The desk and pause screen were also checked at 1280×720.
+- **Dogfight** (Medium, T6): the regular fighter turned on the pilot, hit it for 12, broke off and
+  repositioned, and was shot down in about 12 s; an ambient scout ran and was caught too.
+- **Bomber interception** (Hard): a pilot that ignored the veteran escort and flew straight at the
+  bomber was shot down by the escort in about ten seconds, as intended.
+- **Raid at the desk:** with nobody flying, T1's guns hit the raider (150 → 78) but it got through:
+  −20 paper, store damaged, about 27 s after the alert. Intercepted by the pilot, an easy raider went
+  down in about 6 s and paid +60.
+- **Bomber escort** (Medium, T7): the friendly Widewing flew in over T1 and hit on its first run.
+- **Scout interception, airspace patrol, combined attack** (Medium): all completed.
+- The air war costs about 0.7 ms per frame with three AI aircraft up.
 
-**Fixed along the way:** PlayCanvas destroys a mesh when the last mesh instance using it is
-destroyed. The cached splat and paper-ball meshes in `Effects` and the ring meshes in
-`MissionMarkers` are reused by short-lived entities, so once every user of one had gone, the next
-splat, wreck or marker drew a destroyed mesh ("Cannot read properties of undefined (reading
-'impl')"). This was already possible in v0.0.3 (a second wreck after the first had faded) and became
-frequent with enemy ink splats; the caches now hold their own reference.
+The desk, flight HUD, raid alert and report were checked at 1280×720.
 
 **Still unproven: how it *feels*.** Headless Chromium can't judge that. Playtest these first: whether
-turrets are too accurate or too forgiving (`spread`, `speedSpread`), whether rocket locks are
-escapable often enough, whether the threat ring and range rings read at a glance in a busy fight,
-and whether the sounds are helpful or nagging.
+regular fighters are fair (`AI.skill.medium`), whether the aim assistance is enough with a real
+mouse, whether raids come too often or give too much warning, and whether the markers and combat
+music help or clutter.
 
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.5, core multiplayer.** Two or more
-players sharing a world. The defense network already treats the plane as a position, a velocity and
-a signature, so other players' planes can be targets too.
+Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.6, core multiplayer.** Two or more
+players sharing a world. The defenses, the ordnance and the AI pilots already treat every aircraft
+as an id, a side, a position and a velocity, and the AI's raids rehearse the player-versus-player
+bombing loop of v0.0.7.

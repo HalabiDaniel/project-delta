@@ -1,7 +1,7 @@
 import { assessSuitability, bombLoad, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, BOMB, PLANE, type AircraftId, type AircraftSpec } from '../config';
+import { AIRCRAFT, BOMB, ECONOMY, PLANE, RAIDS, type AircraftId, type AircraftSpec, type AiRole } from '../config';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
 import { HomeIncome } from './HomeIncome';
 import type { ResourceManager } from './ResourceManager';
@@ -50,6 +50,13 @@ export interface SortieLog {
   enemyHits: number;
   /** What destroyed the plane, when enemy fire did ("Ink turret on T8"). */
   killedBy: string | null;
+  /** Enemy aircraft the player shot down (or helped to), and how many of them were bombers. */
+  aircraftDestroyed: number;
+  bombersIntercepted: number;
+  /** Raids on T1 beaten off with the player's help, and friendly bombers seen safely to their target. */
+  objectivesProtected: number;
+  /** Paper taken by enemy raids that got through. */
+  paperLost: number;
   rearms: number;
   outcome: 'flying' | 'recovered' | 'lost';
 }
@@ -83,7 +90,13 @@ export type GameEvent =
   | { type: 'took-off' }
   | { type: 'sortie-ended' }
   | { type: 'returned' }
-  | { type: 'paper-reset' };
+  | { type: 'paper-reset' }
+  /** An enemy aircraft went down; `credit` when the player shot it down or helped to. */
+  | { type: 'aircraft-destroyed'; id: string; role: AiRole; credit: boolean }
+  /** A raid on T1 was beaten off. Paid (outside missions) only when the player took part. */
+  | { type: 'raid-defended'; reward: number; participated: boolean }
+  /** A raider's bomb hit the paper store. */
+  | { type: 'raid-hit'; lost: number };
 
 export interface GameStats {
   planesBuilt: number;
@@ -93,6 +106,8 @@ export interface GameStats {
   failures: number;
   targetsDestroyed: number;
   defensesDestroyed: number;
+  aircraftDestroyed: number;
+  bombersIntercepted: number;
 }
 
 const CRASH_CAUSE: Record<DamageSource, CrashCause> = {
@@ -111,7 +126,10 @@ const CRASH_CAUSE: Record<DamageSource, CrashCause> = {
  */
 export class GameState {
   phase: GamePhase = 'desk';
-  readonly stats: GameStats = { planesBuilt: 0, planesRecovered: 0, planesLost: 0, successes: 0, failures: 0, targetsDestroyed: 0, defensesDestroyed: 0 };
+  readonly stats: GameStats = {
+    planesBuilt: 0, planesRecovered: 0, planesLost: 0, successes: 0, failures: 0,
+    targetsDestroyed: 0, defensesDestroyed: 0, aircraftDestroyed: 0, bombersIntercepted: 0,
+  };
   /** Mission cards on offer at home. */
   offers: Mission[];
   selected = 0;
@@ -370,6 +388,71 @@ export class GameState {
     for (const index of this.mission?.completeDestroy(destroyed) ?? []) this.objectiveComplete(index);
   }
 
+  /**
+   * AI aircraft `id` went down. `credit`: the player shot it down or helped to, which is what the
+   * report and career count. It counts for the mission whoever finished it (T1's guns included);
+   * an escorted bomber going down loses the mission.
+   */
+  aircraftDestroyed(id: string, role: AiRole, credit: boolean): void {
+    if (credit) {
+      this.stats.aircraftDestroyed++;
+      if (this.sortie) this.sortie.aircraftDestroyed++;
+      if (role === 'bomber') {
+        this.stats.bombersIntercepted++;
+        if (this.sortie) this.sortie.bombersIntercepted++;
+      }
+    }
+    this.emit({ type: 'aircraft-destroyed', id, role, credit });
+    const mission = this.mission;
+    if (!mission?.isActive) return;
+    if (mission.escorting(id)) {
+      this.failMission('escort-lost');
+      return;
+    }
+    for (const index of mission.completeDestroy(id)) this.objectiveComplete(index);
+  }
+
+  /** AI aircraft `id` got away out of the world. A mission that had to stop it is lost. */
+  aircraftEscaped(id: string): void {
+    if (this.mission?.lostTo(id, 'escape')) this.failMission('target-escaped');
+  }
+
+  /** AI bomber `id` released its bomb. A mission that had to stop it first is lost. */
+  bombReleased(id: string): void {
+    if (this.mission?.lostTo(id, 'release')) this.failMission('target-bombed');
+  }
+
+  /** The friendly bomber `id` dropped a bomb; `hit` if it landed on its target. */
+  escortStrike(id: string, hit: boolean): void {
+    if (!hit || !this.mission?.isActive) return;
+    const index = this.mission.completeEscort(id);
+    if (index < 0) return;
+    if (this.sortie) this.sortie.objectivesProtected++;
+    this.objectiveComplete(index);
+  }
+
+  /**
+   * A raid on T1 was beaten off (shot down or turned back). The defense reward only goes to a
+   * player who took part, not to T1's guns alone; a raid a mission sent pays through the mission.
+   */
+  raidDefended(participated: boolean, mission = false): void {
+    const reward = participated && !mission ? RAIDS.reward : 0;
+    if (reward > 0) this.resources.earn(reward, 'reward');
+    if (participated && this.sortie) {
+      this.sortie.paperEarned += reward;
+      this.sortie.objectivesProtected++;
+    }
+    this.emit({ type: 'raid-defended', reward, participated });
+  }
+
+  /** A raider's bomb hit the paper store: some paper is lost, never below the protected minimum. */
+  raidHit(): number {
+    const lost = this.resources.lose(RAIDS.penalty, ECONOMY.protectedPaper);
+    if (this.sortie) this.sortie.paperLost += lost;
+    this.emit({ type: 'raid-hit', lost });
+    return lost;
+  }
+
   /** An enemy round or rocket was fired at the plane. */
   recordIncoming(): void {
     if (this.phase === 'flying' && this.sortie) this.sortie.enemyShots++;
@@ -545,6 +628,7 @@ function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): S
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
     bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0,
-    enemyShots: 0, enemyHits: 0, killedBy: null, rearms: 0, outcome: 'flying',
+    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0,
+    rearms: 0, outcome: 'flying',
   };
 }

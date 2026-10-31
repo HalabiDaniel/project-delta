@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AIRCRAFT, DAMAGE, LANDING, TARGETS } from '../config';
+import { AIRCRAFT, DAMAGE, LANDING, TARGETS, WEAPONS } from '../config';
 import { generateTerritories } from '../world/WorldGenerator';
 import { distanceToShape, firstHit, segmentHit, sphereContact, type Shape } from './Collision';
 import { blastDamage, Durability, handlingFactor, impactDamage, roughLandingDamage, wobbleAmount } from './Damage';
 import { Destructible, layoutTargetRange } from './Destructibles';
 import { Gun } from './Gun';
-import { sweepShot } from './Projectiles';
+import { aimAssist, sweepShot } from './Projectiles';
 
 const territories = generateTerritories();
 
@@ -173,5 +173,27 @@ describe('sweepShot', () => {
   it('the nearer of a target and a platform is hit', () => {
     // Fired down through the dummy towards the ground: the dummy is first.
     expect(sweepShot({ x: t5.x, y: 12, z: t5.z }, { x: t5.x, y: -1, z: t5.z }, 0.12, [dummy], territories)?.kind).toBe('object');
+  });
+});
+
+describe('ink against aircraft', () => {
+  const plane = (x: number, z: number, px = x, pz = z) => ({ id: 'bandit', x, y: 20, z, px, py: 20, pz, r: AIRCRAFT.falcon.hitRadius });
+
+  it('hits an aircraft that crosses the round between frames', () => {
+    const hit = sweepShot({ x: 0, y: 20, z: 0 }, { x: 0, y: 20, z: -4 }, WEAPONS.projectileRadius, [], [], [plane(1.5, -2, -1.5, -2)]);
+    expect(hit).toMatchObject({ kind: 'object', id: 'bandit' });
+    expect(sweepShot({ x: 0, y: 20, z: 0 }, { x: 0, y: 20, z: -4 }, WEAPONS.projectileRadius, [], [], [plane(6, -2, 5, -2)])).toBeNull();
+  });
+
+  it('aim assistance widens aircraft a little within a small cone, never close in and never by much', () => {
+    expect(aimAssist(0)).toBe(0);
+    expect(aimAssist(10)).toBeLessThan(0.3);
+    expect(aimAssist(40)).toBeGreaterThan(aimAssist(10));
+    expect(aimAssist(500)).toBe(WEAPONS.aimAssist.max);
+    // A round passing just outside the plane: a miss at the muzzle, a hit after 40 m of flight.
+    const miss = AIRCRAFT.falcon.hitRadius + WEAPONS.projectileRadius + 0.5;
+    const args = [{ x: miss, y: 20, z: 0 }, { x: miss, y: 20, z: -4 }, WEAPONS.projectileRadius, [], [], [plane(0, -2)]] as const;
+    expect(sweepShot(...args, aimAssist(2))).toBeNull();
+    expect(sweepShot(...args, aimAssist(40))).not.toBeNull();
   });
 });
