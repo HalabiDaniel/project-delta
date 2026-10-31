@@ -73,6 +73,8 @@ const PATHS = {
   sound: '<path d="M2.5 6h2.6L8.6 3v10L5.1 10H2.5z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.6a6 6 0 0 1 0 8.8"/>',
   mute: '<path d="M2.5 6h2.6L8.6 3v10L5.1 10H2.5z"/><path d="M11 6l3.5 4M14.5 6 11 10"/>',
   menu: '<path d="M2.5 4h11M2.5 8h11M2.5 12h11"/>',
+  pencil: '<path d="M3 13l1-3.6L11 2.4l2.6 2.6L6.6 12z"/><path d="M9.6 3.8l2.6 2.6M3 13l3.6-1"/>',
+  graphics: '<rect x="1.8" y="3" width="12.4" height="10" rx="1.2"/><path d="M1.8 11l3.6-3.4 3 2.6 2.2-1.8 3.6 3"/><circle cx="10.8" cy="6" r="1"/>',
   info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.2v4.2"/><circle cx="8" cy="5" r=".7" fill="currentColor"/>',
   tip: '<path d="M5.4 10.4a4.4 4.4 0 1 1 5.2 0v1.8H5.4z"/><path d="M6 14.4h4"/>',
   close: '<path d="M3.8 3.8l8.4 8.4M12.2 3.8l-8.4 8.4"/>',
@@ -94,7 +96,7 @@ export const ICON_NAMES: Record<IconName, string> = {
   raid: 'Raid',
   ok: 'Operational', warn: 'Damaged', wrecked: 'Destroyed', offline: 'Offline',
   clock: 'Time', distance: 'Distance', home: 'Home', kills: 'Shot down', crumple: 'Planes lost', damage: 'Damage', medal: 'Medal', streak: 'Streak',
-  swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', tip: 'Tip', close: 'Close', more: 'Details',
+  swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', pencil: 'Pencil outlines', graphics: 'Graphics', tip: 'Tip', close: 'Close', more: 'Details',
 };
 
 /**

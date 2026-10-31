@@ -7,6 +7,7 @@ import { FlightModel, type AircraftStatus, type FlightControls, type FlightResul
 import type { TouchdownCheck, TouchdownState } from './Landing';
 import { buildPaperBallMesh, createPaperMaterial, FoldablePlane, inkBlotMaterial, planeMaterials } from './PlaneModel';
 import { PLANE_SHAPES } from './PlaneShapes';
+import { outline } from '../render/outline/OutlineRenderer';
 
 export { clamp, forwardFromAngles, wrapAngle, yawFromDirection } from './FlightModel';
 export type { AircraftStatus, Collision, FlightControls, FlightOutcome, FlightResult } from './FlightModel';
@@ -55,6 +56,7 @@ export class PlaneController {
         ball.setLocalScale(scale, scale, scale);
         ball.enabled = false;
         this.root.addChild(ball);
+        outline(ball, 'hero');
         return ball;
       });
       this.airframes.set(spec.id, { spec, model, bombs });

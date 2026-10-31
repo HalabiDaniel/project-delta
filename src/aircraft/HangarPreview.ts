@@ -39,7 +39,7 @@ export class HangarPreview {
     this.root = new pc.Entity('hangar-preview');
     const materials = { paper: blueprintMaterial(1), accent: blueprintMaterial(0.55) };
     for (const id of AIRCRAFT_ORDER) {
-      const model = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials);
+      const model = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials, 0, null, null);
       model.entity.render!.castShadows = false;
       model.entity.enabled = false;
       this.root.addChild(model.entity);

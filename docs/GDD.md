@@ -68,6 +68,17 @@ The visual design should remain lightweight enough to run smoothly in standard d
 
 The aesthetic is intentionally not realistic military simulation. The goal is playful aerial warfare in a recognizable miniature world.
 
+### 2.1 Art Direction (from v0.0.8)
+
+paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly geometry under soft, flat cartoon shading, hand-drawn graphite outlines, paper grain, folds and cardboard, in colourful miniature classroom scenes. It should look as if a student built the world from paper, cardboard and school supplies, then brought it to life.
+
+- **Pencil outlines** on everything that matters, boldest on aircraft, lighter on scenery, fading with distance; configurable and optional.
+- **One material library** (paper, notebook and graph paper, cardboard, ink, pencil markings, rubber, wood, plastic) and one lighting model, shared by the game's own models and imported ones.
+- **Custom models where identity matters** (aircraft, cardboard buildings, defenses, landmarks, mission targets); licensed asset packs such as Synty only as environment geometry, always adapted to the shared materials and outlines.
+- **Readable first:** ownership colours (blue player, red hostile, grey neutral, orange objective) with symbols, recognisable landmarks, silhouettes that hold up at speed.
+
+The technical side (outline renderer, materials, asset import, adding content) is documented in [ART_DIRECTION.md](ART_DIRECTION.md).
+
 ---
 
 ## 3. Multiplayer Sessions
@@ -884,19 +895,25 @@ Single-player still. A mission director deals a safe, a balanced and a high-risk
 
 Single-player still. The home territory becomes a base the player builds in fixed slots (defense, radar, economy, utility): ink turrets and paper rocket launchers built on the 0.0.4 defense systems (magazines, bomber-first targeting, three levels each), a radar station for early warning, paper workshops for production and storage boxes for capacity and protected paper. Buildings are damaged by raids and stay damaged until repaired with paper; they can be upgraded, or removed for a partial refund. Raids target buildings, are announced only once detected, destroy a share of vulnerable paper and end with a defense report; the mission director paces them. The HUD is redesigned: fixed zones, icon-and-number values, short alerts, first-time tips instead of rules to read, key hints that fade after the first sorties, and a HUD size setting.
 
-### Version 0.0.8: Core Multiplayer
+### Version 0.0.8: World Expansion, Visual Identity and Player Experience
+
+Single-player still. The game gets its permanent look: a playable sketchbook with pencil outlines, paper materials and soft cartoon light (see §2.1). The abstract grid becomes a classroom: territories become themed desks and cardboard platforms (Notebook, Cardboard, Graph Paper, Colored Paper, Art Desk) with names (Home Desk, Pencil Point, Notebook Ridge, Eraser Fields, Ink Valley, Cardboard Fort, Ruler Crossing, Paper Citadel, Scrap Corner), landmarks, props and a few obstacles. Licensed environment assets can be dropped in without being committed. New players get an interactive tutorial, the home base a unified dashboard, and the mission loop quick rebuild, repair and rearm, clearer rewards and failure reasons. Paper-themed audio, effects and animation, graphics presets and accessibility settings.
+
+Built in reviewable phases with developer checkpoints: (1) visual vertical slice on one territory, (2) world expansion, (3) territory identity and navigation, (4) home dashboard and onboarding, (5) gameplay flow and polish, (6) testing and refinement.
+
+### Version 0.0.9: Core Multiplayer
 
 Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
 
-### Version 0.0.9: Player Territory Bombing
+### Version 0.0.10: Player Territory Bombing
 
 Real player-versus-player attacks on built bases, defender losses of vulnerable paper, fighter interception, notifications, and the mission director's bounties and cooperation offers between players.
 
-### Version 0.0.10: Persistent Sessions
+### Version 0.0.11: Persistent Sessions
 
 Player accounts, session reconnection, persistent economies, and campaign lifecycle.
 
-### Version 0.0.11: AI Escort Aircraft
+### Version 0.0.12: AI Escort Aircraft
 
 Purchasable single-use supporting aircraft.
 

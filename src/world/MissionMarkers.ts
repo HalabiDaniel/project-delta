@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { outline } from '../render/outline/OutlineRenderer';
 import { PALETTE } from '../config';
 import type { Mission, Objective, TargetZone } from '../missions/Mission';
 import { flatMaterial, type World } from './WorldGenerator';
@@ -290,6 +291,7 @@ export class MissionMarkers {
       if (material === strong) paint.push(ring);
     });
     this.root.addChild(root);
+    outline(root, 'structure', { merge: true });
     return [root, paint];
   }
 
