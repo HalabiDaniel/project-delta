@@ -117,18 +117,30 @@ export class MissionMarkers {
           }
           break;
         }
+        case 'escort': {
+          // The friendly bomber's target: a bullseye like any other.
+          const [body, paint] = this.bullseye(objective.zone, false);
+          marker.body = body;
+          marker.paint = paint;
+          marker.beacon = this.beacon(objective.zone.x, objective.zone.z, this.mat.beaconBomb, 0.6);
+          break;
+        }
+        case 'intercept':
+          // Aircraft move: the HUD marks them, not the world.
+          break;
         case 'recon':
         case 'reach':
-        case 'survive': {
+        case 'survive':
+        case 'patrol': {
           const a = objective.airspace;
           const box = new pc.Entity('airspace');
-          const material = objective.kind === 'recon' ? this.mat.airRecon : objective.kind === 'reach' ? this.mat.airDelivery : this.mat.airSurvive;
+          const material = objective.kind === 'recon' || objective.kind === 'patrol' ? this.mat.airRecon : objective.kind === 'reach' ? this.mat.airDelivery : this.mat.airSurvive;
           box.addComponent('render', { type: 'box', material, castShadows: false, receiveShadows: false });
           box.setPosition(a.x, a.ceiling / 2, a.z);
           box.setLocalScale(a.half * 2, a.ceiling, a.half * 2);
           this.root.addChild(box);
           marker.body = box;
-          const beacon = objective.kind === 'recon' ? this.mat.beaconRecon : objective.kind === 'reach' ? this.mat.beaconDelivery : this.mat.beaconSurvive;
+          const beacon = objective.kind === 'recon' || objective.kind === 'patrol' ? this.mat.beaconRecon : objective.kind === 'reach' ? this.mat.beaconDelivery : this.mat.beaconSurvive;
           marker.beacon = this.beacon(a.x, a.z, beacon, 0.8);
           break;
         }
@@ -211,11 +223,13 @@ export class MissionMarkers {
     if (m.beacon) m.beacon.enabled = state === 'open';
     switch (m.objective.kind) {
       case 'bomb':
+      case 'escort':
         if (state === 'done') for (const ring of m.paint) ring.render!.material = this.mat.done;
         break;
       case 'recon':
       case 'reach':
       case 'survive':
+      case 'patrol':
         if (m.body) m.body.enabled = state === 'open' || state === 'waiting';
         break;
       case 'escape':

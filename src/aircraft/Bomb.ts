@@ -92,6 +92,8 @@ class Bomb {
   clean = true;
   /** Release order, so the camera can follow the newest bomb. */
   serial = 0;
+  /** Who dropped it, for bombs that are not the player's (an AI bomber's id). */
+  tag: string | null = null;
   readonly position = new pc.Vec3();
   readonly velocity = new pc.Vec3();
   private readonly previous = new pc.Vec3();
@@ -108,17 +110,17 @@ class Bomb {
     return BOMB.kinds[this.kind].radius;
   }
 
-  release(position: pc.Vec3, planeVelocity: pc.Vec3, serial: number, kind: BombKind, clean: boolean): void {
+  release(position: Point3, planeVelocity: Point3, serial: number, kind: BombKind, clean: boolean, tag: string | null): void {
     this.active = true;
     this.kind = kind;
     this.clean = clean;
+    this.tag = tag;
     const scale = this.radius / BOMB.kinds.standard.radius;
     this.entity.setLocalScale(scale, scale, scale);
     this.serial = serial;
     this.spin = 0;
-    this.position.copy(position);
-    this.velocity.copy(planeVelocity);
-    this.velocity.y -= BOMB.releaseKick;
+    this.position.set(position.x, position.y, position.z);
+    this.velocity.set(planeVelocity.x, planeVelocity.y - BOMB.releaseKick, planeVelocity.z);
     this.entity.enabled = true;
     this.entity.setPosition(this.position);
   }
@@ -145,6 +147,9 @@ class Bomb {
   }
 }
 
+/** A bomb's impact, with the kind of bomb, how it was released and who dropped it. */
+export type TaggedImpact = BombImpact & { bomb: BombKind; clean: boolean; tag: string | null };
+
 /** The bombs currently in the air. Several can fall at once on multi-bomb missions. */
 export class Bombs {
   private readonly pool: Bomb[] = [];
@@ -162,11 +167,11 @@ export class Bombs {
 
   /**
    * Drops a ball, carrying the plane's velocity plus a small downward kick. `clean` records whether
-   * it left on a clean low-level approach.
+   * it left on a clean low-level approach; `tag` who dropped it, when that matters.
    */
-  release(position: pc.Vec3, planeVelocity: pc.Vec3, kind: BombKind, clean = true): void {
+  release(position: Point3, planeVelocity: Point3, kind: BombKind, clean = true, tag: string | null = null): void {
     const bomb = this.pool.find((b) => !b.active) ?? this.pool.reduce((a, b) => (a.serial < b.serial ? a : b));
-    bomb.release(position, planeVelocity, ++this.serial, kind, clean);
+    bomb.release(position, planeVelocity, ++this.serial, kind, clean, tag);
   }
 
   /** Moves every falling bomb; returns each impact with the kind of bomb that made it and how it was released. */
@@ -175,11 +180,11 @@ export class Bombs {
     zones: readonly ZoneRef[],
     territories: readonly Territory[],
     objects: readonly Collider[],
-  ): Array<BombImpact & { bomb: BombKind; clean: boolean }> {
-    const impacts: Array<BombImpact & { bomb: BombKind; clean: boolean }> = [];
+  ): TaggedImpact[] {
+    const impacts: TaggedImpact[] = [];
     for (const bomb of this.pool) {
       const impact = bomb.update(dt, zones, territories, objects);
-      if (impact) impacts.push({ ...impact, bomb: bomb.kind, clean: bomb.clean });
+      if (impact) impacts.push({ ...impact, bomb: bomb.kind, clean: bomb.clean, tag: bomb.tag });
     }
     return impacts;
   }

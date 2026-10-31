@@ -1,4 +1,4 @@
-import type { ThreatLevel } from '../config';
+import type { AiRole, Side, ThreatLevel } from '../config';
 import type { InstallationKind } from '../defenses/Layout';
 
 export interface MiniMapView {
@@ -18,6 +18,8 @@ export interface MiniMapView {
   /** Practice planes the mission still wants shot down. */
   targets: Array<{ x: number; z: number }>;
   plane: { x: number; z: number; yaw: number; autopilot: boolean } | null;
+  /** AI aircraft: enemies red, friends blue. Raiders pulse, with a line to what they are bombing. */
+  aircraft: Array<{ x: number; z: number; yaw: number; side: Side; role: AiRole; raid: { x: number; z: number } | null; mission: boolean }>;
   /** The point the target marker is showing, for a guide line from the plane. */
   objective: { x: number; z: number } | null;
   boundaryRadius: number;
@@ -46,6 +48,9 @@ const COLORS = {
   wreck: '#9ca3af',
   reachTurret: 'rgba(220, 38, 38, 0.5)',
   reachLauncher: 'rgba(147, 51, 234, 0.5)',
+  enemy: '#b91c1c',
+  friend: '#2563eb',
+  raidLine: 'rgba(185, 28, 28, 0.55)',
 };
 
 /**
@@ -191,6 +196,45 @@ export class MiniMap {
       ctx.rotate(a + Math.PI / 2);
       ctx.fillStyle = r.state === 'open' ? COLORS.ring : COLORS.ringWaiting;
       ctx.fillRect(-4, -1.5, 8, 3);
+      ctx.restore();
+    }
+
+    for (const a of v.aircraft) {
+      const x = sx(a.x, a.z);
+      const y = sy(a.x, a.z);
+      if (a.raid) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(sx(a.raid.x, a.raid.z), sy(a.raid.x, a.raid.z));
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = COLORS.raidLine;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(x, y, 6 + 2 * Math.sin(this.time * 6), 0, Math.PI * 2);
+        ctx.strokeStyle = COLORS.enemy;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      const size = a.role === 'bomber' ? 1.3 : a.role === 'scout' ? 0.85 : 1;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.atan2(Math.sin(a.yaw), -Math.cos(a.yaw)));
+      ctx.scale(size, size);
+      ctx.beginPath();
+      ctx.moveTo(5, 0);
+      ctx.lineTo(-3.5, -3.5);
+      ctx.lineTo(-1.5, 0);
+      ctx.lineTo(-3.5, 3.5);
+      ctx.closePath();
+      ctx.fillStyle = a.side === 'enemy' ? COLORS.enemy : COLORS.friend;
+      ctx.fill();
+      if (a.mission) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 

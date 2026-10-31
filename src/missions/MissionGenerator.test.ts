@@ -262,14 +262,15 @@ describe('missions in the air', () => {
       for (const o of spawned) {
         expect(ids.has(o.id)).toBe(false);
         ids.add(o.id);
-        if (o.side === 'enemy') expect(o.skill).toBe(difficulty);
+        // Enemy pilots are never better than the card says (patrol scouts are a step easier).
+        if (o.side === 'enemy') expect(['easy', 'medium', 'hard'].indexOf(o.skill)).toBeLessThanOrEqual(['easy', 'medium', 'hard'].indexOf(difficulty));
         expect(o.route.length).toBeGreaterThanOrEqual(2);
       }
       for (const o of spec.objectives) {
         if (o.kind === 'intercept') for (const id of o.targets) expect(spawned.some((a) => a.id === id && a.side === 'enemy')).toBe(true);
         if (o.kind === 'escort') expect(spawned.find((a) => a.id === o.escort)).toMatchObject({ side: 'player', role: 'bomber', strike: { x: o.zone.x, z: o.zone.z } });
       }
-      expect(spec.threat?.air?.skill ?? difficulty).toBe(difficulty);
+
     });
   });
 
@@ -297,12 +298,14 @@ describe('missions in the air', () => {
     expect(DEFENSES.home.turrets.length).toBeGreaterThan(0);
   });
 
-  it('escorts and patrols stay out of fortified ground on easier cards, and enemy pilots pay', () => {
+  it('escorts and patrols stay out of fortified ground, patrols reach above the turrets, and enemy pilots pay', () => {
     each((type, difficulty, seed) => {
-      if (type !== 'escort' || !supports(type, difficulty, ctx)) return;
+      if ((type !== 'escort' && type !== 'patrol') || !supports(type, difficulty, ctx)) return;
       const spec = generateMission(type, difficulty, ctx, seededRng(seed));
-      expect(threatOf(spec.objectives[0].kind === 'escort' ? spec.objectives[0].territoryId : '')).toBeLessThanOrEqual(2);
+      const o = spec.objectives[0];
+      expect(threatOf('territoryId' in o ? o.territoryId : '')).toBeLessThanOrEqual(2);
     });
+    expect(MISSIONS.patrolCeiling).toBeGreaterThan(DEFENSES.turret.pivot + DEFENSES.turret.range);
     expect(missionReward('dogfight', 'medium', 100, [], ['hard'])).toBeGreaterThan(missionReward('dogfight', 'medium', 100, [], ['easy']));
     expect(missionReward('dogfight', 'medium', 100, [], ['easy'])).toBeGreaterThan(missionReward('dogfight', 'medium', 100));
   });

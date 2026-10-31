@@ -513,13 +513,13 @@ However, rewards should distinguish player participation from completely automat
 
 SAMs are a later development feature, not part of version 0.0.1.
 
-Version 0.0.4 lays the groundwork with automated defenses the world owns: ink turrets, paper rocket launchers (an early, simplified SAM with basic homing) and radar stations on the unclaimed territories, placed by threat level. Player-built defenses come with version 0.0.8.
+Version 0.0.4 lays the groundwork with automated defenses the world owns: ink turrets, paper rocket launchers (an early, simplified SAM with basic homing) and radar stations on the unclaimed territories, placed by threat level. Version 0.0.5 gives the player's home territory two predefined ink turrets that shoot at hostile aircraft. Player-built defenses come with version 0.0.9.
 
 ---
 
 ## 10. AI-Controlled Escort Aircraft
 
-**Planned for a later version.**
+**Planned for a later version.** Version 0.0.5 builds the foundations: AI pilots (scouts, fighters and bombers at three skill levels) that fly the same flight model, health and weapons as player aircraft, enemy patrols and raids, and a friendly AI bomber to escort on missions.
 
 Players can purchase smaller AI-controlled aircraft that accompany their main plane during missions.
 
@@ -869,27 +869,31 @@ Fighter, bomber, and reconnaissance plane patterns with different costs and flig
 
 Single-player still. Territories have threat levels (unprotected, light, guarded, fortified) and the defenses to match: ink turrets, paper rocket launchers and radar stations that detect, track and shoot at the player, with blind spots, limited accuracy and travel time. New mission types built around them (suppression, dangerous reconnaissance, fortified bombing, multi-stage strikes, survival, low-altitude attacks), risk-based rewards, and warnings that make every hit readable.
 
-### Version 0.0.5: Core Multiplayer
+### Version 0.0.5: AI Aircraft and Interception
+
+Single-player still. AI-controlled paper planes fly the same flight model as the player's: scouts that run, fighters that dogfight and bombers that make steady runs, at rookie, regular and veteran skill. Enemy bombers raid the player's home territory, whose own turrets fight back; intercepting them pays, and a hit costs a capped amount of paper above a protected minimum. New mission types (dogfight, scout and bomber interception, bomber escort, airspace patrol, combined attack), ambient patrols over enemy territory, aim assistance, aircraft markers and combat feedback.
+
+### Version 0.0.6: Core Multiplayer
 
 Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
 
-### Version 0.0.6: Player Territory Bombing
+### Version 0.0.7: Player Territory Bombing
 
 Real player-versus-player attacks, defender losses, fighter interception, and notifications.
 
-### Version 0.0.7: Dynamic Mission Director
+### Version 0.0.8: Dynamic Mission Director
 
 Multiple mission categories, difficulty adaptation, and introductory bounties.
 
-### Version 0.0.8: Player-Built Defenses
+### Version 0.0.9: Player-Built Defenses
 
 Constructible automated defenses and resource costs, built on the 0.0.4 defense systems.
 
-### Version 0.0.9: Persistent Sessions
+### Version 0.0.10: Persistent Sessions
 
 Player accounts, session reconnection, persistent economies, and campaign lifecycle.
 
-### Version 0.0.10: AI Escort Aircraft
+### Version 0.0.11: AI Escort Aircraft
 
 Purchasable single-use supporting aircraft.
 

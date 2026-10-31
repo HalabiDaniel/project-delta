@@ -334,7 +334,8 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
       const eta = flightTime(bomber);
       const fighters = Array.from({ length: count }, (_, i) => ({
         orders: interceptorPlan(from, id, difficulty, airId(type, 'fighter'), rng, 'mission'),
-        delay: Math.round(eta * 0.35 + i * 7),
+        // Early enough to meet the bomber on its way in, before its run.
+        delay: Math.round(Math.max(0, eta * 0.2 - 2) + i * 4),
       }));
       return make(distanceTo(t) * 1.5, {
         title: `Escort the bomber to ${t.id}`,
@@ -351,9 +352,10 @@ export function generateMission(type: MissionType, difficulty: Difficulty, ctx: 
       const crossing = [...shuffled(rng, neighbours(ctx.territories, t).filter((n) => n.id !== ctx.homeId))];
       const intruders: AirSpawn[] = plan.map(([role, after]) => {
         const id = airId(type, role);
+        // Scouts crossing a patrol are a step less wily than the card: they run, but can be caught.
         const orders =
           role === 'scout'
-            ? scoutPlan(ctx.territories, [...crossing.slice(0, 1), t, ...crossing.slice(1, 2)].map((x) => x.id), difficulty, id, rng, 'mission')
+            ? scoutPlan(ctx.territories, [...crossing.slice(0, 1), t, ...crossing.slice(1, 2)].map((x) => x.id), easier(difficulty), id, rng, 'mission')
             : patrolPlan(ctx.territories, [t.id], 'fighter', difficulty, id, rng, 'mission');
         return { orders, afterPatrol: after };
       });
@@ -387,6 +389,11 @@ let airSerial = 0;
 /** A unique id for an aircraft a mission sends up. */
 function airId(type: MissionType, role: string): string {
   return `${type}-${++airSerial}-${role}`;
+}
+
+/** One skill level down (rookies stay rookies). */
+function easier(difficulty: Difficulty): Difficulty {
+  return difficulty === 'hard' ? 'medium' : 'easy';
 }
 
 /** "rookie", "regular" or "veteran". */
@@ -506,10 +513,9 @@ function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext
         return on(t).some((i) => i.kind === 'radar') && on(t).some((i) => i.kind === 'supply');
       case 'bomber-intercept':
         return MISSIONS.raidOrigins[difficulty].includes(t.id) && homeStore(ctx) !== null;
-      case 'escort':
-        return t.threat <= MISSIONS.escortMaxThreat;
+
       default:
-        return t.threat >= ((MISSIONS.minThreat as Partial<Record<MissionType, number>>)[type] ?? 0);
+        return t.threat >= ((MISSIONS.minThreat as Partial<Record<MissionType, number>>)[type] ?? 0) && t.threat <= (MISSIONS.maxThreat[type] ?? 3);
     }
   });
 }

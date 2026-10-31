@@ -674,7 +674,7 @@ export const AI: {
  * defense reward; if its bomb hits the store, some paper is lost, never below ECONOMY.protectedPaper.
  */
 export const RAIDS = {
-  /** The first raid of a visit comes after the player has finished this many sorties, at least `first` seconds in. */
+  /** Raids start once the player has launched this many sorties in the visit; the first comes `first` seconds after that. */
   afterSorties: 1,
   first: [60, 110] as readonly [number, number],
   /** Seconds between raids, counted only while the game runs (not on the report or paused). */
@@ -755,12 +755,18 @@ export const MISSIONS = {
   airBonus: { easy: 10, medium: 18, hard: 28 },
   /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
   raidOrigins: { easy: ['T3', 'T7'], medium: ['T6', 'T8'], hard: ['T9'] } as Record<Difficulty, readonly string[]>,
-  /** Escort missions only go as far as guarded ground: the bomber has to survive the guns too. */
-  escortMaxThreat: 2,
-  /** Airspace patrol: seconds to spend over the territory, and how far out and how high the patrol area reaches. */
+  /**
+   * Missions that only go as far as guarded ground: an escorted bomber has to survive the guns too,
+   * and a patrol is about the fight in the air, not sitting under rocket launchers.
+   */
+  maxThreat: { escort: 2, patrol: 2 } as Partial<Record<string, ThreatLevel>>,
+  /**
+   * Airspace patrol: seconds to spend over the territory, and how far out and how high the patrol
+   * area reaches. It reaches above the turrets' range: patrolling high is the safe way.
+   */
   patrolTime: { easy: 20, medium: 25, hard: 30 },
   patrolMargin: 15,
-  patrolCeiling: 45,
+  patrolCeiling: 60,
   /** Extra paper per metre between the launch pad and the objective. */
   distanceReward: 0.15,
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
@@ -909,6 +915,8 @@ export const PALETTE = {
   defense: [0.52, 0.55, 0.38],
   defenseDark: [0.33, 0.36, 0.25],
   defenseBarrel: [0.18, 0.19, 0.17],
+  /** T1's own guns, in home blue. */
+  friendlyDefense: [0.36, 0.5, 0.78],
   wreck: [0.26, 0.24, 0.22],
   enemyInk: [0.55, 0.08, 0.32],
   rocketPaper: [0.96, 0.95, 0.9],
@@ -917,6 +925,10 @@ export const PALETTE = {
   radarDish: [0.86, 0.87, 0.84],
   rangeTurret: [0.95, 0.25, 0.2],
   rangeLauncher: [0.65, 0.25, 0.85],
+  /** AI aircraft: enemy planes are folded from grey newsprint with red trim, friendly ones in home blue. */
+  enemyPaper: [0.8, 0.79, 0.76],
+  enemyAccent: [0.72, 0.1, 0.12],
+  friendlyAccent: [0.23, 0.48, 0.93],
   /** Flags and platform trim per threat level (light, guarded, fortified). */
   threat1: [0.98, 0.78, 0.18],
   threat2: [0.98, 0.5, 0.12],

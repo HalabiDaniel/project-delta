@@ -5,6 +5,7 @@ import { LANDING, type AircraftId, type Difficulty, type ThreatLevel } from '../
 import type { MissionFailure, MissionStatus, MissionType } from '../missions/Mission';
 import type { BoundaryState } from '../systems/Boundary';
 import type { BuildKind, GamePhase } from '../systems/GameState';
+import { AirHud, type AirView } from './AirHud';
 import { attr, bindButton, esc, place, text, toggle, width, type ScreenPoint } from './dom';
 import { Garage, type GarageView } from './Garage';
 import { icon, type IconName } from './icons';
@@ -158,6 +159,13 @@ export interface ResultView {
   /** Enemy rounds and rockets fired at the plane, and how many hit. */
   enemyShots: number;
   enemyHits: number;
+  /** Enemy aircraft the player shot down (or helped to), bombers among them. */
+  aircraftDestroyed: number;
+  bombersIntercepted: number;
+  /** Raids beaten off with the player's help and friendly bombers seen to their target. */
+  objectivesProtected: number;
+  /** Paper taken by raids that got through during the sortie. */
+  paperLost: number;
   /** "Survived · 64/100 health", or what shot it down. */
   survival: string;
   survived: boolean;
@@ -170,6 +178,7 @@ export interface CareerView {
   planesLost: number;
   targetsDestroyed: number;
   defensesDestroyed: number;
+  aircraftDestroyed: number;
   favorite: string | null;
 }
 
@@ -200,6 +209,8 @@ export interface HudView {
   minimap: MiniMapView;
   /** Warnings about the defenses, in flight. */
   threat: ThreatView | null;
+  /** Aircraft markers, the lead sight and the incoming-bomber alert. */
+  air: AirView | null;
 }
 
 export interface HudActions {
@@ -269,7 +280,7 @@ const TEMPLATE = /* html */ `
   <div class="damage-flash" data-damage-flash></div>
 
   <section class="panel resources">
-    <div class="brand">paperwars<span>.io</span> <small>v0.0.4</small></div>
+    <div class="brand">paperwars<span>.io</span> <small>v0.0.5</small></div>
     <div class="paper"><svg class="paper-icon" viewBox="0 0 18 22" aria-hidden="true"><path d="M1 1h11l5 5v15H1z" fill="#fff" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 1v5h5" fill="#e5e7eb" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><b data-paper></b><span>paper</span><span class="delta" data-delta></span></div>
     <div class="income"><span class="income-bar"><i data-income-bar></i></span><span data-income-text></span></div>
     <div class="stats-title">Career <small>(this browser)</small></div>
@@ -278,6 +289,7 @@ const TEMPLATE = /* html */ `
       <div><dt>Planes lost</dt><dd data-lost></dd></div>
       <div><dt>Targets destroyed</dt><dd data-destroyed></dd></div>
       <div><dt>Defenses destroyed</dt><dd data-defenses></dd></div>
+      <div><dt>Aircraft shot down</dt><dd data-aircraft-down></dd></div>
       <div><dt>Favourite plane</dt><dd data-favorite></dd></div>
     </dl>
   </section>
@@ -353,6 +365,9 @@ const TEMPLATE = /* html */ `
           <div><dt>Aircraft survival</dt><dd data-res-survival></dd></div>
           <div><dt>Damage dealt</dt><dd data-res-dealt></dd></div>
           <div><dt>Defenses destroyed</dt><dd data-res-defenses></dd></div>
+          <div><dt>Enemy aircraft destroyed</dt><dd data-res-aircraft></dd></div>
+          <div><dt>Bombers intercepted</dt><dd data-res-bombers></dd></div>
+          <div><dt>Friendly objectives protected</dt><dd data-res-protected></dd></div>
           <div><dt>Damage taken</dt><dd data-res-taken></dd></div>
           <div><dt>Enemy fire dodged</dt><dd data-res-dodged></dd></div>
           <div><dt>Bombing accuracy</dt><dd data-res-bombs></dd></div>
@@ -361,6 +376,7 @@ const TEMPLATE = /* html */ `
         <dl class="ledger money">
           <div><dt>Paper spent</dt><dd data-res-spent></dd></div>
           <div><dt>Paper earned</dt><dd data-res-earned></dd></div>
+          <div data-res-lost-row><dt>Paper lost to raids</dt><dd data-res-lost></dd></div>
           <div class="net"><dt>Net change</dt><dd data-res-net></dd></div>
         </dl>
         <button class="btn primary" data-continue>Continue <kbd>Enter</kbd></button>
@@ -380,6 +396,7 @@ const TEMPLATE = /* html */ `
       </table>
       <p class="overlay-rules">Land on <b>T1</b> to rearm or bring your plane home: come in slow (under ${LANDING.maxSpeed}), descend gently (under ${LANDING.maxSink} m/s) with the wings level. Fast or steep touchdowns cost health.</p>
       <p class="overlay-rules">Defended territories shoot back. Turrets can't turn to face behind them, fast and turning planes are hard to hit, rockets can't follow a hard turn, and nothing fires over <b>T1</b>. Destroy a territory's radar and its guns see less far.</p>
+      <p class="overlay-rules">Enemy paper planes patrol enemy country, and bombers raid <b>T1</b>'s paper store. Keep turning when a fighter is on your tail, outrun it to make it give up, and lead your shots: the small circle shows where. <b>T1</b>'s own guns help against raiders.</p>
       <button class="btn primary" data-resume>Resume</button>
       <p class="overlay-note">Click anywhere or press Esc to continue.</p>
     </div>
@@ -395,6 +412,7 @@ export class HUD {
   private readonly minimap: MiniMap;
   private readonly garage: Garage;
   private readonly threats: ThreatHud;
+  private readonly air: AirHud;
   private bannerTimer = 0;
   private hitTimer = 0;
   private cardsKey = '';
@@ -416,6 +434,7 @@ export class HUD {
     this.minimap = new MiniMap(this.el.minimap as HTMLCanvasElement);
     this.garage = new Garage(this.el['garage-cards'], this.el.inspector, actions.selectAircraft);
     this.threats = new ThreatHud(root);
+    this.air = new AirHud(root, root.querySelector('.resources') as HTMLElement);
 
     bindButton(this.el.build, actions.build);
     bindButton(this.el.continue, actions.continueToDesk);
@@ -437,6 +456,7 @@ export class HUD {
     text(this.el.lost, String(v.career.planesLost));
     text(this.el.destroyed, String(v.career.targetsDestroyed));
     text(this.el.defenses, String(v.career.defensesDestroyed));
+    text(this.el['aircraft-down'], String(v.career.aircraftDestroyed));
     text(this.el.favorite, v.career.favorite ?? '—');
     width(this.el['income-bar'], v.income.producing ? v.income.progress : 0);
     text(
@@ -466,6 +486,9 @@ export class HUD {
     this.renderLabels(v.labels);
     this.renderTargetLabels(v.paused ? [] : v.targets);
     this.threats.render(flying ? v.threat : null);
+    this.air.render(v.paused ? null : v.air);
+    // During a raid the alert takes the career numbers' place, so the column never runs into the garage.
+    this.el.paper.closest('.resources')!.classList.toggle('raiding', !v.paused && !!v.air?.raid);
     this.minimap.render(v.minimap, dt);
 
     if (this.bannerTimer && now > this.bannerTimer) {
@@ -690,13 +713,18 @@ export class HUD {
           : '0',
       );
       text(this.el['res-defenses'], String(r.defensesDestroyed));
+      text(this.el['res-aircraft'], String(r.aircraftDestroyed));
+      text(this.el['res-bombers'], String(r.bombersIntercepted));
+      text(this.el['res-protected'], String(r.objectivesProtected));
+      toggle(this.el['res-lost-row'], r.paperLost > 0);
+      text(this.el['res-lost'], `−${r.paperLost}`);
       text(this.el['res-taken'], String(r.damageTaken));
       text(this.el['res-dodged'], r.enemyShots > 0 ? `${r.enemyShots - r.enemyHits}/${r.enemyShots} · ${Math.round(((r.enemyShots - r.enemyHits) / r.enemyShots) * 100)}%` : '—');
       text(this.el['res-bombs'], r.bombsDropped > 0 ? `${r.bombHits}/${r.bombsDropped} · ${Math.round((r.bombHits / r.bombsDropped) * 100)}%` : '—');
       text(this.el['res-shots'], r.shotsFired > 0 ? `${r.shotsFired} · ${r.shotsHit} hits (${Math.round((r.shotsHit / r.shotsFired) * 100)}%)` : '—');
       text(this.el['res-spent'], r.paperSpent > 0 ? `−${r.paperSpent}` : '0');
       text(this.el['res-earned'], r.paperEarned > 0 ? `+${r.paperEarned}` : '0');
-      const net = r.paperEarned - r.paperSpent;
+      const net = r.paperEarned - r.paperSpent - r.paperLost;
       text(this.el['res-net'], net > 0 ? `+${net}` : net < 0 ? `−${-net}` : '0');
       attr(this.el['res-net'], 'data-tone', net > 0 ? 'good' : net < 0 ? 'bad' : '');
     }

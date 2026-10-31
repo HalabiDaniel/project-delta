@@ -225,7 +225,7 @@ export class DefenseModels {
     root.setPosition(s.x, s.ground, s.z);
     const body = new pc.Entity('body');
     root.addChild(body);
-    const paintColor: Color3 = s.kind === 'supply' ? PALETTE.cardboard : PALETTE.defense;
+    const paintColor: Color3 = s.kind === 'supply' ? PALETTE.cardboard : s.side === 'player' ? PALETTE.friendlyDefense : PALETTE.defense;
     const paint = flatMaterial(paintColor);
     let turn: pc.Entity | null = null;
     let elevate: pc.Entity | null = null;
