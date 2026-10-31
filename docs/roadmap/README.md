@@ -25,17 +25,34 @@ not because the code compiles. Working features from earlier versions are preser
 | Version | Theme | Summary |
 |---|---|---|
 | [v0.0.10](v0.0.10.md) | Persistent multiplayer and private alpha | Player identity, PostgreSQL persistence, restart recovery, offline protection, a hardened server and an externally reachable, invite-only deployment for the developer and one friend. |
-| [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the aircraft roster (Dart, Falcon, Swift, Widewing, plus the new Shadow and Courier), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
-| [v0.0.12](v0.0.12.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. |
-| [v0.0.13](v0.0.13.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. |
+| [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the four existing aircraft remodelled for the new roster (Swift, Falcon, Dart, Widewing), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
+| [v0.0.12](v0.0.12.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. New aircraft: Raptor. |
+| [v0.0.13](v0.0.13.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. New aircraft: Lancer. |
 | [v0.0.14](v0.0.14.md) | Menus, settings and branding | Logo and branding, main menu, lobby, full settings with rebinding, loading screens and a first-launch flow. |
-| [v0.0.15](v0.0.15.md) | Economy and content depth | Ink and rubber balls as real resources, anti-snowball upkeep and caps, more missions, multiplayer world events and server-side progression. |
-| [v0.0.16](v0.0.16.md) | Advanced multiplayer | AI escorts, mission director bounties and rivalries, cooperation offers, deeper raids, reputation, social features with mute and report, anti-farming. |
-| [v0.0.17](v0.0.17.md) | World scale and environments | 12 to 16 territories, new environments, interest-based network updates, regional servers and level of detail. |
-| [v0.0.18](v0.0.18.md) | Customization and social | Cosmetic-only aircraft and territory customization, earned cosmetics, inventory, friends and small alliances. |
+| [v0.0.15](v0.0.15.md) | Economy and content depth | Ink and rubber balls as real resources, anti-snowball upkeep and caps, more missions, multiplayer world events and server-side progression. New aircraft: Lightning, Thug. |
+| [v0.0.16](v0.0.16.md) | Advanced multiplayer | AI escorts, mission director bounties and rivalries, cooperation offers, deeper raids, reputation, social features with mute and report, anti-farming. New aircraft: Ghost, Specter. |
+| [v0.0.17](v0.0.17.md) | World scale and environments | 12 to 16 territories, new environments, interest-based network updates, regional servers and level of detail. New aircraft: Jumper, Wasp. |
+| [v0.0.18](v0.0.18.md) | Customization and social | Cosmetic-only aircraft and territory customization, earned cosmetics, inventory, friends and small alliances. New aircraft: Hawk. |
 | [v0.0.19](v0.0.19.md) | Public readiness | Accounts, matchmaking, the campaign lifecycle, moderation, abuse prevention, analytics, legal compliance and scalable infrastructure. |
 | [v0.0.20](v0.0.20.md) | Release candidate | LiveOps tools, shop infrastructure behind a disabled flag, tutorial retune, browser matrix, support channels and feature freeze. |
 | [v0.1.0](v0.1.0.md) | First public release | Staged testing rounds after 0.0.20; only fixes and balance changes ship. |
+
+## Aircraft roster
+
+Thirteen aircraft, each a folded-paper interpretation of a real aircraft, arrive across the versions
+(full table in [GDD §5.3](../GDD.md#53-aircraft-roster)):
+
+| Version | Aircraft | Running total |
+|---|---|---|
+| v0.0.11 | Swift (F-16, basic fighter and new starter), Falcon (Su-57, agile stealth fighter), Dart (SR-71, high-speed reconnaissance), Widewing (B-52, heavy bomber): the existing four, remodelled and re-roled. Shadow and Courier are dropped. | 4 |
+| v0.0.12 | Raptor (F-22, air superiority) | 5 |
+| v0.0.13 | Lancer (B-1B, supersonic bomber) | 6 |
+| v0.0.15 | Lightning (F-35, stealth multirole), with the radar signature and stealth system; Thug (A-10, ground attack) | 8 |
+| v0.0.16 | Ghost (B-2, stealth bomber), Specter (RQ-4, surveillance drone) | 10 |
+| v0.0.17 | Jumper (AV-8B, VTOL fighter), with the hover flight mode; Wasp (AH-6, light attack helicopter) | 12 |
+| v0.0.18 | Hawk (AH-64, heavy attack helicopter) | 13 |
+
+v0.0.14, v0.0.19 and v0.0.20 add no aircraft (v0.0.20 is the feature freeze).
 
 ## Why this order
 
