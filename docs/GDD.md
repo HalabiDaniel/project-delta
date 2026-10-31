@@ -915,7 +915,7 @@ Lightweight secure player identity, PostgreSQL persistence for territories, buil
 
 ### Version 0.0.11: Art Integration and Controller Support
 
-Synty environment models adapted to the sketchbook look, the five custom aircraft (Dart, Falcon, Widewing, Shadow, Courier), custom buildings with construction, damage and repair states, all nine territories completed (the remaining v0.0.8 phases), browser delivery and performance work, and full gamepad support through one input-action layer shared with keyboard and mouse. See [v0.0.11](roadmap/v0.0.11.md).
+Synty environment models adapted to the sketchbook look, custom models for the aircraft roster (Dart, Falcon, Swift, Widewing, and the new Shadow and Courier), custom buildings with construction, damage and repair states, all nine territories completed (the remaining v0.0.8 phases), browser delivery and performance work, and full gamepad support through one input-action layer shared with keyboard and mouse. See [v0.0.11](roadmap/v0.0.11.md).
 
 ### Version 0.0.12: HUD and UI Revamp
 

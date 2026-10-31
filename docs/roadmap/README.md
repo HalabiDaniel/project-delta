@@ -25,7 +25,7 @@ not because the code compiles. Working features from earlier versions are preser
 | Version | Theme | Summary |
 |---|---|---|
 | [v0.0.10](v0.0.10.md) | Persistent multiplayer and private alpha | Player identity, PostgreSQL persistence, restart recovery, offline protection, a hardened server and an externally reachable, invite-only deployment for the developer and one friend. |
-| [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the five-aircraft roster (Dart, Falcon, Widewing, Shadow, Courier), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
+| [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the aircraft roster (Dart, Falcon, Swift, Widewing, plus the new Shadow and Courier), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
 | [v0.0.12](v0.0.12.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. |
 | [v0.0.13](v0.0.13.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. |
 | [v0.0.14](v0.0.14.md) | Menus, settings and branding | Logo and branding, main menu, lobby, full settings with rebinding, loading screens and a first-launch flow. |
