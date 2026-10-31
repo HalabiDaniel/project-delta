@@ -79,6 +79,10 @@ export class HUD {
     this.plane = new PlaneHud({ bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
     this.report = new ReportCard(this.zones.centre, actions.continueToDesk);
     this.menus = new Menus(root, actions);
+    // Zones grow with the window (on top of the HUD size setting), so 1080p isn't a sea of tiny panels.
+    const fit = () => root.style.setProperty('--fit-scale', String(Math.min(1.4, Math.max(0.9, window.innerHeight / 740))));
+    fit();
+    window.addEventListener('resize', fit);
     this.lockHint = div(root, 'hint lock-hint');
     this.lockHint.innerHTML = '<kbd>Esc</kbd> → click';
     this.lockHint.title = 'Mouse not captured: press Esc, then click to capture it';
@@ -97,7 +101,7 @@ export class HUD {
     // In a fight, the less urgent parts of the HUD step back.
     this.root.classList.toggle('combat', flying && !!v.threat && (v.threat.ring.length > 0 || v.threat.lock !== null));
 
-    this.economy.render(v.economy, { buttons: atHome && !v.paused && v.result === null, base: v.baseMode, baseAvailable: atHome, full: v.baseMode });
+    this.economy.render(v.economy, { buttons: atHome && !v.paused && v.result === null, base: v.baseMode, baseAvailable: atHome, full: v.baseMode, repairs: v.economy.repairs });
     this.missions.render(v);
     this.garage.render(v.paused || v.baseMode ? null : v.garage);
     this.plane.render(v);

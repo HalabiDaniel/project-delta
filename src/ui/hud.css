@@ -61,7 +61,7 @@
 
 /* ---- Layout: fixed zones -------------------------------------------------------------------- */
 .world-layer { position: absolute; inset: 0; }
-.zone { position: absolute; display: flex; gap: var(--s2); transform: scale(var(--ui-scale)); }
+.zone { position: absolute; display: flex; gap: var(--s2); transform: scale(calc(var(--ui-scale) * var(--fit-scale, 1))); }
 .zone-tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; transform-origin: top left; }
 .zone-tc { top: 14px; left: 50%; translate: -50% 0; width: min(560px, 44vw); flex-direction: column; align-items: center; transform-origin: top center; }
 .zone-tr { top: 14px; right: 14px; flex-direction: column; align-items: flex-end; transform-origin: top right; }
@@ -201,6 +201,7 @@
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
 .icon-btn.on { background: var(--friend); color: #fff; }
 .icon-btn kbd { position: absolute; right: -6px; bottom: -6px; font-size: 9px; padding: 0 3px; }
+.icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: var(--warn); color: #fff; font: 800 10px/16px var(--num); }
 
 .bar {
   position: relative;
@@ -756,7 +757,12 @@
 .ov[data-tone='bad'] .icon, .ov[data-tone='bad'] b { color: var(--hostile); }
 
 .tray { padding: 8px; }
-.tray-items { display: grid; grid-template-columns: repeat(5, 74px); gap: 6px; }
+.tray-items { display: flex; gap: 8px; }
+.tray-group { display: flex; gap: 4px; align-items: stretch; }
+.tray-group + .tray-group { padding-left: 8px; border-left: 1px dashed var(--edge); }
+.tray-cat { display: grid; place-items: center; width: 14px; color: var(--ink-3); }
+.tray-cat .icon { width: 13px; height: 13px; }
+.tray-item { width: 58px; }
 .tray-item {
   display: grid;
   justify-items: center;
@@ -795,8 +801,8 @@
 .bi-what { display: inline-flex; align-items: center; gap: 5px; }
 .bi-pick { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: var(--t-s); }
 .bi-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.stats.gain { gap: 3px; }
-.stats.gain .stat .icon { display: none; }
+.stats.gain { gap: 6px; }
+.stats.gain .stat .icon { width: 12px; height: 12px; color: var(--good); }
 .base-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
 /* Raid alert and defense report */

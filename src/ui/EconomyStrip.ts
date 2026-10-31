@@ -29,7 +29,7 @@ export class EconomyStrip {
     const buttons = document.createElement('div');
     buttons.className = 'icon-btns';
     buttons.innerHTML = /* html */ `
-      <button class="icon-btn" data-e="base-btn" title="Base (B)">${icon('base')}<kbd class="hint-key">B</kbd></button>
+      <button class="icon-btn" data-e="base-btn" title="Base (B)">${icon('base')}<span class="badge" data-e="repairs" title="Need repairs"></span><kbd class="hint-key">B</kbd></button>
       <button class="icon-btn" data-e="book-btn" title="Logbook (L)">${icon('book')}<kbd class="hint-key">L</kbd></button>
       <button class="icon-btn" data-e="menu-btn" title="Menu (Esc)">${icon('menu')}<kbd class="hint-key">Esc</kbd></button>`;
     host.appendChild(buttons);
@@ -43,7 +43,7 @@ export class EconomyStrip {
     bindButton(this.el['menu-btn'], actions.menu);
   }
 
-  render(v: EconomyView, opts: { buttons: boolean; base: boolean; baseAvailable: boolean; full: boolean }): void {
+  render(v: EconomyView, opts: { buttons: boolean; base: boolean; baseAvailable: boolean; full: boolean; repairs: number }): void {
     text(this.el.paper, fmt(v.paper));
     text(this.el.cap, `/${fmt(v.capacity)}`);
     toggle(this.el.cap, opts.full || v.paper >= v.capacity * 0.8);
@@ -60,6 +60,8 @@ export class EconomyStrip {
     toggle(this.el.buttons, opts.buttons);
     this.el['base-btn'].classList.toggle('on', opts.base);
     (this.el['base-btn'] as HTMLButtonElement).disabled = !opts.baseAvailable && !opts.base;
+    toggle(this.el.repairs, opts.repairs > 0 && !opts.base);
+    text(this.el.repairs, String(opts.repairs));
   }
 
   /** Floats "+50" / "−20" next to the paper and fades. */

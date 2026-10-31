@@ -52,8 +52,8 @@ export class ChaseCamera {
    */
   updateBase(dt: number, centre: { x: number; z: number }, yaw: number, snap = false): void {
     forwardFromAngles(yaw, 0, this.dir);
-    this.wantPos.set(centre.x - this.dir.x * 30, 52, centre.z - this.dir.z * 30);
-    this.wantLook.set(centre.x + this.dir.x * 1, 0, centre.z + this.dir.z * 1);
+    this.wantPos.set(centre.x - this.dir.x * 36, 58, centre.z - this.dir.z * 36);
+    this.wantLook.set(centre.x - this.dir.x * 8, 0, centre.z - this.dir.z * 8);
     this.setFov(CAMERA.baseFov, snap ? Infinity : dt);
     this.move(snap ? Infinity : 2.5, dt, 0);
   }

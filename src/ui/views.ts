@@ -260,6 +260,8 @@ export interface EconomyView {
   progress: number;
   protectedPaper: number;
   streak: number;
+  /** Structures on T1 that need repairs. */
+  repairs: number;
 }
 
 /** The desk's main action: fold, refit or roll out the chosen plane, then launch. */

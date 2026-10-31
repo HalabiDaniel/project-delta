@@ -513,7 +513,7 @@ However, rewards should distinguish player participation from completely automat
 
 SAMs are a later development feature, not part of version 0.0.1.
 
-Version 0.0.4 lays the groundwork with automated defenses the world owns: ink turrets, paper rocket launchers (an early, simplified SAM with basic homing) and radar stations on the unclaimed territories, placed by threat level. Version 0.0.5 gives the player's home territory two predefined ink turrets that shoot at hostile aircraft. Player-built defenses come with version 0.0.9.
+Version 0.0.4 lays the groundwork with automated defenses the world owns: ink turrets, paper rocket launchers (an early, simplified SAM with basic homing) and radar stations on the unclaimed territories, placed by threat level. Version 0.0.5 gives the player's home territory two predefined ink turrets that shoot at hostile aircraft. Version 0.0.7 makes them player-built: the player spends paper on turrets (magazine and reload), rocket launchers (bombers first) and a radar in fixed construction slots, upgrades and repairs them, and the defense reward still only goes to a player who took part.
 
 ---
 
@@ -753,51 +753,54 @@ The intended model is cosmetic-only monetization rather than pay-to-win progress
 
 ## 15. User Interface
 
-### 15.1 Territory Interface
+The UI is read at a glance, not read like a document (redesigned in version 0.0.7).
 
-Displays:
+### 15.1 Principles
 
-- Current resources.
-- Active missions.
-- Aircraft construction options.
-- Incoming attack warnings.
-- Defensive structures.
-- Mission history.
+- **Icon + number.** A value with an icon shows only the icon and the number; the icon's name is its tooltip.
+- **One to three words** for titles, buttons and alerts, from one short-phrase dictionary. No sentences on the HUD: sentences live in tooltips, first-time tips and the logbook.
+- **Show what matters now.** Each state shows only its panels; in a fight the less urgent ones step back.
+- **Details on demand.** Hover for a tooltip, click to inspect, hold H for key hints, the logbook for history.
+- **Colour and shape carry state**, never colour alone: blue friendly, red hostile, amber warning, green good, grey off, with pips, icons and dots alongside.
 
-### 15.2 Aircraft Selection
+### 15.2 Style
 
-Shows:
+Panels are cut card stock with a folded corner and a soft shadow, semi-opaque over the world. One line-icon family, one bold tabular face for numbers and one plain face for the few words left, three sizes. Motion is short: panels fold in, deltas pop and fade. Everything is built from design tokens and a few shared components (card, chip, tag, button with key cap, bar, stat, pips, tooltip, alert).
 
-- Aircraft appearance.
-- Role.
-- Cost.
-- Speed and handling.
-- Combat capabilities.
-- Mission suitability.
-- Build and launch action.
+### 15.3 Layout
 
-### 15.3 Flight Interface
+Fixed zones, the same in every state:
 
-Displays:
+| Zone | Flying | At the desk | Base management |
+|---|---|---|---|
+| Top left | Paper, production, storage | Paper, production, storage; Base, Logbook, Menu buttons | Paper / capacity, production, protected paper |
+| Top centre | Objective, threat panel, raid alert, alerts, tips | Alerts, tips | Weapons ready, radar, base condition; alerts |
+| Top right | Mini-map with T1's radar | Mini-map; mission cards below | Mini-map |
+| Bottom left | Health, range | Aircraft inspector | Build tray |
+| Bottom centre | Speed, altitude, boost; landing checks | Garage | Slot inspector |
+| Bottom right | Ink, bombs | Fold / launch | Repair all, Done |
 
-- Plane durability.
-- Speed.
-- Current mission.
-- Objective markers.
-- Weapon status.
-- Relevant radar or threat alerts.
-- Return-to-base control.
+The centre stays clear for flying and aiming. A HUD size setting (S / M / L) scales every zone from its own corner.
 
-### 15.4 Mission Results
+### 15.4 Territory Interface
 
-Shows:
+Base management (B) at home: the camera rises above the home territory, every construction slot gets a marker (what stands there, its level and health, whether the chosen building fits), a see-through preview shows where a building would go, and the inspector shows health, stats, upgrade, repair and removal with their costs (and the paper still missing).
 
-- Mission success or failure.
-- Reward earned.
-- Aircraft cost lost.
-- Resources gained or lost.
-- Relevant damage and combat contributions.
-- Available next actions.
+### 15.5 Aircraft Selection
+
+Plane cards show the price as an icon and a number, the fit for the chosen mission as an icon; the inspector shows ratings as icons and pips and the loadout as numbers.
+
+### 15.6 Flight Interface
+
+Health and range bars, speed, altitude and boost, ink as a number and bombs as pips, the current objective with its distance, progress and clock, the threat panel and ring, rocket lock, aircraft markers with an icon for what each is doing, and at most three alerts.
+
+### 15.7 Mission Results
+
+A headline and medal, four big numbers (net paper, destroyed, damage, time), bonuses and records as chips, and the full breakdown behind Details. Raids on the home territory end with a defense report: raiders downed, paper lost or saved, structures hit, repair cost and one line on what decided it.
+
+### 15.8 Learning Without Text
+
+First-time tips appear once per save, next to what they explain; key hints show for the first sorties, then on H or by setting; every icon has a tooltip.
 
 ---
 
@@ -877,17 +880,17 @@ Single-player still. AI-controlled paper planes fly the same flight model as the
 
 Single-player still. A mission director deals a safe, a balanced and a high-risk card from templates and explicit rules, adapting tiers (easy to very hard) to a rolling performance rating, with recovery missions, variety memory, eligibility checks and limited swaps. Rewards follow R = B × D × M, balanced against plane costs, with a free emergency Dart and capped home production. World events (raids, high-value shipments, convoys, supply runs) and territory states, short multi-sortie operations, medals, records, streaks, aircraft mastery, achievements, a local save, and developer tools for the director and the economy.
 
-### Version 0.0.7: Core Multiplayer
+### Version 0.0.7: Territory Management, Base Building and a New HUD
+
+Single-player still. The home territory becomes a base the player builds in fixed slots (defense, radar, economy, utility): ink turrets and paper rocket launchers built on the 0.0.4 defense systems (magazines, bomber-first targeting, three levels each), a radar station for early warning, paper workshops for production and storage boxes for capacity and protected paper. Buildings are damaged by raids and stay damaged until repaired with paper; they can be upgraded, or removed for a partial refund. Raids target buildings, are announced only once detected, destroy a share of vulnerable paper and end with a defense report; the mission director paces them. The HUD is redesigned: fixed zones, icon-and-number values, short alerts, first-time tips instead of rules to read, key hints that fade after the first sorties, and a HUD size setting.
+
+### Version 0.0.8: Core Multiplayer
 
 Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
 
-### Version 0.0.8: Player Territory Bombing
+### Version 0.0.9: Player Territory Bombing
 
-Real player-versus-player attacks, defender losses, fighter interception, notifications, and the mission director's bounties and cooperation offers between players.
-
-### Version 0.0.9: Player-Built Defenses
-
-Constructible automated defenses and resource costs, built on the 0.0.4 defense systems.
+Real player-versus-player attacks on built bases, defender losses of vulnerable paper, fighter interception, notifications, and the mission director's bounties and cooperation offers between players.
 
 ### Version 0.0.10: Persistent Sessions
 

@@ -12,6 +12,11 @@ export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
 
 const STATUS_ICON = { ok: 'ok', damaged: 'warn', destroyed: 'wrecked' } as const;
 
+type TrayCategory = 'defense' | 'radar' | 'economy';
+const TRAY_CATEGORY: Record<BuildingKind, TrayCategory> = { turret: 'defense', launcher: 'defense', radar: 'radar', workshop: 'economy', storage: 'economy' };
+const CATEGORY_ICONS: Record<TrayCategory, IconName> = { defense: 'shield', radar: 'radar', economy: 'paper' };
+const CATEGORY_LABELS: Record<TrayCategory, string> = { defense: 'Defense', radar: 'Detection', economy: 'Economy' };
+
 function stats(list: readonly Stat[]): string {
   return list.map((s) => `<span class="stat" title="${esc(s.label)}"${s.tone ? ` data-tone="${s.tone}"` : ''}>${icon(s.icon)}<b>${esc(s.value)}</b>${s.delta ? `<em>${esc(s.delta)}</em>` : ''}</span>`).join('');
 }
@@ -126,7 +131,18 @@ export class BaseHud {
     this.trayKey = key;
     const wrap = this.el['tray-items'];
     wrap.innerHTML = '';
+    // Grouped by category: defense, radar, economy.
+    let group: HTMLElement | null = null;
+    let category = '';
     for (const t of v.tray) {
+      const cat = TRAY_CATEGORY[t.kind];
+      if (cat !== category) {
+        category = cat;
+        group = document.createElement('div');
+        group.className = 'tray-group';
+        group.innerHTML = `<span class="tray-cat" title="${CATEGORY_LABELS[cat]}">${icon(CATEGORY_ICONS[cat])}</span>`;
+        wrap.appendChild(group);
+      }
       const b = document.createElement('button');
       b.className = 'tray-item';
       b.classList.toggle('chosen', t.chosen);
@@ -135,7 +151,7 @@ export class BaseHud {
       b.title = `${t.name}: ${t.purpose}${t.placeable ? '' : ' (no free slot for it)'}`;
       b.innerHTML = `${icon(BUILDING_ICONS[t.kind], 'icon tray-icon')}<span class="tray-name">${esc(t.short)}</span><span class="price">${price(t)}</span>`;
       bindButton(b, () => this.actions.base.choose(t.kind));
-      wrap.appendChild(b);
+      group!.appendChild(b);
     }
   }
 
@@ -162,7 +178,7 @@ export class BaseHud {
         <div class="meter" title="Health">${icon('health')}<span class="bar"><i data-level="${level(i.health / i.maxHealth)}" style="width:${pct(i.health / i.maxHealth)}"></i></span><b>${fmt(i.health)}/${fmt(i.maxHealth)}</b></div>
         <div class="stats">${stats(i.stats)}</div>
         <div class="bi-actions">
-          ${i.upgrade ? `<button class="btn" data-act="upgrade"${i.upgrade.missing > 0 || i.status === 'destroyed' ? ' disabled' : ''} title="${esc(i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '))}">${icon('upgrade')}<span>${SAY.upgrade}</span><span class="price">${price(i.upgrade)}</span><span class="stats gain">${stats(i.upgrade.next.filter((s) => s.delta))}</span><kbd>U</kbd></button>` : i.kind !== 'store' ? `<span class="tag" title="Fully upgraded">${icon('level')}${SAY.maxLevel}</span>` : ''}
+          ${i.upgrade ? `<button class="btn" data-act="upgrade"${i.upgrade.missing > 0 || i.status === 'destroyed' ? ' disabled' : ''} title="${esc(i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '))}">${icon('upgrade')}<span>${SAY.upgrade}</span><span class="price">${price(i.upgrade)}</span><span class="stats gain">${i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="stat" title="${esc(`${s.label}: ${s.value}`)}">${icon(s.icon)}<em>${esc(s.delta!)}</em></span>`).join('')}</span><kbd>U</kbd></button>` : i.kind !== 'store' ? `<span class="tag" title="Fully upgraded">${icon('level')}${SAY.maxLevel}</span>` : ''}
           ${i.repair ? `<button class="btn" data-act="repair"${i.repair.missing > 0 ? ' disabled' : ''}>${icon('repair')}<span>${SAY.repair}</span><span class="price">${price(i.repair)}</span><kbd>R</kbd></button>` : ''}
           ${i.refund !== null ? `<button class="btn ghost${i.confirmingRemove ? ' confirm' : ''}" data-act="remove" title="Remove for a partial refund">${icon('remove')}<span>${i.confirmingRemove ? SAY.confirmRemove : ''}</span><span class="price">${icon('refund')}<b>+${i.refund}</b></span><kbd>X</kbd></button>` : ''}
         </div>`;

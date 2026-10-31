@@ -510,6 +510,9 @@ export class Game {
     this.refreshPad();
     this.input.exitPointerLock();
     this.camera.updateDesk(0, this.world.launchPosition, this.world.launchYaw, true);
+    // Back at the desk: anything on T1 that needs repairs.
+    const repairs = this.base.needsRepair.length;
+    if (repairs > 0) this.alert('repair', `${repairs} to repair`, String(this.base.repairAllCost), 'warn', 3);
   }
 
   /** X: swaps the selected card for another (a limited number of times). */
@@ -2044,6 +2047,7 @@ export class Game {
         progress: income.progressFor(resources.paper),
         protectedPaper: base.protectedPaper,
         streak: this.progress.data.streak.current,
+        repairs: base.needsRepair.length,
       },
       desk: {
         cost: buildCost, kind, name, note, tag, noteTone, progress: state.buildProgress,
