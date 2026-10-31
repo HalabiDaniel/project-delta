@@ -3,6 +3,10 @@ import { BASE, DEFENSES, PALETTE, type ThreatLevel } from '../config';
 import { Installation, type DefenseNetwork } from '../defenses/Installation';
 import type { DefenseLayout, InstallationSpec } from '../defenses/Layout';
 import { flatMaterial, type World } from './WorldGenerator';
+import { materials } from '../render/materials/MaterialLibrary';
+import { outline } from '../render/outline/OutlineRenderer';
+import { MATERIALS } from '../render/style';
+import { paperStore } from './props/buildings';
 
 type Color3 = readonly [number, number, number];
 
@@ -107,7 +111,12 @@ export class DefenseModels {
     const root = new pc.Entity('defenses');
     this.root = root;
     app.root.addChild(root);
-    for (const t of world.territories) if (t.threat > 0) root.addChild(this.trim(t.x, t.z, t.size, t.threat as Exclude<ThreatLevel, 0>));
+    // Walls, flags and trims never move: their pencil strokes are merged into one mesh per tier.
+    const statics = new pc.Entity('static-defenses');
+    const trims = new pc.Entity('threat-trims');
+    root.addChild(statics);
+    root.addChild(trims);
+    for (const t of world.territories) if (t.threat > 0) trims.addChild(this.trim(t.x, t.z, t.size, t.threat as Exclude<ThreatLevel, 0>));
     for (const inst of network.installations) this.addView(inst, false);
     for (const b of layout.barriers) {
       const wall = new pc.Entity('barrier');
@@ -115,7 +124,7 @@ export class DefenseModels {
       wall.setEulerAngles(0, b.yaw * RAD_TO_DEG, 0);
       wall.addChild(part('box', this.mat.cardboardDark, 0, b.height / 2, 0, b.length, b.height, b.thickness));
       wall.addChild(part('box', this.mat.tape, 0, b.height + 0.01, 0, b.length + 0.02, 0.04, b.thickness * 0.6));
-      root.addChild(wall);
+      statics.addChild(wall);
     }
     for (const f of layout.flags) {
       const flag = new pc.Entity('flag');
@@ -124,8 +133,10 @@ export class DefenseModels {
       flag.addChild(part('cone', this.mat.graphite, 0, 4.55, 0, 0.22, 0.3, 0.22));
       flag.addChild(part('box', this.mat.threat[f.level as Exclude<ThreatLevel, 0>], 0.75, 3.85, 0, 1.4, 0.9, 0.04));
       flag.setEulerAngles(0, Math.atan2(f.x - world.home.x, f.z - world.home.z) * RAD_TO_DEG, 0);
-      root.addChild(flag);
+      statics.addChild(flag);
     }
+    outline(statics, 'structure', { merge: true });
+    outline(trims, 'background', { merge: true });
   }
 
   /**
@@ -275,6 +286,7 @@ export class DefenseModels {
   private addView(inst: Installation, fresh: boolean): void {
     const view = this.build(inst);
     this.root.addChild(view.root);
+    this.outlineView(view);
     if (view.ring) this.root.addChild(view.ring.entity);
     this.views.push(view);
     this.byId.set(inst.id, view);
@@ -282,6 +294,18 @@ export class DefenseModels {
       view.assemble = 0;
       this.poseAssemble(view);
     }
+  }
+
+  /**
+   * Pencil strokes for an installation, merged per rigid part: the body, the part that turns, the
+   * part that elevates, and each rocket (they come and go as the launcher reloads).
+   */
+  private outlineView(v: View): void {
+    const moving = [v.turn, v.elevate, v.flash, ...v.rockets].filter((e): e is pc.Entity => e !== null);
+    outline(v.body, 'structure', { merge: true, exclude: moving });
+    if (v.turn) outline(v.turn, 'structure', { merge: true, exclude: moving.filter((e) => e !== v.turn) });
+    if (v.elevate) outline(v.elevate, 'structure', { merge: true, exclude: moving.filter((e) => e !== v.elevate) });
+    for (const r of v.rockets) outline(r, 'structure', { merge: true });
   }
 
   private removeView(v: View): void {
@@ -345,10 +369,17 @@ export class DefenseModels {
     root.setPosition(s.x, s.ground, s.z);
     const body = new pc.Entity('body');
     root.addChild(body);
-    const paintColor: Color3 =
-      s.kind === 'supply' || s.kind === 'workshop' || s.kind === 'storage' ? PALETTE.cardboard : s.side === 'player' ? PALETTE.friendlyDefense : PALETTE.defense;
     const friendly = s.side === 'player';
-    const paint = flatMaterial(paintColor);
+    // T1's paper store is the art direction's custom cardboard building (textured card).
+    const store = s.kind === 'supply' && friendly;
+    const paintColor: Color3 = store
+      ? MATERIALS['cardboard/side'].color
+      : s.kind === 'supply' || s.kind === 'workshop' || s.kind === 'storage'
+        ? PALETTE.cardboard
+        : friendly
+          ? PALETTE.friendlyDefense
+          : PALETTE.defense;
+    const paint = store ? materials().create(MATERIALS['cardboard/side']) : flatMaterial(paintColor);
     let turn: pc.Entity | null = null;
     let elevate: pc.Entity | null = null;
     let flash: pc.Entity | null = null;
@@ -423,6 +454,10 @@ export class DefenseModels {
       }
       case 'supply': {
         bodyYaw = s.facing;
+        if (store) {
+          body.addChild(paperStore(paint).toEntity(this.app.graphicsDevice, 'paper-store'));
+          break;
+        }
         body.addChild(part('box', paint, -0.75, 0.8, 0.25, 2, 1.6, 2.6));
         body.addChild(part('box', paint, 1.05, 0.65, -0.15, 1.5, 1.3, 2.4));
         const top = part('box', this.mat.cardboardDark, 0.05, 2, 0.05, 2.3, 0.9, 2.1);

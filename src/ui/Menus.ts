@@ -2,6 +2,7 @@ import { attr, bindButton, esc, text, toggle } from './dom';
 import { fmt } from './format';
 import { icon, type IconName } from './icons';
 import { SAY } from './strings';
+import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
 
 const CONTROLS: Array<[string, IconName, string]> = [
@@ -61,6 +62,12 @@ export class Menus {
             <button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button></span></div>
           <div class="setting" title="HUD size"><span>${icon('distance')}Size</span><span class="seg" data-u="scale">
             <button data-v="0.9">S</button><button data-v="1">M</button><button data-v="1.15">L</button></span></div>
+          <div class="setting" title="Graphics quality: shadows, decorations, outline detail and resolution"><span>${icon('graphics')}Graphics</span><span class="seg" data-u="gfx">
+            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
+          <div class="setting" title="Pencil outlines: off, or how detailed"><span>${icon('pencil')}Outlines</span><span class="seg" data-u="outlines">
+            <button data-v="off">Off</button><button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
+          <div class="setting" title="How strongly outlines are drawn"><span>${icon('pencil')}Lines</span><span class="seg" data-u="lines">
+            <button data-v="0.6">Faint</button><button data-v="1">Normal</button><button data-v="1.4">Bold</button></span></div>
         </div>
         <div data-u="session"></div>
         <div class="controls">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
@@ -88,6 +95,9 @@ export class Menus {
     this.overlay.addEventListener('click', (e) => e.target === this.overlay && actions.resume());
     for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setHints(b.dataset.v as HintMode));
     for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setUiScale(Number(b.dataset.v)));
+    for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setGraphicsPreset(b.dataset.v as GraphicsPreset));
+    for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlines(b.dataset.v as OutlineChoice));
+    for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlineIntensity(Number(b.dataset.v)));
     text(this.el.version, `v${__APP_VERSION__}`);
   }
 
@@ -108,6 +118,11 @@ export class Menus {
       }
       for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === v.menu.settings.hints);
       for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === v.menu.settings.uiScale);
+      const g = v.menu.settings.graphics;
+      for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.preset);
+      for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.outlines);
+      for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === g.intensity);
+      toggle(this.el.lines.parentElement!, g.outlines !== 'off');
       text(this.el.reset, v.menu.confirmingReset ? SAY.confirmReset : SAY.reset);
       this.el.reset.classList.toggle('confirm', v.menu.confirmingReset);
       this.el.reset.title = 'Delete all progress (asks twice)';

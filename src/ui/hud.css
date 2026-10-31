@@ -995,3 +995,6 @@
 .dev-kind { display: inline-block; min-width: 64px; color: #93c5fd; }
 .dev-kind[data-kind='completed'] { color: #86efac; }
 .dev-kind[data-kind='failed'], .dev-kind[data-kind='invalid'] { color: #fca5a5; }
+
+/* Performance readout (?perf). */
+.perf-overlay { position: fixed; left: 8px; bottom: 8px; z-index: 50; padding: 6px 8px; border-radius: 6px; background: rgba(20, 24, 40, 0.78); color: #e8eefc; font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; pointer-events: none; }

@@ -36,6 +36,7 @@ import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
 import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
+import { PerfMonitor, type PerfSnapshot } from './ui/PerfOverlay';
 import { Logbook, type LogbookView } from './ui/Logbook';
 import type { GarageView } from './ui/Garage';
 import {
@@ -72,6 +73,24 @@ import { OrdnanceView } from './world/OrdnanceView';
 import { MissionMarkers } from './world/MissionMarkers';
 import { TargetRange } from './world/TargetRange';
 import { buildWorld, type World } from './world/WorldGenerator';
+import { installOutlines, type OutlineRenderer } from './render/outline/OutlineRenderer';
+import {
+  browserStorage,
+  loadGraphics,
+  matchesPreset,
+  outlineChoice,
+  saveGraphics,
+  SHADOW_RESOLUTION,
+  withIntensity,
+  withOutlines,
+  withPreset,
+  type GraphicsSettings,
+} from './render/GraphicsSettings';
+import { setShadowQuality } from './render/lighting';
+import { AssetLibrary } from './assets/AssetLibrary';
+import { TextureBank } from './render/shading/textures';
+import { PaperShading } from './render/shading/PaperShading';
+import { installMaterials, MaterialLibrary } from './render/materials/MaterialLibrary';
 
 /** Ignore an Esc key press this soon after the browser released pointer lock (it was the same press). */
 const ESC_AFTER_UNLOCK_MS = 300;
@@ -160,6 +179,12 @@ export class Game {
   private readonly tipsSeen = new Set<string>();
   /** Lifetime sorties, for when key hints stop showing (auto). */
   private sortiesTotal = 0;
+  /** Graphics settings: this computer's, kept apart from the save. */
+  graphics: GraphicsSettings = loadGraphics(browserStorage());
+  private outlines: OutlineRenderer | null = null;
+  /** Licensed and own models in use, e.g. `paperwars.assets.report()` in the console. */
+  assets: AssetLibrary | null = null;
+  private perfMonitor: PerfMonitor | null = null;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -211,14 +236,23 @@ export class Game {
     const options = new pc.AppOptions();
     options.graphicsDevice = device;
     options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem];
-    options.resourceHandlers = [];
+    // Textures and glTF containers, for licensed models in assets/licensed/ (none needed otherwise).
+    options.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler];
     const app = new pc.AppBase(canvas);
     app.init(options);
     app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
     window.addEventListener('resize', () => app.resizeCanvas());
 
-    const world = buildWorld(app);
+    // The look: paper shading for every lit material, the material library, pencil outlines.
+    const textures = new TextureBank(device);
+    new PaperShading(device, textures);
+    installMaterials(new MaterialLibrary(textures));
+    const outlines = installOutlines(app);
+    const assets = new AssetLibrary(app);
+    await assets.preload();
+    const graphics = loadGraphics(browserStorage());
+    const world = buildWorld(app, assets, graphics.detail);
     const targetSpecs = layoutTargetRange(world.territories);
     const range = new TargetRange(app, targetSpecs);
     const rangeFootprints = targetSpecs.flatMap((s) => s.shapes.map(footprint));
@@ -321,6 +355,9 @@ export class Game {
       toggleSound: () => game?.toggleSound(),
       setHints: (mode) => game?.setHints(mode),
       setUiScale: (scale) => game?.setUiScale(scale),
+      setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
+      setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
+      setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
       base: {
         selectSlot: (id) => game?.baseAction('select', id),
@@ -381,6 +418,10 @@ export class Game {
       for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
     game.hud.setScale(game.uiScale);
+    game.outlines = outlines;
+    game.assets = assets;
+    game.setGraphics(graphics);
+    game.perfMonitor = new PerfMonitor(app, () => outlines.stats(), new URLSearchParams(window.location.search).has('perf'));
     if (new URLSearchParams(window.location.search).has('dev')) game.dev.toggle(true);
     // The session summary is kept for next time, and the game saved, whenever the page goes away.
     const leave = () => void game!.saveNow();
@@ -390,6 +431,10 @@ export class Game {
     game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
+    app.on('update', () => {
+      outlines.update();
+      game!.perfMonitor?.frame();
+    });
     app.start();
     return game;
   }
@@ -606,6 +651,27 @@ export class Game {
   }
 
   /** Key hints show for the first few sorties (auto), always, or never; H shows them while held. */
+  /** Frame timing and rendering counts (also shown with ?perf). */
+  perf(): PerfSnapshot | null {
+    return this.perfMonitor?.snapshot() ?? null;
+  }
+
+  /** Applies and remembers graphics settings (outlines, shadows, decoration, resolution). */
+  setGraphics(settings: GraphicsSettings): void {
+    this.graphics = settings;
+    saveGraphics(browserStorage(), settings);
+    this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
+    const shadows = SHADOW_RESOLUTION[settings.shadows];
+    setShadowQuality(this.world.sun, { enabled: shadows > 0, resolution: shadows });
+    this.world.homeDressing.setDetail(settings.detail);
+    const device = this.app.graphicsDevice;
+    const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
+    if (device.maxPixelRatio !== ratio) {
+      device.maxPixelRatio = ratio;
+      this.app.resizeCanvas();
+    }
+  }
+
   private get showHints(): boolean {
     if (this.input.isHeld('KeyH')) return true;
     return this.hints === 'on' || (this.hints === 'auto' && this.sortiesTotal < BASE.hintSorties);
@@ -1083,7 +1149,7 @@ export class Game {
 
   /** What anything flying can hit: props, standing installations and walls. */
   private solids(): Collider[] {
-    return [...this.range.solids, ...this.installationSolids(), ...this.barriers];
+    return [...this.range.solids, ...this.installationSolids(), ...this.barriers, ...this.world.homeDressing.colliders];
   }
 
   /** Enemy aircraft, for the player's ink: their spheres and this step's movement. */
@@ -2058,7 +2124,16 @@ export class Game {
       welcome: this.welcome && choosing ? { restored: this.welcome.restored, paper: resources.paper, session: this.welcome.session ? sessionView(this.welcome.session) : null, problems: this.welcome.problems.length } : null,
       menu: {
         session: sessionView(this.progress.session),
-        settings: { muted: this.sounds.muted, hints: this.hints, uiScale: this.uiScale },
+        settings: {
+          muted: this.sounds.muted,
+          hints: this.hints,
+          uiScale: this.uiScale,
+          graphics: {
+            preset: matchesPreset(this.graphics) ? this.graphics.preset : null,
+            outlines: outlineChoice(this.graphics),
+            intensity: this.graphics.outlineIntensity,
+          },
+        },
         saveNote: this.saveNote(),
         confirmingReset: this.confirming?.what === 'reset' && performance.now() < this.confirming.until,
       },

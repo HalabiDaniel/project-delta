@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.7",
+  "version": "0.0.8-dev",
   "private": true,
-  "description": "paperwars.io v0.0.7 - territory management, base building, player defenses and a new HUD",
+  "description": "paperwars.io v0.0.8 (in development) - visual identity: pencil outlines, paper materials, Home Desk",
   "type": "module",
   "scripts": {
     "dev": "vite",

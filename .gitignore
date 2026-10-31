@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# Purchased / licensed models (Synty and others) stay on the developer's machine: never commit
+# them to the public repository. See assets/licensed/README.md.
+assets/licensed/*
+!assets/licensed/README.md

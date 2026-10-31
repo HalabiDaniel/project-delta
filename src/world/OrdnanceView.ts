@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { outline } from '../render/outline/OutlineRenderer';
 import { Ribbon, trailMaterial } from '../aircraft/FlightTrails';
 import { PALETTE } from '../config';
 import type { Ordnance, Shot } from '../combat/Ordnance';
@@ -158,6 +159,8 @@ export class OrdnanceView {
       root.addChild(fin);
     }
     this.app.root.addChild(root);
+    // Incoming rockets are threats: drawn as boldly as aircraft.
+    outline(root, 'hero', { merge: true });
     return root;
   }
 }

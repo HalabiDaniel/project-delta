@@ -1,3 +1,4 @@
+import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
 import type { RatingKey, SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
@@ -240,6 +241,12 @@ export interface SettingsView {
   muted: boolean;
   hints: HintMode;
   uiScale: number;
+  graphics: {
+    /** The preset, or null once something was changed from it. */
+    preset: GraphicsPreset | null;
+    outlines: OutlineChoice;
+    intensity: number;
+  };
 }
 
 export interface MenuView {
@@ -435,6 +442,9 @@ export interface HudActions {
   toggleSound(): void;
   setHints(mode: HintMode): void;
   setUiScale(scale: number): void;
+  setGraphicsPreset(preset: GraphicsPreset): void;
+  setOutlines(choice: OutlineChoice): void;
+  setOutlineIntensity(intensity: number): void;
   toggleBase(): void;
   base: {
     selectSlot(id: string): void;

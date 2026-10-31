@@ -5,6 +5,7 @@ import type { Collider } from '../combat/Collision';
 import { Destructible, type TargetSpec } from '../combat/Destructibles';
 import { PALETTE } from '../config';
 import { flatMaterial } from './WorldGenerator';
+import { outline } from '../render/outline/OutlineRenderer';
 
 /** Seconds a target shudders after a hit, and takes to fold back up after respawning. */
 const SHUDDER = 0.22;
@@ -99,6 +100,9 @@ export class TargetRange {
         });
         root.addChild(body);
       }
+      // Pencil strokes: the stand (the practice plane outlines itself), or the whole leaning body.
+      if (plane) outline(root, 'structure', { merge: true, exclude: [body] });
+      else outline(body, 'structure', { merge: true });
       this.views.set(s.id, { target, root, body, plane, material, shudder: 0, rebuild: 0, shownDamage: 0 });
     }
   }
