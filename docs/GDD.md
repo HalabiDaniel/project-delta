@@ -899,29 +899,65 @@ Single-player still. The home territory becomes a base the player builds in fixe
 
 Single-player still. The game gets its permanent look: a playable sketchbook with pencil outlines, paper materials and soft cartoon light (see §2.1). The abstract grid becomes a classroom: territories become themed desks and cardboard platforms (Notebook, Cardboard, Graph Paper, Colored Paper, Art Desk) with names (Home Desk, Pencil Point, Notebook Ridge, Eraser Fields, Ink Valley, Cardboard Fort, Ruler Crossing, Paper Citadel, Scrap Corner), landmarks, props and a few obstacles. Licensed environment assets can be dropped in without being committed. New players get an interactive tutorial, the home base a unified dashboard, and the mission loop quick rebuild, repair and rearm, clearer rewards and failure reasons. Paper-themed audio, effects and animation, graphics presets and accessibility settings.
 
-Built in reviewable phases with developer checkpoints: (1) visual vertical slice on one territory, (2) world expansion, (3) territory identity and navigation, (4) home dashboard and onboarding, (5) gameplay flow and polish, (6) testing and refinement.
+Built in reviewable phases with developer checkpoints: (1) visual vertical slice on one territory, (2) world expansion, (3) territory identity and navigation, (4) home dashboard and onboarding, (5) gameplay flow and polish, (6) testing and refinement. Phase 1 shipped; phases 2 to 6 are completed in version 0.0.11 alongside the full asset integration.
 
 ### Version 0.0.9: Core Multiplayer
 
 Up to eight players share a classroom on an authoritative Node + Colyseus server: they join an ongoing session, claim one of eight territories as their base (the centre stays the AI's), and fly together. The server runs single-player's rule classes for every player (economy, base, mission board, sortie) and decides every position, hit, kill, balance and reward; clients send input frames and commands, predict their own plane and interpolate everyone else's. Player-versus-player combat with kill and assist credit and bounties that can't be farmed; raid missions against eligible player bases with capped losses above the protected reserve, new-player protection, shields, cooldowns and decaying rewards; defenders warned, given an interception card and backed by their guns; rival missions (raid, scout, shoot down, intercept) alongside each player's own board; names, tags, a scoreboard, a kill feed and emotes (no chat); reconnection with a grace period. Sessions live in memory. Built in eight reviewable phases with bots and a load test; see [MULTIPLAYER.md](MULTIPLAYER.md).
 
-### Version 0.0.10: Player Territory Bombing
+### Versions 0.0.10 to 0.0.20: towards the first public release
 
-Building on 0.0.9's raids: deeper attacks on built bases (multi-structure targets, escorts), the mission director's bounties and cooperation offers between players (escorting another player's bomber, joint defense), reputation and retaliation, and balance from playtesting.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md). Version 0.0.9's multiplayer becomes a persistent private alpha first, so two real players test every version that follows.
 
-### Version 0.0.11: Persistent Sessions
+### Version 0.0.10: Persistent Multiplayer and Private Alpha
 
-Player accounts, session reconnection, persistent economies, and campaign lifecycle.
+Lightweight secure player identity, PostgreSQL persistence for territories, buildings, resources, aircraft and progression, duplicate-proof server-authoritative transactions, defined rules for interrupted sorties, one persistent world that survives everyone leaving and a server restart, offline protection, a hardened server, and an externally reachable invite-only deployment (HTTPS, secure WebSockets) for the developer and one friend, with a feedback log and deployment and restore docs. See [v0.0.10](roadmap/v0.0.10.md).
 
-### Version 0.0.12: AI Escort Aircraft
+### Version 0.0.11: Art Integration and Controller Support
 
-Purchasable single-use supporting aircraft.
+Synty environment models adapted to the sketchbook look, the five custom aircraft (Dart, Falcon, Widewing, Shadow, Courier), custom buildings with construction, damage and repair states, all nine territories completed (the remaining v0.0.8 phases), browser delivery and performance work, and full gamepad support through one input-action layer shared with keyboard and mouse. See [v0.0.11](roadmap/v0.0.11.md).
 
-### Version 0.1.0: Early Public Alpha
+### Version 0.0.12: HUD and UI Revamp
 
-Integrated multiplayer gameplay, balance, onboarding, stability, and progression.
+A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. See [v0.0.12](roadmap/v0.0.12.md).
 
-Cosmetic monetization should be introduced only after the core gameplay and retention have been validated.
+### Version 0.0.13: Audio and Music Revamp
+
+Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. See [v0.0.13](roadmap/v0.0.13.md).
+
+### Version 0.0.14: Menus, Settings and Branding
+
+Logo and branding, main menu, lobby, full settings with rebinding, loading screens, transitions, a first-launch flow and clear error screens. See [v0.0.14](roadmap/v0.0.14.md).
+
+### Version 0.0.15: Economy and Content Depth
+
+Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, multiplayer world events, server-side medals and achievements, and an economy simulator. See [v0.0.15](roadmap/v0.0.15.md).
+
+### Version 0.0.16: Advanced Multiplayer
+
+AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers between players, deeper raids, reputation, social features with mute and report (§12), and anti-farming rules. See [v0.0.16](roadmap/v0.0.16.md).
+
+### Version 0.0.17: World Scale and Environments
+
+12 to 16 territories per world, new environments (bedroom, library, art room), interest-based network updates (§16.4), regional servers and level of detail. See [v0.0.17](roadmap/v0.0.17.md).
+
+### Version 0.0.18: Customization and Social
+
+Cosmetic-only aircraft and territory customization (§5.6), earned cosmetics, an inventory, friends and small alliances. See [v0.0.18](roadmap/v0.0.18.md).
+
+### Version 0.0.19: Public Readiness
+
+Public accounts, matchmaking, the campaign lifecycle and resets (§3.3), inactivity rules (§3.4), moderation and abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.19](roadmap/v0.0.19.md).
+
+### Version 0.0.20: Release Candidate
+
+LiveOps tools, cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests, a browser matrix, support channels and a feature freeze. See [v0.0.20](roadmap/v0.0.20.md).
+
+### Version 0.1.0: First Public Release (Public Alpha)
+
+After 0.0.20, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
+
+Version numbering from here: 0.1.x are small improvements, 0.x.0 are major versions, and 1.0.0 is the first full version. Cosmetic monetization (§14) is enabled in a later major version, only after the core gameplay and retention have been validated.
 
 ---
 
