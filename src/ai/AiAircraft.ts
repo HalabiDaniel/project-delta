@@ -26,8 +26,8 @@ import { beyondEdge, headingTo, terrainAhead } from './Navigation';
  */
 export type AiState = 'patrol' | 'alert' | 'attack' | 'reposition' | 'evade' | 'disengage' | 'bomb-run' | 'egress' | 'leave';
 
-/** Why it is in the air: background traffic, a mission's, or a raid on T1. */
-export type AiPurpose = 'ambient' | 'mission' | 'raid';
+/** Why it is in the air: background traffic, a mission's, a raid on T1, or a world event's (a convoy, a supply run). */
+export type AiPurpose = 'ambient' | 'mission' | 'raid' | 'event';
 
 /** What a bomber is after: a point on the ground, and how close its bomb must land. */
 export interface Strike {

@@ -89,6 +89,15 @@ export class LocalStats {
     this.save();
   }
 
+  /** Forgets everything (progress reset). */
+  clear(): void {
+    try {
+      this.store?.setItem(KEY, '');
+    } catch {
+      // Blocked: nothing was kept anyway.
+    }
+  }
+
   private save(): void {
     try {
       this.store?.setItem(KEY, JSON.stringify(this.data));

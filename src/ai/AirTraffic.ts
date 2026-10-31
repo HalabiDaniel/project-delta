@@ -61,7 +61,7 @@ export type AirEvent =
   | { type: 'collision'; aircraft: AiAircraft; damage: number; at: Point3 }
   /** Left the world (or was cleared away out of sight). */
   | { type: 'gone'; aircraft: AiAircraft }
-  /** A mission's aircraft left the world while its mission was still on: it got away. */
+  /** A mission's (or a world event's) aircraft left the world while it still mattered: it got away. */
   | { type: 'escaped'; aircraft: AiAircraft }
   /** A fighter has turned on someone. */
   | { type: 'engaging'; aircraft: AiAircraft; target: string }
@@ -252,7 +252,8 @@ export class AirTraffic {
       if (!a.gone) continue;
       const far = Math.hypot(a.position.x, a.position.z) > 190 + FAR_GONE;
       if (input.visible(a.position) && !far) continue;
-      const escaped = a.purpose === 'mission' && this.missionOn;
+      // A world event's aircraft getting away matters whether or not a mission is on.
+      const escaped = (a.purpose === 'mission' && this.missionOn) || a.purpose === 'event';
       this.remove(a);
       this.events.push({ type: escaped ? 'escaped' : 'gone', aircraft: a });
     }
@@ -304,7 +305,12 @@ export class AirTraffic {
     this.ambientTimer = this.spawnAmbient(input) ? randRange(this.rng, AI.ambient.respawn[0], AI.ambient.respawn[1]) : 3;
   }
 
-  /** Aircraft that must fly: mission and raid ones (ambient ones make way for them). */
+  /** How many more aircraft that must fly (a mission's, an event's) can go up within AI.maxActive. */
+  get room(): number {
+    return Math.max(0, AI.maxActive - this.reserved());
+  }
+
+  /** Aircraft that must fly: mission, raid and event ones (ambient ones make way for them). */
   private reserved(): number {
     return this.aircraft.filter((a) => a.purpose !== 'ambient').length + this.pending.length;
   }

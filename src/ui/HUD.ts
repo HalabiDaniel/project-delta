@@ -1,8 +1,8 @@
 import { SUITABILITY_LABELS, type SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
-import { LANDING, type AircraftId, type Difficulty, type ThreatLevel } from '../config';
-import type { MissionFailure, MissionStatus, MissionType } from '../missions/Mission';
+import { DIRECTOR, LANDING, type AircraftId, type TerritoryState, type ThreatLevel, type Tier } from '../config';
+import type { Medal, MissionFailure, MissionStatus, MissionType } from '../missions/Mission';
 import type { BoundaryState } from '../systems/Boundary';
 import type { BuildKind, GamePhase } from '../systems/GameState';
 import { AirHud, type AirView } from './AirHud';
@@ -30,6 +30,8 @@ export interface TargetIndicator extends ScreenPoint {
 export interface TerritoryLabel extends ScreenPoint {
   id: string;
   role: 'home' | 'objective' | 'neutral';
+  /** Its state in the world, when not at peace. */
+  state: TerritoryState;
 }
 
 /** A name, role and health bar floating over a practice target, a damaged prop or a defense. */
@@ -55,16 +57,53 @@ export interface ThreatSummary {
   detail: string;
 }
 
+/** A stage of an operation, as its card and the tracker show it. */
+export interface OperationStageView {
+  label: string;
+  status: 'locked' | 'open' | 'done';
+  /** The stage's optional objective, and whether it was met. */
+  optional: string;
+  met: boolean | null;
+  skipped: boolean;
+}
+
+export interface OperationView {
+  codename: string;
+  territoryId: string;
+  /** Index of the stage this card flies. */
+  stage: number;
+  stages: OperationStageView[];
+  bonus: number;
+  earned: number;
+  /** Paper still to be had: stages, optional extras and the bonus. */
+  remaining: number;
+  /** Started: it can be abandoned but not swapped. */
+  active: boolean;
+  /** The second click on Abandon confirms. */
+  confirming: boolean;
+}
+
 export interface MissionCardView {
   type: MissionType;
   codename: string;
   title: string;
   description: string;
-  difficulty: Difficulty;
-  difficultyLabel: string;
+  /** Safe, Balanced, High risk, Operation, World event. */
+  slotLabel: string;
+  slot: 'safe' | 'balanced' | 'risky' | 'event';
+  tier: Tier;
+  tierLabel: string;
   stars: number;
   multiplier: number;
   reward: number;
+  /** "B 46 × D 1.5 × M 1.2". */
+  rewardNote: string;
+  modifiers: Array<{ id: string; label: string; detail: string }>;
+  /** The tier the director thinks fits the player right now. */
+  recommended: boolean;
+  /** Seconds before a world event's card goes away by itself. */
+  expires: number | null;
+  operation: OperationView | null;
   bombs: number;
   timeLimit: number | null;
   threat: ThreatSummary;
@@ -84,6 +123,9 @@ export interface ObjectiveView {
 export interface TrackerView {
   title: string;
   codename: string;
+  /** "Operation Ink Storm · stage 2 of 3 · optional: take under 25% damage". */
+  operation: string | null;
+  modifiers: string[];
   threat: ThreatSummary;
   type: MissionType;
   difficultyLabel: string;
@@ -171,6 +213,44 @@ export interface ResultView {
   survived: boolean;
   paperSpent: number;
   paperEarned: number;
+  medal: Medal | null;
+  /** What each medal asks for on this mission. */
+  criteria: Record<Medal, string> | null;
+  /** Bonuses paid on top of the reward (streak, operation, optional objectives). */
+  bonuses: Array<{ label: string; amount: number }>;
+  /** Personal bests broken, achievements unlocked. */
+  records: string[];
+  achievements: Array<{ title: string; detail: string }>;
+  streak: number;
+  operation: string | null;
+}
+
+/** The previous visit's summary, on arrival. */
+export interface SessionView {
+  missionsCompleted: number;
+  missionsFailed: number;
+  paperEarned: number;
+  paperSpent: number;
+  aircraftLost: number;
+  enemiesDestroyed: number;
+  best: string;
+  achievements: string[];
+  minutes: number;
+}
+
+export interface WelcomeView {
+  restored: boolean;
+  paper: number;
+  session: SessionView | null;
+  problems: number;
+}
+
+/** The pause menu: this visit so far, and settings. */
+export interface MenuView {
+  session: SessionView;
+  muted: boolean;
+  saveNote: string;
+  confirmingReset: boolean;
 }
 
 export interface CareerView {
@@ -187,8 +267,16 @@ export interface HudView {
   career: CareerView;
   phase: GamePhase;
   paused: boolean;
-  income: { producing: boolean; amount: number; interval: number; progress: number; cap: number };
-  build: { cost: number; kind: BuildKind; name: string; canBuild: boolean; note: string | null; noteTone: 'bad' | 'info'; progress: number };
+  income: { state: 'producing' | 'slowed' | 'full'; amount: number; interval: number; progress: number; cap: number; taper: number };
+  /** The newest lines of the paper log. */
+  ledger: Array<{ label: string; delta: number }>;
+  /** Missions in a row, and the bonus it pays. */
+  streak: { current: number; rate: number };
+  build: { cost: number; kind: BuildKind; name: string; canBuild: boolean; note: string | null; noteTone: 'bad' | 'info'; progress: number; emergency: boolean };
+  /** Card swaps left. */
+  swaps: number;
+  welcome: WelcomeView | null;
+  menu: MenuView;
   garage: GarageView | null;
   /** Mission cards while choosing (desk → ready); null once launched. */
   cards: MissionCardView[] | null;
@@ -222,6 +310,12 @@ export interface HudActions {
   endSortie(): void;
   continueToDesk(): void;
   resume(): void;
+  swap(): void;
+  abandonOperation(): void;
+  openLogbook(): void;
+  resetProgress(): void;
+  dismissWelcome(): void;
+  toggleSound(): void;
 }
 
 export type BannerTone = 'good' | 'bad' | 'info';
@@ -247,6 +341,9 @@ export const MISSION_TYPE_LABELS: Record<MissionType, string> = {
   escort: 'Bomber escort',
   patrol: 'Airspace patrol',
   combined: 'Combined attack',
+  shipment: 'High-value target',
+  convoy: 'Convoy interception',
+  'supply-run': 'Supply run escort',
 };
 
 const BUILD_VERB: Record<BuildKind, string> = { fold: 'Fold', refit: 'Refit', rollout: 'Roll out' };
@@ -258,7 +355,9 @@ const CONTROLS: Array<[string, string]> = [
   ['Shift', 'Boost (short burst, then recharge)'],
   ['Left click', 'Fire ink guns (hold)'],
   ['Right click', 'Drop a bomb'],
-  ['1 / 2 / 3', 'Choose a mission (at home)'],
+  ['1 – 4', 'Choose a mission (at home)'],
+  ['X', 'Swap the chosen card (limited)'],
+  ['L', 'Logbook: records, achievements, paper log'],
   ['Q / E', 'Choose a plane (at home)'],
   ['F', 'Fold, refit or roll out the plane'],
   ['Space', 'Launch, or take off again after landing'],
@@ -280,9 +379,11 @@ const TEMPLATE = /* html */ `
   <div class="damage-flash" data-damage-flash></div>
 
   <section class="panel resources">
-    <div class="brand">paperwars<span>.io</span> <small>v0.0.5</small></div>
+    <div class="brand">paperwars<span>.io</span> <small>v0.0.6</small><button class="link-btn" data-logbook-btn><kbd>L</kbd> Logbook</button></div>
     <div class="paper"><svg class="paper-icon" viewBox="0 0 18 22" aria-hidden="true"><path d="M1 1h11l5 5v15H1z" fill="#fff" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 1v5h5" fill="#e5e7eb" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><b data-paper></b><span>paper</span><span class="delta" data-delta></span></div>
-    <div class="income"><span class="income-bar"><i data-income-bar></i></span><span data-income-text></span></div>
+    <div class="income" data-income><span class="income-bar"><i data-income-bar></i></span><span data-income-text></span></div>
+    <ul class="ledger-mini" data-ledger></ul>
+    <div class="streak-line" data-streak></div>
     <div class="stats-title">Career <small>(this browser)</small></div>
     <dl class="stats">
       <div><dt>Missions completed</dt><dd data-missions></dd></div>
@@ -296,14 +397,17 @@ const TEMPLATE = /* html */ `
 
   <section class="panel mission">
     <div data-cards-wrap>
-      <div class="eyebrow">Choose a mission <span class="eyebrow-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
+      <div class="eyebrow">Choose a mission <span class="eyebrow-keys" data-card-keys><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>
       <div class="cards" data-cards></div>
+      <button class="swap-btn" data-swap><kbd>X</kbd> Swap this card <span data-swaps></span></button>
     </div>
     <div data-tracker>
       <div class="tracker-head"><span class="eyebrow" data-tr-type></span><span class="pill" data-tr-status></span></div>
       <div class="codename" data-tr-codename></div>
       <div class="mission-title" data-tr-title></div>
       <div class="mission-meta" data-tr-meta></div>
+      <div class="tr-operation" data-tr-operation></div>
+      <div class="card-mods" data-tr-mods></div>
       <div class="card-threat" data-tr-threat><span class="threat-chip" data-tr-threat-chip></span><span data-tr-threat-detail></span></div>
       <div class="timer" data-tr-timer></div>
       <ul class="objectives" data-tr-objectives></ul>
@@ -358,6 +462,7 @@ const TEMPLATE = /* html */ `
       <div class="result-card" data-result>
         <div class="eyebrow">Sortie report</div>
         <div class="result-title" data-res-title></div>
+        <div class="medal-row" data-res-medal-row><span class="medal" data-res-medal></span><span class="medal-why" data-res-medal-why></span></div>
         <dl class="ledger">
           <div><dt>Aircraft</dt><dd data-res-plane></dd></div>
           <div><dt data-res-mission-title></dt><dd data-res-mission></dd></div>
@@ -376,9 +481,11 @@ const TEMPLATE = /* html */ `
         <dl class="ledger money">
           <div><dt>Paper spent</dt><dd data-res-spent></dd></div>
           <div><dt>Paper earned</dt><dd data-res-earned></dd></div>
+          <div class="bonuses" data-res-bonuses></div>
           <div data-res-lost-row><dt>Paper lost to raids</dt><dd data-res-lost></dd></div>
           <div class="net"><dt>Net change</dt><dd data-res-net></dd></div>
         </dl>
+        <ul class="res-extras" data-res-extras></ul>
         <button class="btn primary" data-continue>Continue <kbd>Enter</kbd></button>
       </div>
     </div>
@@ -391,14 +498,32 @@ const TEMPLATE = /* html */ `
   <div class="overlay" data-overlay>
     <div class="overlay-card">
       <h2 data-overlay-title></h2>
-      <table class="controls">
-        ${CONTROLS.map(([key, action]) => `<tr><th><kbd>${key}</kbd></th><td>${action}</td></tr>`).join('')}
-      </table>
+      <div class="menu-session" data-menu-session></div>
+      <div class="menu-actions">
+        <button class="btn primary" data-resume>Resume</button>
+        <button class="btn ghost" data-menu-logbook><kbd>L</kbd> Logbook</button>
+        <button class="btn ghost" data-menu-sound></button>
+        <button class="btn ghost danger" data-menu-reset>Reset progress</button>
+      </div>
+      <p class="overlay-note" data-menu-save></p>
+      <div class="controls">
+        ${CONTROLS.map(([key, action]) => `<div><kbd>${key}</kbd><span>${action}</span></div>`).join('')}
+      </div>
       <p class="overlay-rules">Land on <b>T1</b> to rearm or bring your plane home: come in slow (under ${LANDING.maxSpeed}), descend gently (under ${LANDING.maxSink} m/s) with the wings level. Fast or steep touchdowns cost health.</p>
       <p class="overlay-rules">Defended territories shoot back. Turrets can't turn to face behind them, fast and turning planes are hard to hit, rockets can't follow a hard turn, and nothing fires over <b>T1</b>. Destroy a territory's radar and its guns see less far.</p>
       <p class="overlay-rules">Enemy paper planes patrol enemy country, and bombers raid <b>T1</b>'s paper store. Keep turning when a fighter is on your tail, outrun it to make it give up, and lead your shots: the small circle shows where. <b>T1</b>'s own guns help against raiders.</p>
-      <button class="btn primary" data-resume>Resume</button>
+      <p class="overlay-rules">The mission director deals a <b>safe</b>, a <b>balanced</b> and a <b>high-risk</b> card that follow how you fly. Swap a card you dislike with <b>X</b>. World events (shipments, convoys, supply runs, raids) add a fourth card for a while: ignore it if you like.</p>
       <p class="overlay-note">Click anywhere or press Esc to continue.</p>
+    </div>
+  </div>
+
+  <div class="welcome" data-welcome>
+    <div class="welcome-card">
+      <div class="eyebrow">paperwars.io v0.0.6</div>
+      <h2 data-wc-title></h2>
+      <p class="welcome-sub" data-wc-sub></p>
+      <div class="menu-session" data-wc-session></div>
+      <button class="btn primary" data-wc-go>Back to the desk <kbd>Enter</kbd></button>
     </div>
   </div>
 `;
@@ -420,7 +545,7 @@ export class HUD {
   private lastRender = performance.now();
 
   constructor(
-    private readonly root: HTMLElement,
+    readonly root: HTMLElement,
     private readonly actions: HudActions,
   ) {
     root.classList.add('hud');
@@ -437,6 +562,13 @@ export class HUD {
     this.air = new AirHud(root, root.querySelector('.resources') as HTMLElement);
 
     bindButton(this.el.build, actions.build);
+    bindButton(this.el.swap, actions.swap);
+    bindButton(this.el['logbook-btn'], actions.openLogbook);
+    bindButton(this.el['menu-logbook'], actions.openLogbook);
+    bindButton(this.el['menu-sound'], actions.toggleSound);
+    bindButton(this.el['menu-reset'], actions.resetProgress);
+    bindButton(this.el['wc-go'], actions.dismissWelcome);
+    this.el.welcome.addEventListener('click', () => actions.dismissWelcome());
     bindButton(this.el.continue, actions.continueToDesk);
     bindButton(this.el.resume, actions.resume);
     bindButton(this.el.rearm, actions.rearm);
@@ -458,11 +590,19 @@ export class HUD {
     text(this.el.defenses, String(v.career.defensesDestroyed));
     text(this.el['aircraft-down'], String(v.career.aircraftDestroyed));
     text(this.el.favorite, v.career.favorite ?? '—');
-    width(this.el['income-bar'], v.income.producing ? v.income.progress : 0);
+    width(this.el['income-bar'], v.income.state !== 'full' ? v.income.progress : 0);
+    attr(this.el.income, 'data-state', v.income.state);
     text(
       this.el['income-text'],
-      v.income.producing ? `T1 makes +${v.income.amount} every ${v.income.interval} s` : `Income paused at ${v.income.cap}+ paper`,
+      v.income.state === 'producing'
+        ? `T1 store makes +${v.income.amount} every ${v.income.interval} s`
+        : v.income.state === 'slowed'
+          ? `Store filling: +${v.income.amount} every ${v.income.interval * 2} s`
+          : `Store full at ${v.income.cap}: production paused`,
     );
+    this.renderLedger(v);
+    this.renderWelcome(v.welcome);
+    this.renderMenu(v);
 
     this.renderCards(v);
     this.renderTracker(v.tracker);
@@ -473,7 +613,7 @@ export class HUD {
 
     toggle(this.el['lock-hint'], flying && !v.pointerLocked);
     toggle(this.el.overlay, v.paused);
-    text(this.el['overlay-title'], v.phase === 'flying' ? 'Paused' : 'Controls');
+    text(this.el['overlay-title'], v.phase === 'flying' ? 'Paused' : 'Menu');
     this.root.classList.toggle('in-flight', flying);
 
     place(this.el.nose, flying ? v.nose : null);
@@ -571,29 +711,47 @@ export class HUD {
   private renderCards(v: HudView): void {
     toggle(this.el['cards-wrap'], v.cards !== null);
     if (!v.cards) return;
-    const key = v.cards.map((c) => `${c.codename}|${c.title}|${c.difficulty}|${c.reward}|${c.fits.map((f) => f.level).join(',')}`).join('/');
+    const key = v.cards
+      .map((c) => [c.codename, c.title, c.tier, c.reward, c.slotLabel, c.recommended, c.modifiers.map((m) => m.id).join('+'), c.fits.map((f) => f.level).join(','),
+        c.operation ? `${c.operation.stage}:${c.operation.active}:${c.operation.confirming}:${c.operation.stages.map((x) => x.status).join('')}` : ''].join('|'))
+      .join('/');
     if (key !== this.cardsKey) {
       this.cardsKey = key;
       const wrap = this.el.cards;
       wrap.innerHTML = '';
+      this.el['card-keys'].innerHTML = v.cards.map((_, i) => `<kbd>${i + 1}</kbd>`).join('');
       v.cards.forEach((c, i) => {
-        const card = document.createElement('button');
+        const card = document.createElement('div');
         card.className = 'card';
-        card.dataset.difficulty = c.difficulty;
-        const stars = '★'.repeat(c.stars) + '☆'.repeat(3 - c.stars);
+        card.setAttribute('role', 'button');
+        card.dataset.difficulty = c.tier;
+        card.dataset.slot = c.slot;
+        const stars = '★'.repeat(c.stars) + '☆'.repeat(Math.max(0, 3 - c.stars));
         const facts = [c.bombs > 0 ? `Up to ${c.bombs} bomb${c.bombs === 1 ? '' : 's'}` : 'No bombs', c.timeLimit ? `${c.timeLimit} s limit` : 'No time limit'];
         const fits = c.fits
           .map((f) => `<span class="fit-chip" data-id="${f.id}" data-level="${f.level}" title="${esc(f.name)}: ${SUITABILITY_LABELS[f.level]}">${esc(f.name)}</span>`)
           .join('');
+        const mods = c.modifiers.map((m) => `<span class="mod-chip" data-mod="${m.id}" title="${esc(m.detail)}">${esc(m.label)}</span>`).join('');
+        const op = c.operation;
+        const opHtml = op
+          ? `<ol class="op-stages">${op.stages
+              .map((st, k) => `<li data-status="${st.status}" class="${k === op.stage ? 'this' : ''}" title="Optional: ${esc(st.optional)}${st.met === true ? ' (met)' : st.met === false ? ' (missed)' : ''}">${esc(st.label)}${st.skipped ? ' <small>(already down)</small>' : ''}</li>`)
+              .join('')}</ol>
+             <div class="op-foot"><span>Bonus <b>+${op.bonus}</b> · ${op.remaining} still to earn</span>${op.active ? `<button class="op-abandon${op.confirming ? ' confirm' : ''}">${op.confirming ? 'Click again to abandon' : 'Abandon'}</button>` : ''}</div>`
+          : '';
         card.innerHTML = `
-          <div class="card-top"><kbd>${i + 1}</kbd><span class="card-type">${MISSION_TYPE_LABELS[c.type]}</span><span class="card-diff" title="${c.difficultyLabel}">${stars} <b>×${c.multiplier}</b></span></div>
+          <div class="card-top"><kbd>${i + 1}</kbd><span class="slot-chip" data-slot="${c.slot}">${esc(c.slotLabel)}</span><span class="card-type">${MISSION_TYPE_LABELS[c.type]}</span><span class="card-diff" title="${c.tierLabel}">${stars} <b>×${c.multiplier}</b></span></div>
           <div class="codename">${esc(c.codename)}</div>
-          <div class="card-title">${esc(c.title)}</div>
+          <div class="card-title">${esc(c.title)}${c.recommended ? '<span class="fit-tag" title="The director thinks this difficulty suits you right now">Your level</span>' : ''}</div>
+          ${opHtml}
           <div class="card-desc">${esc(c.description)}</div>
+          ${mods ? `<div class="card-mods">${mods}</div>` : ''}
           <div class="card-threat" data-level="${c.threat.level}"><span class="threat-chip">${esc(c.threat.label)}</span><span>${esc(c.threat.detail)}</span></div>
-          <div class="card-foot"><span>${facts.join(' · ')}</span><b class="card-reward">+${c.reward}</b></div>
+          <div class="card-foot"><span>${facts.join(' · ')}<span class="card-expires"></span></span><b class="card-reward" title="${esc(c.rewardNote)}">+${c.reward}</b></div>
           <div class="card-fits">${fits}</div>`;
         bindButton(card, () => this.actions.select(i));
+        const abandon = card.querySelector<HTMLElement>('.op-abandon');
+        if (abandon) bindButton(abandon, () => this.actions.abandonOperation());
         wrap.appendChild(card);
       });
     }
@@ -602,7 +760,59 @@ export class HUD {
       for (const chip of card.querySelectorAll<HTMLElement>('.fit-chip')) {
         chip.classList.toggle('mine', !!v.cards![i].fits.find((f) => f.id === chip.dataset.id)?.selected);
       }
+      const expires = v.cards![i].expires;
+      const el = card.querySelector<HTMLElement>('.card-expires');
+      if (el) text(el, expires !== null ? ` · gone in ${clock(expires)}` : '');
     });
+    const chosen = v.cards[v.selected];
+    const swappable = !!chosen && chosen.slot !== 'event' && !chosen.operation?.active;
+    toggle(this.el.swap, v.phase === 'desk' || v.phase === 'building' || v.phase === 'ready');
+    (this.el.swap as HTMLButtonElement).disabled = !swappable || v.swaps <= 0;
+    text(this.el.swaps, `· ${v.swaps}/${DIRECTOR.swaps.max} left`);
+  }
+
+  private renderLedger(v: HudView): void {
+    const key = v.ledger.map((l) => `${l.label}${l.delta}`).join('|');
+    const list = this.el.ledger;
+    if (list.dataset.key !== key) {
+      list.dataset.key = key;
+      list.innerHTML = v.ledger
+        .map((l) => `<li><span>${esc(l.label)}</span><b data-tone="${l.delta > 0 ? 'good' : 'bad'}">${l.delta > 0 ? '+' : '−'}${Math.abs(l.delta)}</b></li>`)
+        .join('');
+    }
+    toggle(list, v.ledger.length > 0 && v.phase !== 'flying');
+    const st = v.streak;
+    toggle(this.el.streak, st.current > 0);
+    text(this.el.streak, st.current > 0 ? `🔥 ${st.current} in a row${st.rate > 0 ? ` · +${Math.round(st.rate * 100)}% streak bonus` : ''}` : '');
+  }
+
+  private renderWelcome(w: WelcomeView | null): void {
+    toggle(this.el.welcome, w !== null);
+    if (!w) return;
+    text(this.el['wc-title'], w.restored ? 'Welcome back!' : 'Welcome');
+    text(
+      this.el['wc-sub'],
+      `Your home territory, ${w.paper} paper, planes, records and missions are restored.${w.problems > 0 ? ` (${w.problems} damaged save entr${w.problems === 1 ? 'y was' : 'ies were'} repaired.)` : ''}`,
+    );
+    const html = w.session ? `<div class="eyebrow">Last time</div>${sessionHtml(w.session)}` : '';
+    if (this.el['wc-session'].dataset.html !== html) {
+      this.el['wc-session'].dataset.html = html;
+      this.el['wc-session'].innerHTML = html;
+    }
+  }
+
+  private renderMenu(v: HudView): void {
+    if (!v.paused) return;
+    const html = `<div class="eyebrow">This session</div>${sessionHtml(v.menu.session)}`;
+    if (this.el['menu-session'].dataset.html !== html) {
+      this.el['menu-session'].dataset.html = html;
+      this.el['menu-session'].innerHTML = html;
+    }
+    toggle(this.el['menu-logbook'], v.phase !== 'flying');
+    text(this.el['menu-sound'], v.menu.muted ? 'Sound: off (M)' : 'Sound: on (M)');
+    text(this.el['menu-reset'], v.menu.confirmingReset ? 'Click again to reset' : 'Reset progress');
+    this.el['menu-reset'].classList.toggle('confirm', v.menu.confirmingReset);
+    text(this.el['menu-save'], v.menu.saveNote);
   }
 
   private renderTracker(t: TrackerView | null): void {
@@ -612,6 +822,14 @@ export class HUD {
     text(this.el['tr-title'], t.title);
     text(this.el['tr-codename'], t.codename);
     text(this.el['tr-meta'], `Reward +${t.reward} paper`);
+    toggle(this.el['tr-operation'], t.operation !== null);
+    text(this.el['tr-operation'], t.operation ?? '');
+    const mods = t.modifiers.map((m) => `<span class="mod-chip">${esc(m)}</span>`).join('');
+    if (this.el['tr-mods'].dataset.html !== mods) {
+      this.el['tr-mods'].dataset.html = mods;
+      this.el['tr-mods'].innerHTML = mods;
+    }
+    toggle(this.el['tr-mods'], t.modifiers.length > 0);
     attr(this.el['tr-threat'], 'data-level', String(t.threat.level));
     text(this.el['tr-threat-chip'], t.threat.label);
     text(this.el['tr-threat-detail'], t.threat.detail);
@@ -653,8 +871,8 @@ export class HUD {
     for (const dock of this.docks) toggle(dock, dock.dataset.dock === dockKey && !v.paused);
 
     const b = v.build;
-    text(this.el['build-label'], `${BUILD_VERB[b.kind]} ${b.name}`);
-    text(this.el['build-cost'], b.cost > 0 ? `−${b.cost} paper` : 'free');
+    text(this.el['build-label'], b.emergency ? 'Fold an emergency Dart' : `${BUILD_VERB[b.kind]} ${b.name}`);
+    text(this.el['build-cost'], b.emergency || b.cost === 0 ? 'free' : `−${b.cost} paper`);
     (this.el.build as HTMLButtonElement).disabled = !b.canBuild;
     const note = this.el['build-note'];
     toggle(note, (v.phase === 'desk' || v.phase === 'ready') && b.note !== null && !v.paused);
@@ -724,6 +942,27 @@ export class HUD {
       text(this.el['res-shots'], r.shotsFired > 0 ? `${r.shotsFired} · ${r.shotsHit} hits (${Math.round((r.shotsHit / r.shotsFired) * 100)}%)` : '—');
       text(this.el['res-spent'], r.paperSpent > 0 ? `−${r.paperSpent}` : '0');
       text(this.el['res-earned'], r.paperEarned > 0 ? `+${r.paperEarned}` : '0');
+      toggle(this.el['res-medal-row'], r.medal !== null || r.missionTone === 'good');
+      attr(this.el['res-medal'], 'data-medal', r.medal ?? 'none');
+      text(this.el['res-medal'], r.medal ? `${r.medal === 'gold' ? '🥇' : r.medal === 'silver' ? '🥈' : '🥉'} ${r.medal.charAt(0).toUpperCase()}${r.medal.slice(1)}` : '');
+      const next = r.medal === 'bronze' ? 'silver' : r.medal === 'silver' ? 'gold' : null;
+      text(this.el['res-medal-why'], r.criteria ? (next ? `For ${next}: ${r.criteria[next]}` : r.criteria.gold) : '');
+      const bonuses = r.bonuses.map((b) => `<div><dt>${esc(b.label)}</dt><dd data-tone="good">+${b.amount}</dd></div>`).join('');
+      if (this.el['res-bonuses'].dataset.html !== bonuses) {
+        this.el['res-bonuses'].dataset.html = bonuses;
+        this.el['res-bonuses'].innerHTML = bonuses;
+      }
+      const extras = [
+        ...(r.operation ? [`<li class="op">${esc(r.operation)}</li>`] : []),
+        ...(r.streak >= 2 ? [`<li>🔥 ${r.streak} missions in a row</li>`] : []),
+        ...r.records.map((x) => `<li class="record">🏁 New best · ${esc(x)}</li>`),
+        ...r.achievements.map((a) => `<li class="ach">🏆 ${esc(a.title)} <small>${esc(a.detail)}</small></li>`),
+      ].join('');
+      if (this.el['res-extras'].dataset.html !== extras) {
+        this.el['res-extras'].dataset.html = extras;
+        this.el['res-extras'].innerHTML = extras;
+      }
+      toggle(this.el['res-extras'], extras.length > 0);
       const net = r.paperEarned - r.paperSpent - r.paperLost;
       text(this.el['res-net'], net > 0 ? `+${net}` : net < 0 ? `−${-net}` : '0');
       attr(this.el['res-net'], 'data-tone', net > 0 ? 'good' : net < 0 ? 'bad' : '');
@@ -821,11 +1060,12 @@ export class HUD {
       let el = this.labelEls.get(label.id);
       if (!el) {
         el = document.createElement('div');
-        el.textContent = label.role === 'home' ? `${label.id} · Home` : label.id;
         this.el.labels.appendChild(el);
         this.labelEls.set(label.id, el);
       }
-      const className = `territory-label ${label.role}`;
+      const state = STATE_LABELS[label.state];
+      text(el, `${label.id}${label.role === 'home' ? ' · Home' : ''}${state ? ` · ${state}` : ''}`);
+      const className = `territory-label ${label.role} state-${label.state}`;
       if (el.className !== className) el.className = className;
       el.style.transform = `translate(${label.x}px, ${label.y}px)`;
       toggle(el, true);
@@ -860,6 +1100,20 @@ export class HUD {
     }
     for (const [id, el] of this.targetEls) if (!seen.has(id)) toggle(el, false);
   }
+}
+
+const STATE_LABELS: Record<TerritoryState, string> = { peaceful: '', alert: 'On alert', 'under-attack': 'Under attack', disabled: 'Defenses down' };
+
+function sessionHtml(s: SessionView): string {
+  const row = (label: string, value: string) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  return `<dl class="ledger session">
+    ${row('Missions completed', `${s.missionsCompleted}${s.missionsFailed ? ` <small>(${s.missionsFailed} failed)</small>` : ''}`)}
+    ${row('Paper earned · spent', `+${s.paperEarned} · −${s.paperSpent}`)}
+    ${row('Aircraft lost', String(s.aircraftLost))}
+    ${row('Enemies destroyed', String(s.enemiesDestroyed))}
+    ${row('Best performance', esc(s.best))}
+    ${row('Time', `${s.minutes} min`)}
+  </dl>${s.achievements.length ? `<p class="session-ach">🏆 ${s.achievements.map(esc).join(' · ')}</p>` : ''}`;
 }
 
 function statusLabel(status: MissionStatus, reward: number): [string, string] {

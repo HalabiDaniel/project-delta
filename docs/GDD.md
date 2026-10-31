@@ -873,17 +873,17 @@ Single-player still. Territories have threat levels (unprotected, light, guarded
 
 Single-player still. AI-controlled paper planes fly the same flight model as the player's: scouts that run, fighters that dogfight and bombers that make steady runs, at rookie, regular and veteran skill. Enemy bombers raid the player's home territory, whose own turrets fight back; intercepting them pays, and a hit costs a capped amount of paper above a protected minimum. New mission types (dogfight, scout and bomber interception, bomber escort, airspace patrol, combined attack), ambient patrols over enemy territory, aim assistance, aircraft markers and combat feedback.
 
-### Version 0.0.6: Core Multiplayer
+### Version 0.0.6: Dynamic Missions, Progression and Game Balance
+
+Single-player still. A mission director deals a safe, a balanced and a high-risk card from templates and explicit rules, adapting tiers (easy to very hard) to a rolling performance rating, with recovery missions, variety memory, eligibility checks and limited swaps. Rewards follow R = B × D × M, balanced against plane costs, with a free emergency Dart and capped home production. World events (raids, high-value shipments, convoys, supply runs) and territory states, short multi-sortie operations, medals, records, streaks, aircraft mastery, achievements, a local save, and developer tools for the director and the economy.
+
+### Version 0.0.7: Core Multiplayer
 
 Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
 
-### Version 0.0.7: Player Territory Bombing
+### Version 0.0.8: Player Territory Bombing
 
-Real player-versus-player attacks, defender losses, fighter interception, and notifications.
-
-### Version 0.0.8: Dynamic Mission Director
-
-Multiple mission categories, difficulty adaptation, and introductory bounties.
+Real player-versus-player attacks, defender losses, fighter interception, notifications, and the mission director's bounties and cooperation offers between players.
 
 ### Version 0.0.9: Player-Built Defenses
 

@@ -1,7 +1,7 @@
 import { assessSuitability, bombLoad, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, BOMB, ECONOMY, PLANE, RAIDS, type AircraftId, type AircraftSpec, type AiRole } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, type AircraftId, type AircraftSpec, type AiRole } from '../config';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
 import { HomeIncome } from './HomeIncome';
 import type { ResourceManager } from './ResourceManager';
@@ -45,6 +45,8 @@ export interface SortieLog {
   targetsDestroyed: number;
   /** Turrets, launchers, radars and depots destroyed (also counted in targetsDestroyed). */
   defensesDestroyed: number;
+  /** Ink turrets among them. */
+  turretsDestroyed: number;
   /** Enemy rounds and rockets fired at the plane, and how many of them hit it. */
   enemyShots: number;
   enemyHits: number;
@@ -58,7 +60,33 @@ export interface SortieLog {
   /** Paper taken by enemy raids that got through. */
   paperLost: number;
   rearms: number;
+  /** Metres flown, over every take-off of the sortie. */
+  distanceFlown: number;
+  /** Safe touchdowns on T1 during the sortie. */
+  landings: number;
+  /** Flown in the free emergency Dart. */
+  emergency: boolean;
   outcome: 'flying' | 'recovered' | 'lost';
+}
+
+/**
+ * The free emergency Dart: folded from scrap when the player can afford no plane at all. Half the
+ * ink, no bomb, a shorter range, and it falls apart after the sortie (it is never kept).
+ */
+export function emergencyDart(): AircraftSpec {
+  const dart = AIRCRAFT.dart;
+  return {
+    ...dart,
+    name: 'Emergency Dart',
+    roleLabel: 'Emergency',
+    cost: 0,
+    refitCost: 0,
+    tagline: 'Scrap paper, free, for one sortie: half the ink, no bomb, shorter range.',
+    range: ECONOMY.emergency.range,
+    gun: { ...dart.gun, ammo: ECONOMY.emergency.ammo },
+    gunLabel: 'Light ink gun (half full)',
+    bombs: { capacity: 0, kind: dart.bombs.kind },
+  };
 }
 
 export type GameEvent =
@@ -155,6 +183,8 @@ export class GameState {
   rearmProgress: number | null = null;
   /** The current (or just finished) sortie, from the moment its plane was paid for. */
   sortie: SortieLog | null = null;
+  /** The plane on the pad or in the air is the free emergency Dart. */
+  emergency = false;
 
   private buildDuration: number = PLANE.buildTime;
   private readonly listeners: Array<(event: GameEvent) => void> = [];
@@ -205,6 +235,57 @@ export class GameState {
     return this.phase === 'desk' && this.resources.canAfford(this.buildCost) && this.suitability().level !== 'unsuitable';
   }
 
+  /**
+   * The free emergency Dart is on offer: at the desk, with no plane in the hangar to roll out and
+   * not enough paper to fold or refit any design.
+   */
+  emergencyAvailable(): boolean {
+    if (this.phase !== 'desk') return false;
+    return AIRCRAFT_ORDER.every((id) => !this.resources.canAfford(this.buildCostFor(id)));
+  }
+
+  /** desk → building, with the free emergency Dart. Refused if the mission needs a bomb (it carries none). */
+  buildEmergency(): boolean {
+    if (!this.emergencyAvailable()) return false;
+    const spec = emergencyDart();
+    const fit = assessSuitability(spec, this.selectedMission.spec);
+    if (fit.level === 'unsuitable') {
+      this.emit({ type: 'build-refused', cost: 0, reason: 'incompatible', detail: fit.reason });
+      return false;
+    }
+    this.plane = spec;
+    this.emergency = true;
+    this.buildKind = 'fold';
+    this.durability = new Durability(spec.maxHealth);
+    this.sortie = newSortie(spec.id, 'fold', 0);
+    this.sortie.emergency = true;
+    this.phase = 'building';
+    this.buildProgress = 0;
+    this.buildDuration = PLANE.buildTime;
+    this.emit({ type: 'built', cost: 0, kind: 'fold', aircraft: spec.id });
+    return true;
+  }
+
+  /**
+   * Replaces the cards on offer (the director dealt a new one, or one went stale). Only before
+   * launch; the selection stays on the same card if it is still there.
+   */
+  updateOffers(offers: Mission[]): boolean {
+    if (this.phase !== 'desk' && this.phase !== 'building' && this.phase !== 'ready') return false;
+    const current = this.offers[this.selected];
+    this.offers = offers;
+    const keep = offers.indexOf(current);
+    this.selected = keep >= 0 ? keep : Math.min(this.selected, Math.max(0, offers.length - 1));
+    return true;
+  }
+
+  /** A bonus on top of a reward (a streak, an operation, an optional objective, a bounty). */
+  payBonus(amount: number, label: string): void {
+    if (amount <= 0) return;
+    this.resources.earn(Math.round(amount), 'bonus', label);
+    if (this.sortie) this.sortie.paperEarned += Math.round(amount);
+  }
+
   /** Missions can be chosen any time before launch. */
   select(index: number): boolean {
     if (this.phase !== 'desk' && this.phase !== 'building' && this.phase !== 'ready') return false;
@@ -219,7 +300,7 @@ export class GameState {
    * the pad, that plane is stowed in the hangar first (free, ready to roll out later). Not while folding.
    */
   selectAircraft(id: AircraftId): boolean {
-    if (!(id in this.catalog) || id === this.aircraft) return false;
+    if (!(id in this.catalog) || (id === this.aircraft && !this.emergency)) return false;
     if (this.phase === 'ready') this.stow();
     if (this.phase !== 'desk') return false;
     this.aircraft = id;
@@ -231,7 +312,8 @@ export class GameState {
   stow(): boolean {
     if (this.phase !== 'ready' || !this.plane) return false;
     const id = this.plane.id;
-    this.hangar.set(id, { condition: 'ready', health: this.durability?.health ?? this.plane.maxHealth, invested: this.sortie?.paperSpent ?? 0 });
+    // Scrap paper isn't worth keeping: an emergency Dart taken off the pad is simply gone.
+    if (!this.emergency) this.hangar.set(id, { condition: 'ready', health: this.durability?.health ?? this.plane.maxHealth, invested: this.sortie?.paperSpent ?? 0 });
     this.clearPlane();
     this.phase = 'desk';
     this.emit({ type: 'stowed', aircraft: id });
@@ -250,15 +332,17 @@ export class GameState {
       this.emit({ type: 'build-refused', cost, reason: 'incompatible', detail: fit.reason });
       return false;
     }
-    if (!this.resources.spend(cost)) {
+    const spec = this.chosen;
+    const kind = this.buildKindFor(spec.id);
+    const label = kind === 'refit' ? `Refitted ${spec.name}` : `Folded ${spec.name}`;
+    if (!this.resources.spend(cost, label)) {
       this.emit({ type: 'build-refused', cost, reason: 'paper', detail: '' });
       return false;
     }
-    const spec = this.chosen;
-    const kind = this.buildKindFor(spec.id);
     const waiting = this.hangar.get(spec.id);
     this.hangar.delete(spec.id);
     this.plane = spec;
+    this.emergency = false;
     this.buildKind = kind;
     this.durability = new Durability(spec.maxHealth);
     this.sortie = newSortie(spec.id, kind, cost + (kind === 'rollout' ? (waiting?.invested ?? 0) : 0));
@@ -293,7 +377,7 @@ export class GameState {
   /** ready → flying. The selected mission starts and the plane is armed for it. */
   launch(): boolean {
     if (this.phase !== 'ready' || !this.plane) return false;
-    const fit = this.suitability(this.plane.id);
+    const fit = assessSuitability(this.plane, this.selectedMission.spec);
     if (fit.level === 'unsuitable') {
       this.emit({ type: 'launch-refused', detail: fit.reason });
       return false;
@@ -374,13 +458,14 @@ export class GameState {
    * The player dealt `dealt` damage to a prop, practice target or (`defense`) installation;
    * `destroyed` names it if that finished it off. Destroyed targets count towards destroy objectives.
    */
-  recordDamage(dealt: number, destroyed: string | null, defense = false): void {
+  recordDamage(dealt: number, destroyed: string | null, defense = false, turret = false): void {
     if (this.sortie) this.sortie.damageDealt += dealt;
     if (!destroyed) return;
     if (this.sortie) this.sortie.targetsDestroyed++;
     this.stats.targetsDestroyed++;
     if (defense) {
       if (this.sortie) this.sortie.defensesDestroyed++;
+      if (this.sortie && turret) this.sortie.turretsDestroyed++;
       this.stats.defensesDestroyed++;
     }
     this.emit({ type: 'target-destroyed', id: destroyed, defense });
@@ -437,7 +522,7 @@ export class GameState {
    */
   raidDefended(participated: boolean, mission = false): void {
     const reward = participated && !mission ? RAIDS.reward : 0;
-    if (reward > 0) this.resources.earn(reward, 'reward');
+    if (reward > 0) this.resources.earn(reward, 'reward', 'Raid beaten off');
     if (participated && this.sortie) {
       this.sortie.paperEarned += reward;
       this.sortie.objectivesProtected++;
@@ -485,8 +570,10 @@ export class GameState {
   /** One step of flight from `prev` to `pos`: range used, recon time, deliveries and rings. */
   updateFlight(prev: Point3, pos: Point3, dt: number): void {
     if (this.phase !== 'flying') return;
+    const step = Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
+    if (this.sortie) this.sortie.distanceFlown += step;
     if (this.rangeLeft > 0) {
-      this.rangeLeft = Math.max(0, this.rangeLeft - Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z));
+      this.rangeLeft = Math.max(0, this.rangeLeft - step);
       if (this.rangeLeft === 0) this.emit({ type: 'range-exhausted' });
     }
     const mission = this.mission;
@@ -503,6 +590,7 @@ export class GameState {
     if (this.phase !== 'flying') return false;
     this.phase = 'landed';
     this.rearmProgress = null;
+    if (this.sortie) this.sortie.landings++;
     const mission = this.mission;
     if (mission?.completeLanding(territoryId)) {
       this.objectiveComplete(mission.objectives.findIndex((o) => o.kind === 'land'));
@@ -542,7 +630,7 @@ export class GameState {
     this.phase = 'debrief';
     this.rearmProgress = null;
     this.failMission('abandoned');
-    this.hangar.set(this.plane.id, { condition: 'recovered', health: this.durability?.health ?? 0, invested: 0 });
+    if (!this.emergency) this.hangar.set(this.plane.id, { condition: 'recovered', health: this.durability?.health ?? 0, invested: 0 });
     this.bombsLoaded = 0;
     this.stats.planesRecovered++;
     if (this.sortie) this.sortie.outcome = 'recovered';
@@ -591,6 +679,7 @@ export class GameState {
 
   private clearPlane(): void {
     this.plane = null;
+    this.emergency = false;
     this.durability = null;
     this.gun = null;
     this.sortie = null;
@@ -605,7 +694,7 @@ export class GameState {
     // Finishing one may open the next, whose targets may already be down.
     for (const next of mission.settle()) this.objectiveComplete(next);
     if (mission.allDone && mission.succeed()) {
-      this.resources.earn(mission.reward, 'reward');
+      this.resources.earn(mission.reward, 'reward', `Mission completed: ${mission.title}`);
       if (this.sortie) this.sortie.paperEarned += mission.reward;
       this.stats.successes++;
       this.emit({ type: 'mission-succeeded', reward: mission.reward });
@@ -627,8 +716,8 @@ export class GameState {
 function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): SortieLog {
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
-    bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0,
+    bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0,
     enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0,
-    rearms: 0, outcome: 'flying',
+    rearms: 0, distanceFlown: 0, landings: 0, emergency: false, outcome: 'flying',
   };
 }

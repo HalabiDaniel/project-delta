@@ -594,6 +594,70 @@ describe('GameState: aircraft and raids', () => {
   });
 });
 
+describe('GameState: economy (v0.0.6)', () => {
+  it('a player who can afford nothing gets a free emergency Dart: half the ink, no bomb, gone after the sortie', () => {
+    const { state, resources } = setup('delivery', 'bomb');
+    resources.spend(95);
+    expect(state.emergencyAvailable()).toBe(true);
+    expect(state.build()).toBe(false);
+    expect(state.buildEmergency()).toBe(true);
+    expect(resources.paper).toBe(5);
+    expect(state.plane?.name).toBe('Emergency Dart');
+    expect(state.plane?.gun.ammo).toBe(ECONOMY.emergency.ammo);
+    expect(state.plane?.bombs.capacity).toBe(0);
+    state.tick(PLANE.buildTime);
+    expect(state.launch()).toBe(true);
+    expect(state.bombsLoaded).toBe(0);
+    expect(state.sortie?.emergency).toBe(true);
+    landAndEnd(state);
+    expect(state.hangar.size).toBe(0);
+  });
+
+  it("the emergency Dart can't fly a bombing mission, and isn't offered while something is affordable", () => {
+    const { state, resources, events } = setup('bomb');
+    expect(state.emergencyAvailable()).toBe(false);
+    resources.spend(95);
+    expect(state.buildEmergency()).toBe(false);
+    expect(events).toContain('build-refused');
+  });
+
+  it('stowing an emergency Dart throws it away rather than keeping a free plane', () => {
+    const { state, resources } = setup('delivery');
+    resources.spend(95);
+    state.buildEmergency();
+    state.tick(PLANE.buildTime);
+    expect(state.selectAircraft('falcon')).toBe(true);
+    expect(state.hangar.size).toBe(0);
+    expect(state.phase).toBe('desk');
+  });
+
+  it('logs what each payment was for, counts distance and landings, and pays bonuses into the sortie', () => {
+    const { state, resources } = setup('bomb');
+    const labels: string[] = [];
+    resources.onChange((_p, _d, _s, label) => labels.push(label));
+    sortie(state);
+    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 30, y: 10, z: 40 }, 0.1);
+    state.dropBomb();
+    state.resolveBomb(0);
+    state.payBonus(4, 'Streak bonus');
+    state.land('T1');
+    expect(labels).toEqual(['Folded Falcon', 'Mission completed: Bomb T5', 'Streak bonus']);
+    expect(state.sortie?.distanceFlown).toBeCloseTo(50);
+    expect(state.sortie?.landings).toBe(1);
+    expect(state.sortie?.paperEarned).toBe(54);
+  });
+
+  it('new cards can replace the offers before launch, keeping the selection on the same card', () => {
+    const { state } = setup('bomb', 'double', 'delivery');
+    state.select(2);
+    const keep = state.offers[2];
+    expect(state.updateOffers([new Mission(SPECS.practice), keep])).toBe(true);
+    expect(state.selected).toBe(1);
+    sortie(state);
+    expect(state.updateOffers([new Mission(SPECS.bomb)])).toBe(false);
+  });
+});
+
 describe('LocalStats', () => {
   const memory = (): KeyValueStore & { data: Record<string, string> } => {
     const data: Record<string, string> = {};

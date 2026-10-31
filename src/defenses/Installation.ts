@@ -88,6 +88,9 @@ export class Installation {
     return this.spec.id;
   }
 
+  /** Its territory is on alert: it gets a fix the moment it sees a plane, with no delay. */
+  alarm = false;
+
   get alive(): boolean {
     return !this.durability.destroyed;
   }
@@ -223,7 +226,7 @@ export class Installation {
     this.estimate.x += (target.vx - this.estimate.x) * k;
     this.estimate.y += (target.vy - this.estimate.y) * k;
     this.estimate.z += (target.vz - this.estimate.z) * k;
-    this.acquire = alerted || !turret ? 1 : Math.min(1, this.acquire + dt / DEFENSES.turret.acquireTime);
+    this.acquire = alerted || this.alarm || !turret ? 1 : Math.min(1, this.acquire + dt / DEFENSES.turret.acquireTime);
 
     // Turrets lead the plane; launchers point at it and let the rocket do the chasing.
     const aim = { x: target.x, y: target.y, z: target.z };
@@ -405,9 +408,15 @@ export class DefenseNetwork {
     return { orders, events };
   }
 
-  restoreAll(): void {
-    for (const i of this.installations) i.restore();
+  /** Everything back to full health, except the wrecks in `keep` (the world remembers those for a while). */
+  restoreAll(keep: ReadonlySet<string> = new Set()): void {
+    for (const i of this.installations) if (!keep.has(i.id) || i.alive) i.restore();
     this.aware.clear();
+  }
+
+  /** Puts the territories in `territoryIds` on alert (and takes every other one off it). */
+  setAlarm(territoryIds: ReadonlySet<string>): void {
+    for (const i of this.installations) i.alarm = territoryIds.has(i.spec.territoryId);
   }
 
   /**
