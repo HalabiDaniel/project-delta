@@ -779,7 +779,7 @@ export const BASE = {
   /** …and times this while the paper store lies wrecked. */
   wreckedStore: 0.5,
   /** Without a radar, raiders are only noticed this close to T1 (m from its middle). */
-  detection: 55,
+  detection: 70,
   /** Share of the paper put into a building given back when it is removed (scaled by its health). */
   refund: 0.5,
   /** Repairs cost this share of a building's value per share of health missing… */
@@ -799,11 +799,11 @@ export const BASE = {
   slots: [
     { id: 'D1', kind: 'defense', at: [9, 11] },
     { id: 'D2', kind: 'defense', at: [9, -11] },
-    { id: 'R1', kind: 'radar', at: [-2, -12] },
+    { id: 'R1', kind: 'radar', at: [2, -21] },
     { id: 'E1', kind: 'economy', at: [-15, 8] },
     { id: 'E2', kind: 'economy', at: [-15, -8] },
     { id: 'U1', kind: 'utility', at: [1, 20] },
-    { id: 'U2', kind: 'utility', at: [2, -21] },
+    { id: 'U2', kind: 'utility', at: [-3, -12] },
   ] as ReadonlyArray<{ id: string; kind: SlotKind; at: readonly [number, number] }>,
   /** What a brand-new game starts with: one ink turret. */
   starter: [{ slot: 'D1', kind: 'turret' }] as ReadonlyArray<{ slot: string; kind: BuildingKind }>,
@@ -827,9 +827,9 @@ export const BASE = {
     radar: {
       kind: 'radar', name: 'Radar station', short: 'Radar', slots: ['radar'], purpose: 'Early warning of raids',
       levels: [
-        { cost: 70, health: 80, range: 110 },
-        { cost: 50, health: 95, range: 150 },
-        { cost: 80, health: 110, range: 210 },
+        { cost: 70, health: 80, range: 140 },
+        { cost: 50, health: 95, range: 190 },
+        { cost: 80, health: 110, range: 260 },
       ],
     },
     workshop: {

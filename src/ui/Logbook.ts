@@ -3,11 +3,23 @@ import type { PerformanceBreakdown } from '../director/Performance';
 import { CATEGORY_LABELS, type Category } from '../director/Templates';
 import { ACHIEVEMENTS, BEST_LABELS, clock, type ProgressData } from '../progress/Progress';
 import type { Ledger } from '../systems/Ledger';
+import type { BaseStats } from '../base/Base';
 import { bindButton, esc } from './dom';
-import type { SessionView } from './HUD';
-import { MISSION_TYPE_LABELS } from './HUD';
+import { icon, type IconName } from './icons';
+import { MISSION_TYPE_LABELS } from './strings';
+import type { SessionView } from './views';
 
 export interface LogbookView {
+  /** Career numbers in this browser (the HUD no longer shows them). */
+  career: { missionsCompleted: number; planesLost: number; targetsDestroyed: number; defensesDestroyed: number; aircraftDestroyed: number; favorite: string | null };
+  /** T1 as a base: what stands there and what it has been through. */
+  base: {
+    stats: BaseStats;
+    production: number;
+    capacity: number;
+    protectedPaper: number;
+    buildings: Array<{ name: string; icon: IconName; level: number; status: 'ok' | 'damaged' | 'destroyed'; kills: number; bombers: number; damage: number }>;
+  };
   progress: ProgressData;
   session: SessionView;
   ledger: Ledger;
@@ -17,8 +29,8 @@ export interface LogbookView {
   recommended: string;
 }
 
-type Tab = 'records' | 'aircraft' | 'paper' | 'session';
-const TABS: Array<[Tab, string]> = [['records', 'Records & achievements'], ['aircraft', 'Aircraft'], ['paper', 'Paper log'], ['session', 'This session']];
+type Tab = 'records' | 'base' | 'aircraft' | 'paper' | 'session';
+const TABS: Array<[Tab, string]> = [['records', 'Records'], ['base', 'Base'], ['aircraft', 'Aircraft'], ['paper', 'Paper'], ['session', 'Session']];
 
 /**
  * The logbook (L): personal bests, medals and achievements, each design's record, the paper log
@@ -65,7 +77,7 @@ export class Logbook {
   private render(): void {
     const v = this.view();
     for (const b of this.el.querySelectorAll<HTMLElement>('[data-tab]')) b.classList.toggle('active', b.dataset.tab === this.tab);
-    const html = this.tab === 'records' ? records(v) : this.tab === 'aircraft' ? aircraft(v) : this.tab === 'paper' ? paper(v) : session(v);
+    const html = this.tab === 'records' ? records(v) : this.tab === 'base' ? base(v) : this.tab === 'aircraft' ? aircraft(v) : this.tab === 'paper' ? paper(v) : session(v);
     if (this.body.dataset.html !== html) {
       this.body.dataset.html = html;
       this.body.innerHTML = html;
@@ -86,6 +98,12 @@ function records(v: LogbookView): string {
     row('Medals', `🥇 ${v.progress.medals.gold} · 🥈 ${v.progress.medals.silver} · 🥉 ${v.progress.medals.bronze}`),
     row('Safe landings', String(v.progress.landings)),
     row('Difficulty that suits you now', `${v.recommended} <small>(the director's guess: harder cards are always there if you want them)</small>`),
+    row('Missions completed', String(v.career.missionsCompleted)),
+    row('Planes lost', String(v.career.planesLost)),
+    row('Targets destroyed', String(v.career.targetsDestroyed)),
+    row('Defenses destroyed', String(v.career.defensesDestroyed)),
+    row('Aircraft shot down', String(v.career.aircraftDestroyed)),
+    row('Favourite plane', v.career.favorite ?? '—'),
   ].join('');
   const unlocked = ACHIEVEMENTS.filter((a) => v.progress.achievements[a.id] !== undefined).length;
   const achievements = ACHIEVEMENTS.map((a) => {
@@ -94,6 +112,34 @@ function records(v: LogbookView): string {
   }).join('');
   return `<div class="lb-cols"><section><h3>Personal bests</h3><dl class="ledger">${bests}</dl></section>
     <section><h3>Achievements <small>${unlocked}/${ACHIEVEMENTS.length}</small></h3><ul class="achievements">${achievements}</ul></section></div>`;
+}
+
+function base(v: LogbookView): string {
+  const b = v.base;
+  const s = b.stats;
+  const row = (label: string, value: string) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const status = { ok: '✓', damaged: 'Damaged', destroyed: 'Wrecked' };
+  const buildings = b.buildings.length
+    ? b.buildings.map((x) => `<tr><th>${icon(x.icon)} ${esc(x.name)}</th><td>${'★'.repeat(x.level)}</td><td class="${x.status === 'ok' ? 'good' : 'bad'}">${status[x.status]}</td><td>${x.kills}</td><td>${x.bombers}</td><td>${x.damage}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="muted">Nothing built yet</td></tr>';
+  return `<div class="lb-cols"><section><h3>T1 now</h3><dl class="ledger">
+      ${row('Paper per minute', String(Math.round(b.production * 10) / 10))}
+      ${row('Capacity', String(b.capacity))}
+      ${row('Protected from raids', String(b.protectedPaper))}
+    </dl>
+    <h3>Buildings</h3><table class="lb-table"><thead><tr><th></th><th>Level</th><th>State</th><th>Shot down</th><th>Bombers</th><th>Damage</th></tr></thead><tbody>${buildings}</tbody></table></section>
+    <section><h3>Raids and building</h3><dl class="ledger">
+      ${row('Raids on T1', String(s.raids))}
+      ${row('Raids repelled', String(s.repelled))}
+      ${row('Bombers destroyed by defenses', String(s.bombersDowned))}
+      ${row('Aircraft destroyed by defenses', String(s.aircraftDowned))}
+      ${row('Paper lost to attacks', s.paperLost > 0 ? `−${s.paperLost}` : '0')}
+      ${row('Paper spent on construction', s.construction > 0 ? `−${s.construction}` : '0')}
+      ${row('Paper spent on repairs', s.repairCosts > 0 ? `−${s.repairCosts}` : '0')}
+      ${row('Paper made by workshops', `+${Math.round(s.workshopPaper)}`)}
+      ${row('Structures repaired', String(s.repairs))}
+      ${row('Refunds for removed buildings', s.refunds > 0 ? `+${s.refunds}` : '0')}
+    </dl></section></div>`;
 }
 
 function aircraft(v: LogbookView): string {

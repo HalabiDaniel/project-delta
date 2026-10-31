@@ -7,6 +7,7 @@ import { MissionDirector } from '../director/MissionDirector';
 import { planOperation } from '../director/Operations';
 import type { MissionContext } from '../missions/MissionGenerator';
 import { emptyProgress, emptySession } from '../progress/Progress';
+import { emptyBaseStats } from '../base/Base';
 import { seededRng } from './Random';
 import { MemoryStore, migrate, SAVE_VERSION, SaveManager, validateSave, type SaveData } from './SaveGame';
 import { generateTerritories } from '../world/WorldGenerator';
@@ -41,8 +42,16 @@ function sample(): SaveData {
       byAircraft: [['falcon', { sorties: 1, successes: 1, lost: 0, spent: 25, earned: 80 }]],
       byType: [['dogfight', { sorties: 1, successes: 1, lost: 0, spent: 25, earned: 80 }]],
     },
-    settings: { muted: true, dev: false },
+    settings: { muted: true, dev: false, hints: 'off', uiScale: 1.15, tips: ['desk', 'flight'] },
     lastSession: { ...emptySession(9), missionsCompleted: 3 },
+    base: {
+      buildings: [
+        { slot: 'D1', kind: 'turret', level: 2, invested: 105, kills: 3, bombers: 1, damage: 240, health: 70 },
+        { slot: 'E1', kind: 'workshop', level: 1, invested: 80, kills: 0, bombers: 0, damage: 0, health: 90 },
+      ],
+      store: 100,
+      stats: { ...emptyBaseStats(), raids: 2, repelled: 1, paperLost: 12 },
+    },
   };
 }
 
@@ -159,5 +168,26 @@ describe('validateSave', () => {
     expect(migrate({ version: SAVE_VERSION, paper: 5 }, problems)).toEqual({ version: SAVE_VERSION, paper: 5 });
     expect(migrate({ version: 0 }, problems)).toBeNull();
     expect(problems[0]).toMatch(/upgrade/);
+  });
+
+  it('a v0.0.6 save (version 1) keeps T1\'s two turrets as built turrets, and its settings get defaults', () => {
+    const problems: string[] = [];
+    const old = { ...JSON.parse(JSON.stringify(sample())), version: 1, base: undefined, settings: { muted: false, dev: false } };
+    const data = validateSave(migrate(old, problems), problems)!;
+    expect(data.version).toBe(SAVE_VERSION);
+    expect(data.base!.buildings.map((b) => [b.slot, b.kind, b.level])).toEqual([['D1', 'turret', 1], ['D2', 'turret', 1]]);
+    expect(data.settings).toEqual({ muted: false, dev: false, hints: 'auto', uiScale: 1, tips: [] });
+  });
+
+  it('a damaged base is repaired: unknown slots and kinds dropped, levels and health kept in range', () => {
+    const problems: string[] = [];
+    const raw = JSON.parse(JSON.stringify(sample()));
+    raw.base.buildings.push({ slot: 'Q7', kind: 'turret' }, { slot: 'E2', kind: 'castle' }, { slot: 'U1', kind: 'storage', level: 9, health: 5000 });
+    const data = validateSave(raw, problems)!;
+    expect(data.base!.buildings.map((b) => b.slot)).toEqual(['D1', 'E1', 'U1']);
+    const u1 = data.base!.buildings.find((b) => b.slot === 'U1')!;
+    expect(u1.level).toBe(3);
+    expect(u1.health).toBe(130);
+    expect(problems.length).toBeGreaterThan(0);
   });
 });

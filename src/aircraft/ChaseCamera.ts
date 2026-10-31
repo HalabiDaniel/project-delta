@@ -47,6 +47,18 @@ export class ChaseCamera {
   }
 
   /**
+   * Base management: high above the home platform and behind it, looking down over the whole base,
+   * so every construction slot is in view. Still the normal 3D world, just from higher up.
+   */
+  updateBase(dt: number, centre: { x: number; z: number }, yaw: number, snap = false): void {
+    forwardFromAngles(yaw, 0, this.dir);
+    this.wantPos.set(centre.x - this.dir.x * 30, 52, centre.z - this.dir.z * 30);
+    this.wantLook.set(centre.x + this.dir.x * 1, 0, centre.z + this.dir.z * 1);
+    this.setFov(CAMERA.baseFov, snap ? Infinity : dt);
+    this.move(snap ? Infinity : 2.5, dt, 0);
+  }
+
+  /**
    * Sits behind and above the plane, looking a little ahead and below it. When `focus` is given
    * (a falling bomb or its impact point) the view rises and pans down to keep it in frame.
    */

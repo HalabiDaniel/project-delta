@@ -1,4 +1,5 @@
-import { AIRCRAFT_ORDER, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type Tier } from '../config';
+import { emptyBaseStats, type BaseSave, type BaseStats } from '../base/Base';
+import { AIRCRAFT_ORDER, BASE, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
 import type { DirectorState, HistoryEntry, HistoryKind, OfferSource, Recipe, Slot } from '../director/MissionDirector';
 import type { Operation, OperationStage, OperationTemplate, OptionalKind } from '../director/Operations';
 import type { MissionRecord } from '../director/Performance';
@@ -12,7 +13,7 @@ import type { EconomyTotals, Efficiency, Transaction } from './Ledger';
  * turns the previous version into the new one; saves from an unknown future version are kept
  * aside, never overwritten.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface HangarSave {
   id: AircraftId;
@@ -39,10 +40,25 @@ export interface SaveData {
     byAircraft: Array<[AircraftId, Efficiency]>;
     byType: Array<[MissionType, Efficiency]>;
   };
-  settings: { muted: boolean; dev: boolean };
+  settings: SaveSettings;
   /** The summary of the previous visit, shown on the next. */
   lastSession: SessionSummary | null;
+  /** T1's buildings, their condition and records; null for a brand-new game. */
+  base: BaseSave | null;
 }
+
+export interface SaveSettings {
+  muted: boolean;
+  dev: boolean;
+  /** Key hints: for the first sorties (auto), always, or never. */
+  hints: 'auto' | 'on' | 'off';
+  /** HUD size. */
+  uiScale: number;
+  /** First-time tips already shown. */
+  tips: string[];
+}
+
+export const UI_SCALES: readonly number[] = [0.9, 1, 1.15];
 
 // ---- Storage --------------------------------------------------------------------------------
 
@@ -229,8 +245,22 @@ export class SaveManager {
 
 // ---- Versions ---------------------------------------------------------------------------------
 
-/** Steps from each old version to the next. None yet: version 1 is the first save format. */
-const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {};
+/**
+ * Steps from each old version to the next.
+ * 1 → 2 (v0.0.7): T1 became a base the player builds. Before, it had two ink turrets for free;
+ * a save from then keeps them, as built turrets in the two defense slots.
+ */
+const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {
+  1: (raw) => ({
+    ...raw,
+    version: 2,
+    base: {
+      buildings: ['D1', 'D2'].map((slot) => ({ slot, kind: 'turret', level: 1, invested: BASE.buildings.turret.levels[0].cost, kills: 0, bombers: 0, damage: 0, health: BASE.buildings.turret.levels[0].health })),
+      store: DEFENSES.home.storeHealth,
+      stats: emptyBaseStats(),
+    },
+  }),
+};
 
 export function migrate(raw: unknown, problems: string[]): unknown {
   if (!isObject(raw)) return raw;
@@ -306,9 +336,46 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
       byAircraft: check.pairs(ledger.byAircraft, 'ledger.byAircraft', AIRCRAFT_ORDER, (v) => validateEfficiency(v, check)),
       byType: check.pairs(ledger.byType, 'ledger.byType', ALL_TYPES, (v) => validateEfficiency(v, check)),
     },
-    settings: { muted: settings.muted === true, dev: settings.dev === true },
+    settings: {
+      muted: settings.muted === true,
+      dev: settings.dev === true,
+      hints: check.oneOf(settings.hints, 'settings.hints', ['auto', 'on', 'off'] as const, 'auto'),
+      uiScale: UI_SCALES.includes(settings.uiScale as number) ? (settings.uiScale as number) : 1,
+      tips: Array.isArray(settings.tips) ? settings.tips.filter((t): t is string => typeof t === 'string').slice(0, 50) : [],
+    },
     lastSession: validateSession(raw.lastSession, check),
+    base: raw.base === null || raw.base === undefined ? null : validateBase(raw.base, check),
   };
+}
+
+const BASE_SLOT_IDS = BASE.slots.map((s) => s.id);
+
+/** T1's buildings: unknown slots or kinds are dropped, levels and health kept in range. */
+function validateBase(b: unknown, check: Checker): BaseSave | null {
+  if (!isObject(b)) {
+    check.note('base was not an object');
+    return null;
+  }
+  const buildings = check.list(b.buildings, 'base.buildings', (x, i) => {
+    if (!isObject(x)) return null;
+    const slot = check.oneOf(x.slot, `base.buildings[${i}].slot`, BASE_SLOT_IDS, null);
+    const kind = check.oneOf(x.kind, `base.buildings[${i}].kind`, BASE.order, null) as BuildingKind | null;
+    if (!slot || !kind) return null;
+    const levels = BASE.buildings[kind].levels;
+    const level = check.int(x.level, `base.buildings[${i}].level`, 1, levels.length, 1);
+    return {
+      slot, kind, level,
+      invested: check.int(x.invested, `base.buildings[${i}].invested`, 0, 100_000, levels[0].cost),
+      kills: check.int(x.kills, `base.buildings[${i}].kills`, 0, 1_000_000, 0),
+      bombers: check.int(x.bombers, `base.buildings[${i}].bombers`, 0, 1_000_000, 0),
+      damage: check.int(x.damage, `base.buildings[${i}].damage`, 0, 100_000_000, 0),
+      health: check.num(x.health, `base.buildings[${i}].health`, 0, levels[level - 1].health, levels[level - 1].health),
+    };
+  }).filter((x): x is NonNullable<typeof x> => x !== null).filter((x, i, all) => all.findIndex((y) => y.slot === x.slot) === i);
+  const s = isObject(b.stats) ? b.stats : {};
+  const empty = emptyBaseStats();
+  const stats = Object.fromEntries((Object.keys(empty) as Array<keyof BaseStats>).map((k) => [k, check.int(s[k], `base.stats.${k}`, 0, 100_000_000, 0)])) as unknown as BaseStats;
+  return { buildings, store: check.num(b.store, 'base.store', 0, DEFENSES.home.storeHealth, DEFENSES.home.storeHealth), stats };
 }
 
 function validateEfficiency(v: unknown, check: Checker): Efficiency | null {

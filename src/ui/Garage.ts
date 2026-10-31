@@ -2,6 +2,8 @@ import { SUITABILITY_LABELS, type RatingKey, type SuitabilityLevel } from '../ai
 import type { AircraftId } from '../config';
 import type { BuildKind } from '../systems/GameState';
 import { attr, bindButton, esc, text, toggle } from './dom';
+import { icon, type IconName } from './icons';
+import type { Stat } from './views';
 
 export interface GarageCardView {
   id: AircraftId;
@@ -9,10 +11,8 @@ export interface GarageCardView {
   roleLabel: string;
   accent: string;
   cost: number;
-  /** What pressing F would cost for this design right now, and what it would do. */
   buildCost: number;
   buildKind: BuildKind;
-  /** A plane of this design waiting at home: stowed and ready, or recovered and needing a refit. */
   hangar: 'ready' | 'recovered' | null;
   hangarHealth: number | null;
   suitability: SuitabilityLevel;
@@ -26,21 +26,28 @@ export interface InspectorView {
   accent: string;
   tagline: string;
   ratings: Array<{ key: RatingKey; label: string; value: number }>;
-  loadout: string[];
+  loadout: Stat[];
+  /** The player's record with this design, for the tooltip. */
+  record: string | null;
   suitability: { level: SuitabilityLevel; reason: string; missionTitle: string };
 }
 
 export interface GarageView {
   cards: GarageCardView[];
   inspector: InspectorView;
-  /** Folding is under way: the choice can't change. */
   locked: boolean;
 }
 
+const RATING_ICONS: Record<RatingKey, IconName> = {
+  speed: 'speed', maneuverability: 'heading', durability: 'health', range: 'range', payload: 'bombload', firepower: 'ink', stealth: 'recon',
+};
+
+export const FIT_ICONS: Record<SuitabilityLevel, IconName> = { recommended: 'ok', good: 'ok', possible: 'warn', unsuitable: 'wrecked' };
+
 /**
- * The garage at home: a card per design (cost, hangar, how well it suits the chosen mission) and an
- * inspector for the chosen one with its ratings and loadout. The 3D preview above the launch pad
- * shows the same plane.
+ * The garage at home: a card per design (price, hangar, fit for the chosen mission as an icon)
+ * and an inspector for the chosen one: ratings as icons and pips, loadout as numbers. The 3D
+ * preview above the launch pad shows the same plane.
  */
 export class Garage {
   private cardsKey = '';
@@ -51,12 +58,10 @@ export class Garage {
     private readonly onSelect: (id: AircraftId) => void,
   ) {
     inspector.innerHTML = /* html */ `
-      <div class="insp-head"><span class="swatch" data-i="swatch"></span><b data-i="name"></b><span class="role-chip" data-i="role"></span></div>
-      <p class="insp-tagline" data-i="tagline"></p>
+      <div class="insp-head"><span class="swatch" data-i="swatch"></span><b data-i="name"></b><span class="tag" data-i="role"></span><span class="fit-badge" data-i="fit"></span></div>
       <dl class="ratings" data-i="ratings"></dl>
-      <ul class="loadout" data-i="loadout"></ul>
-      <div class="fit" data-i="fit"><span class="fit-badge" data-i="fit-badge"></span><span class="fit-text" data-i="fit-text"></span></div>
-      <p class="insp-hint">Drag the model to turn it · <kbd>Q</kbd><kbd>E</kbd> switch plane</p>`;
+      <div class="stats" data-i="loadout"></div>
+      <div class="insp-keys hint-keys"><kbd>Q</kbd><kbd>E</kbd>${icon('swap')}</div>`;
   }
 
   render(v: GarageView | null): void {
@@ -77,15 +82,15 @@ export class Garage {
         card.className = 'plane-card';
         card.dataset.id = c.id;
         card.style.setProperty('--accent', c.accent);
+        card.title = `${c.name} · ${c.roleLabel} · ${SUITABILITY_LABELS[c.suitability]}${c.hangar === 'ready' ? ' · in the hangar' : c.hangar === 'recovered' ? ` · recovered, refit ${c.buildCost} instead of ${c.cost}` : ''}`;
         const price =
-          c.buildKind === 'rollout' ? 'In hangar · <b>free</b>'
-          : c.buildKind === 'refit' ? `Refit <b>${c.buildCost}</b> <s>${c.cost}</s>`
-          : `<b>${c.cost}</b> paper`;
+          c.buildKind === 'rollout' ? `${icon('home')}<b>0</b>`
+          : c.buildKind === 'refit' ? `${icon('repair')}<b>${c.buildCost}</b>`
+          : `${icon('paper')}<b>${c.cost}</b>`;
         const health = c.hangar === 'recovered' && c.hangarHealth !== null ? `<span class="pc-health"><i style="width:${Math.round(c.hangarHealth * 100)}%"></i></span>` : '';
         card.innerHTML = `
           <span class="pc-name">${esc(c.name)}</span>
-          <span class="fit-badge small" data-level="${c.suitability}">${SUITABILITY_LABELS[c.suitability]}</span>
-          <span class="pc-role">${esc(c.roleLabel)}</span>
+          <span class="fit-badge small" data-level="${c.suitability}">${icon(FIT_ICONS[c.suitability])}</span>
           <span class="pc-price${c.affordable ? '' : ' short'}">${price}</span>
           ${health}`;
         bindButton(card, () => this.onSelect(c.id));
@@ -103,23 +108,31 @@ export class Garage {
     const q = (name: string) => this.inspector.querySelector<HTMLElement>(`[data-i="${name}"]`)!;
     q('swatch').style.background = i.accent;
     text(q('name'), i.name);
+    q('name').title = i.tagline;
     text(q('role'), i.roleLabel);
-    text(q('tagline'), i.tagline);
+    const fit = q('fit');
+    attr(fit, 'data-level', i.suitability.level);
+    const fitKey = i.suitability.level;
+    if (fit.dataset.key !== fitKey) {
+      fit.dataset.key = fitKey;
+      fit.innerHTML = icon(FIT_ICONS[i.suitability.level]);
+    }
+    fit.title = `${SUITABILITY_LABELS[i.suitability.level]} for ${i.suitability.missionTitle}: ${i.suitability.reason}`;
     const ratings = q('ratings');
     if (ratings.children.length !== i.ratings.length) {
-      ratings.innerHTML = i.ratings.map(() => '<div><dt></dt><dd><span class="pips"><i></i><i></i><i></i><i></i><i></i></span></dd></div>').join('');
+      ratings.innerHTML = i.ratings.map((r) => `<div title="${esc(r.label)}"><dt>${icon(RATING_ICONS[r.key])}</dt><dd><span class="pips5"><i></i><i></i><i></i><i></i><i></i></span></dd></div>`).join('');
     }
     i.ratings.forEach((r, k) => {
       const row = ratings.children[k] as HTMLElement;
-      text(row.querySelector('dt') as HTMLElement, r.label);
+      row.title = `${r.label} ${r.value}/5`;
       [...row.querySelectorAll('i')].forEach((pip, n) => pip.classList.toggle('on', n < r.value));
     });
     const loadout = q('loadout');
-    const html = i.loadout.map((line) => `<li>${esc(line)}</li>`).join('');
-    if (loadout.innerHTML !== html) loadout.innerHTML = html;
-    const badge = q('fit-badge');
-    attr(badge, 'data-level', i.suitability.level);
-    text(badge, SUITABILITY_LABELS[i.suitability.level]);
-    text(q('fit-text'), `for ${i.suitability.missionTitle}: ${i.suitability.reason}`);
+    const html = i.loadout.map((s) => `<span class="stat" title="${esc(s.label)}">${icon(s.icon)}<b>${esc(s.value)}</b></span>`).join('');
+    if (loadout.dataset.html !== html) {
+      loadout.dataset.html = html;
+      loadout.innerHTML = html;
+    }
+    loadout.title = i.record ?? '';
   }
 }

@@ -10,8 +10,11 @@ const LOCK_REQUEST_CAP_MS = 500;
 
 const GAME_KEYS = new Set([
   'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'KeyM', 'Escape', 'Enter', 'NumpadEnter',
-  'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4',
-  'KeyX', 'KeyL', 'Backquote',
+  'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyL', 'Backquote',
+  // B base management, H key hints, U upgrade, Delete remove; 0–7 pick mission cards or base slots.
+  'KeyB', 'KeyH', 'KeyU', 'Delete',
+  'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
+  'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7',
 ]);
 
 /** Mouse buttons as reported by MouseEvent.button. */

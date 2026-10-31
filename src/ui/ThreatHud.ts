@@ -3,6 +3,8 @@ import type { InstallationKind } from '../defenses/Layout';
 import { attr, text, toggle, width } from './dom';
 import { icon, type IconName } from './icons';
 
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+
 export interface ThreatPanelView {
   territoryId: string;
   level: ThreatLevel;
@@ -44,25 +46,23 @@ export interface ThreatView {
 /** Radius of the ring of threat markers around the middle of the screen. */
 const RING_RADIUS = 190;
 
-const STATUS: Record<ThreatPanelView['status'], string> = {
-  clear: 'Not spotted',
-  spotted: 'Spotted!',
-  engaged: 'Under fire!',
-  neutralised: 'Defenses down',
+const STATUS: Record<ThreatPanelView['status'], { icon: IconName; label: string }> = {
+  clear: { icon: 'recon', label: 'Not spotted' },
+  spotted: { icon: 'recon', label: 'Spotted' },
+  engaged: { icon: 'kills', label: 'Under fire' },
+  neutralised: { icon: 'offline', label: 'Defenses down' },
 };
 
-const TEMPLATE = /* html */ `
-  <div class="threat-panel" data-threat-panel>
-    <span class="tp-id" data-tp-id></span><span class="tp-level" data-tp-level></span>
+const PANEL = /* html */ `
+  <div class="threat-panel card" data-threat-panel>
+    <b class="tp-id" data-tp-id></b><span class="pips tp-level" data-tp-level><i></i><i></i><i></i></span>
     <span class="tp-icons" data-tp-icons></span><span class="tp-status" data-tp-status></span>
   </div>
   <div class="lock-warning" data-lock>
     <div class="lw-title" data-lw-title></div>
     <div class="lw-bar"><i data-lw-bar></i></div>
-    <div class="lw-sub" data-lw-sub></div>
   </div>
   <div class="threat-note" data-threat-note></div>
-  <div class="threat-ring" data-threat-ring></div>
 `;
 
 /**
@@ -77,14 +77,19 @@ export class ThreatHud {
   private iconsKey = '';
   private noteTimer = 0;
 
-  constructor(root: HTMLElement) {
+  constructor(layer: HTMLElement, panelHost: HTMLElement) {
     const holder = document.createElement('div');
     holder.className = 'threat-hud';
-    holder.innerHTML = TEMPLATE;
-    root.appendChild(holder);
+    holder.innerHTML = PANEL;
+    panelHost.appendChild(holder);
+    const ring = document.createElement('div');
+    ring.className = 'threat-ring';
+    ring.dataset.threatRing = '';
+    layer.appendChild(ring);
     for (const node of holder.querySelectorAll<HTMLElement>('*')) {
       for (const name of node.getAttributeNames()) if (name.startsWith('data-')) this.el[name.slice(5)] = node;
     }
+    this.el['threat-ring'] = ring;
   }
 
   render(v: ThreatView | null): void {
@@ -94,13 +99,18 @@ export class ThreatHud {
       attr(this.el['threat-panel'], 'data-level', String(panel.level));
       attr(this.el['threat-panel'], 'data-status', panel.status);
       text(this.el['tp-id'], panel.territoryId);
-      text(this.el['tp-level'], panel.label);
-      text(this.el['tp-status'], STATUS[panel.status]);
+      this.el['tp-level'].title = panel.label;
+      [...this.el['tp-level'].children].forEach((pip, n) => pip.classList.toggle('on', n < panel.level));
+      const status = this.el['tp-status'];
+      if (status.dataset.status !== panel.status) {
+        status.dataset.status = panel.status;
+        status.innerHTML = icon(STATUS[panel.status].icon, 'icon', STATUS[panel.status].label);
+      }
       const key = panel.installations.map((i) => `${i.id}:${i.alive}:${i.engaged}`).join('|');
       if (key !== this.iconsKey) {
         this.iconsKey = key;
         this.el['tp-icons'].innerHTML = panel.installations
-          .map((i) => `<span class="tp-icon" data-alive="${i.alive}" data-engaged="${i.engaged}" title="${i.kind}">${icon(i.kind)}</span>`)
+          .map((i) => `<span class="tp-icon" data-alive="${i.alive}" data-engaged="${i.engaged}">${icon(KIND_ICONS[i.kind], 'icon', i.kind)}</span>`)
           .join('');
       }
     }
@@ -110,11 +120,9 @@ export class ThreatHud {
     if (lock) {
       attr(this.el.lock, 'data-state', lock.state);
       if (lock.state === 'locking') {
-        text(this.el['lw-title'], 'ROCKET LOCK');
-        text(this.el['lw-sub'], 'Break its line: turn hard, get low, or get out of range');
+        text(this.el['lw-title'], 'LOCK');
       } else {
-        text(this.el['lw-title'], `ROCKET INCOMING${lock.count > 1 ? ` ×${lock.count}` : ''} · ${Math.round(lock.distance)} m`);
-        text(this.el['lw-sub'], 'Turn hard across its path, outrun it, or shoot it down');
+        text(this.el['lw-title'], `ROCKET${lock.count > 1 ? ` ×${lock.count}` : ''} · ${Math.round(lock.distance)} m`);
       }
       width(this.el['lw-bar'], lock.state === 'locking' ? lock.progress : 1);
     }

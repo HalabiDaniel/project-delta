@@ -1,5 +1,8 @@
 import * as pc from 'playcanvas';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, ECONOMY, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId } from './config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId } from './config';
+import { Base, STORE, type BaseEvent } from './base/Base';
+import { BaseMode } from './base/BaseMode';
+import { chooseRaidTarget, raidLoss, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
 import type { AiAircraft, BombOrder, Contact, Strike } from './ai/AiAircraft';
 import { AirTraffic, type AirEvent, type Raid } from './ai/AirTraffic';
 import { leadPoint } from './ai/Gunnery';
@@ -17,11 +20,11 @@ import { layoutTargetRange } from './combat/Destructibles';
 import { Projectiles, type ShotImpact } from './combat/Projectiles';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent } from './combat/Ordnance';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from './defenses/Installation';
-import { layoutDefenses, overHome, type DefenseLayout } from './defenses/Layout';
+import { layoutDefenses, overHome, slotPoint, type DefenseLayout, type InstallationKind } from './defenses/Layout';
 import { MissionDirector, SLOT_LABELS, type Situation } from './director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards, type Payout } from './director/Operations';
 import { skillBand } from './director/Performance';
-import { EVENT_LABELS, WorldEvents } from './director/WorldEvents';
+import { EVENT_LABELS, WorldEvents, type EventKind } from './director/WorldEvents';
 import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
@@ -31,18 +34,21 @@ import { Input, MOUSE_LEFT, MOUSE_RIGHT } from './systems/Input';
 import { Ledger } from './systems/Ledger';
 import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
-import { openStore, SaveManager, SAVE_VERSION, type SaveData } from './systems/SaveGame';
+import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
 import { Logbook, type LogbookView } from './ui/Logbook';
 import type { GarageView } from './ui/Garage';
 import {
   HUD,
+  type AlertTone,
   type MissionCardView,
   type SessionView,
   type AircraftStatusView,
   type GroundView,
+  type HintMode,
   type HudView,
   type ObjectiveView,
+  type RaidAlertView,
   type ResultView,
   type ScreenPoint,
   type TargetIndicator,
@@ -51,10 +57,13 @@ import {
   type ThreatSummary,
   type TrackerView,
 } from './ui/HUD';
+import { BUILDING_ICONS } from './ui/BaseHud';
+import { compass } from './ui/format';
+import { MISSION_ICONS, SAY } from './ui/strings';
 import type { IconName } from './ui/icons';
 import type { MiniMapView } from './ui/MiniMap';
 import { Sounds } from './ui/Sounds';
-import type { AircraftMarkerView, AirView, RaidAlertView } from './ui/AirHud';
+import type { AircraftMarkerView, AirView } from './ui/AirHud';
 import type { ThreatRingItem, ThreatView } from './ui/ThreatHud';
 import { AircraftModels } from './world/AircraftModels';
 import { DefenseModels } from './world/DefenseModels';
@@ -82,6 +91,8 @@ const AIRCRAFT_MARKER_RANGE = 230;
 const AIRCRAFT_EDGE_RANGE = 140;
 /** Sounds of other aircraft (gunfire, crashes) carry this far. */
 const HEARING = 120;
+/** The mini-map shows enemy aircraft this close to the plane, even beyond T1's radar. */
+const SIGHT_RANGE = 120;
 const KEY_TO_CARD: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
 /** The report on the last sortie's medal, records and bonuses, kept until the next sortie. */
 interface SortieOutcome {
@@ -100,7 +111,6 @@ export class Game {
   paused = false;
 
   private lastAutoPause = -Infinity;
-  private lastHint = -Infinity;
   /** The landing rollout has finished and the ground crew can work. */
   private rolledToStop = false;
   private crashTime = 0;
@@ -138,6 +148,18 @@ export class Game {
   private alarmKey = '';
   private readonly logbook: Logbook;
   private readonly dev: DevPanel;
+  /** Base management on T1 (B). */
+  readonly baseMode: BaseMode;
+  /** Every raid on T1 under way, keeping score for its defense report. */
+  private readonly raidTrackers = new Map<number, RaidTracker>();
+  /** The last defense report, kept for the base view. */
+  private lastRaid: RaidReport | null = null;
+  /** Settings saved with the game: key hints, HUD size, and which first-time tips were shown. */
+  hints: HintMode = 'auto';
+  uiScale = 1;
+  private readonly tipsSeen = new Set<string>();
+  /** Lifetime sorties, for when key hints stop showing (auto). */
+  private sortiesTotal = 0;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -171,10 +193,12 @@ export class Game {
     readonly ledger: Ledger,
     readonly saves: SaveManager,
     readonly missionContext: () => MissionContext,
+    readonly base: Base,
   ) {
     this.barriers = layout.barriers.map((b) => ({ id: b.id, shapes: b.solids }));
     this.logbook = new Logbook(hud.root, () => this.logbookView(), () => this.toggleLogbook(false));
     this.dev = new DevPanel(hud.root, this);
+    this.baseMode = new BaseMode(base);
   }
 
   static async create(canvas: HTMLCanvasElement, hudRoot: HTMLElement): Promise<Game> {
@@ -207,6 +231,11 @@ export class Game {
     const resources = new ResourceManager();
     const ledger = new Ledger();
     ledger.watch(resources);
+    // T1 as a base: the paper store, and whatever the player has built (a new game starts with one turret).
+    const base = new Base(world.home, defenses, resources);
+    if (saved?.base) base.load(saved.base);
+    else base.startFresh();
+    resources.capacity = base.capacity;
     const staticContext = {
       territories: world.territories,
       homeId: world.home.id,
@@ -218,7 +247,8 @@ export class Game {
         ...layout.barriers.flatMap((b) => b.solids.map(footprint)),
       ],
     };
-    const airTraffic = new AirTraffic(world.territories, world.home, homeStore(layout, world));
+    // Each raid picks one of T1's structures to go for when it sets out.
+    const airTraffic = new AirTraffic(world.territories, world.home, () => chooseRaidTarget(base).strike);
     let events: WorldEvents | null = null;
     // Missions only ever see the installations still standing, and the territories' states.
     const missionContext = (): MissionContext => ({
@@ -274,6 +304,7 @@ export class Game {
     let game: Game | undefined;
     const hud = new HUD(hudRoot, {
       build: () => game?.build(),
+      launch: () => game?.launch(),
       select: (index) => game?.select(index),
       selectAircraft: (id) => game?.selectAircraft(id),
       rearm: () => game?.rearm(),
@@ -284,9 +315,22 @@ export class Game {
       swap: () => game?.swapCard(),
       abandonOperation: () => game?.abandonOperation(),
       openLogbook: () => game?.toggleLogbook(true),
+      openMenu: () => game?.pause(),
       resetProgress: () => game?.resetProgress(),
       dismissWelcome: () => game?.dismissWelcome(),
       toggleSound: () => game?.toggleSound(),
+      setHints: (mode) => game?.setHints(mode),
+      setUiScale: (scale) => game?.setUiScale(scale),
+      toggleBase: () => game?.toggleBase(),
+      base: {
+        selectSlot: (id) => game?.baseAction('select', id),
+        choose: (kind) => game?.baseAction('choose', kind),
+        build: () => game?.baseAction('build'),
+        upgrade: () => game?.baseAction('upgrade'),
+        repair: () => game?.baseAction('repair'),
+        repairAll: () => game?.baseAction('repair-all'),
+        remove: () => game?.baseAction('remove'),
+      },
     });
     game = new Game(
       app,
@@ -325,12 +369,18 @@ export class Game {
       ledger,
       saves,
       missionContext,
+      base,
     );
+    game.sortiesTotal = Object.values(progress.data.mastery).reduce((sum, m) => sum + (m?.flights ?? 0), 0);
     if (saved) {
       game.sounds.muted = saved.settings.muted;
       if (saved.settings.dev) game.dev.toggle(true);
       game.welcome = { session: saved.lastSession, restored: true, problems };
+      game.hints = saved.settings.hints;
+      game.uiScale = saved.settings.uiScale;
+      for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
+    game.hud.setScale(game.uiScale);
     if (new URLSearchParams(window.location.search).has('dev')) game.dev.toggle(true);
     // The session summary is kept for next time, and the game saved, whenever the page goes away.
     const leave = () => void game!.saveNow();
@@ -353,7 +403,7 @@ export class Game {
   selectAircraft(id: AircraftId): void {
     if (this.paused) return;
     if (this.state.phase === 'building') {
-      this.hint('Folding in progress', 'Wait for this plane, or launch it and land to switch.');
+      this.alert('plane', 'Folding', null, 'info', 1.6);
       return;
     }
     this.state.selectAircraft(id);
@@ -410,7 +460,7 @@ export class Game {
   /** On the ground at home: the ground crew tops up ink and range. */
   rearm(): void {
     if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
-    if (!this.state.rearm() && this.state.rearmProgress === null) this.hint('Fully armed', 'Ink and range are already topped up.');
+    if (!this.state.rearm() && this.state.rearmProgress === null) this.alert('rearm', 'Full', null, 'info', 1.4);
   }
 
   /** From wherever the plane stopped after landing. */
@@ -467,22 +517,22 @@ export class Game {
     const { state, director } = this;
     if (this.paused || (state.phase !== 'desk' && state.phase !== 'building' && state.phase !== 'ready')) return;
     if (state.selected >= director.offers.length) {
-      this.hint("Event cards can't be swapped", 'Ignore it if you like: it costs nothing.');
+      this.alert('swap', 'No swap', null, 'info', 1.6);
       return;
     }
     if (director.swaps <= 0) {
-      this.hint('No swaps left', `You get one back after every sortie (up to ${DIRECTOR.swaps.max}).`);
+      this.alert('swap', 'No swaps', `0/${DIRECTOR.swaps.max}`, 'bad', 1.6);
       return;
     }
     if (!director.canSwap(state.selected)) {
-      this.hint('Operation under way', 'Abandon the operation to replace its card.');
+      this.alert('radar', 'Operation on', null, 'info', 1.6);
       return;
     }
     const mission = director.swap(state.selected);
     if (!mission) return;
     state.updateOffers(director.missions);
     state.select(director.missions.indexOf(mission));
-    this.hud.banner('Card swapped', `${director.swaps} swap${director.swaps === 1 ? '' : 's'} left.`, 'info', 1.6);
+    this.alert('swap', 'Swapped', `${director.swaps}/${DIRECTOR.swaps.max}`, 'info', 1.6);
     this.requestSave();
   }
 
@@ -492,20 +542,20 @@ export class Game {
     if (this.paused || !op || op.status !== 'active') return;
     if (this.state.phase !== 'desk' && this.state.phase !== 'building' && this.state.phase !== 'ready') return;
     if (!this.confirm('abandon')) {
-      this.hud.banner(`Abandon ${op.codename}?`, `You keep the ${op.earned} paper it has paid; the +${op.bonus} bonus is lost. Click again to confirm.`, 'bad', 3);
+      this.alert('close', 'Abandon?', `−${op.bonus}`, 'bad', 3);
       return;
     }
     this.director.abandonOperation();
     this.events.hold(null);
     this.state.updateOffers(this.director.missions);
-    this.hud.banner(`${op.codename} abandoned`, `You keep the ${op.earned} paper it paid.`, 'info', 2.4);
+    this.alert('close', 'Abandoned', null, 'info', 2);
     this.requestSave();
   }
 
   /** Deletes all local progress (asks twice), then starts over. */
   resetProgress(): void {
     if (!this.confirm('reset')) {
-      this.hud.banner('Reset all progress?', 'Paper, planes, records, achievements and history will be deleted. Click again to confirm.', 'bad', 3.5);
+      this.alert('remove', 'Reset all?', null, 'bad', 3.5);
       return;
     }
     void this.saves.reset().then(() => {
@@ -537,7 +587,134 @@ export class Game {
 
   toggleSound(): void {
     this.sounds.muted = !this.sounds.muted;
-    this.hud.banner(this.sounds.muted ? 'Sound off' : 'Sound on', 'M toggles warning sounds.', 'info', 1.4);
+    this.alert(this.sounds.muted ? 'mute' : 'sound', this.sounds.muted ? 'Sound off' : 'Sound on', null, 'info', 1.4);
+    this.requestSave();
+  }
+
+  setHints(mode: HintMode): void {
+    this.hints = mode;
+    this.requestSave();
+  }
+
+  setUiScale(scale: number): void {
+    this.uiScale = UI_SCALES.includes(scale) ? scale : 1;
+    this.hud.setScale(this.uiScale);
+    this.requestSave();
+  }
+
+  /** Key hints show for the first few sorties (auto), always, or never; H shows them while held. */
+  private get showHints(): boolean {
+    if (this.input.isHeld('KeyH')) return true;
+    return this.hints === 'on' || (this.hints === 'auto' && this.sortiesTotal < BASE.hintSorties);
+  }
+
+  /** Base management is available at home: at the desk, or landed and rolled to a stop. */
+  private get atHome(): boolean {
+    const phase = this.state.phase;
+    return phase === 'desk' || phase === 'building' || phase === 'ready' || (phase === 'landed' && this.rolledToStop);
+  }
+
+  /** B: into base management (the camera rises above T1) and back out. */
+  toggleBase(open = !this.baseMode.open): void {
+    if (this.paused) return;
+    if (open && !this.atHome) {
+      this.alert('home', 'Land first', null, 'info', 1.6);
+      return;
+    }
+    if (open) {
+      this.baseMode.enter();
+      this.dismissWelcome();
+      this.input.exitPointerLock();
+      this.tip('base', 'Click a slot, pick a building, build. Damage stays until you repair.', ['B']);
+    } else {
+      this.baseMode.exit();
+      this.defenseModels.showPreview(null);
+    }
+  }
+
+  /** The base management buttons and keys. */
+  baseAction(action: 'select' | 'choose' | 'build' | 'upgrade' | 'repair' | 'repair-all' | 'remove', arg?: string): void {
+    if (this.paused || !this.baseMode.open) return;
+    const m = this.baseMode;
+    switch (action) {
+      case 'select':
+        if (arg) m.selectSlot(arg);
+        break;
+      case 'choose':
+        if (arg) m.choose(arg as Parameters<BaseMode['choose']>[0]);
+        break;
+      case 'build':
+        m.build();
+        break;
+      case 'upgrade':
+        m.upgrade();
+        break;
+      case 'repair':
+        m.repair();
+        break;
+      case 'repair-all':
+        m.repairAll();
+        break;
+      case 'remove':
+        m.remove();
+        break;
+    }
+  }
+
+  /** What the base did: models follow, with a fold-up animation for new buildings, and the player hears about it. */
+  private onBaseEvent(e: BaseEvent): void {
+    const { base, hud } = this;
+    switch (e.type) {
+      case 'built': {
+        const id = base.idOf(e.slot);
+        this.defenseModels.sync(new Set([id]));
+        this.defenseModels.showPreview(null);
+        const i = base.installation(e.slot);
+        if (i) this.effects.burst(this.v1.set(i.spec.x, i.spec.ground + 1.2, i.spec.z), 'fold');
+        this.sounds.play('spotted');
+        this.alert(BUILDING_ICONS[e.kind], BASE.buildings[e.kind].short, `−${e.cost}`, 'good', 1.8);
+        break;
+      }
+      case 'upgraded': {
+        this.defenseModels.sync();
+        const i = base.installation(e.slot);
+        if (i) this.effects.burst(this.v1.set(i.spec.x, i.spec.ground + 1.5, i.spec.z), 'ring');
+        this.sounds.play('spotted');
+        this.alert('upgrade', `${BASE.buildings[e.kind].short} ${'★'.repeat(e.level - 1)}`, `−${e.cost}`, 'good', 1.8);
+        break;
+      }
+      case 'repaired':
+        for (const key of e.keys) {
+          const i = base.installation(key);
+          if (i) this.effects.burst(this.v1.set(i.spec.x, i.spec.ground + 1, i.spec.z), 'fold');
+        }
+        this.alert('repair', e.keys.length > 1 ? `${e.keys.length} repaired` : 'Repaired', `−${e.cost}`, 'good', 1.8);
+        break;
+      case 'removed':
+        this.defenseModels.sync();
+        this.alert('remove', `${BASE.buildings[e.kind].short} removed`, e.refund > 0 ? `+${e.refund}` : null, 'info', 1.8);
+        break;
+      case 'refused': {
+        const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
+        hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad', 1.8);
+        break;
+      }
+    }
+    // Capacity and production change with the buildings.
+    this.resources.capacity = base.capacity;
+    this.requestSave();
+  }
+
+  /** An alert below the objective. */
+  private alert(icon: IconName, title: string, value: string | null, tone: AlertTone, seconds = 2.4): void {
+    this.hud.alert(icon, title, value, tone, seconds);
+  }
+
+  /** A first-time tip, once per save. */
+  private tip(id: string, text: string, keys: string[] = []): void {
+    if (this.tipsSeen.has(id)) return;
+    this.tipsSeen.add(id);
+    this.hud.tip(text, keys);
     this.requestSave();
   }
 
@@ -575,8 +752,9 @@ export class Game {
         byAircraft: [...this.ledger.byAircraft],
         byType: [...this.ledger.byType],
       },
-      settings: { muted: this.sounds.muted, dev: this.dev.open },
+      settings: { muted: this.sounds.muted, dev: this.dev.open, hints: this.hints, uiScale: this.uiScale, tips: [...this.tipsSeen] },
       lastSession: this.progress.session.sorties > 0 ? this.progress.session : (this.welcome?.session ?? null),
+      base: this.base.save(),
     };
   }
 
@@ -647,11 +825,18 @@ export class Game {
   }
 
   private simulate(dt: number, mouse: { dx: number; dy: number }): void {
-    const { world, plane, camera, state } = this;
+    const { world, plane, camera, state, base, resources } = this;
+    // T1's buildings set how fast paper comes in and how much the store holds.
+    state.income.perMinute = base.production;
+    state.income.capacity = base.capacity;
+    resources.capacity = base.capacity;
     state.tick(dt);
+    base.recordIncome(state.income.lastPaid);
     this.progress.session.seconds += dt;
     this.updateWorld(dt);
     const atDesk = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready';
+    // Base management is only open at home.
+    if (this.baseMode.open && !this.atHome) this.toggleBase(false);
     switch (state.phase) {
       case 'desk':
       case 'building':
@@ -661,8 +846,9 @@ export class Game {
           if (state.buildKind === 'refit') plane.setDamage(this.refitFrom + (1 - this.refitFrom) * state.buildProgress);
         }
         // Dragging on the canvas turns the preview.
-        if (this.input.isButtonHeld(MOUSE_LEFT) && !this.input.pointerLocked) this.preview.drag(mouse.dx, mouse.dy);
-        camera.updateDesk(dt, world.launchPosition, world.launchYaw);
+        if (this.input.isButtonHeld(MOUSE_LEFT) && !this.input.pointerLocked && !this.baseMode.open) this.preview.drag(mouse.dx, mouse.dy);
+        if (this.baseMode.open) camera.updateBase(dt, world.home, world.launchYaw);
+        else camera.updateDesk(dt, world.launchPosition, world.launchYaw);
         break;
       case 'flying':
         this.fly(dt, mouse);
@@ -673,7 +859,8 @@ export class Game {
           this.rolledToStop = true;
           this.input.exitPointerLock(); // free the cursor for the ground crew's buttons
         }
-        camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
+        if (this.baseMode.open) camera.updateBase(dt, world.home, world.launchYaw);
+        else camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
       case 'crashed':
         this.crashTime += dt;
@@ -688,7 +875,16 @@ export class Game {
     if (this.markers.shown !== shown) this.markers.show(shown);
 
     this.updateAir(dt);
+    this.detectRaids();
     this.updateDefenses(dt);
+    // The slots on T1, lit up in base management, and the see-through building where it would go.
+    const pads = this.baseMode.highlights();
+    this.defenseModels.setSlots(pads.map((p) => {
+      const at = this.base.installation(p.id)?.spec ?? buildingSpecAt(this.base, p.id);
+      return { id: p.id, x: at.x, z: at.z, highlight: p.highlight };
+    }));
+    const preview = this.baseMode.preview();
+    this.defenseModels.showPreview(preview?.spec ?? null, preview?.valid ?? true);
     const standing = [...this.range.colliders, ...this.installationColliders()];
     for (const impact of this.bombs.update(dt, this.openZones(), world.territories, standing)) this.onBombImpact(impact);
     for (const impact of this.aiBombs.update(dt, [], world.territories, standing)) this.onAiBombImpact(impact);
@@ -708,7 +904,7 @@ export class Game {
     const before = this.boundary.state;
     const boundary = this.boundary.update(dt, plane.position.x, plane.position.z);
     // The warning panel covers the countdown and the autopilot; only the hand-back needs a banner.
-    if (before === 'autopilot' && boundary === 'inside') this.hud.banner('You have control', 'Back inside the airspace.', 'info', 1.8);
+    if (before === 'autopilot' && boundary === 'inside') this.alert('plane', 'Control', null, 'info', 1.6);
     const p = plane.position;
     const autopilot =
       boundary === 'autopilot'
@@ -771,13 +967,15 @@ export class Game {
     const { dealt, destroyed } = state.damageAircraft(damage, c.kind === 'rough-landing' ? 'landing' : 'impact');
     if (destroyed || dealt <= 0) return;
     if (c.kind === 'rough-landing') {
-      this.hud.banner(`Rough landing! −${dealt}`, `${hardLandingReason(c.check)} Go around and try again.`, 'bad', 3);
+      this.alert('land', 'Rough landing', `−${dealt}`, 'bad', 2.6);
+      this.tip('rough', `${hardLandingReason(c.check)} Slow, gentle, wings level.`);
     } else {
       const what =
         c.kind === 'object'
           ? (this.range.get(c.id)?.spec.name.toLowerCase() ?? this.defenses.get(c.id)?.spec.name.toLowerCase() ?? 'a barrier wall')
           : c.id;
-      this.hud.banner(`Ouch! −${dealt}`, `You hit ${what}. Keep clear of platforms and props.`, 'bad', 2.2);
+      this.alert('damage', 'Ouch', `−${dealt}`, 'bad', 2);
+      void what;
     }
   }
 
@@ -807,6 +1005,14 @@ export class Game {
       // Raids keep their own pace, but wait their turn behind other world events.
       raids: state.phase !== 'debrief' && state.phase !== 'crashed' && this.sortiesFlown >= RAIDS.afterSorties && this.events.raidsAllowed(this.sortiesFlown),
       patrol: state.mission?.isActive ? state.mission.patrolProgress : 0,
+      // The director paces raids: slower while T1 recovers, the player struggles or is busy.
+      raidPace: raidPace({
+        vulnerable: this.base.vulnerable(),
+        integrity: this.base.integrity,
+        skill: this.director.performance.skill,
+        struggling: this.director.performance.struggling,
+        onMission: flying && !!state.mission?.isActive && state.mission.spec.type !== 'bomber-intercept',
+      }),
     });
     const eye = this.camera.entity.getPosition();
     for (const shot of out.shots) {
@@ -844,14 +1050,16 @@ export class Game {
     events.update(dt, this.sortiesFlown);
     for (const note of events.takeNotes()) {
       if (note.event && note.event.status === 'active') this.sounds.play(note.event.kind === 'supply-run' ? 'spotted' : 'bandit');
-      this.hud.banner(note.title, note.detail, note.tone, 3.4);
+      if (note.event?.kind === 'raid') continue; // the raid alert says it
+      const short = shortNote(note.title, note.detail);
+      this.alert(note.event ? EVENT_ICONS[note.event.kind] : short.icon, short.title, short.value, note.tone, 3);
     }
     for (const payout of [...events.takePayouts(), ...director.takePayouts()]) {
       if (state.sortie && (state.phase === 'flying' || state.phase === 'landed')) state.payBonus(payout.amount, payout.label);
       else this.resources.earn(payout.amount, 'bonus', payout.label);
       if (payout.label.startsWith('Shipment') || payout.label.startsWith('Convoy')) {
         const a = this.progress.unlockNow('world-event');
-        if (a) this.hud.banner(`Achievement: ${a.title}`, a.detail, 'good', 3);
+        if (a) this.alert('medal', a.title, null, 'good', 3);
       }
       this.requestSave();
     }
@@ -917,7 +1125,7 @@ export class Game {
     const { state, hud } = this;
     switch (e.type) {
       case 'destroyed':
-        this.onAircraftDown(e.aircraft, e.byPlayer, e.cause);
+        this.onAircraftDown(e.aircraft, e.byPlayer, e.cause, e.by);
         break;
       case 'collision':
         if (this.near(e.at)) this.effects.burst(this.v1.set(e.at.x, e.at.y, e.at.z), 'thud');
@@ -937,7 +1145,7 @@ export class Game {
       case 'released':
         state.bombReleased(e.aircraft.id);
         if (e.aircraft.side === 'enemy' && this.airTraffic.raids.some((r) => r.bomber === e.aircraft.id)) {
-          hud.banner('Bomb released!', `It is falling on your paper store on ${this.world.home.id}.`, 'bad', 2.5);
+          this.alert('bomb', 'Bomb away', null, 'bad', 2.2);
         }
         break;
       case 'raid':
@@ -946,44 +1154,95 @@ export class Game {
     }
   }
 
+  /**
+   * A raid changed stage. Every raid gets a tracker for its defense report from the start, but the
+   * player only hears about one once T1 detects it (see detectRaids): no radar, late warning.
+   */
   private onRaid(raid: Raid): void {
-    const { hud, state } = this;
-    if (raid.stage === 'over') {
-      this.events.raidEnded(raid);
-      if (this.director.validate()) state.updateOffers(this.director.missions);
-    }
+    const { state } = this;
     if (raid.stage === 'inbound') {
-      // Home is under attack: an emergency defense card goes on the board (unless a mission sent it).
-      if (!this.events.events.some((e) => e.raidId === raid.id)) this.events.raidStarted(raid);
-      if (this.director.validate()) state.updateOffers(this.director.missions);
-      this.sounds.play('raid');
-      const escort = raid.escorts.length > 0 ? ', with a fighter escort' : '';
-      hud.banner('Incoming bomber!', `Enemy Widewing from beyond ${raid.origin}${escort} · ETA ${Math.ceil(raid.eta)} s`, 'bad', 4);
+      if (!this.raidTrackers.has(raid.id)) {
+        const key = this.raidTargetKey(raid);
+        const target = raidTargetFor(this.base, key);
+        this.raidTrackers.set(raid.id, new RaidTracker(raid.id, new Set([raid.bomber, ...raid.escorts]), target, raidLoss(this.base.vulnerable(), key === STORE)));
+      }
+      if (raid.detected) this.announceRaid(raid);
       return;
     }
     if (raid.stage !== 'over') return;
+    this.events.raidEnded(raid);
+    if (this.director.validate()) state.updateOffers(this.director.missions);
     switch (raid.outcome) {
       case 'intercepted':
       case 'driven-off':
         state.raidDefended(raid.participated, raid.mission);
-        if (!raid.mission) {
-          const how = raid.outcome === 'intercepted' ? 'Raider shot down' : 'Raider turned back';
-          hud.banner(
-            raid.participated ? `${how}! +${RAIDS.reward}` : `${how}`,
-            raid.participated ? 'Your paper store is safe. Defense reward paid.' : `${this.world.home.id}'s guns saw it off. No reward without your help.`,
-            'good',
-            3,
-          );
-        }
+        if (!raid.mission && raid.participated) this.alert('shield', 'Raid stopped', `+${RAIDS.reward}`, 'good', 3);
         break;
       case 'missed':
-        hud.banner('Their bomb missed!', 'Your paper store is untouched.', 'good', 2.5);
+        this.alert('shield', 'Bomb missed', null, 'good', 2.2);
         break;
     }
+    const tracker = this.raidTrackers.get(raid.id);
+    this.raidTrackers.delete(raid.id);
+    if (!tracker || raid.outcome === 'cancelled' || !raid.outcome) return;
+    const report = tracker.finish(raid.outcome, this.base.repairAllCost);
+    this.lastRaid = report;
+    const stats = this.base.stats;
+    stats.raids++;
+    if (report.repelled) stats.repelled++;
+    stats.paperLost += report.paperLost;
+    this.hud.raidReport(report);
+    // After a raid that hurt, T1 gets time to recover before the next.
+    if (!report.repelled && (report.paperLost > 0 || report.destroyed.length > 0)) this.airTraffic.delayRaids(RAIDS.recovery);
+    if (report.repairCost > 0) this.tip('repair', 'Damaged buildings stay damaged. Repair them in the base.', ['B']);
+    this.requestSave();
+  }
+
+  /** Which of T1's structures a raid is aimed at (by where its bomb is meant to land). */
+  private raidTargetKey(raid: Raid): string {
+    const strike = raid.strike;
+    if (!strike) return STORE;
+    for (const key of [STORE, ...this.base.buildings.keys()]) {
+      const i = this.base.installation(key);
+      if (i && Math.abs(i.spec.x - strike.x) < 0.5 && Math.abs(i.spec.z - strike.z) < 0.5) return key;
+    }
+    return STORE;
+  }
+
+  /** T1 has seen a raider coming: the alarm, the alert, and the emergency card on the board. */
+  private announceRaid(raid: Raid): void {
+    const { state } = this;
+    // Home is under attack: an emergency defense card goes on the board (unless a mission sent it).
+    if (!this.events.events.some((e) => e.raidId === raid.id)) this.events.raidStarted(raid);
+    if (this.director.validate()) state.updateOffers(this.director.missions);
+    this.sounds.play('raid');
+    const tracker = this.raidTrackers.get(raid.id);
+    const what = tracker ? tracker.target.name.split(' ').slice(-1)[0] : null;
+    this.alert('raid', SAY.raidInbound, what ? what.charAt(0).toUpperCase() + what.slice(1) : null, 'bad', 3.5);
+    this.tip('raid', 'A raid is coming for T1. Fly out to meet it, or trust your guns. A radar warns you earlier.', ['F', 'Space']);
+  }
+
+  /**
+   * Raids nobody has noticed yet: T1 notices each one once its bomber comes within the detection
+   * range (the radar's, or close in without one). Until then there is no warning at all.
+   */
+  private detectRaids(): void {
+    const home = this.world.home;
+    const range = this.base.detectionRange;
+    for (const raid of this.airTraffic.raids) {
+      if (raid.detected || raid.stage === 'over') continue;
+      const bomber = this.airTraffic.get(raid.bomber);
+      if (!bomber) continue;
+      if (Math.hypot(bomber.position.x - home.x, bomber.position.z - home.z) > range && raid.stage === 'inbound') continue;
+      raid.detected = true;
+      this.announceRaid(raid);
+    }
+    // Until its bomb falls, what a hit would cost follows the paper in the store.
+    for (const t of this.raidTrackers.values()) t.potentialLoss = raidLoss(this.base.vulnerable(), t.target.key === STORE);
   }
 
   /** An AI aircraft went down: it crumples, and the player hears about it if it was theirs or mattered. */
-  private onAircraftDown(a: AiAircraft, byPlayer: boolean, cause: 'shot' | 'crash'): void {
+  private onAircraftDown(a: AiAircraft, byPlayer: boolean, cause: 'shot' | 'crash', by: string | null = null): void {
     const { hud, state } = this;
     const at = a.position;
     const enemy = a.side === 'enemy';
@@ -992,19 +1251,22 @@ export class Game {
     this.hitAt.delete(a.id);
     const credit = enemy && (byPlayer || a.playerDamage > 0);
     const screen = this.projectOnScreen(this.v3.copy(at));
+    // T1's own guns keep score.
+    const byBase = !!by && this.base.keyOf(by) !== null;
+    if (enemy && byBase) this.base.recordKill(by!, a.role === 'bomber');
+    for (const t of this.raidTrackers.values()) if (t.involves(a.id)) t.raiderDown(!byBase && (byPlayer || a.playerDamage > 0));
     if (credit) {
       this.sounds.play('kill');
       if (screen) hud.pop('SHOT DOWN!', 'good', screen);
       this.career.recordAircraftDestroyed(a.role === 'bomber');
-      const detail =
-        a.purpose === 'ambient' ? 'A patrol plane: no bounty, but one less in the sky.'
-        : a.role === 'bomber' && a.purpose === 'raid' ? 'Bomber intercepted. Your paper store is safe.'
-        : `${a.skill.label} ${AI.roleLabels[a.role].toLowerCase()} down.`;
-      hud.banner(`Enemy ${a.spec.name} destroyed`, detail, 'good', 2.6);
+      this.alert(a.role, 'Shot down', a.purpose === 'ambient' ? null : AI.roleLabels[a.role], 'good', 2.2);
+    } else if (enemy && byBase) {
+      if (screen) hud.pop('DOWN!', 'good', screen);
+      this.alert('turret', 'T1 got it', null, 'good', 2.2);
     } else if (enemy && screen) {
       hud.pop(cause === 'crash' ? 'CRASHED!' : 'DOWN!', 'info', screen);
     } else if (!enemy) {
-      hud.banner(`Your ${a.spec.name} is down!`, 'Enemy fighters got to it.', 'bad', 3);
+      this.alert(a.role, `${a.spec.name} down`, null, 'bad', 2.6);
     }
     const onMission = !!state.mission?.isActive && missionAircraft(state.mission).has(a.id);
     this.events.aircraftDown(a.id, credit, onMission);
@@ -1016,7 +1278,11 @@ export class Game {
     if (shot.kind === 'rocket') this.effects.explosion(point, 0.6);
     else if (shot.side === 'enemy') this.effects.enemyInkHit(point, false);
     else this.effects.inkHit(point, false);
-    this.airTraffic.damage(target, shot.damage, shot.source, false);
+    const { dealt } = this.airTraffic.damage(target, shot.damage, shot.source, false);
+    if (dealt > 0 && shot.side === 'player') {
+      this.base.recordDamage(shot.source, dealt);
+      for (const t of this.raidTrackers.values()) if (t.involves(target)) t.raiderHit(dealt, false);
+    }
   }
 
   /** An AI bomber's bomb landed: did it hit what it was aimed at, and what did the blast catch? */
@@ -1028,6 +1294,8 @@ export class Game {
     const miss = Math.hypot(impact.x - s.x, impact.z - s.z);
     const hostile = owner.side === 'enemy';
     const hit = impact.kind !== 'void' && miss <= s.radius + (hostile ? BOMB.kinds.standard.blastRadius / 2 : 0.3);
+    const raid = hostile ? this.airTraffic.raids.find((r) => r.bomber === impact.tag && r.stage !== 'over') : undefined;
+    const tracker = raid ? this.raidTrackers.get(raid.id) : undefined;
     if (impact.kind !== 'void') {
       this.effects.bombImpact(point, hit);
       // The blast catches the other side's installations: no credit to the player.
@@ -1036,26 +1304,26 @@ export class Game {
         if (!i.alive || i.side === owner.side) continue;
         const distance = Math.min(...i.spec.shapes.map((shape) => distanceToShape(point, shape)));
         const damage = blastDamage(kind.damage, kind.blastRadius, distance);
-        if (damage > 0) this.damageInstallation(i, damage, this.defenseModels.labelPoint(i.id, this.v2), false);
+        if (damage > 0 && this.damageInstallation(i, damage, this.defenseModels.labelPoint(i.id, this.v2), false) > 0) {
+          if (i.side === 'player') tracker?.structureHit(i.spec.name, !i.alive);
+        }
       }
       const at = this.projectOnScreen(this.v3.copy(point));
       if (at) this.hud.pop(hit ? 'KABOOM!' : 'SPLAT!', hostile === hit ? 'bad' : 'good', at);
     }
+    if (hostile && hit) {
+      // A bomb on target destroys a share of the vulnerable paper; the protected reserve is safe.
+      const key = tracker?.target.key ?? STORE;
+      const lost = this.state.raidHit(raidLoss(this.base.vulnerable(), key === STORE), this.base.protectedPaper, `Raid hit the ${(tracker?.target.name ?? 'paper store').toLowerCase()}`);
+      tracker?.hit(lost);
+      this.alert('raid', SAY.baseHit, lost > 0 ? `−${lost}` : null, 'bad', 3);
+    }
     this.airTraffic.bombLanded(impact.tag, hit);
-    if (hostile) {
-      if (!hit) return;
-      const lost = this.state.raidHit();
-      this.hud.banner(
-        'Paper store hit!',
-        lost > 0 ? `The raid cost you ${lost} paper.` : `Your last ${ECONOMY.protectedPaper} paper is protected.`,
-        'bad',
-        3,
-      );
-    } else {
+    if (!hostile) {
       this.state.escortStrike(impact.tag, hit);
       const supply = this.events.about(impact.tag)?.kind === 'supply-run';
       this.events.supplyDropped(impact.tag, hit);
-      if (!hit) this.hud.banner(supply ? 'The supplies missed the store' : 'Your bomber missed', 'It is going round for another run. Keep it covered.', 'bad', 2.5);
+      if (!hit) this.alert(supply ? 'supply' : 'bomber', 'Missed', null, 'bad', 2.2);
     }
   }
 
@@ -1110,7 +1378,7 @@ export class Game {
     const spotted = approached !== null && this.defenses.isAware(approached, PLAYER_ID);
     if (spotted && this.warned !== approached) this.sounds.play('spotted');
     this.warned = spotted ? approached : null;
-    this.defenseModels.update(dt, flying ? p : null, approached);
+    this.defenseModels.update(dt, flying ? p : null, approached, this.baseMode.open ? world.home.id : null);
     this.ordnanceView.update(dt, this.ordnance, this.camera.entity.getPosition());
     const locking = flying ? this.lockingOnPlayer() : [];
     this.sounds.lockTone(dt, locking.length > 0 ? Math.max(...locking.map((i) => i.lock)) : null);
@@ -1177,7 +1445,12 @@ export class Game {
     if (!credit) {
       if (destroyed) {
         this.effects.explosion(this.defenseModels.centre(i.id, this.v3), 1.1, 'wreck');
-        if (i.side === 'player') this.hud.banner(`Your ${i.spec.name.toLowerCase()} is wrecked`, 'It is rebuilt when the sortie ends.', 'bad', 2.4);
+        if (i.side === 'player') {
+          this.sounds.play('collapse');
+          const key = this.base.keyOf(i.id);
+          const kind = key ? (this.base.at(key)?.kind ?? null) : null;
+          this.alert(kind ? BUILDING_ICONS[kind] : 'store', kind ? `${BASE.buildings[kind].short} wrecked` : 'Store wrecked', null, 'bad', 3);
+        }
       }
       return dealt;
     }
@@ -1188,17 +1461,11 @@ export class Game {
       this.effects.explosion(centre, 1.1, 'wreck');
       this.sounds.play('collapse');
       const p = this.projectOnScreen(centre);
-      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!' }[i.spec.kind];
+      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!', workshop: 'WORKSHOP DOWN!', storage: 'BOX DOWN!' }[i.spec.kind];
       if (p) this.hud.pop(word, 'good', p);
       const t = i.spec.territoryId;
       const left = this.defenses.on(t).filter((x) => x.isWeapon && x.alive).length;
-      const detail = {
-        turret: left > 0 ? `${left} weapon${left === 1 ? '' : 's'} left on ${t}.` : `${t} has no weapons left.`,
-        launcher: `No more rockets from ${t}.`,
-        radar: `${t}'s guns now see less far.`,
-        supply: `${t}'s supplies are burning.`,
-      }[i.spec.kind];
-      this.hud.banner(`${i.spec.name} destroyed`, detail, 'good', 2.4);
+      this.alert(KIND_ICONS[i.spec.kind], 'Destroyed', i.isWeapon ? `${left} left` : null, 'good', 2.2);
     }
     this.state.recordDamage(dealt, destroyed ? i.id : null, true, i.spec.kind === 'turret');
     if (destroyed && i.side === 'enemy') {
@@ -1320,6 +1587,7 @@ export class Game {
       const { dealt, destroyed } = this.airTraffic.damage(ai.id, impact.damage, PLAYER_ID, true);
       if (dealt <= 0) return;
       this.state.recordDamage(dealt, null);
+      for (const t of this.raidTrackers.values()) if (t.involves(ai.id)) t.raiderHit(dealt, true);
       this.hitAt.set(ai.id, performance.now());
       const at = this.projectOnScreen(point);
       if (at) this.hud.damageNumber(dealt, at, destroyed);
@@ -1403,13 +1671,6 @@ export class Game {
     this.plane.park(pad, this.world.launchYaw, this.world.home.id, fold);
   }
 
-  /** A short banner for "you can't do that now" moments, not repeated in quick succession. */
-  private hint(title: string, subtitle: string): void {
-    if (performance.now() - this.lastHint < 2500) return;
-    this.lastHint = performance.now();
-    this.hud.banner(title, subtitle, 'info', 2.5);
-  }
-
   // ---- Wiring ---------------------------------------------------------------------------------
 
   private bindEvents(): void {
@@ -1440,6 +1701,10 @@ export class Game {
           this.toggleLogbook(false);
           return;
         }
+        if (this.baseMode.open && !this.paused) {
+          this.toggleBase(false);
+          return;
+        }
         if (performance.now() - this.lastAutoPause < ESC_AFTER_UNLOCK_MS) return;
         if (this.paused) this.resume();
         else this.pause();
@@ -1447,6 +1712,27 @@ export class Game {
       }
       if (this.paused) return;
       if (this.logbook.open) return;
+      if (code === 'KeyB') {
+        this.toggleBase();
+        return;
+      }
+      if (this.baseMode.open) {
+        // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
+        const slot = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
+        if (slot !== undefined) {
+          const id = slot === '0' ? STORE : BASE.slots[Number(slot) - 1]?.id;
+          if (id) this.baseAction('select', id);
+        } else if (code === 'Enter' || code === 'NumpadEnter') this.baseAction('build');
+        else if (code === 'KeyU') this.baseAction('upgrade');
+        else if (code === 'KeyR') this.baseAction('repair');
+        else if (code === 'KeyX' || code === 'Delete') this.baseAction('remove');
+        else if (code === 'Space' && (state.phase === 'ready' || state.phase === 'landed')) {
+          this.toggleBase(false);
+          if (state.phase === 'landed') this.takeOff();
+          else this.launch();
+        }
+        return;
+      }
       if (code in KEY_TO_CARD) this.select(KEY_TO_CARD[code]);
       else if (code === 'KeyX') this.swapCard();
       else if (code === 'KeyQ') this.cycleAircraft(-1);
@@ -1457,7 +1743,7 @@ export class Game {
         else this.launch();
       } else if (code === 'KeyR') {
         if (state.phase === 'landed') this.rearm();
-        else if (state.phase === 'flying') this.hint('Rearm at home', 'Land on T1, then press R to top up ink and range.');
+        else if (state.phase === 'flying') this.alert('home', 'Rearm at T1', null, 'info', 1.6);
       } else if (code === 'Enter' || code === 'NumpadEnter') {
         if (state.phase === 'landed') this.endSortie();
         else this.continueToDesk();
@@ -1484,6 +1770,13 @@ export class Game {
       if (source !== 'restore' && source !== 'reset') this.progress.paper(delta, source === 'spend');
       if (source !== 'income') this.requestSave();
     });
+    // Earnings that didn't fit: the store is full.
+    this.resources.onOverflow((lost, source) => {
+      if (source === 'income') return;
+      this.alert('capacity', SAY.storageFull, `−${lost}`, 'warn', 3);
+      this.tip('storage', 'Storage full: paper beyond capacity is lost. Spend it, or build storage boxes.', ['B']);
+    });
+    this.base.onEvent((e) => this.onBaseEvent(e));
     state.onEvent((event) => {
       switch (event.type) {
         case 'aircraft-selected':
@@ -1492,23 +1785,25 @@ export class Game {
           this.requestSave();
           break;
         case 'stowed':
-          hud.banner(`${AIRCRAFT[event.aircraft].name} stowed`, 'It waits in the hangar, ready to roll out for free.', 'info', 2.2);
+          this.alert('home', `${AIRCRAFT[event.aircraft].name} stowed`, null, 'info', 1.8);
           break;
         case 'build-refused':
           if (event.reason === 'incompatible') {
-            hud.banner(`The ${state.chosen.name} can't fly this mission`, `${event.detail}. Pick another plane (Q/E) or mission.`, 'bad', 3);
+            this.alert('wrecked', 'Wrong plane', null, 'bad', 2.4);
+            this.tip('unsuitable', `${event.detail}. Switch plane with Q / E, or pick another card.`, ['Q', 'E']);
           } else {
-            hud.banner('Not enough paper', `You need ${event.cost}. Your home territory keeps producing paper.`, 'bad', 2.5);
+            this.alert('paper', 'Need paper', `−${Math.max(0, event.cost - this.resources.paper)}`, 'bad', 2);
           }
           break;
         case 'launch-refused':
-          hud.banner(`Wrong plane for this mission`, `${event.detail}. Choose another mission, or switch planes (Q/E).`, 'bad', 3);
+          this.alert('wrecked', 'Wrong plane', null, 'bad', 2.4);
           break;
         case 'ready':
           this.effects.burst(this.plane.position, 'fold');
           break;
         case 'launched': {
           this.sortiesFlown++;
+          this.sortiesTotal++;
           this.dismissWelcome();
           const mission = state.mission!;
           this.director.accepted(mission);
@@ -1522,7 +1817,8 @@ export class Game {
           }
           this.airTraffic.startMission(mission.spec.aircraft ?? []);
           this.career.recordSortie(state.plane!.id);
-          hud.banner('Mission active', mission.title, 'info', 1.8);
+          this.alert(MISSION_ICONS[mission.spec.type], 'Go', null, 'info', 1.4);
+          this.tip('flight', 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.', ['LMB', 'RMB', 'Shift']);
           this.requestSave();
           break;
         }
@@ -1530,10 +1826,10 @@ export class Game {
           this.sortieOver(true);
           break;
         case 'out-of-ammo':
-          hud.banner('Out of ink!', 'Land on T1 and press R to rearm.', 'bad', 2.5);
+          this.alert('ink', 'Out of ink', null, 'bad', 2.2);
           break;
         case 'range-exhausted':
-          hud.banner('Out of range!', 'The plane can only glide now. Head home and land to rearm.', 'bad', 3.5);
+          this.alert('range', SAY.gliding, null, 'bad', 3);
           break;
         case 'damaged':
           hud.damageFlash(event.amount);
@@ -1543,9 +1839,9 @@ export class Game {
           break;
         case 'bomb-missed':
           if (event.tooHigh) {
-            hud.banner("Too high: it doesn't count", 'The run was blown. Leave the zone and come in again lower.', 'bad', 3);
+            this.alert('altitude', 'Too high', null, 'bad', 2.4);
           } else if (event.remaining > 0 || state.bombsFalling > 0) {
-            hud.banner('Missed!', `${event.remaining} bomb${event.remaining === 1 ? '' : 's'} left. Line up and try again.`, 'bad', 2);
+            this.alert('bombload', 'Missed', `${event.remaining} left`, 'bad', 2);
           }
           break;
         case 'approach-blown': {
@@ -1553,7 +1849,7 @@ export class Game {
           if (state.bombsFalling > 0) break;
           const o = state.mission?.objectives[event.index];
           const ceiling = o?.kind === 'bomb' && o.approach ? o.approach.ceiling : 0;
-          hud.banner('Too high! Run blown', `Leave the zone and come back in below ${ceiling} m.`, 'bad', 2.6);
+          this.alert('altitude', 'Run blown', `<${ceiling} m`, 'bad', 2.4);
           break;
         }
         case 'objective-complete':
@@ -1563,20 +1859,16 @@ export class Game {
           this.airTraffic.endMission();
           this.career.recordMissionCompleted();
           if (state.phase === 'landed') break; // the touchdown banner reports it
-          hud.banner(
-            'Mission complete!',
-            state.phase === 'flying' ? `+${event.reward} paper · Land on T1 to recover your plane` : `+${event.reward} paper`,
-            'good',
-            3.5,
-          );
+          this.alert('ok', 'Complete', `+${event.reward}`, 'good', 3);
+          if (state.phase === 'flying') this.tip('recover', 'Land on T1 to keep your plane: a refit is much cheaper than a new one.');
           break;
         case 'mission-failed':
           this.airTraffic.endMission();
-          if (event.reason === 'missed') hud.banner('Out of bombs!', 'Every target needs a hit. Mission failed.', 'bad', 3);
-          else if (event.reason === 'out-of-time') hud.banner('Out of time!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
-          else if (event.reason === 'target-escaped') hud.banner('It got away!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
-          else if (event.reason === 'target-bombed') hud.banner('Too late!', 'The bomber released its bomb. Mission failed.', 'bad', 3);
-          else if (event.reason === 'escort-lost') hud.banner('Your bomber is down!', 'Mission failed. Land on T1 to recover the plane.', 'bad', 3);
+          if (event.reason === 'missed') this.alert('bombload', 'Out of bombs', null, 'bad', 3);
+          else if (event.reason === 'out-of-time') this.alert('clock', 'Out of time', null, 'bad', 3);
+          else if (event.reason === 'target-escaped') this.alert('escape', 'It got away', null, 'bad', 3);
+          else if (event.reason === 'target-bombed') this.alert('bomb', 'Too late', null, 'bad', 3);
+          else if (event.reason === 'escort-lost') this.alert('bomber', 'Bomber lost', null, 'bad', 3);
           break;
         case 'crashed':
           this.onCrashed(event.cause);
@@ -1585,17 +1877,17 @@ export class Game {
         case 'landed': {
           const mission = state.mission;
           if (mission?.status === 'succeeded' && mission.objectives.some((o) => o.kind === 'land')) {
-            hud.banner('Mission complete!', `+${mission.reward} paper · Plane recovered`, 'good', 3.5);
+            this.alert('ok', 'Complete', `+${mission.reward}`, 'good', 3);
           } else {
-            hud.banner('Touchdown!', 'Safe on T1. The ground crew is ready.', 'good', 2.5);
+            this.alert('land', 'Touchdown', null, 'good', 2);
           }
           break;
         }
         case 'rearmed':
-          hud.banner('Rearmed', 'Ink and range topped up. Space to take off.', 'good', 2);
+          this.alert('rearm', 'Rearmed', null, 'good', 1.8);
           break;
         case 'paper-reset':
-          hud.banner('Paper reset', `${this.resources.paper} paper restored`, 'info', 1.6);
+          this.alert('paper', 'Paper reset', String(this.resources.paper), 'info', 1.6);
           break;
       }
     });
@@ -1614,18 +1906,20 @@ export class Game {
     this.career.recordPlaneLost();
     this.input.exitPointerLock(); // free the cursor for the Continue button
     if (cause === 'hard-landing') {
-      hud.banner('Hard landing!', `${hardLandingReason(plane.lastTouchdown ?? assessTouchdown(plane.touchdownState()))} The plane is wrecked.`, 'bad', 4);
+      this.alert('land', 'Hard landing', null, 'bad', 3.5);
+      this.tip('hard-landing', `${hardLandingReason(plane.lastTouchdown ?? assessTouchdown(plane.touchdownState()))} Slow, gentle, wings level.`);
     } else if (cause === 'shot-down') {
       const by = this.state.sortie?.killedBy;
-      hud.banner('Shot down!', by ? `Brought down by the ${by.charAt(0).toLowerCase()}${by.slice(1)}.` : 'Enemy fire tore it apart.', 'bad', 4);
+      this.alert('crumple', 'Shot down', null, 'bad', 3.5);
+      void by;
     } else if (cause === 'void') {
-      hud.banner('Plane lost in the void', 'No reward for an unfinished mission.', 'bad', 4);
+      this.alert('crumple', 'Lost', null, 'bad', 3.5);
     } else {
-      hud.banner('Plane destroyed!', 'It hit too hard and crumpled. Fast impacts tear paper apart.', 'bad', 4);
+      this.alert('crumple', 'Crumpled', null, 'bad', 3.5);
     }
   }
 
-  private onObjectiveComplete(objective: Objective, index: number): void {
+  private onObjectiveComplete(objective: Objective, _index: number): void {
     const mission = this.state.mission!;
     if (objective.kind === 'ring') {
       const g = objective.gate;
@@ -1638,24 +1932,25 @@ export class Game {
     if (mission.allDone) return; // the success banner says it all
     if (objective.kind === 'bomb') {
       const left = mission.objectives.filter((o, i) => o.kind === 'bomb' && !mission.isDone(i)).length;
-      this.hud.banner('Target hit!', left > 0 ? `${left} more to go.` : this.objectiveLabel(mission, mission.openObjectives()[0] ?? index), 'good', 2.5);
+      this.alert('bomb', 'Hit', left > 0 ? `${left} left` : null, 'good', 2.2);
     } else if (objective.kind === 'recon') {
       const next = mission.objectives[mission.openObjectives()[0]];
-      this.hud.banner('Reconnaissance complete', next?.kind === 'escape' ? `Now get clear: more than ${next.distance} m from ${next.territoryId}.` : '', 'good', 2.4);
+      this.alert('recon', 'Scouted', next?.kind === 'escape' ? `${next.distance} m out` : null, 'good', 2.2);
     } else if (objective.kind === 'reach') {
-      this.hud.banner('Delivered!', '', 'good', 2);
+      this.alert('reach', 'Delivered', null, 'good', 2);
     } else if (objective.kind === 'destroy' && objective.what !== 'practice') {
-      this.hud.banner('Objective complete', this.objectiveLabel(mission, mission.openObjectives()[0] ?? index), 'good', 2.4);
+      this.alert('ok', 'Done', null, 'good', 2);
     }
   }
 
   // ---- HUD view -------------------------------------------------------------------------------
 
   private view(): HudView {
-    const { plane, world, state, resources } = this;
+    const { plane, world, state, resources, base } = this;
     const flying = state.phase === 'flying';
     const choosing = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready';
     const mission = choosing ? state.selectedMission : state.mission;
+    const baseOpen = this.baseMode.open;
 
     let nose: ScreenPoint | null = null;
     let aim: ScreenPoint | null = null;
@@ -1674,7 +1969,8 @@ export class Game {
         : Math.hypot(goal.point.x - from.x, goal.point.z - from.z);
       target = {
         ...this.indicator(goal.point),
-        label: `${goal.label} · ${Math.round(distance)} m`,
+        label: goal.label,
+        distance,
         tone: goal.tone,
         icon: goal.icon,
         near: !goal.solid && distance < 15,
@@ -1695,68 +1991,62 @@ export class Game {
     const kind = state.phase === 'desk' ? state.buildKindFor(state.aircraft) : state.buildKind;
     const name = (state.plane ?? state.chosen).name;
     const buildCost = state.buildCost;
-    let buildNote: string | null = null;
+    let note: string | null = null;
+    let tag: string | null = null;
     let noteTone: 'bad' | 'info' = 'info';
     const fit = state.phase === 'desk' || state.phase === 'ready' ? state.suitability(state.plane?.id ?? state.aircraft) : null;
     if (fit?.level === 'unsuitable') {
       noteTone = 'bad';
-      buildNote = `The ${name} can't fly this mission: ${fit.reason}. Choose another plane (Q/E) or mission.`;
+      tag = '✗';
+      note = `The ${name} can't fly this mission: ${fit.reason}. Choose another plane (Q/E) or mission.`;
     } else if (state.phase === 'desk' && state.emergencyAvailable()) {
       const fit = state.suitability(state.aircraft);
       noteTone = 'bad';
-      buildNote =
-        `You can't afford any plane. Fold a free emergency Dart (F): half the ink, no bomb, for one sortie.` +
-        (fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : '');
-    } else if (state.phase === 'desk') {
-      const waiting = state.hangar.get(state.aircraft);
-      if (!resources.canAfford(buildCost)) {
-        const wait = state.income.timeToAfford(resources.paper, buildCost);
-        noteTone = 'bad';
-        buildNote =
-          `Need ${buildCost} paper to ${kind === 'refit' ? 'refit' : 'fold'} a ${name}, you have ${resources.paper}.` +
-          (wait !== null ? ` Your home makes paper: ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.');
-      } else if (waiting?.condition === 'recovered') {
-        buildNote = `Your recovered ${name} is in the hangar: a refit costs ${buildCost} instead of ${AIRCRAFT[state.aircraft].cost}.`;
-      } else if (waiting?.condition === 'ready') {
-        buildNote = `Your ${name} is stowed in the hangar, ready to roll out for free.`;
-      }
-    } else if (state.phase === 'ready') {
-      buildNote = 'Q / E stows this plane in the hangar and switches to another.';
+      tag = 'Scrap';
+      note = `You can't afford any plane: a free emergency Dart has half the ink, no bomb, for one sortie.${fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+    } else if (state.phase === 'desk' && !resources.canAfford(buildCost)) {
+      const wait = state.income.timeToAfford(resources.paper, buildCost);
+      noteTone = 'bad';
+      tag = `−${buildCost - resources.paper}`;
+      note = `Need ${buildCost} paper, you have ${resources.paper}.${wait !== null ? ` Ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.'}`;
     }
 
     const landing = this.onApproach()
       ? (() => {
           const s = plane.touchdownState();
+          if (!this.tipsSeen.has('landing')) this.tip('landing', 'Landing on T1: slow, gentle descent, wings level. The checks turn green.');
           return { speed: s.speed, sink: s.sink, rollDeg: (s.roll * 180) / Math.PI, check: assessTouchdown(s) };
         })()
       : null;
 
+    // First-time tips: the desk, and each kind of objective the first time it comes up.
+    if (choosing && !this.welcome && !baseOpen && !this.paused) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
+    if (flying && mission?.isActive && !this.paused) {
+      const next = mission.objectives[mission.openObjectives()[0]];
+      if (next && !this.tipsSeen.has(`obj-${next.kind}`)) {
+        const hint = this.trackerHint(mission, state.phase);
+        if (hint) this.tip(`obj-${next.kind}`, hint);
+      }
+    }
+
     const f = plane.flight;
-    const favorite = this.career.favorite;
+    const income = state.income;
     return {
-      paper: resources.paper,
-      career: {
-        missionsCompleted: this.career.data.missionsCompleted,
-        planesLost: this.career.data.planesLost,
-        targetsDestroyed: this.career.data.targetsDestroyed,
-        defensesDestroyed: this.career.data.defensesDestroyed,
-        aircraftDestroyed: this.career.data.aircraftDestroyed,
-        favorite: favorite ? AIRCRAFT[favorite].name : null,
-      },
       phase: state.phase,
       paused: this.paused,
-      income: {
-        state: state.income.stateFor(resources.paper),
-        amount: state.income.amount,
-        interval: state.income.interval,
-        progress: state.income.progressFor(resources.paper),
-        cap: state.income.cap,
-        taper: state.income.taper,
+      baseMode: baseOpen,
+      hints: this.showHints,
+      economy: {
+        paper: resources.paper,
+        capacity: base.capacity,
+        rate: income.ratePerMinute(resources.paper),
+        state: income.stateFor(resources.paper),
+        progress: income.progressFor(resources.paper),
+        protectedPaper: base.protectedPaper,
+        streak: this.progress.data.streak.current,
       },
-      ledger: this.ledger.recent(4).map((e) => ({ label: e.source === 'income' ? `Home production ×${e.count}` : e.label, delta: e.delta })),
-      streak: { current: this.progress.data.streak.current, rate: Progress.streakRate(this.progress.data.streak.current + 1) },
-      build: {
-        cost: buildCost, kind, name, note: buildNote, noteTone, progress: state.buildProgress,
+      desk: {
+        cost: buildCost, kind, name, note, tag, noteTone, progress: state.buildProgress,
         emergency: state.emergencyAvailable() && !resources.canAfford(buildCost),
         canBuild: state.canBuild() || (state.emergencyAvailable() && state.suitability(state.aircraft).level !== 'unsuitable' && state.selectedMission.spec.bombs === 0),
       },
@@ -1764,14 +2054,14 @@ export class Game {
       welcome: this.welcome && choosing ? { restored: this.welcome.restored, paper: resources.paper, session: this.welcome.session ? sessionView(this.welcome.session) : null, problems: this.welcome.problems.length } : null,
       menu: {
         session: sessionView(this.progress.session),
-        muted: this.sounds.muted,
+        settings: { muted: this.sounds.muted, hints: this.hints, uiScale: this.uiScale },
         saveNote: this.saveNote(),
         confirmingReset: this.confirming?.what === 'reset' && performance.now() < this.confirming.until,
       },
-      garage: choosing ? this.garageView() : null,
+      garage: choosing && !baseOpen ? this.garageView() : null,
       cards: choosing ? state.offers.map((m) => this.cardView(m)) : null,
       selected: state.selected,
-      tracker: !choosing && mission ? this.tracker(mission, from) : null,
+      tracker: !choosing && mission && !baseOpen ? this.tracker(mission, from) : null,
       flight: flying
         ? {
             speed: plane.speed,
@@ -1792,10 +2082,18 @@ export class Game {
       aim,
       target,
       labels,
-      targets: flying || state.phase === 'landed' ? this.targetLabels(mission, target?.onScreen ? goal?.targetId ?? null : null) : [],
+      targets: flying || (state.phase === 'landed' && !baseOpen) ? this.targetLabels(mission, target?.onScreen ? goal?.targetId ?? null : null) : [],
       minimap: this.minimapView(mission, goal?.point ?? null),
       threat: flying ? this.threatView() : null,
       air: this.airView(flying, aim),
+      raid: this.raidAlert(),
+      base: baseOpen
+        ? this.baseMode.view(
+            (x, z) => this.projectOnScreen(this.v3.set(x, 1.2, z)),
+            state.phase === 'ready' || state.phase === 'landed',
+            this.lastRaid,
+          )
+        : null,
     };
   }
 
@@ -1860,7 +2158,26 @@ export class Game {
 
   /** The logbook's contents. */
   private logbookView(): LogbookView {
+    const favorite = this.career.favorite;
+    const base = this.base;
     return {
+      career: {
+        missionsCompleted: this.career.data.missionsCompleted,
+        planesLost: this.career.data.planesLost,
+        targetsDestroyed: this.career.data.targetsDestroyed,
+        defensesDestroyed: this.career.data.defensesDestroyed,
+        aircraftDestroyed: this.career.data.aircraftDestroyed,
+        favorite: favorite ? AIRCRAFT[favorite].name : null,
+      },
+      base: {
+        stats: base.stats,
+        production: base.production,
+        capacity: base.capacity,
+        protectedPaper: base.protectedPaper,
+        buildings: [...base.buildings.values()].map((b) => ({
+          name: BASE.buildings[b.kind].name, icon: BUILDING_ICONS[b.kind], level: b.level, status: base.status(b.slot), kills: b.kills, bombers: b.bombers, damage: b.damage,
+        })),
+      },
       progress: this.progress.data,
       session: sessionView(this.progress.session),
       ledger: this.ledger,
@@ -1897,9 +2214,11 @@ export class Game {
         if (!at.onScreen && d > AIRCRAFT_EDGE_RANGE && !important) continue;
         const aimedAt = !!aim && at.onScreen && Math.hypot(aim.x - at.x, aim.y - at.y) < 70;
         const recentlyHit = now - (this.hitAt.get(a.id) ?? -Infinity) < 3000;
+        const attacking = a.side === 'enemy' && a.attacking && (a.targetId === PLAYER_ID || !!(a.targetId && state.mission?.escorting(a.targetId)));
         markers.push({
           id: a.id, x: at.x, y: at.y, onScreen: at.onScreen, angle: at.angle,
           side: a.side, icon: a.role, name: `${a.side === 'enemy' ? 'Enemy' : 'Your'} ${a.spec.name}`, detail: this.aircraftDetail(a),
+          status: attacking ? 'attacking' : a.state === 'bomb-run' ? 'bombing' : a.role === 'scout' && a.state === 'evade' ? 'running' : a.leaving || a.state === 'disengage' ? 'leaving' : null,
           distance: d, health: a.durability.fraction, showHealth: recentlyHit || aimedAt || d < 45 || wanted.has(a.id) || raider,
           far: clamp((d - 40) / 160, 0, 1), mission: wanted.has(a.id) || raider || this.events.about(a.id)?.aircraft[0] === a.id, attacking: a.side === 'enemy' && a.attacking && a.targetId === PLAYER_ID,
           compact: false,
@@ -1925,7 +2244,7 @@ export class Game {
       m.compact = placed.some((o) => Math.abs(o.x - m.x) < 130 && Math.abs(o.y - m.y) < 64);
       if (!m.compact) placed.push(m);
     }
-    return { markers, lead, raid: this.raidAlert() };
+    return { markers, lead };
   }
 
   /** What an aircraft's marker says it is doing. */
@@ -1946,23 +2265,41 @@ export class Game {
     return `${AI.roleLabels[a.role]} · ${a.skill.label}`;
   }
 
-  /** The most urgent raid on T1 still to be settled, for the alert card. */
+  /**
+   * The early-warning alert for the most urgent raid T1 knows about: where it comes from, how long
+   * until it gets there, what it is after, how many guns are ready, and what to do.
+   */
   private raidAlert(): RaidAlertView | null {
-    const raids = this.airTraffic.raids.filter((r) => r.stage !== 'over');
+    const raids = this.airTraffic.raids.filter((r) => r.stage !== 'over' && r.detected);
     if (raids.length === 0) return null;
     const raid = raids.reduce((a, b) => (b.eta < a.eta ? b : a));
     const bomber = this.airTraffic.get(raid.bomber);
+    const home = this.world.home;
+    const tracker = this.raidTrackers.get(raid.id);
+    const key = tracker?.target.key ?? STORE;
+    const kind = key === STORE ? 'store' : (this.base.at(key)?.kind ?? 'store');
+    const r = this.base.readiness;
+    const { phase } = this.state;
+    const response =
+      phase === 'flying' ? null
+      : phase === 'landed' ? { key: 'Space', label: SAY.takeOff }
+      : phase === 'ready' ? { key: 'Space', label: SAY.launch }
+      : phase === 'desk' ? { key: 'F', label: 'Fold' }
+      : null;
     const mission = this.state.mission;
     return {
       state: raid.stage === 'released' ? 'released' : 'inbound',
-      title: raid.stage === 'released' ? 'BOMB AWAY!' : 'INCOMING BOMBER',
-      subtitle: `Enemy Widewing approaching ${this.world.home.id} from ${raid.origin}${raid.escorts.length > 0 ? ' · escorted' : ''}`,
+      direction: bomber ? compass(bomber.position.x - home.x, bomber.position.z - home.z) : '?',
       eta: raid.eta,
-      target: 'Home territory · paper store',
-      objective: `Intercept before bomb release (a hit costs ${RAIDS.penalty} paper)`,
-      rewardLabel: raid.mission ? 'Mission reward' : 'Defense reward',
-      reward: `+${raid.mission && mission ? mission.reward : RAIDS.reward} paper`,
+      target: tracker?.target.name ?? 'Paper store',
+      targetIcon: BUILDING_ICONS[kind],
+      ready: r.ready,
+      total: r.total,
+      escorted: raid.escorts.length > 0,
       distance: this.state.phase === 'flying' && bomber ? bomber.position.distance(this.plane.position) : null,
+      reward: raid.mission && mission ? mission.reward : RAIDS.reward,
+      mission: raid.mission,
+      response,
     };
   }
 
@@ -1970,20 +2307,22 @@ export class Game {
   private threatSummary(m: Mission): ThreatSummary {
     const t = m.spec.threat;
     const air = t?.air ? airList(t.air) : null;
+    const airIcons: IconName[] = t?.air ? [...(t.air.fighters ? ['fighter' as const] : []), ...(t.air.scouts ? ['scout' as const] : []), ...(t.air.bombers ? ['bomber' as const] : [])] : [];
     if (t?.air && t.level === 0) {
       // Nothing on the ground: the danger is in the air, as strong as its pilots.
       const level = ({ easy: 1, medium: 2, hard: 3 } as const)[t.air.skill];
-      return { level, label: 'Air threat', detail: `No ground defenses · ${air}` };
+      return { level, label: 'Air threat', detail: `No ground defenses · ${air}`, icons: airIcons };
     }
     if (!t || t.level === 0) {
-      return { level: 0, label: THREAT.levels[0].label, detail: m.spec.type === 'rings' ? 'Course clear of defenses' : 'No known defenses' };
+      return { level: 0, label: THREAT.levels[0].label, detail: m.spec.type === 'rings' ? 'Course clear of defenses' : 'No known defenses', icons: [] };
     }
     const parts: string[] = [];
     if (t.turrets || t.launchers) parts.push(defenseList(t.turrets, t.launchers));
     if (t.radars) parts.push(t.radars === 1 ? 'radar' : `${t.radars} radars`);
     const where = m.spec.type === 'rings' ? `Course passes ${t.territories.join(', ')}` : t.territories.join(' + ');
     if (air) parts.push(air);
-    return { level: t.level, label: THREAT.levels[t.level].label, detail: `${where}: ${parts.join(' · ')}` };
+    const icons: IconName[] = [...(t.turrets ? ['turret' as const] : []), ...(t.launchers ? ['launcher' as const] : []), ...(t.radars ? ['radar' as const] : []), ...airIcons];
+    return { level: t.level, label: THREAT.levels[t.level].label, detail: `${where}: ${parts.join(' · ')}`, icons };
   }
 
   /**
@@ -2081,16 +2420,17 @@ export class Game {
         tagline: chosen.tagline,
         ratings: RATING_KEYS.map((key) => ({ key, label: RATING_LABELS[key], value: ratings[key] })),
         loadout: [
-          `${chosen.gunLabel} · ${chosen.gun.ammo} ink`,
-          `${chosen.bombs.capacity} ${bombKind.label.toLowerCase()}${chosen.bombs.capacity === 1 ? '' : 's'}`,
-          `${chosen.maxHealth} health · ${(chosen.range / 1000).toFixed(1)} km range`,
-          ...(() => {
-            const m = this.progress.data.mastery[chosen.id];
-            if (!m || m.flights === 0) return [];
-            const acc = chosen.bombs.capacity > 1 && m.bombsDropped > 0 ? `${Math.round((m.bombHits / m.bombsDropped) * 100)}% bombs on target` : m.shotsFired > 0 ? `${Math.round((m.shotsHit / m.shotsFired) * 100)}% ink on target` : '';
-            return [`Your record: ${m.flights} flight${m.flights === 1 ? '' : 's'} · ${m.missions} done${acc ? ` · ${acc}` : ''}`];
-          })(),
+          { icon: 'ink', value: String(chosen.gun.ammo), label: `${chosen.gunLabel} · ink` },
+          { icon: 'bombload', value: String(chosen.bombs.capacity), label: bombKind.label + (chosen.bombs.capacity === 1 ? '' : 's') },
+          { icon: 'health', value: String(chosen.maxHealth), label: 'Health' },
+          { icon: 'range', value: `${(chosen.range / 1000).toFixed(1)} km`, label: 'Range' },
         ],
+        record: (() => {
+          const m = this.progress.data.mastery[chosen.id];
+          if (!m || m.flights === 0) return null;
+          const acc = chosen.bombs.capacity > 1 && m.bombsDropped > 0 ? `${Math.round((m.bombHits / m.bombsDropped) * 100)}% bombs on target` : m.shotsFired > 0 ? `${Math.round((m.shotsHit / m.shotsFired) * 100)}% ink on target` : '';
+          return `Your record: ${m.flights} flight${m.flights === 1 ? '' : 's'} · ${m.missions} done${acc ? ` · ${acc}` : ''}`;
+        })(),
         suitability: { level: fit.level, reason: fit.reason, missionTitle: mission.title },
       },
       locked: state.phase === 'building',
@@ -2127,19 +2467,14 @@ export class Game {
     const { state } = this;
     if (state.phase !== 'landed') return null;
     const mission = state.mission;
-    let missionLine = '';
-    let missionTone: GroundView['missionTone'] = 'info';
-    if (mission?.status === 'succeeded') {
-      missionLine = `Mission complete · +${mission.reward} paper. End the sortie for your report.`;
-      missionTone = 'good';
-    } else if (mission?.status === 'failed') {
-      missionLine = 'Mission failed. End the sortie to recover the plane.';
-      missionTone = 'bad';
-    } else if (mission) {
-      const left = mission.timeLeft;
-      missionLine = `Mission still in progress${left !== null ? ` · ${Math.ceil(left)} s left` : ''}. Ending the sortie abandons it.`;
-    }
-    return { stopped: this.rolledToStop, rearming: state.rearmProgress, canRearm: state.canRearm(), missionLine, missionTone };
+    return {
+      stopped: this.rolledToStop,
+      rearming: state.rearmProgress,
+      canRearm: state.canRearm(),
+      status: mission?.status ?? null,
+      reward: mission?.reward ?? 0,
+      timeLeft: mission?.timeLeft ?? null,
+    };
   }
 
   /**
@@ -2167,7 +2502,7 @@ export class Game {
       const s = target.spec;
       near.push({
         id: s.id, name: shipment ? 'Paper shipment' : s.name, role: shipment ? 'High-value target' : s.role, health: target.durability.fraction,
-        icon: s.kind === 'dummy' ? 'practice' : shipment ? 'supply' : null, state: null, point, distance,
+        icon: s.kind === 'dummy' ? 'practice' : shipment ? 'supply' : null, state: null, side: null, point, distance,
       });
     }
     for (const i of this.defenses.installations) {
@@ -2176,8 +2511,10 @@ export class Game {
       const distance = point.distance(eye);
       if (distance > DEFENSES.labelRange) continue;
       const state: TargetLabelView['state'] = !i.isWeapon ? null : i.targetId === PLAYER_ID && i.state !== 'destroyed' ? i.state : 'idle';
+      // T1's own buildings only show once damaged (or while shooting at raiders).
+      if (i.side === 'player' && i.durability.fraction >= 1 && !i.engaged) continue;
       const role = i.side === 'player' && i.engaged ? 'Firing at raiders' : i.spec.role;
-      near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: i.spec.kind, state, point, distance });
+      near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: KIND_ICONS[i.spec.kind], state, side: i.side, point, distance });
     }
     near.sort((a, b) => Number(wanted.has(b.id)) - Number(wanted.has(a.id)) || a.distance - b.distance);
     const views: TargetLabelView[] = [];
@@ -2187,7 +2524,7 @@ export class Game {
       if (!p) continue;
       const range = n.icon && n.icon !== 'practice' ? DEFENSES.labelRange : TARGETS.labelRange;
       views.push({
-        id: n.id, x: p.x, y: p.y, name: n.name, role: n.role, health: n.health, icon: n.icon, state: n.state,
+        id: n.id, x: p.x, y: p.y, name: n.name, role: n.role, health: n.health, icon: n.icon, state: n.state, side: n.side,
         mission: wanted.has(n.id),
         far: clamp((n.distance - 30) / (range - 30), 0, 1),
       });
@@ -2302,41 +2639,53 @@ export class Game {
     return result;
   }
 
+  /** An objective in a few words and numbers: "Bomb T5", "Hold T6 12/20s", "Fighters T8 1/2". */
   private objectiveLabel(mission: Mission, index: number): string {
     const o = mission.objectives[index];
     if (!o) return '';
     switch (o.kind) {
       case 'bomb':
-        if (o.approach) return `Bomb ${o.territoryId} from below ${o.approach.ceiling} m`;
-        return o.precision ? `Hit the ink spot on ${o.territoryId}` : `Hit the bullseye on ${o.territoryId}`;
-      case 'recon': return `Scout ${o.territoryId} below ${o.airspace.ceiling} m`;
-      case 'reach': return `Reach ${o.territoryId}'s airspace`;
-      case 'ring': return `Ring ${o.number} of ${mission.objectives.length}`;
-      case 'land': return `Land on ${o.territoryId}`;
-      case 'survive': return `Hold out ${o.duration} s over ${o.territoryId} (${Math.floor(mission.progress[index] * o.duration)}/${o.duration})`;
-      case 'escape': return `Escape: ${o.distance} m clear of ${o.territoryId}`;
+        if (o.approach) return `Low bomb ${o.territoryId} <${o.approach.ceiling} m`;
+        return o.precision ? `Ink spot ${o.territoryId}` : `Bomb ${o.territoryId}`;
+      case 'recon': return `Scout ${o.territoryId} <${o.airspace.ceiling} m`;
+      case 'reach': return `Reach ${o.territoryId}`;
+      case 'ring': return `Ring ${o.number}/${mission.objectives.length}`;
+      case 'land': return `Land ${o.territoryId}`;
+      case 'survive': return `Hold ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
+      case 'escape': return `Escape ${o.territoryId} ${o.distance} m`;
       case 'destroy': {
         const n = mission.destroyedTargets(index).size;
         switch (o.what) {
-          case 'radar': return `Destroy the radar on ${o.territoryId}`;
-          case 'supply': return `Destroy the supply depot on ${o.territoryId}`;
-          case 'defense': return `Destroy defenses on ${o.territoryId} (${n}/${o.count})`;
-          case 'shipment': return `Destroy the paper shipment on ${o.territoryId}`;
-          default: return `Shoot down practice planes on ${o.territoryId} (${n}/${o.count})`;
+          case 'radar': return `Radar ${o.territoryId}`;
+          case 'supply': return `Depot ${o.territoryId}`;
+          case 'defense': return `Defenses ${o.territoryId} ${n}/${o.count}`;
+          case 'shipment': return `Shipment ${o.territoryId}`;
+          default: return `Practice ${o.territoryId} ${n}/${o.count}`;
         }
       }
       case 'intercept': {
         const n = mission.destroyedTargets(index).size;
         switch (o.what) {
-          case 'bomber': return 'Shoot down the bomber before it releases';
-          case 'scout': return 'Shoot down the scout before it gets away';
-          case 'fighter': return o.count > 1 ? `Shoot down the enemy fighters over ${o.territoryId} (${n}/${o.count})` : `Shoot down the enemy fighter over ${o.territoryId}`;
-          case 'convoy': return 'Shoot down the convoy before it leaves the map';
-          default: return `Shoot down the intruders (${n}/${o.count})`;
+          case 'bomber': return 'Bomber';
+          case 'scout': return 'Scout';
+          case 'fighter': return o.count > 1 ? `Fighters ${o.territoryId} ${n}/${o.count}` : `Fighter ${o.territoryId}`;
+          case 'convoy': return 'Convoy';
+          default: return `Intruders ${n}/${o.count}`;
         }
       }
-      case 'escort': return `Keep the bomber flying until it hits ${o.territoryId}`;
-      case 'patrol': return `Patrol ${o.duration} s over ${o.territoryId} (${Math.floor(mission.progress[index] * o.duration)}/${o.duration})`;
+      case 'escort': return `Escort to ${o.territoryId}`;
+      case 'patrol': return `Patrol ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
+    }
+  }
+
+  private objectiveIcon(o: Objective): IconName {
+    switch (o.kind) {
+      case 'destroy':
+        return o.what === 'radar' ? 'radar' : o.what === 'supply' || o.what === 'shipment' ? 'supply' : o.what === 'defense' ? 'turret' : 'practice';
+      case 'intercept':
+        return o.what === 'scout' ? 'scout' : o.what === 'fighter' ? 'fighter' : o.what === 'aircraft' ? 'patrol' : 'bomber';
+      default:
+        return o.kind;
     }
   }
 
@@ -2350,7 +2699,8 @@ export class Game {
       const next = mission.openObjectives()[0];
       const gate = next !== undefined ? mission.objectives[next] : null;
       objectives.push({
-        label: `Fly through the rings (${done}/${rings.length})`,
+        label: `Rings ${done}/${rings.length}`,
+        icon: 'ring',
         done: mission.allDone,
         open: !mission.allDone,
         progress: done / rings.length,
@@ -2361,6 +2711,7 @@ export class Game {
         const p = objectivePoint(o, world, this.v3);
         objectives.push({
           label: this.objectiveLabel(mission, i),
+          icon: this.objectiveIcon(o),
           done: mission.isDone(i),
           open: mission.isOpen(i) && mission.isActive,
           progress: o.kind === 'recon' || o.kind === 'destroy' || o.kind === 'survive' || o.kind === 'patrol' || (o.kind === 'intercept' && o.count > 1) ? mission.progress[i] : null,
@@ -2380,6 +2731,7 @@ export class Game {
       threat: this.threatSummary(mission),
       type: mission.spec.type,
       difficultyLabel: d.label,
+      stars: d.stars,
       multiplier: d.multiplier,
       reward: mission.reward,
       status: mission.status,
@@ -2496,8 +2848,10 @@ export class Game {
       bombersIntercepted: sortie.bombersIntercepted,
       objectivesProtected: sortie.objectivesProtected,
       paperLost: sortie.paperLost,
+      paperOverflow: sortie.paperOverflow,
       survival,
       survived: recovered,
+      health: recovered ? health / spec.maxHealth : 0,
       paperSpent: sortie.paperSpent,
       paperEarned: sortie.paperEarned,
       medal: this.outcome?.progress.medal ?? null,
@@ -2540,22 +2894,33 @@ export class Game {
       defenses: this.defenses.installations.map((i) => {
         const near = showPlane && Math.hypot(i.spec.x - plane.position.x, i.spec.z - plane.position.z) < i.spec.range + DEFENSES.approachMargin * 2;
         const reach = i.isWeapon && (near || reachFor.has(i.spec.territoryId)) ? { range: i.spec.range, facing: i.spec.facing, arc: i.spec.arc } : null;
-        return { x: i.spec.x, z: i.spec.z, kind: i.spec.kind, alive: i.alive, engaged: i.alive && i.isWeapon && i.engaged, reach };
+        return { x: i.spec.x, z: i.spec.z, kind: i.spec.kind, alive: i.alive, engaged: i.alive && i.isWeapon && i.engaged, friendly: i.side === 'player', reach };
       }),
       zones,
       rings,
       targets,
       plane: showPlane ? { x: plane.position.x, z: plane.position.z, yaw: plane.yaw, autopilot: this.boundary.state === 'autopilot' } : null,
-      aircraft: this.airTraffic.aircraft.map((a) => {
-        const raid = this.airTraffic.raids.find((r) => r.bomber === a.id && r.stage === 'inbound');
-        const strike = a.orders.strike;
-        return {
-          x: a.position.x, z: a.position.z, yaw: a.model.yaw, side: a.side, role: a.role,
-          raid: raid && strike ? { x: strike.x, z: strike.z } : null,
-          mission: !!mission?.isActive && missionAircraft(mission).has(a.id),
-        };
-      }),
+      // Enemy aircraft show only when someone can see them: T1's radar (or lookouts), the plane, or the mission.
+      aircraft: this.airTraffic.aircraft
+        .filter((a) => {
+          if (a.side === 'player') return true;
+          const raid = this.airTraffic.raids.find((r) => (r.bomber === a.id || r.escorts.includes(a.id)) && r.stage !== 'over');
+          if (raid) return raid.detected;
+          if (mission?.isActive && missionAircraft(mission).has(a.id)) return true;
+          if (Math.hypot(a.position.x - world.home.x, a.position.z - world.home.z) <= this.base.detectionRange) return true;
+          return showPlane && a.position.distance(plane.position) < SIGHT_RANGE;
+        })
+        .map((a) => {
+          const raid = this.airTraffic.raids.find((r) => r.bomber === a.id && r.stage === 'inbound');
+          const strike = a.orders.strike;
+          return {
+            x: a.position.x, z: a.position.z, yaw: a.model.yaw, side: a.side, role: a.role,
+            raid: raid && strike ? { x: strike.x, z: strike.z } : null,
+            mission: !!mission?.isActive && missionAircraft(mission).has(a.id),
+          };
+        }),
       objective: showPlane && objective ? { x: objective.x, z: objective.z } : null,
+      radar: { x: world.home.x, z: world.home.z, range: this.base.detectionRange, state: !this.base.radar ? 'none' : this.base.radar.alive ? 'on' : 'off' },
       boundaryRadius: WORLD.boundaryRadius,
       warning: state.phase === 'flying' && this.boundary.state !== 'inside',
     };
@@ -2698,4 +3063,35 @@ function airList(air: { fighters: number; scouts: number; bombers: number; skill
   add(air.scouts, 'scout');
   add(air.bombers, 'bomber');
   return `Air: ${parts.join(' + ')} (${skill})`;
+}
+
+/** Icons for installations, by kind. */
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+
+const EVENT_ICONS: Record<EventKind, IconName> = { raid: 'raid', 'high-value': 'supply', convoy: 'bomber', 'supply-run': 'escort' };
+
+/** A world event's note, cut down to an alert: a few words and the number in it. */
+function shortNote(title: string, detail: string): { icon: IconName; title: string; value: string | null } {
+  const value = /[+−-]\d+/.exec(detail)?.[0]?.replace('-', '−') ?? null;
+  const t = title.replace(/!$/, '');
+  const rules: Array<[RegExp, IconName, (m: RegExpExecArray) => string]> = [
+    [/^Paper shipment on (T\d)/, 'supply', (m) => `Shipment ${m[1]}`],
+    [/^Enemy convoy/, 'bomber', () => 'Convoy'],
+    [/^Supply run inbound/, 'escort', () => 'Supply run'],
+    [/^Convoy destroyed/, 'bomber', () => 'Convoy down'],
+    [/^Shipment destroyed/, 'supply', () => 'Shipment down'],
+    [/^Supply (plane lost|run turned back)/, 'escort', () => 'Supplies lost'],
+    [/^Supplies delivered/, 'supply', () => 'Supplies'],
+    [/^(T\d)'s defenses are down/, 'offline', (m) => `${m[1]} defenses down`],
+  ];
+  for (const [re, icon, make] of rules) {
+    const m = re.exec(t);
+    if (m) return { icon, title: make(m), value };
+  }
+  return { icon: 'info', title: t.split(' ').slice(0, 3).join(' '), value };
+}
+
+/** Where a slot is on T1, built on or not. */
+function buildingSpecAt(base: Base, slot: string): { x: number; z: number } {
+  return slotPoint(base.home, slot) ?? { x: base.home.x, z: base.home.z };
 }

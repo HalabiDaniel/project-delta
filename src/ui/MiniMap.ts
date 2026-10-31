@@ -10,6 +10,7 @@ export interface MiniMapView {
     kind: InstallationKind;
     alive: boolean;
     engaged: boolean;
+    friendly: boolean;
     reach: { range: number; facing: number; arc: number | null } | null;
   }>;
   /** Precision spots and bullseyes still to hit. */
@@ -22,16 +23,21 @@ export interface MiniMapView {
   aircraft: Array<{ x: number; z: number; yaw: number; side: Side; role: AiRole; raid: { x: number; z: number } | null; mission: boolean }>;
   /** The point the target marker is showing, for a guide line from the plane. */
   objective: { x: number; z: number } | null;
+  /**
+   * T1's early warning: how far out raiders are noticed (its radar's range, or close in without
+   * one), and whether the radar is standing (a sweep turns) or wrecked.
+   */
+  radar: { x: number; z: number; range: number; state: 'none' | 'on' | 'off' } | null;
   boundaryRadius: number;
   /** Past the boundary: the edge flashes. */
   warning: boolean;
 }
 
 const COLORS = {
-  bg: 'rgba(255, 255, 255, 0.86)',
+  bg: 'rgba(251, 248, 241, 0.92)',
   boundary: 'rgba(31, 41, 55, 0.35)',
   warning: '#dc2626',
-  home: '#2563eb',
+  home: '#2f6fe4',
   objective: '#ea580c',
   done: '#4ade80',
   neutral: '#9ca3af',
@@ -40,7 +46,7 @@ const COLORS = {
   ringWaiting: '#9ca3af',
   zone: '#dc2626',
   precision: '#3730a3',
-  plane: '#111827',
+  plane: '#1d2747',
   guide: 'rgba(220, 38, 38, 0.6)',
   threat: ['', '#eab308', '#f97316', '#dc2626'],
   defense: '#4d5530',
@@ -48,9 +54,14 @@ const COLORS = {
   wreck: '#9ca3af',
   reachTurret: 'rgba(220, 38, 38, 0.5)',
   reachLauncher: 'rgba(147, 51, 234, 0.5)',
-  enemy: '#b91c1c',
-  friend: '#2563eb',
+  enemy: '#d6372e',
+  friend: '#2f6fe4',
   raidLine: 'rgba(185, 28, 28, 0.55)',
+  radar: 'rgba(47, 111, 228, 0.5)',
+  radarFill: 'rgba(47, 111, 228, 0.07)',
+  radarOff: 'rgba(214, 55, 46, 0.45)',
+  sweep: 'rgba(47, 111, 228, 0.35)',
+  friendlyDefense: '#2f6fe4',
 };
 
 /**
@@ -124,6 +135,31 @@ export class MiniMap {
       ctx.fillText(t.id, x, y);
     }
 
+    // T1's early-warning radius, with a turning sweep while the radar stands.
+    if (v.radar) {
+      const x = sx(v.radar.x, v.radar.z);
+      const y = sy(v.radar.x, v.radar.z);
+      const r = v.radar.range * scale;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.radarFill;
+      ctx.fill();
+      ctx.setLineDash(v.radar.state === 'on' ? [] : [3, 3]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = v.radar.state === 'off' ? COLORS.radarOff : COLORS.radar;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (v.radar.state === 'on') {
+        const a = this.time * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, r, a - 0.5, a);
+        ctx.closePath();
+        ctx.fillStyle = COLORS.sweep;
+        ctx.fill();
+      }
+    }
+
     // How far each nearby weapon reaches, with the blind spot behind a turret left open.
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1;
@@ -144,7 +180,7 @@ export class MiniMap {
     for (const d of v.defenses) {
       const x = sx(d.x, d.z);
       const y = sy(d.x, d.z);
-      ctx.fillStyle = !d.alive ? COLORS.wreck : d.engaged && Math.sin(this.time * 12) > -0.3 ? COLORS.engaged : COLORS.defense;
+      ctx.fillStyle = !d.alive ? COLORS.wreck : d.engaged && Math.sin(this.time * 12) > -0.3 ? COLORS.engaged : d.friendly ? COLORS.friendlyDefense : COLORS.defense;
       ctx.beginPath();
       switch (d.kind) {
         case 'turret':
@@ -160,7 +196,16 @@ export class MiniMap {
           ctx.arc(x, y, 2, 0, Math.PI * 2);
           break;
         case 'supply':
+        case 'storage':
           ctx.rect(x - 1.4, y - 1.4, 2.8, 2.8);
+          break;
+        case 'workshop':
+          ctx.moveTo(x - 2, y + 1.6);
+          ctx.lineTo(x - 2, y - 1);
+          ctx.lineTo(x, y - 2.2);
+          ctx.lineTo(x + 2, y - 1);
+          ctx.lineTo(x + 2, y + 1.6);
+          ctx.closePath();
           break;
       }
       ctx.fill();
