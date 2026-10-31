@@ -57,4 +57,15 @@ export class Boost {
     this.state = 'ready';
     this.timeLeft = 0;
   }
+
+  /** Seconds left of the burst or the recharge (for saving and restoring flight state). */
+  get remaining(): number {
+    return this.timeLeft;
+  }
+
+  /** Puts the boost back exactly as a snapshot had it. */
+  restore(state: BoostState, timeLeft: number): void {
+    this.state = state;
+    this.timeLeft = timeLeft;
+  }
 }

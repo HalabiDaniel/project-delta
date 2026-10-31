@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId } from './config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId, type Side } from './config';
 import { Base, STORE, type BaseEvent } from './base/Base';
 import { BaseMode } from './base/BaseMode';
 import { chooseRaidTarget, raidLoss, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
@@ -1343,7 +1343,7 @@ export class Game {
   }
 
   /** A round or rocket struck an AI aircraft. */
-  private onAircraftHit(target: string, shot: { side: 'player' | 'enemy'; source: string; damage: number; kind: 'ink' | 'rocket' }, point: pc.Vec3): void {
+  private onAircraftHit(target: string, shot: { side: Side; source: string; damage: number; kind: 'ink' | 'rocket' }, point: pc.Vec3): void {
     if (shot.kind === 'rocket') this.effects.explosion(point, 0.6);
     else if (shot.side === 'enemy') this.effects.enemyInkHit(point, false);
     else this.effects.inkHit(point, false);
@@ -2593,7 +2593,7 @@ export class Game {
       // T1's own buildings only show once damaged (or while shooting at raiders).
       if (i.side === 'player' && i.durability.fraction >= 1 && !i.engaged) continue;
       const role = i.side === 'player' && i.engaged ? 'Firing at raiders' : i.spec.role;
-      near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: KIND_ICONS[i.spec.kind], state, side: i.side, point, distance });
+      near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: KIND_ICONS[i.spec.kind], state, side: i.side === 'enemy' ? 'enemy' : 'player', point, distance });
     }
     near.sort((a, b) => Number(wanted.has(b.id)) - Number(wanted.has(a.id)) || a.distance - b.distance);
     const views: TargetLabelView[] = [];

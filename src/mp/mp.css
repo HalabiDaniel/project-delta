@@ -1,0 +1,237 @@
+/*
+ * paperwars.io multiplayer: the lobby, the claim map and the in-game layer (connection, kill feed,
+ * scoreboard, raid banner, name and owner tags). Same tokens and components as hud.css: cut card
+ * stock, ink-navy text, blue friendly, red hostile, amber warning. Each player's tape colour comes
+ * in as --owner.
+ */
+
+/* ---- Lobby ------------------------------------------------------------------------------------ */
+.mp-lobby {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(188, 219, 245, 0.25), rgba(29, 39, 71, 0.35));
+  pointer-events: auto;
+  z-index: 20;
+}
+.mp-card { width: min(640px, 92vw); padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); }
+.mp-head { display: flex; align-items: baseline; gap: var(--s3); }
+.mp-head h2 { margin: 0; font-size: var(--t-l); color: var(--ink-2); }
+.mp-field { display: flex; flex-direction: column; gap: var(--s1); font-size: var(--t-s); color: var(--ink-2); }
+.mp-field span { display: flex; gap: var(--s1); align-items: center; }
+.mp-lobby input {
+  font: 600 var(--t-m) var(--font);
+  color: var(--ink);
+  padding: var(--s2) var(--s3);
+  border: 1.5px solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  outline: none;
+}
+.mp-lobby input:focus { border-color: var(--friend); }
+.mp-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.mp-or { color: var(--ink-3); font-size: var(--t-s); }
+.mp-title { flex: 1; min-width: 140px; }
+.mp-list { display: flex; flex-direction: column; gap: var(--s1); max-height: 260px; overflow: auto; }
+.mp-room {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: var(--s3);
+  align-items: center;
+  padding: var(--s2) var(--s3);
+  background: var(--paper-2);
+  border-radius: var(--r-s);
+}
+.mp-room.full { opacity: 0.6; }
+.mp-room-title { font-weight: 700; }
+.mp-empty { color: var(--ink-3); font-size: var(--t-s); padding: var(--s2); }
+.mp-foot { display: flex; gap: var(--s2); align-items: center; justify-content: flex-end; }
+.mp-foot > :first-child { margin-right: auto; }
+.mp-status { font-size: var(--t-s); color: var(--ink-3); }
+.mp-status[data-tone='bad'] { color: var(--hostile); }
+.mp-hint { margin: 0; font-size: var(--t-s); color: var(--ink-2); }
+.mp-error { color: var(--hostile); font-size: var(--t-s); font-weight: 600; }
+
+/* The classroom map: three rows of desks, as the world is laid out. */
+.mp-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+.mp-cell {
+  --owner: var(--off);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 78px;
+  padding: var(--s2);
+  border: 2px dashed var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  font: 500 var(--t-s) var(--font);
+  color: var(--ink);
+  text-align: left;
+  cursor: default;
+}
+.mp-cell.free { border-style: solid; border-color: var(--friend); cursor: pointer; }
+.mp-cell.free:hover { background: #e9f1ff; transform: translateY(-1px); }
+.mp-cell.owned { border-style: solid; border-color: var(--owner); background: color-mix(in srgb, var(--owner) 12%, var(--paper-solid)); }
+.mp-cell.mine { box-shadow: 0 0 0 2px var(--owner); }
+.mp-cell-id { font-family: var(--num); font-weight: 800; color: var(--ink-3); }
+.mp-cell-name { font-weight: 700; font-size: var(--t-m); }
+.mp-owner { color: var(--owner); font-weight: 800; }
+.mp-free { color: var(--friend); }
+.mp-ai { color: var(--ink-3); }
+.mp-players { display: flex; flex-wrap: wrap; gap: var(--s2); font-size: var(--t-s); }
+.mp-player { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: 99px; background: var(--paper-2); }
+.mp-player i, .mp-board i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+.mp-player.me { font-weight: 800; }
+.mp-player.away { opacity: 0.55; }
+
+/* ---- In the game ------------------------------------------------------------------------------ */
+.mp-layer { position: absolute; inset: 0; pointer-events: none; }
+.mp-tags { position: absolute; inset: 0; }
+/* Before a desk is claimed only the lobby and the connection show. */
+.hud.mp-pregame .zone,
+.hud.mp-pregame .world-layer { display: none; }
+
+.mp-net {
+  position: absolute;
+  top: 14px;
+  right: 158px;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 3px var(--s3);
+  font-size: var(--t-s);
+  animation: none;
+  pointer-events: none;
+  opacity: 0.88;
+}
+.mp-net .stat { display: inline-flex; align-items: center; gap: 3px; }
+.mp-net small { color: var(--ink-3); }
+.mp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--off); }
+.mp-dot[data-tone='good'] { background: var(--good); }
+.mp-dot[data-tone='warn'] { background: var(--warn); }
+.mp-dot[data-tone='bad'] { background: var(--hostile); }
+.mp-room-name { color: var(--ink-2); font-weight: 600; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-keys { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); }
+.mp-keys kbd { font: 700 10px var(--font); padding: 0 4px; border-radius: 3px; background: var(--paper-2); border: 1px solid var(--edge); }
+
+.mp-feed { position: absolute; left: 14px; top: 38%; display: flex; flex-direction: column; gap: 3px; max-width: 320px; }
+.mp-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 2px var(--s2);
+  border-radius: var(--r-s);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  font-size: var(--t-s);
+  transition: opacity 1s;
+}
+.mp-line.mine { box-shadow: 0 0 0 2px var(--warn), var(--shadow); }
+.mp-line.news { color: var(--ink-2); font-style: italic; }
+.mp-line.news.bad { color: var(--hostile); }
+.mp-line.news.good { color: var(--good); }
+.mp-line.fade { opacity: 0; }
+.mp-line small { color: var(--ink-3); }
+
+.mp-board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  padding: var(--s3);
+  pointer-events: none;
+  animation: none;
+}
+.mp-board table { border-collapse: collapse; font-size: var(--t-s); }
+.mp-board th { color: var(--ink-3); font-weight: 600; padding: 2px 8px; text-align: left; }
+.mp-board td { padding: 4px 8px; border-top: 1px solid var(--edge); font-family: var(--num); font-variant-numeric: tabular-nums; }
+.mp-board td:first-child { font-family: var(--font); font-weight: 700; white-space: nowrap; }
+.mp-board tr.me td { background: rgba(47, 111, 228, 0.08); }
+.mp-board tr.away td { opacity: 0.5; }
+.mp-status-cell { font-family: var(--font) !important; color: var(--ink-2); }
+
+.mp-banner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  margin-top: 64px;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: var(--shadow-lift);
+  font-size: var(--t-s);
+}
+.mp-banner[data-tone='bad'] { box-shadow: 0 0 0 2px var(--hostile), var(--shadow-lift); color: var(--hostile); animation: mp-pulse 1.1s ease-in-out infinite; }
+.mp-banner[data-tone='warn'] { box-shadow: 0 0 0 2px var(--warn), var(--shadow-lift); }
+.mp-banner b { font-size: var(--t-m); }
+@keyframes mp-pulse { 50% { box-shadow: 0 0 0 4px var(--hostile), var(--shadow-lift); } }
+
+.mp-connection {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r);
+  background: var(--paper-solid);
+  box-shadow: 0 0 0 2px var(--warn), var(--shadow-lift);
+  font-weight: 700;
+}
+
+/* Name tags over other players' planes: their name in their colour, a thin health bar. */
+.mp-tag {
+  --owner: var(--hostile);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: -6px;
+  will-change: transform;
+}
+.mp-tag-name {
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--paper);
+  border: 1.5px solid var(--owner);
+  color: var(--ink);
+  font: 700 11px var(--font);
+  white-space: nowrap;
+}
+.mp-tag-bar { width: 44px; height: 4px; border-radius: 2px; background: rgba(29, 39, 71, 0.18); overflow: hidden; }
+.mp-tag-bar i { display: block; height: 100%; background: var(--owner); }
+.mp-tag-emote { position: absolute; top: -26px; font-size: 22px; color: var(--owner); text-shadow: 0 1px 0 #fff; }
+.mp-tag-emote.pop { animation: mp-emote 2.2s ease-out both; }
+@keyframes mp-emote { 0% { transform: scale(0.2) translateY(6px); opacity: 0; } 15% { transform: scale(1.25); opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
+
+/* Owner tags on claimed territories. */
+.mp-terr {
+  --owner: var(--off);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-s);
+  background: var(--paper);
+  border-left: 4px solid var(--owner);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  white-space: nowrap;
+  will-change: transform;
+}
+.mp-terr small { color: var(--ink-3); }
+.mp-terr.alert { box-shadow: 0 0 0 2px var(--hostile), var(--shadow); }

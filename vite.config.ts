@@ -12,7 +12,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 2500,
   },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
     environment: 'node',
   },
 });

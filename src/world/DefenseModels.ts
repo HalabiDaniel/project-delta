@@ -102,23 +102,36 @@ export class DefenseModels {
     } as Record<Exclude<ThreatLevel, 0>, pc.StandardMaterial>,
   };
 
+  /** Per territory: its walls, flag and threat trim (hidden when a player claims it in multiplayer). */
+  private readonly statics = new Map<string, pc.Entity>();
+
   constructor(
     private readonly app: pc.AppBase,
     layout: DefenseLayout,
     private readonly network: DefenseNetwork,
-    world: World,
+    world: Pick<World, 'territories'> & { home?: { x: number; z: number } },
   ) {
     const root = new pc.Entity('defenses');
     this.root = root;
     app.root.addChild(root);
-    // Walls, flags and trims never move: their pencil strokes are merged into one mesh per tier.
-    const statics = new pc.Entity('static-defenses');
-    const trims = new pc.Entity('threat-trims');
-    root.addChild(statics);
-    root.addChild(trims);
-    for (const t of world.territories) if (t.threat > 0) trims.addChild(this.trim(t.x, t.z, t.size, t.threat as Exclude<ThreatLevel, 0>));
+    // Walls, flags and trims never move: their pencil strokes are merged into one mesh per tier
+    // and territory.
+    const group = (territoryId: string) => {
+      let g = this.statics.get(territoryId);
+      if (!g) {
+        g = new pc.Entity(`static-defenses-${territoryId}`);
+        g.addChild(new pc.Entity('structures'));
+        g.addChild(new pc.Entity('trims'));
+        root.addChild(g);
+        this.statics.set(territoryId, g);
+      }
+      return { statics: g.children[0] as pc.Entity, trims: g.children[1] as pc.Entity };
+    };
+    for (const t of world.territories) if (t.threat > 0) group(t.id).trims.addChild(this.trim(t.x, t.z, t.size, t.threat as Exclude<ThreatLevel, 0>));
     for (const inst of network.installations) this.addView(inst, false);
+    const centre = world.home ?? { x: 0, z: 0 };
     for (const b of layout.barriers) {
+      const statics = group(b.territoryId).statics;
       const wall = new pc.Entity('barrier');
       wall.setPosition(b.x, 0, b.z);
       wall.setEulerAngles(0, b.yaw * RAD_TO_DEG, 0);
@@ -127,16 +140,25 @@ export class DefenseModels {
       statics.addChild(wall);
     }
     for (const f of layout.flags) {
+      const statics = group(f.territoryId).statics;
       const flag = new pc.Entity('flag');
       flag.setPosition(f.x, 0, f.z);
       flag.addChild(part('cylinder', this.mat.pencil, 0, 2.2, 0, 0.22, 4.4, 0.22));
       flag.addChild(part('cone', this.mat.graphite, 0, 4.55, 0, 0.22, 0.3, 0.22));
       flag.addChild(part('box', this.mat.threat[f.level as Exclude<ThreatLevel, 0>], 0.75, 3.85, 0, 1.4, 0.9, 0.04));
-      flag.setEulerAngles(0, Math.atan2(f.x - world.home.x, f.z - world.home.z) * RAD_TO_DEG, 0);
+      flag.setEulerAngles(0, Math.atan2(f.x - centre.x, f.z - centre.z) * RAD_TO_DEG, 0);
       statics.addChild(flag);
     }
-    outline(statics, 'structure', { merge: true });
-    outline(trims, 'background', { merge: true });
+    for (const g of this.statics.values()) {
+      outline(g.children[0] as pc.Entity, 'structure', { merge: true });
+      outline(g.children[1] as pc.Entity, 'background', { merge: true });
+    }
+  }
+
+  /** Shows or hides a territory's walls, flag and trim (multiplayer: gone while a player owns it). */
+  setTerritoryStatics(territoryId: string, visible: boolean): void {
+    const g = this.statics.get(territoryId);
+    if (g) g.enabled = visible;
   }
 
   /**

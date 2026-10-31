@@ -1,7 +1,8 @@
 import * as pc from 'playcanvas';
-import { PALETTE, THREAT, WORLD, type ThreatLevel } from '../config';
+import { PALETTE, WORLD } from '../config';
 import { yawFromDirection } from '../aircraft/PlaneController';
-import { Territory } from './Territory';
+import type { Territory } from './Territory';
+import { generateTerritories } from './Grid';
 import { setUpLighting } from '../render/lighting';
 import { outline } from '../render/outline/OutlineRenderer';
 import type { AssetLibrary } from '../assets/AssetLibrary';
@@ -23,31 +24,7 @@ export interface World {
   homeDressing: Dressing;
 }
 
-/**
- * Lays out gridSize × gridSize square territories, numbered T1… row by row, separated by empty
- * gaps and centred on the origin. T1 belongs to the player; the others get their threat level from
- * `threats` (unlisted ones are unprotected). Mission targets are chosen per mission.
- */
-export function generateTerritories(
-  gridSize: number = WORLD.gridSize,
-  size: number = WORLD.territorySize,
-  gap: number = WORLD.gap,
-  threats: Readonly<Record<string, ThreatLevel>> = THREAT.map,
-): Territory[] {
-  const spacing = size + gap;
-  const offset = (gridSize - 1) / 2;
-  const territories: Territory[] = [];
-  for (let row = 0; row < gridSize; row++) {
-    for (let col = 0; col < gridSize; col++) {
-      const id = `T${row * gridSize + col + 1}`;
-      const home = id === WORLD.homeId;
-      territories.push(
-        new Territory(id, (col - offset) * spacing, (row - offset) * spacing, size, home ? 'player' : null, WORLD.thickness, home ? 0 : (threats[id] ?? 0)),
-      );
-    }
-  }
-  return territories;
-}
+export { generateTerritories } from './Grid';
 
 /**
  * Creates the territories, lighting and fog. T1 is dressed as Home Desk (the art direction's
@@ -83,6 +60,30 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
   const homeDressing = new Dressing(app, home, HOME_DESK, assets, detail, dir, true);
 
   return { territories, home, platforms, launchPosition, launchYaw, sun, homeDressing: homeDressing };
+}
+
+/** The multiplayer classroom's scene: every territory as a plain platform, and the light. */
+export interface SharedScene {
+  platforms: Map<string, pc.Entity>;
+  sun: pc.Entity;
+}
+
+/**
+ * Builds the platforms and lighting for the shared world. Nobody's home is dressed yet: the
+ * multiplayer game dresses each territory as a desk when a player claims it.
+ */
+export function buildSharedScene(app: pc.AppBase, territories: readonly Territory[]): SharedScene {
+  const sun = setUpLighting(app);
+  const platforms = new Map<string, pc.Entity>();
+  for (const territory of territories) {
+    const platform = box(`territory-${territory.id}`, flatMaterial(PALETTE.neutral));
+    platform.setPosition(territory.x, territory.top - territory.thickness / 2, territory.z);
+    platform.setLocalScale(territory.size, territory.thickness, territory.size);
+    app.root.addChild(platform);
+    platforms.set(territory.id, platform);
+    outline(platform, 'structure');
+  }
+  return { platforms, sun };
 }
 
 export function box(name: string, material: pc.Material): pc.Entity {

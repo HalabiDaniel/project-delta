@@ -87,6 +87,8 @@ export interface AiWorld {
   /** Every aircraft in the air, AI and player, itself included. */
   contacts: readonly Contact[];
   home: Territory;
+  /** Other territories enemy patrols keep off (multiplayer: every player's home). */
+  homes?: readonly Territory[];
   rng: Rng;
 }
 
@@ -655,7 +657,7 @@ export class AiAircraft {
     if (guard && Math.hypot(c.x - guard.x, c.z - guard.z) > AI.leash) return false;
     const bomber = this.orders.escort ? find(world, this.orders.escort) : null;
     if (bomber && dist(bomber, c) > AI.leash) return false;
-    if (this.side === 'enemy' && this.purpose !== 'raid' && world.home.containsXZ(c.x, c.z, DEFENSES.homeSafeMargin + HOME_AVOID)) return false;
+    if (this.side === 'enemy' && this.purpose !== 'raid' && homeUnder(world, c.x, c.z)) return false;
     return true;
   }
 
@@ -802,9 +804,10 @@ export class AiAircraft {
       dir = { x: dir.x + n.x * push, y: dir.y + (n.y + up) * push, z: dir.z + n.z * push };
     }
     // Enemy patrols keep off home.
-    if (this.side === 'enemy' && this.purpose !== 'raid' && world.home.containsXZ(p.x, p.z, DEFENSES.homeSafeMargin + HOME_AVOID)) {
-      const len = Math.hypot(world.home.x, world.home.z) || 1;
-      dir = { x: dir.x - (world.home.x / len) * 1.5, y: dir.y, z: dir.z - (world.home.z / len) * 1.5 };
+    const avoid = this.side === 'enemy' && this.purpose !== 'raid' ? homeUnder(world, p.x, p.z) : null;
+    if (avoid) {
+      const len = Math.hypot(avoid.x, avoid.z) || 1;
+      dir = { x: dir.x - (avoid.x / len) * 1.5, y: dir.y, z: dir.z - (avoid.z / len) * 1.5 };
     }
     // Back into the world, unless leaving it.
     const r = Math.hypot(p.x, p.z);
@@ -884,4 +887,11 @@ function dist(a: Point3, b: Point3): number {
 
 function dot(a: Point3, b: Point3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+/** The home (single-player's, or any player's in multiplayer) that (x, z) is over or close to, if any. */
+function homeUnder(world: AiWorld, x: number, z: number): Territory | null {
+  const margin = DEFENSES.homeSafeMargin + HOME_AVOID;
+  if (world.home.containsXZ(x, z, margin)) return world.home;
+  return world.homes?.find((h) => h.containsXZ(x, z, margin)) ?? null;
 }

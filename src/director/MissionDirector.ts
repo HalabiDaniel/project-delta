@@ -1,7 +1,7 @@
 import { assessSuitability } from '../aircraft/Aircraft';
 import { AIRCRAFT, AIRCRAFT_ORDER, DIRECTOR, OPERATIONS, TIER_ORDER, TIERS, type AircraftId, type Tier } from '../config';
 import { Mission, type Escalation, type MissionSpec, type MissionType, type Situational } from '../missions/Mission';
-import { escalationsFor, EVENT_TYPES, generateMission, MISSION_TYPES, supports, threatOf, type MissionContext } from '../missions/MissionGenerator';
+import { escalationsFor, EVENT_TYPES, generateMission, MISSION_TYPES, offLimits, supports, threatOf, type MissionContext } from '../missions/MissionGenerator';
 import { emergencyDart } from '../systems/GameState';
 import { seededRng, shuffled, type Rng } from '../systems/Random';
 import { abandon, finishStage, openStage, planOperation, skipStage, type Operation, type Payout, type StageRecipe, type StageResult } from './Operations';
@@ -414,7 +414,7 @@ export class MissionDirector {
   private recoveryCard(why: string[], exclude: ReadonlySet<MissionType>): Offer | null {
     const ctx = this.context();
     const sit = this.situation();
-    const safe = ctx.territories.filter((t) => t.id !== ctx.homeId && threatOf(t, ctx) === 0);
+    const safe = ctx.territories.filter((t) => !offLimits(t, ctx) && threatOf(t, ctx) === 0);
     const types = [...RECOVERY_TYPES].filter((t) => !exclude.has(t));
     while (types.length > 0) {
       const c = weightedPick(this.rng, types.map((type) => ({ type, weight: TEMPLATES[type].weight * this.variety(type) })));

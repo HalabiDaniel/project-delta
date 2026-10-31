@@ -1,6 +1,6 @@
 import { OPERATIONS, TIER_ORDER, TIERS, type Tier } from '../config';
 import type { Escalation, MissionType } from '../missions/Mission';
-import { codename, threatOf, type MissionContext } from '../missions/MissionGenerator';
+import { codename, offLimits, threatOf, type MissionContext } from '../missions/MissionGenerator';
 import { shuffled, type Rng } from '../systems/Random';
 
 /**
@@ -108,7 +108,7 @@ export function planOperation(ctx: MissionContext, tier: Tier, rng: Rng, estimat
     },
   };
   for (const template of shuffled(rng, ['strike', 'light', 'air'] as OperationTemplate[])) {
-    for (const t of shuffled(rng, ctx.territories.filter((x) => x.id !== ctx.homeId && ctx.states?.get(x.id) !== 'disabled'))) {
+    for (const t of shuffled(rng, ctx.territories.filter((x) => !offLimits(x, ctx) && ctx.states?.get(x.id) !== 'disabled'))) {
       if (!fits[template](t.id)) continue;
       const stages: OperationStage[] = [];
       for (const plan of PLANS[template]) {

@@ -82,6 +82,10 @@ export interface AirInput {
   obstacles: readonly Collider[];
   /** The player's plane, while it is in the air. */
   player: Contact | null;
+  /** Multiplayer: every player's plane in the air (alongside or instead of `player`). */
+  players?: readonly Contact[];
+  /** Multiplayer: every player's home, which enemy patrols keep off. */
+  homes?: readonly Territory[];
   /** Can the camera see this point? Aircraft only appear and vanish where it can't. */
   visible: (p: Point3) => boolean;
   /** The world may send raids now (the game is running, and the player has flown a sortie). */
@@ -185,6 +189,14 @@ export class AirTraffic {
     return this.launchRaid(plan, from.id, skill, mission);
   }
 
+  /**
+   * Multiplayer: a mission's raid on a player's home (bomber first, then its escorts), settled like
+   * any other raid. Several can be under way at once, one per player's mission.
+   */
+  startMissionRaid(plan: readonly AiOrders[], origin: string): Raid {
+    return this.launchRaid([...plan], origin, plan[0].skill, true);
+  }
+
   /** The next raid waits at least `seconds` (time for T1 to recover after a damaging one). */
   delayRaids(seconds: number): void {
     this.raidTimer = Math.max(this.raidTimer, seconds);
@@ -223,8 +235,9 @@ export class AirTraffic {
     this.schedule(dt, input);
 
     const contacts: Contact[] = input.player ? [input.player] : [];
+    if (input.players) contacts.push(...input.players);
     for (const a of this.aircraft) if (a.alive) contacts.push(a.contact());
-    const world = { territories: input.territories, obstacles: input.obstacles, contacts, home: this.home, rng: this.rng };
+    const world = { territories: input.territories, obstacles: input.obstacles, contacts, home: this.home, homes: input.homes, rng: this.rng };
 
     for (const a of [...this.aircraft]) {
       if (!a.alive) continue;

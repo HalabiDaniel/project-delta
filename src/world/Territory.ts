@@ -13,8 +13,11 @@ export class Territory {
     readonly size: number,
     readonly owner: TerritoryOwner,
     readonly thickness: number = WORLD.thickness,
-    /** How heavily it is defended. Home is always 0. */
-    readonly threat: ThreatLevel = 0,
+    /**
+     * How heavily it is defended. Home is always 0. Multiplayer changes it when a player claims the
+     * territory (the AI defenses make way for the player's base) and back when it is released.
+     */
+    public threat: ThreatLevel = 0,
   ) {}
 
   /** Platform tops all sit at y = 0. */
