@@ -65,6 +65,13 @@ export interface MissionContext {
   installations?: readonly InstallationInfo[];
   /** Territory states: disabled ones count as unprotected; easy cards keep away from those on alert. */
   states?: ReadonlyMap<string, TerritoryState>;
+  /** Multiplayer: territories missions never send the player to (other players' homes). */
+  excluded?: ReadonlySet<string>;
+}
+
+/** Home, or (multiplayer) another player's home: never an ordinary mission's target or route. */
+export function offLimits(t: { id: string }, ctx: Pick<MissionContext, 'homeId' | 'excluded'>): boolean {
+  return t.id === ctx.homeId || (ctx.excluded?.has(t.id) ?? false);
 }
 
 /** How the director wants a mission made, beyond its type and content difficulty. */
@@ -421,7 +428,7 @@ function draftMission(type: MissionType, difficulty: Difficulty, ctx: MissionCon
       const duration = MISSIONS.patrolTime[difficulty];
       const plan: Array<[AiRole, number]> =
         difficulty === 'easy' ? [['scout', 0.2]] : difficulty === 'medium' ? [['scout', 0.15], ['fighter', 0.5]] : [['fighter', 0.1], ['scout', 0.35], ['fighter', 0.6]];
-      const crossing = [...shuffled(rng, neighbours(ctx.territories, t).filter((n) => n.id !== ctx.homeId))];
+      const crossing = [...shuffled(rng, neighbours(ctx.territories, t).filter((n) => !offLimits(n, ctx)))];
       const intruders: AirSpawn[] = plan.map(([role, after]) => {
         const id = airId(type, role);
         // Scouts crossing a patrol are a step less wily than the card: they run, but can be caught.
@@ -493,7 +500,7 @@ function flightPath(start: Territory, type: MissionType, difficulty: Difficulty,
   const path = [start];
   while (path.length < 3) {
     const next = shuffled(rng, neighbours(ctx.territories, path[path.length - 1])).find(
-      (t) => t.id !== ctx.homeId && !path.includes(t) && inWindow(threatOf(t, ctx), type, difficulty),
+      (t) => !offLimits(t, ctx) && !path.includes(t) && inWindow(threatOf(t, ctx), type, difficulty),
     );
     if (!next) break;
     path.push(next);
@@ -607,7 +614,7 @@ export function codename(rng: Rng): string {
 function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext): Territory[] {
   const on = (t: Territory) => (ctx.installations ?? []).filter((i) => i.territoryId === t.id);
   return ctx.territories.filter((t) => {
-    if (t.id === ctx.homeId) return false;
+    if (offLimits(t, ctx)) return false;
     // Easy cards keep away from territories the player has just stirred up.
     if (difficulty === 'easy' && type !== 'bomber-intercept' && ctx.states?.get(t.id) === 'alert') return false;
     switch (type) {

@@ -175,9 +175,9 @@ export function layoutDefenses(territories: readonly Territory[], occupied: read
  * T1's fixed structure: the paper store, where the player's paper is kept and raiders aim. It
  * belongs to the player. Everything else on T1 is built by the player in its slots (buildingSpec).
  */
-export function homeDefenses(home: Territory): InstallationSpec[] {
+export function homeDefenses(home: Territory, side: Side = 'player'): InstallationSpec[] {
   const c = DEFENSES.home;
-  const store = installation(home, 'supply', homePoint(home, c.store), 'store', 'player');
+  const store = installation(home, 'supply', homePoint(home, c.store), 'store', side);
   return [{ ...store, name: c.storeName, role: c.storeRole, maxHealth: c.storeHealth }];
 }
 
@@ -203,12 +203,12 @@ export function slotPoint(home: Territory, slotId: string): { x: number; z: numb
  * face outward from the middle of T1 (so where a slot is decides what a turret covers), take their
  * numbers from the level, and shoot only at hostile aircraft. Launchers deal with bombers first.
  */
-export function buildingSpec(home: Territory, slotId: string, kind: BuildingKind, level: number): InstallationSpec {
+export function buildingSpec(home: Territory, slotId: string, kind: BuildingKind, level: number, side: Side = 'player'): InstallationSpec {
   const at = homePoint(home, BASE.slots.find((s) => s.id === slotId)?.at ?? [0, 0]);
   const b = BASE.buildings[kind];
   const lv = b.levels[Math.max(0, Math.min(b.levels.length, level) - 1)];
   const outward = Math.atan2(home.x - at.x, home.z - at.z);
-  const base = installation(home, kind, at, slotId, 'player');
+  const base = installation(home, kind, at, slotId, side);
   const spec: InstallationSpec = { ...base, name: b.name, role: b.purpose, facing: outward, maxHealth: lv.health, slot: slotId, level };
   switch (kind) {
     case 'turret':

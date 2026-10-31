@@ -903,11 +903,11 @@ Built in reviewable phases with developer checkpoints: (1) visual vertical slice
 
 ### Version 0.0.9: Core Multiplayer
 
-Two or more players sharing a world, claiming territories, and seeing each other's aircraft.
+Up to eight players share a classroom on an authoritative Node + Colyseus server: they join an ongoing session, claim one of eight territories as their base (the centre stays the AI's), and fly together. The server runs single-player's rule classes for every player (economy, base, mission board, sortie) and decides every position, hit, kill, balance and reward; clients send input frames and commands, predict their own plane and interpolate everyone else's. Player-versus-player combat with kill and assist credit and bounties that can't be farmed; raid missions against eligible player bases with capped losses above the protected reserve, new-player protection, shields, cooldowns and decaying rewards; defenders warned, given an interception card and backed by their guns; rival missions (raid, scout, shoot down, intercept) alongside each player's own board; names, tags, a scoreboard, a kill feed and emotes (no chat); reconnection with a grace period. Sessions live in memory. Built in eight reviewable phases with bots and a load test; see [MULTIPLAYER.md](MULTIPLAYER.md).
 
 ### Version 0.0.10: Player Territory Bombing
 
-Real player-versus-player attacks on built bases, defender losses of vulnerable paper, fighter interception, notifications, and the mission director's bounties and cooperation offers between players.
+Building on 0.0.9's raids: deeper attacks on built bases (multi-structure targets, escorts), the mission director's bounties and cooperation offers between players (escorting another player's bomber, joint defense), reputation and retaliation, and balance from playtesting.
 
 ### Version 0.0.11: Persistent Sessions
 

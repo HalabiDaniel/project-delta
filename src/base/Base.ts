@@ -1,4 +1,4 @@
-import { BASE, ECONOMY, type BuildingKind, type BuildingLevel, type SlotKind } from '../config';
+import { BASE, ECONOMY, type BuildingKind, type BuildingLevel, type Side, type SlotKind } from '../config';
 import type { DefenseNetwork, Installation } from '../defenses/Installation';
 import { buildingSpec, homeDefenses } from '../defenses/Layout';
 import type { ResourceManager } from '../systems/ResourceManager';
@@ -106,9 +106,11 @@ export class Base {
     readonly home: Territory,
     readonly network: DefenseNetwork,
     readonly resources: ResourceManager,
+    /** Whose base it is: the player's in single-player, `p:<id>` in multiplayer. */
+    readonly side: Side = 'player',
   ) {
     // The paper store always stands on T1 (it comes with the world's layout).
-    if (!network.get(this.idOf(STORE))) for (const spec of homeDefenses(home)) network.add(spec);
+    if (!network.get(this.idOf(STORE))) for (const spec of homeDefenses(home, side)) network.add(spec);
   }
 
   // ---- Queries ----------------------------------------------------------------------------------
@@ -319,7 +321,7 @@ export class Base {
     this.stats.construction += check.cost;
     b.level++;
     b.invested += check.cost;
-    this.network.replace(buildingSpec(this.home, slot, b.kind, b.level));
+    this.network.replace(buildingSpec(this.home, slot, b.kind, b.level, this.side));
     this.emit({ type: 'upgraded', slot, kind: b.kind, level: b.level, cost: check.cost });
     return true;
   }
@@ -438,7 +440,7 @@ export class Base {
 
   private put(b: Building, health?: number): void {
     this.buildings.set(b.slot, b);
-    const spec = buildingSpec(this.home, b.slot, b.kind, b.level);
+    const spec = buildingSpec(this.home, b.slot, b.kind, b.level, this.side);
     this.network.add(spec, health ?? spec.maxHealth);
   }
 

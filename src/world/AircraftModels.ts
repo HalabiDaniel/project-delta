@@ -2,13 +2,29 @@ import * as pc from 'playcanvas';
 import { Ribbon, trailMaterial } from '../aircraft/FlightTrails';
 import { FoldablePlane, inkBlotMaterial, planeMaterials, type PlaneMaterials } from '../aircraft/PlaneModel';
 import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
-import type { AiAircraft } from '../ai/AiAircraft';
-import { DAMAGE, PALETTE, type Side } from '../config';
+import type { FlightModel } from '../aircraft/FlightModel';
+import { DAMAGE, PALETTE, type AircraftId, type Side } from '../config';
+
+/**
+ * Anything drawn as a paper plane flying by: an AI aircraft, or (multiplayer) another player's
+ * plane posed from the network. AiAircraft fits as it is.
+ */
+export interface ShownAircraft {
+  readonly id: string;
+  readonly alive: boolean;
+  readonly side: Side;
+  readonly spec: { readonly id: AircraftId };
+  readonly durability: { readonly fraction: number };
+  readonly model: FlightModel;
+}
+
+/** Paper and trim colours for a side the defaults don't cover (multiplayer players). */
+export type Paint = (side: Side) => { paper: readonly [number, number, number]; accent: readonly [number, number, number] } | null;
 
 const RAD_TO_DEG = 180 / Math.PI;
 
 interface View {
-  aircraft: AiAircraft;
+  aircraft: ShownAircraft;
   model: FoldablePlane;
   left: Ribbon;
   right: Ribbon;
@@ -24,7 +40,7 @@ interface View {
  */
 export class AircraftModels {
   private readonly views = new Map<string, View>();
-  private readonly materials: Record<Side, PlaneMaterials>;
+  private readonly materials = new Map<string, PlaneMaterials>();
   private readonly blots = inkBlotMaterial();
   private readonly trail = trailMaterial();
   private readonly rotation = new pc.Quat();
@@ -41,20 +57,37 @@ export class AircraftModels {
   private readonly flat = new pc.Vec3();
   private readonly fwd = new pc.Vec3();
 
-  constructor(private readonly app: pc.AppBase) {
-    this.materials = {
-      enemy: planeMaterials(PALETTE.enemyPaper, PALETTE.enemyAccent),
-      player: planeMaterials(PALETTE.paper, PALETTE.friendlyAccent),
-    };
+  constructor(
+    private readonly app: pc.AppBase,
+    private readonly paint: Paint = () => null,
+  ) {
+    this.materials.set('enemy', planeMaterials(PALETTE.enemyPaper, PALETTE.enemyAccent));
+    this.materials.set('player', planeMaterials(PALETTE.paper, PALETTE.friendlyAccent));
+  }
+
+  private materialsFor(side: Side): PlaneMaterials {
+    let m = this.materials.get(side);
+    if (!m) {
+      const p = this.paint(side);
+      m = p ? planeMaterials(p.paper, p.accent) : this.materials.get('player')!;
+      this.materials.set(side, m);
+    }
+    return m;
   }
 
   /** Keeps one model per aircraft in the air, posed as its flight model says. */
-  update(dt: number, aircraft: readonly AiAircraft[]): void {
+  update(dt: number, aircraft: readonly ShownAircraft[]): void {
     const seen = new Set<string>();
     for (const a of aircraft) {
       if (!a.alive) continue;
       seen.add(a.id);
       let v = this.views.get(a.id);
+      // The same id flown by another aircraft now (a player's next plane): a fresh model.
+      if (v && v.aircraft !== a) {
+        this.dispose(v);
+        this.views.delete(a.id);
+        v = undefined;
+      }
       if (!v) {
         v = this.create(a);
         this.views.set(a.id, v);
@@ -74,8 +107,13 @@ export class AircraftModels {
     this.views.clear();
   }
 
-  private create(a: AiAircraft): View {
-    const model = new FoldablePlane(this.app.graphicsDevice, PLANE_SHAPES[a.spec.id], this.materials[a.side], 0, this.blots);
+  /** The model drawn for aircraft `id`, if it has one (for name tags and effects). */
+  entity(id: string): pc.Entity | null {
+    return this.views.get(id)?.model.entity ?? null;
+  }
+
+  private create(a: ShownAircraft): View {
+    const model = new FoldablePlane(this.app.graphicsDevice, PLANE_SHAPES[a.spec.id], this.materialsFor(a.side), 0, this.blots);
     this.app.root.addChild(model.entity);
     return {
       aircraft: a,

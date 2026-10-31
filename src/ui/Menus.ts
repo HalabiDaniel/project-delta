@@ -24,6 +24,9 @@ const CONTROLS: Array<[string, IconName, string]> = [
   ['M', 'sound', 'Sound'],
 ];
 
+/** The multiplayer game (?mp) shares this menu: the mode link and the reset button change. */
+const MULTIPLAYER = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('mp');
+
 /** "This session" / "Last time" as icon stats. */
 export function sessionStats(s: SessionView): string {
   const stat = (iconName: IconName, value: string, label: string) => `<span class="stat" title="${esc(label)}">${icon(iconName)}<b>${value}</b></span>`;
@@ -56,6 +59,7 @@ export class Menus {
           <button class="btn primary" data-u="resume">${icon('plane')}<span>${SAY.resume}</span><kbd>Esc</kbd></button>
           <button class="btn" data-u="logbook">${icon('book')}<span>${SAY.logbook}</span><kbd>L</kbd></button>
           <button class="btn" data-u="sound"></button>
+          <a class="btn" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter')}<span>${MULTIPLAYER ? 'Single-player' : 'Multiplayer'}</span></a>
         </div>
         <div class="settings">
           <div class="setting" title="Key hints on the HUD"><span>${icon('info')}Hints</span><span class="seg" data-u="hints">
@@ -123,9 +127,9 @@ export class Menus {
       for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.outlines);
       for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === g.intensity);
       toggle(this.el.lines.parentElement!, g.outlines !== 'off');
-      text(this.el.reset, v.menu.confirmingReset ? SAY.confirmReset : SAY.reset);
+      text(this.el.reset, MULTIPLAYER ? 'Leave classroom' : v.menu.confirmingReset ? SAY.confirmReset : SAY.reset);
       this.el.reset.classList.toggle('confirm', v.menu.confirmingReset);
-      this.el.reset.title = 'Delete all progress (asks twice)';
+      this.el.reset.title = MULTIPLAYER ? 'Leave this classroom for good: your desk is freed' : 'Delete all progress (asks twice)';
       text(this.el.save, v.menu.saveNote);
     }
     const w = v.welcome;

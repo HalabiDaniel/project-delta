@@ -34,6 +34,9 @@ export interface Target {
  * firing    – a turret on target and shooting.
  * destroyed – a wreck until the sortie ends.
  */
+/** May installation `i` engage aircraft `t` (already known to be of another side)? */
+export type Hostility = (i: Installation, t: Target) => boolean;
+
 export type InstallationState = 'idle' | 'tracking' | 'locking' | 'firing' | 'destroyed';
 
 export type DefenseEvent =
@@ -428,8 +431,12 @@ export class DefenseNetwork {
     return this.installations.filter((i) => i.isWeapon && i.alive && i.engaged && i.targetId === targetId);
   }
 
-  /** One step for every installation. `targets` are the aircraft in the air that may be shot at. */
-  update(dt: number, targets: readonly Target[]): { orders: ShotOrder[]; events: DefenseEvent[] } {
+  /**
+   * One step for every installation. `targets` are the aircraft in the air that may be shot at.
+   * `hostile`, if given, narrows who each installation may engage beyond "the other side"
+   * (multiplayer: a player's base only engages another player who is attacking it or trespassing).
+   */
+  update(dt: number, targets: readonly Target[], hostile?: Hostility): { orders: ShotOrder[]; events: DefenseEvent[] } {
     const orders: ShotOrder[] = [];
     const events: DefenseEvent[] = [];
     for (const [territoryId, group] of this.byTerritory) {
@@ -439,7 +446,7 @@ export class DefenseNetwork {
       for (const t of targets) if (this.alerted(territoryId, t)) radarSees.add(t.id);
       for (const i of group) {
         const was = i.state;
-        const target = this.choose(i, targets, radarSees, scale);
+        const target = this.choose(i, targets, radarSees, scale, hostile);
         const alerted = !!target && radarSees.has(target.id);
         const order = i.update(dt, target, alerted, scale);
         if (target && i.isWeapon && i.alive && i.unseen === 0) sees.add(target.id);
@@ -495,7 +502,7 @@ export class DefenseNetwork {
    * see it, else the nearest one of the other side it (or its radar) sees, else the one it is
    * following, which it remembers for a moment before giving up.
    */
-  private choose(i: Installation, targets: readonly Target[], radarSees: ReadonlySet<string>, scale: number): Target | null {
+  private choose(i: Installation, targets: readonly Target[], radarSees: ReadonlySet<string>, scale: number, hostile?: Hostility): Target | null {
     if (!i.alive || i.isPassive) return null;
     const p = i.pivot(tmp);
     const bombersFirst = i.spec.prefer === 'bomber';
@@ -505,6 +512,7 @@ export class DefenseNetwork {
     let bestScore = Infinity;
     for (const t of targets) {
       if (t.side === i.side) continue;
+      if (hostile && !hostile(i, t)) continue;
       const following = t.id === i.targetId && i.state !== 'idle';
       const d = distance(p, t);
       const visible = radarSees.has(t.id) || d <= i.detectionRange(t, scale) * (following ? DEFENSES.keepTrack : 1);

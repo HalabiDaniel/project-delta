@@ -225,6 +225,15 @@ export class PlaneController {
     this.root.enabled = false;
   }
 
+  /**
+   * Shows the plane where its flight model is now, for a flight model moved from outside
+   * (multiplayer: the predicted plane, eased towards the server's).
+   */
+  pose(visible = true): void {
+    this.root.enabled = visible;
+    if (visible) this.applyTransform();
+  }
+
   hide(): void {
     this.motion.hide();
     this.root.enabled = false;

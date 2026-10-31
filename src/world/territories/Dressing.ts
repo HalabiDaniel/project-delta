@@ -34,6 +34,8 @@ export class Dressing {
     facing: { x: number; z: number },
     /** Draws the home runway and launch card (T1 only). */
     private readonly runway = false,
+    /** The owner's tape colour (default: blue for home, masking tape otherwise). */
+    private readonly tape: 'tape/blue' | 'tape/masking' | 'tape/grey' | null = null,
   ) {
     this.root = new pc.Entity(`dressing-${territory.id}`);
     this.root.setPosition(territory.x, 0, territory.z);
@@ -73,7 +75,7 @@ export class Dressing {
     surface.part(theme.sheet).box([sheet, 0.02, sheet], { at: [0, 0.01, 0] });
 
     // The owner's colour: strips of tape holding the sheet down, a little crooked.
-    const tape = t.isHome ? 'tape/blue' : 'tape/masking';
+    const tape = this.tape ?? (t.isHome ? 'tape/blue' : 'tape/masking');
     const edge = sheet / 2;
     const strips: Array<[Vec3, number, number]> = [
       [[0, 0.028, edge], 0.5, 0],

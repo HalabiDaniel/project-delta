@@ -13,6 +13,8 @@ const GAME_KEYS = new Set([
   'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyL', 'Backquote',
   // B base management, H key hints, U upgrade, Delete remove; 0–7 pick mission cards or base slots.
   'KeyB', 'KeyH', 'KeyU', 'Delete',
+  // Multiplayer: Z / C / V emotes, Tab the scoreboard.
+  'KeyZ', 'KeyC', 'KeyV', 'Tab',
   'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7',
 ]);
@@ -41,7 +43,7 @@ export class Input {
       if (!GAME_KEYS.has(e.code)) return;
       // Keys typed into a form control (the developer panel's) are not for the game.
       if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
-      if (e.code === 'Space') e.preventDefault(); // no page scrolling or button activation
+      if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scrolling, button activation or focus moves
       this.held.add(e.code);
       if (!e.repeat) for (const handler of this.keyHandlers) handler(e.code);
     });

@@ -1,9 +1,14 @@
-# paperwars.io: v0.0.8 in development (visual vertical slice), on top of v0.0.7
+# paperwars.io: v0.0.9 in development (core multiplayer), on top of v0.0.8's visual slice
 
-> **v0.0.8 checkpoint 1 of 4: the visual vertical slice is ready for art-direction review.** Home
-> Desk (T1) shows the new look: a playable sketchbook with pencil outlines, paper materials and
-> soft cartoon light. See [v0.0.8 in progress](#v008-in-progress-the-visual-vertical-slice) and
-> [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md). Everything below that section describes v0.0.7.
+> **v0.0.9: multiplayer.** Up to eight players share a classroom on a Node + Colyseus server:
+> claim a desk, fly together, shoot each other down and raid each other's bases. Add `?mp` to the
+> address (or Menu → Multiplayer). See [v0.0.9: core multiplayer](#v009-core-multiplayer) and
+> [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
+>
+> **v0.0.8 is at checkpoint 1 of 4** (the visual vertical slice, waiting for art-direction review).
+> Its later phases (the classroom backdrop, every territory's theme, onboarding, the home
+> dashboard) are not done yet; multiplayer is built on the game as it stands and picks them up as
+> they land. Everything below the v0.0.8 section describes v0.0.7.
 
 
 Through v0.0.6 the game became a connected single-player campaign: a mission director, adaptive
@@ -15,9 +20,112 @@ with a defense report. The **HUD is rebuilt** at the same time: fixed zones, ico
 instead of words, short alerts, and tips the first time something matters. The plan is in the
 [game design document](docs/GDD.md#17-development-roadmap).
 
-It is still single-player and runs entirely in the browser (PlayCanvas + TypeScript, no backend).
-Buildings, raids, AI pilots and defenses only ever see an aircraft as a position, a velocity and a
-side, so the same systems can take human opponents when multiplayer arrives.
+Single-player still runs entirely in the browser (PlayCanvas + TypeScript, no backend).
+Multiplayer adds a Node server (`server/`) that runs the very same rule classes per player, with
+the server deciding every hit, every paper balance and every reward.
+
+## v0.0.9: core multiplayer
+
+v0.0.9 turns the single-player sandbox into a shared world (plan in the
+[roadmap](docs/GDD.md#version-009-core-multiplayer)). The full description, with the network
+model, every rule between players, tests and measurements, is in
+[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
+
+![A classroom with five players](docs/checkpoints/0.0.9-multiplayer/04-flight.jpg)
+
+### What is in it
+
+- **A server** (`server/`): Node + Colyseus 0.18 over WebSockets. A classroom session holds up to
+  eight players in memory. `ServerWorld` runs each player's `GameState`, `Base`, `ResourceManager`
+  and `MissionDirector` (single-player's own classes) and shares the defense network, the AI
+  traffic and the ordnance between everyone. Clients send controls and commands only; the server
+  decides every position, hit, kill, balance, building, objective and reward.
+- **Shared types** (`src/net/`): the protocol (input frames, commands, private state, events,
+  validation), the synchronised schema (quantized), the fixed-step flight both sides run,
+  prediction, interpolation and the shared classroom layout.
+- **Sessions and territories**: a menu to start, list and join classrooms; a map to claim one of
+  eight desks (the centre stays the AI's). Claiming swaps the territory's AI defenses for the
+  player's base, dressed as a desk with a runway; leaving brings the AI back.
+- **Flight in sync**: 60 Hz input frames flown by the server through the same `FlightModel`;
+  the pilot's plane is predicted and reconciled, everyone else's interpolated 100 ms in the past.
+  Others' planes launch, fly, land and crash in front of you.
+- **Combat between players**: server-validated, lag-compensated rounds; damage, destruction, kills
+  and assists, a kill feed, bounties that can't be farmed, respawning by folding a new plane, and
+  no spawn camping.
+- **Raids on player bases**: raid cards against bases the rules allow (not new players, not offline
+  ones, not a base just raided, not the same base again soon), a reward paid by the game, a capped
+  loss of the defender's vulnerable paper (never their reserve), building damage, warnings and an
+  interception card for the defender, their guns joining in, and reports for both sides.
+- **Missions together**: each player's own board, plus rival cards (raid, scout, shoot down,
+  intercept); missions never target other players' homes, and their AI aircraft fly under their
+  owner's name.
+- **Recognising each other**: names, colours, name tags with health, owner tags on desks, a
+  scoreboard (Tab), emotes in flight (Z wing waggle, C confetti, V heart), session news, and the
+  connection chip (status, ping, players, protection). No text chat.
+- **Connections**: automatic reconnection with a 60 s grace period (territory and plane kept),
+  back into the session after a browser refresh, the ninth player turned away, leaving mid-flight
+  counted as going down.
+- **Bots and a load test**: `npm run bots` fills a session with headless players (they dogfight,
+  or with `--raid` raid bases) for testing alone; `npm run loadtest` measures 2, 4 and 8 players
+  and a poor network.
+
+| | | |
+|---|---|---|
+| ![Lobby](docs/checkpoints/0.0.9-multiplayer/01-lobby.jpg) | ![Claiming a desk](docs/checkpoints/0.0.9-multiplayer/02-claim.jpg) | ![Rival cards at the desk](docs/checkpoints/0.0.9-multiplayer/03-desk-rival-cards.jpg) |
+| ![Scoreboard](docs/checkpoints/0.0.9-multiplayer/05-scoreboard.jpg) | ![A rival raiding your base](docs/checkpoints/0.0.9-multiplayer/06-incoming-raid.jpg) | ![After the raid](docs/checkpoints/0.0.9-multiplayer/08-base-after-raid.jpg) |
+
+### Playing it
+
+```bash
+npm run server     # ws://localhost:2567
+```
+
+```bash
+npm run dev        # then open http://localhost:5173/?mp in two windows
+```
+
+```bash
+npm run bots -- --count 3    # alone: three bots join and dogfight
+```
+
+Another computer on the network: `http://<host>:5173/?mp&server=ws://<host>:2567` (start Vite
+with `--host`). `PROTECTION=20 npm run server` lets new bases be raided after 20 s instead of five
+minutes, and `npm run bots -- --count 1 --raid 1` sends a bot to raid them.
+
+### Measurements
+
+`npm run loadtest` (bots with the browser's prediction; server and bots in one process, no GPU):
+
+| Players | Network | Server step avg (ms of 16.7) | Down / up per player (KB/s) | Prediction corrections |
+|---|---|---|---|---|
+| 2 | local | 0.38 | 9.8 / 1.2 | 0 of 1,186 |
+| 4 | local | 0.35 | 10.3 / 1.2 | 0 of 2,382 |
+| 8 | local | 0.43 | 13.3 / 1.2 | 0 of 4,758 |
+| 8 | 120 ± 40 ms, a stall every 5 s | 0.45 | 13.8 / 1.2 | 4 of 4,772 (2 cm on average) |
+
+A connection cut mid-fight and resumed kept its seat in every run. The browser client was driven
+in headless Chromium (software rendering, about 1 fps); frame rate, input feel and combat
+readability on real hardware still need playtesting.
+
+### Known limitations
+
+- Sessions live in memory on one server process: no accounts, persistence or campaign yet
+  (v0.0.11). A server restart ends every session.
+- Eight claimable desks in the 3 × 3 classroom; more territory slots come with the world expansion.
+- Homes are dressed without the Home Desk landmark and tall props (the server doesn't know their
+  collision shapes); remote planes don't show bomb racks or the fold animation.
+- World events, medals, records, the logbook and the local save are single-player only; escorting
+  another player isn't a mission yet.
+- `npm audit` flags advisories in `@colyseus/auth`'s dependencies, unused by the game.
+
+### Decisions for the developer
+
+1. **The rules in `PVP`** (`src/config.ts`): protection and shield times, raid rewards and the
+   repeat rule, bounties, aggression and score weights are first guesses.
+2. **Free-for-all** for now (no teams or alliances).
+3. **Bases can only be damaged on a raid**, never by passers-by.
+4. **The centre stays the AI's** stronghold.
+5. **Hosting**: any Node host with WebSockets (`PORT=… npm run server`).
 
 ## v0.0.8 in progress: the visual vertical slice
 
@@ -132,7 +240,7 @@ npm run dev        # http://localhost:5173
 Other scripts:
 
 ```bash
-npm test           # unit tests for the rules (AI pilots, defenses, aircraft, flight, combat, missions, economy, state machine, career stats)
+npm test           # unit tests for the rules, plus the multiplayer server, prediction and room tests
 ```
 
 ```bash
@@ -141,6 +249,20 @@ npm run build      # typecheck + production build into dist/
 
 ```bash
 npm run preview    # serve the production build
+```
+
+Multiplayer (see [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md)):
+
+```bash
+npm run server     # the multiplayer server, ws://localhost:2567; then open the game with ?mp
+```
+
+```bash
+npm run bots -- --count 3      # headless players for a session
+```
+
+```bash
+npm run loadtest   # 2, 4, 8 bots and a poor network: server step time, bandwidth, prediction
 ```
 
 The game needs a desktop browser with WebGL 2.
@@ -861,6 +983,35 @@ src/
 
 assets/licensed/          Licensed models (git-ignored except its README)
 assets/models/            The game's own Blender models
+
+src/net/                  Multiplayer, shared by server and browser (v0.0.9; see docs/MULTIPLAYER.md)
+  protocol.ts             Rates, input frames, commands, private-state sections, events, validation
+  schema.ts               The synchronised world state (Colyseus schema, quantized)
+  PilotFlight.ts          One player's fixed-step flight (FlightModel + boundary), as server and prediction run it
+  Prediction.ts           Client-side prediction and reconciliation
+  Interpolation.ts        Pose buffers for remote aircraft; the server clock estimate
+  World.ts                The shared classroom layout, players' sides, territory names
+
+src/mp/                   The multiplayer game in the browser (?mp, loaded only when asked for)
+  MultiplayerGame.ts      Rendering, prediction, interpolation, server messages, input
+  MpViews.ts              Single-player's HUD view, built from the mirrors and the server's reports
+  MpHud.ts                Connection, kill feed, scoreboard, raid banner, name and owner tags, emotes
+  Lobby.ts                Classroom list, name, claim map
+  NetClient.ts            Joining, reconnecting (and after a refresh), sending frames and commands
+  NetBase.ts              The player's Base as a mirror whose actions become server commands
+
+server/                   The multiplayer server (Node, Colyseus)
+  index.ts                Starts the server and the room list endpoint
+  WorldRoom.ts            The classroom room: joins, claims, drops, reconnects, leaves; ticks; schema sync
+  world/ServerWorld.ts    The authoritative world: flight, guns, bombs, AI, defenses, raids, missions, private state
+  world/Pilot.ts          One player's share of it
+  world/InputClock.ts     Input frames and each player's clock
+  world/PlayerGuns.ts     Players' rounds, lag-compensated against world/History.ts
+  world/FallingBombs.ts   Bombs without drawing
+  world/Attacks.ts        Raid rules, kill and assist credit, bounties
+  world/PvpMissions.ts    Raid, recon, hunt and interception cards
+  bots/                   Headless bot players and `npm run bots`
+  loadtest.ts             `npm run loadtest`
 ```
 
 The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, `FlightModel`, everything in
@@ -868,7 +1019,8 @@ The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, `FlightModel`
 in `defenses/`, `ResourceManager`, `HomeIncome`, `Ledger`, `SaveGame`, `LocalStats`, `Boost`,
 `Landing`, `Boundary`) contain no rendering or input code, and all of them have unit tests. The game reports facts to the rules ("this round
 hit T8-turret1 for 7", "the plane flew from A to B", "the raider's bomb hit the store") and the
-rules decide what they mean, which should make it straightforward to move them to a server later.
+rules decide what they mean. Since v0.0.9 the multiplayer server runs these same classes, one set
+per player, and the browser keeps mirrors of them filled from the server's reports.
 The defense network, the ordnance and the AI pilots only ever see an aircraft as an id, a side, a
 position, a velocity and a signature, so another player's plane can take the AI's place.
 
@@ -1210,11 +1362,33 @@ and a save / reload). Feel and balance still need playtesting: how much warning 
 gives at real frame rates, whether capacity feels too tight, and whether the base camera frames
 T1 well on unusual screen shapes.
 
+## Definition of done (v0.0.9)
+
+| Requirement | Status |
+|---|---|
+| At least two players can join the same session | ✅ (room tests; browser with two players and with bots) |
+| Rooms support a target of eight concurrent players | ✅ eight claimable desks, ninth refused; load tested at 8 |
+| Players claim separate territories (server prevents double claims) | ✅ |
+| Aircraft movement synchronised smoothly (interpolation; prediction with reconciliation) | ✅ 0 corrections locally, 4 of 4,772 on a poor network |
+| Others' aircraft seen launching, flying and landing | ✅ |
+| Player-versus-player combat | ✅ |
+| Damage and destruction validated by the server | ✅ (no client message can report a hit) |
+| Players can attack eligible player-owned territories | ✅ raid cards |
+| Territory defenses respond to hostile players | ✅ raiders, aggressors and trespassers |
+| Resource losses and rewards authoritative and protected against common exploits | ✅ speed-hack bound, validation, rate limits, repeat-raid and repeat-kill decay, no Dart bounties |
+| New players protected from immediate ruin | ✅ protection, shield, capped losses, protected reserve, emergency Dart |
+| Multiplayer missions integrate with existing gameplay | ✅ rival cards alongside each player's own board |
+| Players can identify nearby opponents and territory owners | ✅ names, tags, markers, scoreboard |
+| Basic connection recovery | ✅ grace period, automatic reconnect, refresh resume |
+| Paper-and-pencil visual identity kept | ✅ same HUD, tokens and components |
+| Automated multiplayer tests pass | ✅ 35 server tests among 370 |
+| Playable in modern desktop browsers | ⚠️ checked in headless Chromium only (software rendering); needs a playtest on real hardware |
+| Existing single-player systems preserved | ✅ all 335 earlier tests pass; multiplayer is a separate chunk (single-player's bundle +5 kB) |
+
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.8, world expansion, visual identity
-and player experience**, in progress (see the top of this file): after the art direction is
-approved, phase 2 applies it to every territory and adds the classroom. Multiplayer moves to
-v0.0.9; the director's rules already run on explicit inputs (a situation, a world context) that a
-server can supply per player, and saves keep recipes rather than missions, which is the shape
-server-side persistence will need.
+Per the [roadmap](docs/GDD.md#17-development-roadmap): v0.0.8's remaining phases (the classroom,
+territory identity and navigation, onboarding, polish) still need the art-direction approval of
+checkpoint 1, and apply to multiplayer too. After that, **v0.0.10**: the player-versus-player loop
+deepened with bounties and cooperation offers between players from the mission director, and
+**v0.0.11**: accounts, persistence and the campaign lifecycle on the server.

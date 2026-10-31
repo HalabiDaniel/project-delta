@@ -4,7 +4,7 @@ import { handlingFactor, wobbleAmount } from '../combat/Damage';
 import { DAMAGE, LANDING, PLANE, WORLD, type AircraftSpec, type FlightProfile } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Territory } from '../world/Territory';
-import { Boost } from './Boost';
+import { Boost, type BoostState } from './Boost';
 import { assessTouchdown, type TouchdownCheck, type TouchdownState } from './Landing';
 
 /**
@@ -18,6 +18,18 @@ import { assessTouchdown, type TouchdownCheck, type TouchdownState } from './Lan
 export type AircraftStatus = 'hidden' | 'parked' | 'flying' | 'rolling' | 'stopped' | 'crashed';
 
 export type FlightOutcome = 'flying' | 'touchdown' | 'void';
+
+const STATUSES: readonly AircraftStatus[] = ['hidden', 'parked', 'flying', 'rolling', 'stopped', 'crashed'];
+const BOOST_STATES: readonly BoostState[] = ['ready', 'active', 'cooldown'];
+
+/**
+ * Everything that decides the next flight step, as plain numbers (see FlightModel.saveState). The
+ * multiplayer server sends its copy to the pilot's game, which rewinds to it and replays the inputs
+ * the server hasn't seen yet.
+ */
+export type FlightSnapshot = number[];
+/** Length of a FlightSnapshot. */
+export const FLIGHT_SNAPSHOT_SIZE = 23;
 
 /**
  * Something the plane flew into this step. The plane has already been pushed clear and deflected;
@@ -315,6 +327,49 @@ export class FlightModel {
     this.position.set(cx, home.top + PLANE.parkedHeight, cz);
     if (this.speed <= 0) this.status = 'stopped';
     return this.status === 'stopped';
+  }
+
+  /**
+   * The complete flight state as numbers: status, position, previous position, attitude, speeds,
+   * aim, boost and the hidden steering state. Restoring it and repeating the same controls gives
+   * exactly the same flight.
+   */
+  saveState(out: FlightSnapshot = []): FlightSnapshot {
+    const p = this.position;
+    const q = this.prevPosition;
+    out.length = 0;
+    out.push(
+      STATUSES.indexOf(this.status), p.x, p.y, p.z, q.x, q.y, q.z,
+      this.yaw, this.pitch, this.roll, this.speed, this.throttleSpeed, this.aimYaw, this.aimPitch,
+      BOOST_STATES.indexOf(this.boost.state), this.boost.remaining,
+      this.airborneTime, this.idleTime, this.pitchRate, this.bounceGrace, this.handling, this.wobble,
+      this.lastTouchdown ? 1 : 0,
+    );
+    return out;
+  }
+
+  /** Puts the flight back as `saveState` recorded it. Returns false (and changes nothing) if it isn't one. */
+  loadState(s: readonly number[]): boolean {
+    if (s.length !== FLIGHT_SNAPSHOT_SIZE || s.some((v) => !Number.isFinite(v))) return false;
+    this.status = STATUSES[s[0]] ?? 'hidden';
+    this.position.set(s[1], s[2], s[3]);
+    this.prevPosition.set(s[4], s[5], s[6]);
+    this.yaw = s[7];
+    this.pitch = s[8];
+    this.roll = s[9];
+    this.speed = s[10];
+    this.throttleSpeed = s[11];
+    this.aimYaw = s[12];
+    this.aimPitch = s[13];
+    this.boost.restore(BOOST_STATES[s[14]] ?? 'ready', s[15]);
+    this.airborneTime = s[16];
+    this.idleTime = s[17];
+    this.pitchRate = s[18];
+    this.bounceGrace = s[19];
+    this.handling = s[20];
+    this.wobble = s[21];
+    if (s[22] === 0) this.lastTouchdown = null;
+    return true;
   }
 
   /** Seconds since launch. */

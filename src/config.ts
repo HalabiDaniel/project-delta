@@ -6,8 +6,13 @@
 
 const DEG = Math.PI / 180;
 
-/** Whose side something is on: the player's (their plane, T1's guns, a friendly AI bomber) or the enemy's. */
-export type Side = 'player' | 'enemy';
+/**
+ * Whose side something is on: the player's (their plane, T1's guns, a friendly AI bomber) or the
+ * enemy's. In multiplayer every player is a side of their own (`p:<id>`): their plane, their base
+ * and their friendly AI. Rounds and weapons only ever compare sides, so this is all they need.
+ */
+export type PlayerSide = `p:${string}`;
+export type Side = 'player' | 'enemy' | PlayerSide;
 
 /** How targets, shots and kills refer to the player's own plane. */
 export const PLAYER_ID = 'player';
@@ -729,6 +734,72 @@ export const RAIDS = {
   storePerPaper: 0.01,
   /** After a raid that cost paper or wrecked a building, the next waits at least this long (recovery time). */
   recovery: 150,
+} as const;
+
+/**
+ * Multiplayer (v0.0.9): attacks between players, kills, protections and score. All provisional.
+ * The rules that use them are in server/world/Attacks.ts and server/world/ServerWorld.ts.
+ */
+export const PVP = {
+  /** The territory in the middle stays the AI's: nobody can claim it (homes need a runway pointing inward). */
+  centre: 'T5',
+  /** A new player's base can't be raided for this long after claiming it (seconds), unless they raid first. */
+  newPlayerProtection: 300,
+  /** After a raid on a player's base gets through, nobody can raid it again for this long. */
+  raidShield: 240,
+  /** The same attacker must wait this long before raiding the same base again. */
+  pairCooldown: 600,
+  /**
+   * Raid rewards shrink when one attacker keeps hitting the same base within `farmWindow`
+   * seconds: the n-th raid pays `repeat[n]` of the reward (0: nothing).
+   */
+  farmWindow: 1800,
+  repeat: [1, 0.5, 0.25, 0] as readonly number[],
+  /** A raid's reward: base, plus this much per weapon standing on the target base when it was offered. */
+  raidReward: 55,
+  raidPerWeapon: 8,
+  /** A base with less vulnerable paper than this is a poor target: the raid pays this share. */
+  poorTarget: 25,
+  poorFactor: 0.5,
+  /** Raid missions must be done within this long (seconds). */
+  raidTime: 300,
+  /** Recon of another player's base: seconds over it, reward, time limit. */
+  reconDuration: 8,
+  reconReward: 30,
+  reconTime: 240,
+  /** "Shoot down a rival" cards: reward, time limit. */
+  huntReward: 45,
+  huntTime: 240,
+  /** "Intercept the raider" cards for the defender. */
+  interceptReward: 40,
+  interceptTime: 240,
+  /** Shooting down a raider on its way to (or over) your base, with or without the card. */
+  defenseReward: 35,
+  /**
+   * Shooting down another player's plane pays `killBase` plus `killShare` of what the plane cost;
+   * nothing for an emergency Dart (free planes can't be farmed). The same victim again within
+   * `killWindow` pays `killRepeat[n]` of it.
+   */
+  killBase: 6,
+  killShare: 0.4,
+  killWindow: 300,
+  killRepeat: [1, 0.5, 0.25, 0] as readonly number[],
+  /** Helpers who dealt at least `assistMin` of the damage in the last `assistWindow` seconds share the kill. */
+  assistMin: 0.2,
+  assistWindow: 15,
+  assistShare: 0.5,
+  /**
+   * A player's defenses engage another player who is raiding them, who hurt them in the last
+   * `aggression` seconds, or who flies over their territory (platform plus `airspace`).
+   */
+  aggression: 45,
+  airspace: 6,
+  /** Player-versus-player cards on the board at once (besides an interception when being raided). */
+  cards: 2,
+  /** Wrecked AI installations stand up again after this long (seconds). */
+  aiRebuild: 120,
+  /** Scoreboard points. */
+  score: { kill: 10, assist: 4, raid: 15, defend: 10, mission: 5 },
 } as const;
 
 /** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */
