@@ -6,6 +6,7 @@ import { Boost } from '../aircraft/Boost';
 import { assessTouchdown, hardLandingReason } from '../aircraft/Landing';
 import { Boundary } from './Boundary';
 import { HomeIncome } from './HomeIncome';
+import { Ledger } from './Ledger';
 import { ResourceManager } from './ResourceManager';
 
 describe('HomeIncome', () => {
@@ -87,5 +88,71 @@ describe('Boundary', () => {
     expect(b.update(5, 120, 0)).toBe('autopilot');
     expect(b.update(0.1, 95, 0)).toBe('autopilot'); // inside, but not by the margin yet
     expect(b.update(0.1, 79, 0)).toBe('inside');
+  });
+});
+
+describe('HomeIncome: storage', () => {
+  it('slows to half rate as the store fills, and pauses when it is full', () => {
+    const income = new HomeIncome(1, 3, 120, 60);
+    expect(income.stateFor(10)).toBe('producing');
+    expect(income.stateFor(60)).toBe('slowed');
+    expect(income.stateFor(120)).toBe('full');
+    expect(income.ratePerMinute(10)).toBe(20);
+    expect(income.ratePerMinute(80)).toBe(10);
+    expect(income.ratePerMinute(130)).toBe(0);
+    const r = new ResourceManager(58);
+    income.update(6, r); // two payouts at full rate: 58 → 60
+    expect(r.paper).toBe(60);
+    income.update(5.9, r); // half rate now: not quite one payout
+    expect(r.paper).toBe(60);
+    income.update(0.1, r);
+    expect(r.paper).toBe(61);
+    // Idle for an hour: never beyond the store's capacity.
+    income.update(3600, r);
+    expect(r.paper).toBe(120);
+  });
+
+  it('counts the slower rate when estimating a wait', () => {
+    const income = new HomeIncome(1, 3, 120, 60);
+    expect(income.timeToAfford(58, 62)).toBe(2 * 3 + 2 * 6);
+  });
+});
+
+describe('Ledger', () => {
+  it('logs every change with what it was for, and gathers home production into one line', () => {
+    const r = new ResourceManager(100);
+    const ledger = new Ledger(5, () => 7);
+    ledger.watch(r);
+    r.spend(25, 'Folded Falcon');
+    r.earn(1, 'income');
+    r.earn(1, 'income');
+    r.earn(80, 'reward', 'Mission completed: Bomb T5');
+    r.lose(20, 50);
+    r.restore(300); // not a transaction
+    expect(ledger.recent(4).map((e) => [e.label, e.delta])).toEqual([
+      ['Raid on the paper store', -20],
+      ['Mission completed: Bomb T5', 80],
+      ['Home production', 2],
+      ['Folded Falcon', -25],
+    ]);
+    expect(ledger.entries.find((e) => e.source === 'income')?.count).toBe(2);
+    expect(ledger.totals).toEqual({ earned: 82, spent: 25, income: 2, bonuses: 0, raids: 20 });
+  });
+
+  it('keeps efficiency per design and per mission type', () => {
+    const ledger = new Ledger();
+    ledger.recordSortie({ aircraft: 'falcon', type: 'dogfight', spent: 25, earned: 90, success: true, lost: false });
+    ledger.recordSortie({ aircraft: 'falcon', type: 'bombing', spent: 6, earned: 0, success: false, lost: true });
+    expect(ledger.byAircraft.get('falcon')).toEqual({ sorties: 2, successes: 1, lost: 1, spent: 31, earned: 90 });
+    expect(ledger.byType.get('dogfight')?.earned).toBe(90);
+    expect(ledger.aircraftReturns()[0].ratio).toBeCloseTo(90 / 31);
+  });
+
+  it('keeps only the newest entries', () => {
+    const r = new ResourceManager(100);
+    const ledger = new Ledger(3);
+    ledger.watch(r);
+    for (let i = 0; i < 5; i++) r.spend(1, `Buy ${i}`);
+    expect(ledger.entries.map((e) => e.label)).toEqual(['Buy 2', 'Buy 3', 'Buy 4']);
   });
 });

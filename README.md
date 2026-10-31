@@ -1,9 +1,11 @@
-# paperwars.io: v0.0.5, Enemy Aircraft and Interception
+# paperwars.io: v0.0.6, Dynamic Missions, Progression & Game Balance
 
-Through v0.0.4 every threat came from the ground. v0.0.5 puts **other aircraft in the sky**:
-enemy paper planes patrol enemy country, fighters chase and shoot at you, scouts run, and every few
-minutes a bomber sets out to hit the paper store on your home territory. You dogfight, intercept,
-escort a friendly bomber and patrol airspace, and T1 finally has guns of its own. The plan is in the
+Through v0.0.5 the game gained its action: four aircraft, ground defenses, AI fighters, scouts and
+bombers, raids on T1. v0.0.6 ties those pieces into a **connected, replayable game**: a mission
+director deals cards from the player's situation and the world, difficulty follows how you fly,
+the economy is balanced around plane costs, the world throws up events of its own, short
+operations span several sorties, and progress (records, medals, achievements, the hangar, your
+paper) is **saved in the browser**. The plan is in the
 [game design document](docs/GDD.md#17-development-roadmap).
 
 It is still single-player and runs entirely in the browser (PlayCanvas + TypeScript, no backend).
@@ -39,7 +41,145 @@ npm run preview    # serve the production build
 
 The game needs a desktop browser with WebGL 2.
 
-## What's new in v0.0.5
+## What's new in v0.0.6
+
+### The mission director
+
+A central system (`src/director/MissionDirector.ts`) now deals the mission cards from explicit
+rules, templates and weighted choice. No generative AI: every card is a mission type (the
+template) whose parameters (target, threat level, objectives, enemy aircraft, time limit,
+reward) are filled in from the world.
+
+- **Three cards: safe, balanced, high risk.** The safe card is always easy (unprotected or
+  lightly defended ground, rookie pilots at most), for everyone. The balanced and high-risk
+  cards' tiers grow with the player's skill (below). Pick any of them: nothing is locked.
+- **Four tiers.** Easy ×1, Medium ×1.5, Hard ×2 and **Very hard ×2.5**: hard content with one or
+  two escalations on top (a second fighter, a bomber escort, an extra target, a mandatory return
+  flight, a stricter clock). Difficulty grows by new combinations of threats, never by more
+  enemy health or damage.
+- **Only the flown card is replaced.** After a sortie (success or failure) its card is dealt
+  afresh; the other two stay unless they became impossible.
+- **Swap a card you dislike (X).** Three swaps in hand, one back after every sortie.
+- **Variety memory.** Each recent mission in the same category (bombing, recon, flight,
+  dogfighting, interception, escort, assault) makes that category less likely; the cards on the
+  board are always of different categories; the mission you just flew is never dealt again as it
+  was.
+- **Eligibility.** A card is only dealt if it can be done: its enemy aircraft can go up within
+  the sky's limit of four (raids and events count), no raid interception while a raid is already
+  on, a plane you can afford (or the free emergency Dart) can fly it with enough bombs, and every
+  target it names is still standing. Cards whose targets are destroyed are replaced.
+- **Mission history.** Every card offered, accepted, completed, failed, swapped, invalidated or
+  expired is logged (developer panel, `paperwars.director.history` in the console, and the save).
+
+### Performance and adaptive difficulty
+
+`src/director/Performance.ts` rates the last ten missions, the newest counting most: success
+rate, planes kept, damage avoided, speed against par, gun accuracy, safe landings, and hard
+missions done. The rating moves a **skill** (0–1) that sets the balanced and risky cards' tiers:
+it waits for three missions, then follows the rating by at most 0.07 a mission, so one good
+sortie never makes the next much harder. The logbook shows the tier the director thinks suits you.
+
+**Recovery missions.** After losing two planes in three sorties, failing three of four, or with
+nothing better than a Dart affordable, the safe card becomes a recovery mission: reconnaissance
+of an undefended territory, an easy ring course, a delivery, or one weak practice target, with no
+enemy aircraft, paying **at least 30** (a Falcon and change). The balanced card is capped at medium
+meanwhile.
+
+### Economy
+
+Paper is still the only resource.
+
+- **Reward = B × D × M**, rounded to 5. B is the type's base plus distance, threat and air
+  bonuses; D the tier's multiplier; M the modifiers' (tight clock ×1.1, a territory on alert
+  ×1.2, a high-value target ×1.5). Cards show the breakdown on hover.
+- **Rebalanced to plane costs.** Rewards came down (v0.0.5 hard cards paid up to 305) to the
+  plan's bands: easy Dart work 25–40, medium ~50–100, hard ~75–150, very hard ~140–230.
+- **Free emergency Dart.** With no plane affordable and none in the hangar, F folds a scrap Dart:
+  half the ink, no bomb, shorter range, gone after the sortie. The balance never goes negative.
+- **Home production** fills T1's paper store: +1 every 3 s, half rate from 60 paper, paused at
+  120 (the store is full). It only runs while the game does.
+- **No failure fines.** A failed mission costs the plane (if lost) and nothing else; abandoning
+  pays nothing, so launching and abandoning earns nothing (the economy simulation checks it).
+- **Paper log.** Every change with what it was for ("Folded Falcon −25", "Mission completed +80",
+  home production gathered into one line), the last four under your balance, the full log in the
+  logbook, plus totals and paper in/out per aircraft and per mission type.
+
+| Profile (economy simulation, 40 sorties) | Paper | Paper per success | Planes lost |
+|---|---|---|---|
+| New player (picks safe/balanced) | 100 → ~1,100–2,000 | ~60 | 5–9 |
+| Struggling player (12 paper, losing planes) | 12 → ~380–720, never stuck | ~55 | 17–22 |
+| Wealthy veteran (picks risky) | 600 → ~5,100–6,200 | ~160 | 4–5 |
+
+### World events and territory states
+
+`src/director/WorldEvents.ts`: at most one at a time, 100–170 s apart, none before your first
+sortie. Each puts an optional **fourth card** on the board while it lasts; ignoring it costs
+nothing (a raid's capped toll aside).
+
+| Event | What happens | Card | Off the card |
+|---|---|---|---|
+| Raid on T1 | An enemy Widewing heads for the paper store (v0.0.5 raids, now waiting their turn) | **Emergency: defend T1**, paid through the mission | +60 if you helped, as before |
+| High-value shipment | A paper shipment sits on a territory's crates for ~3 minutes | Destroy it (×1.5) | +45 bounty on any sortie |
+| Convoy | An enemy supply Widewing (sometimes escorted) crosses the map | Intercept it before it leaves | +50 bounty on any sortie |
+| Supply run | A friendly Widewing brings paper in past unprotected ground; enemy fighters come after it | Escort it | +50 supplies if it delivers |
+
+**Territory states.** *On alert* after you destroy something there: its wrecks stay down, its
+defenders get a fix the moment they see you, easy cards keep away, and missions there pay ×1.2.
+*Defenses down* once every weapon is destroyed: wrecks stay for four minutes and it counts as
+unprotected. *Under attack*: T1 while a raid is coming. States show on the territory labels and
+reset when they run out.
+
+### Operations
+
+Short chains against one territory, flown over several sorties with any planes:
+
+| Template | Stages |
+|---|---|
+| Strike (guarded or fortified) | Reconnoitre → destroy its radar → bomb its supply depot and land on T1 |
+| Light (lightly defended) | Scout → silence its guns → bomb it and land on T1 |
+| Air | Catch the scout over it → win the dogfight → escort a bomber there |
+
+The operation card takes the balanced slot; completing a stage opens the next, a failed stage can
+be retried, and its territory stays on alert (its wrecks stay down) until the operation ends.
+Each stage has an optional objective (bring the plane home, take under 25% damage, finish within
+par) worth 10–25. Finishing every stage pays a **bonus** (a quarter of the stages' rewards, at least
+20). **Abandon** (two clicks) keeps what was earned and forfeits only the bonus.
+
+### Replayability
+
+- **Medals.** Bronze for the objective; silver with at most 40% damage and efficient play (no more
+  than one spare bomb, 18%+ ink accuracy in a gunfight, or within 1.5× par); gold within par
+  time with the plane brought home. The report says what the next medal needs.
+- **Personal bests:** fastest bombing run, most accurate bombing mission, longest successful
+  flight, most aircraft downed in a sortie, most missions in a row without losing a plane.
+- **Streaks:** +5% from three successes in a row, +10% from five. A failure resets it, nothing more.
+- **Aircraft mastery:** flights, missions by category, losses, ink and bomb accuracy, kills per
+  design (logbook and garage). Statistics only: nothing unlocks.
+- **14 achievements**, saved locally.
+- **Session summary** in the menu (Esc), and on your next visit a *Welcome back* card with the
+  last one.
+
+### Saving
+
+`src/systems/SaveGame.ts`: IndexedDB, falling back to local storage, then memory. Saved: paper,
+chosen plane, the hangar, the director (cards as recipes, history, swaps, recent missions,
+performance, the operation), progress, the paper log and settings. A plane in the air when the
+page closes comes back to T1 as a recovered plane. Every field is validated on load and repaired
+or dropped (never crashing), the format is versioned with a migration chain (a save from a newer
+version is kept aside, never overwritten), and **Reset progress** (menu, two clicks) deletes it.
+World events are not saved: they reset on reload.
+
+### Developer tools
+
+Press **`** (or open with `?dev`) for the director panel: the performance rating and its
+indicators; each card's slot, tier, B × D × M and why it was chosen; every candidate type for a slot
+with its weight or the reason it was left out; the tier and modifier multipliers; events, cooldown
+and territory states (with buttons to start any event); **force a mission** (type, tier, target,
+slot); **simulated players** (new, struggling, average, successful, wealthy veteran) to preview
+their deals or apply to the game; the **economy simulation** (30 sorties per profile through the
+real director); the history with type frequencies; and paper efficiency per aircraft.
+
+## Since v0.0.5: enemy aircraft and interception
 
 ### Enemy aircraft
 
@@ -329,7 +469,10 @@ shoot down counts whoever finishes it (T1's guns included).
 | A / D | Assisted banking (turn without the mouse) |
 | Shift | Boost (short burst, then recharge) |
 | R | Rearm ink and range (landed at home only) |
-| 1 / 2 / 3 | Choose a mission card (at home, until launch) |
+| 1 – 4 | Choose a mission card (at home, until launch); 4 is a world event's |
+| X | Swap the chosen card (3 swaps, one back per sortie) |
+| L | Logbook: records, achievements, aircraft, paper log, session |
+| ` | Developer panel |
 | Q / E | Choose a plane (at home); with a plane on the pad, stows it first |
 | Drag (at home) | Turn the plane preview |
 | F | Fold, refit or roll out the chosen plane |
@@ -345,18 +488,22 @@ shoot down counts whoever finishes it (T1's guns included).
 | Starting resources | +100 |
 | Fold a new plane | −10 / −25 / −30 / −40 |
 | Refit a recovered plane (and repair it) | −3 / −6 / −7 / −10 |
-| Roll out a stowed plane | 0 |
+| Roll out a stowed plane, or fold the emergency Dart (when nothing is affordable) | 0 |
 | Rearm ink and range after landing | 0 |
-| Home income (while below 150) | +1 every 2 s |
-| Mission success | +reward on the card: about 35 to 95 on Easy, 65 to 200 on Medium, 105 to 305 on Hard |
-| Failed mission, crash | +0 |
-| Raid on T1 beaten off, with your help | +60 (missions that send the raider pay through the mission instead) |
-| Raid on T1 beaten off by T1's guns alone | 0 |
+| Home production | +1 every 3 s below 60, every 6 s from 60, paused at 120 |
+| Mission success | B × D × M: about 25–55 easy, 50–115 medium, 95–165 hard, 140–260 very hard; recovery missions at least 30 |
+| Streak bonus | +5% of the reward from 3 in a row, +10% from 5 |
+| Operation stage optional objective / completion bonus | +10–25 / a quarter of the stages' rewards (at least 20) |
+| Shipment / convoy bounty (off the event's card) | +45 / +50 |
+| Supply run delivered | +50 |
+| Failed mission, crash, abandoned mission | +0 (no fines) |
+| Raid on T1 beaten off, with your help | +60 (the emergency card pays through the mission instead) |
 | A raider's bomb hits the paper store | −20, never below 50 |
 | Shooting down an ambient patrol | 0 |
 
 Paper is still the only resource; ink is not a currency. For playtesting,
-`paperwars.state.resetPaper()` in the browser console restores the starting balance.
+`paperwars.state.resetPaper()` in the browser console restores the starting balance, and the
+developer panel (`) can apply a simulated player.
 
 ## Project structure
 
@@ -366,6 +513,18 @@ src/
   Game.ts                 Wires rules ↔ scene ↔ input ↔ HUD; runs the frame loop; builds the HUD view
   config.ts               Every tuning number: aircraft catalog (AIRCRAFT), threat levels (THREAT), defenses (DEFENSES),
                           AI pilots (AI), raids (RAIDS)
+
+  director/
+    MissionDirector.ts    The cards: slots and tiers, templates, eligibility, variety, swaps, replacement,
+                          validation, operations on the board, history; saving its state
+    Templates.ts          Mission categories, template weights, recovery types
+    Performance.ts        The rolling performance rating, skill, struggling; simulated player profiles
+    WorldEvents.ts        Raids' turn, shipments, convoys, supply runs; territory states and persistent wrecks
+    Operations.ts         Operation templates, stages, optional objectives, bonus, abandoning
+    Simulation.ts         The economy simulation (profiles through the real director and economy)
+
+  progress/
+    Progress.ts           Medals, personal bests, streaks, aircraft mastery, achievements, session summary
 
   ai/
     AiAircraft.ts         One AI plane: flight model, health, guns, bombs, and its pilot (the state machine)
@@ -408,15 +567,17 @@ src/
   missions/
     Mission.ts            Objectives (bomb, low approach, recon, reach, ring, land, destroy, survive, escape,
                           intercept, escort, patrol), progress and failure
-    MissionGenerator.ts   Mission cards: types, threat windows, targets, known defenses, the aircraft each one
-                          sends up, codenames, rewards
+    MissionGenerator.ts   Missions from templates: types, threat windows, targets (or a forced one), escalations,
+                          the aircraft each one sends up, event missions, par times, rewards (B × D × M)
 
   systems/
     GameState.ts          The rules: garage and hangar, fold/refit/roll-out, launch, weapons, health,
                           range, land → rearm → take off → end sortie, rewards, raids won and lost, the sortie log
     LocalStats.ts         Career numbers in local storage (survives missing or blocked storage)
-    ResourceManager.ts    Paper balance; all costs, rewards and raid losses go through it (with a protected floor)
-    HomeIncome.ts         T1's paper trickle
+    ResourceManager.ts    Paper balance; all costs, rewards and raid losses go through it, with what they were for
+    HomeIncome.ts         T1's paper store: production, slowing as it fills, pausing when full
+    Ledger.ts             The paper log, totals, and paper in/out per aircraft and mission type
+    SaveGame.ts           The save: IndexedDB / local storage / memory, validation, versions, reset
     Boundary.ts           Airspace edge: warning countdown and autopilot hand-over
     Random.ts             Seeded random numbers (for repeatable tests)
     Input.ts              Keyboard (physical keys), mouse buttons and deltas, pointer lock
@@ -440,13 +601,15 @@ src/
     icons.ts              The line icons for objectives and defenses
     Garage.ts             Plane cards and the inspector
     MiniMap.ts            The top-down navigation diagram
+    Logbook.ts            Records and achievements, aircraft, the paper log, the session
+    DevPanel.ts           The mission director's developer panel
     dom.ts                Small DOM helpers
 ```
 
 The rules (`GameState`, `Mission`, `MissionGenerator`, `Aircraft`, `FlightModel`, everything in
-`ai/`, everything in `combat/` except the projectile pool, everything in `defenses/`,
-`ResourceManager`, `HomeIncome`, `LocalStats`, `Boost`, `Landing`, `Boundary`) contain no rendering
-or input code, and all of them have unit tests. The game reports facts to the rules ("this round
+`ai/`, `director/` and `progress/`, everything in `combat/` except the projectile pool, everything
+in `defenses/`, `ResourceManager`, `HomeIncome`, `Ledger`, `SaveGame`, `LocalStats`, `Boost`,
+`Landing`, `Boundary`) contain no rendering or input code, and all of them have unit tests. The game reports facts to the rules ("this round
 hit T8-turret1 for 7", "the plane flew from A to B", "the raider's bomb hit the store") and the
 rules decide what they mean, which should make it straightforward to move them to a server later.
 The defense network, the ordnance and the AI pilots only ever see an aircraft as an id, a side, a
@@ -464,6 +627,16 @@ The flight controller, garage, ratings, suitability, defenses, HUD and practice 
 ### Tuning
 
 All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most worth playtesting first:
+
+- **How the cards adapt:** `DIRECTOR.slots` (each slot's tier at skill 0 and 1), `DIRECTOR.skill`
+  (how fast skill follows the rating), `DIRECTOR.weights` (what the rating values),
+  `DIRECTOR.struggle` (when recovery missions start), `DIRECTOR.variety`, `DIRECTOR.swaps`.
+- **What missions pay:** `TIERS` (D), `DIRECTOR.modifiers` (M), `MISSIONS.baseReward`,
+  `distanceReward`, `THREAT.rewardBonus`, `MISSIONS.airBonus`, `DIRECTOR.recoveryReward`. The
+  economy simulation (developer panel, `src/director/simulation.test.ts`) shows the effect.
+- **How busy the world is:** `EVENTS` (first, cooldown, weights, bounties, alert and disabled times).
+- **Operations and progress:** `OPERATIONS`, `PROGRESS` (medal thresholds, streak bonus).
+- **Home production:** `ECONOMY.incomeInterval`, `incomeTaper`, `incomeCap`; the emergency Dart in `ECONOMY.emergency`.
 
 - **How dangerous enemy pilots are:** `AI.skill` per level (`aimError`, `burst`/`pause`, `lead`,
   `reaction`, `throttle`, `evasive`, `positioning`) and `AI.accuracy` (how much distance, speed
@@ -490,6 +663,47 @@ All provisional numbers are in [`src/config.ts`](src/config.ts). The ones most w
 ## Decisions worth knowing
 
 These are judgment calls where the plan left room.
+
+### v0.0.6: missions, progression and balance
+
+- **Very hard is hard content plus escalations.** A fourth content level would have meant another
+  pilot skill and threat window for every mission type; escalations (one fighter becomes two, a
+  bomber gets an escort, an extra target, a return flight, a stricter clock) are the plan's own
+  list of how difficulty should grow, and leave enemy health and damage alone. A type that can't
+  be escalated (a raid interception) tops out at hard.
+- **M is for the situation, D for the tier.** Escalations that add aircraft, targets or distance
+  are already paid through B; only the stricter clock adds to M. M is mostly the world's:
+  high-value targets, territories on alert.
+- **Rewards came down.** v0.0.5 rewards reached 305 for hard cards against planes costing 10–40;
+  the plan's table pairs a Widewing (40) with 75–150. Bases, the distance and threat bonuses and
+  the air bonus were scaled so medians land in those bands (a unit test checks them).
+- **The emergency Dart over a protected minimum.** As the plan preferred. It is gone after the
+  sortie, so it can't be stowed or refitted into a free real Dart, and it carries no bomb, so the
+  director only deals cards it can fly when it is all the player has.
+- **Storage is a cap, not a second balance.** Home production slows from 60 paper and stops at 120
+  rather than filling a separate store the player must collect: the same safety net, no new UI.
+- **The safe card stays easy for everyone.** Recovery replaces it with cheaper work; skill only
+  moves the other two. The "Your level" tag marks the tier the director recommends.
+- **Swaps per card, not a full reshuffle.** Players keep the cards they like; three swaps in hand
+  with one back per sortie means a dislike never traps them, but rerolling for the best card is
+  limited.
+- **Operations take the balanced slot** (an operation is the long-term choice that fits the
+  player's level) and keep their territory on alert, so a radar destroyed in stage 2 is still down
+  when stage 3 bombs the depot. Stages whose target is already destroyed are skipped.
+- **Event cards are a fourth card.** The emergency defense card never replaces what the player
+  chose; at the desk it pulses, in the air the v0.0.5 raid alert does the job. Events wait for
+  each other (one at a time, cooldowns), and raids wait their turn behind them.
+- **Bounties outside the card.** A shipment or convoy destroyed on another sortie pays a bounty,
+  the event's own card pays its reward instead, never both (like v0.0.5's raids).
+- **Supply runs come in over safe ground.** Through enemy country the guns, which the escort can't
+  stop, shot every supply plane down; now they form up over T2 or T4 and run in from outside
+  home's corner, so the danger is the fighters the player can fight. An event's leftover
+  aircraft head home when it ends.
+- **Saves keep recipes, not missions.** Cards are saved as (type, tier, seed, target,
+  escalations), made again on load and dropped if the world says they can't be done, so a save
+  can never contain an impossible card. World events are not saved.
+- **A session summary needs a "leave".** There is no main menu yet, so the summary is in the menu
+  (Esc) and greets you on your next visit.
 
 ### v0.0.5: aircraft
 
@@ -583,6 +797,57 @@ These are judgment calls where the plan left room.
 - **Pulling up after a clean low-level release is fine.** The bomb was released clean and counts;
   the "run blown" banner waits until no bomb is falling.
 
+## Definition of done (v0.0.6)
+
+| Requirement | Status |
+|---|---|
+| Mission director from templates and explicit rules: evaluates the situation, valid targets, difficulty, risk-based rewards, no repeats, existing AI and defenses, tracks active and recent missions | ✅ |
+| Generated parameters: target, threat level, objectives, enemy aircraft, reward, optional time limit | ✅ |
+| Three offers: safe, balanced, high-risk; free choice | ✅ |
+| Only the flown card replaced; others kept unless invalid; limited manual refresh (swaps) | ✅ |
+| Variety memory, not predictable | ✅ |
+| Eligibility: spawnable aircraft, bombs a reachable plane carries, standing targets, affordable | ✅ |
+| Rolling performance rating from recent missions (success, losses, damage dealt/taken, time, accuracy, landings, hard missions) | ✅ |
+| Adaptive difficulty with low-risk work always available; recovery missions that pay for a plane | ✅ |
+| Gradual progression by new threat combinations (escalations), not health or damage | ✅ |
+| Player-selected difficulty; gradual skill changes | ✅ |
+| R = B × D × M with tier multipliers 1 / 1.5 / 2 / 2.5 | ✅ |
+| Cost-to-reward balancing; no farming by abandoning | ✅ (unit tests and economy simulation) |
+| Free emergency Dart with limited capabilities | ✅ |
+| Production interval, storage cap, slowing and pausing, no idle accumulation | ✅ |
+| No failure fines | ✅ |
+| Transaction history and resource efficiency statistics | ✅ |
+| Dynamic raids, temporary high-value targets, convoys (intercept and escort), emergency defense card | ✅ |
+| Territory states (peaceful, alert, under attack, defenses disabled) affecting missions and markers | ✅ |
+| Event cooldowns and limits; optional participation | ✅ |
+| Operations: linked stages, multi-sortie, completion bonus, optional objectives, tracking, abandoning | ✅ |
+| Medals, personal bests, streaks with modest bonuses, aircraft mastery, achievements, session summary | ✅ |
+| Local save (IndexedDB, fallbacks): paper, plane, hangar, statistics, achievements, history, operation, settings | ✅ |
+| Restore on launch (a plane in flight comes back to T1); validation; reset with confirmation; save versioning | ✅ |
+| Developer panel, forced generation, simulated profiles, economy simulation, mission history logging | ✅ |
+
+The rules are covered by unit tests (`npm test`, 270 tests, 71 new): the director's deals, tiers by
+skill, very hard escalations, eligibility (air room, raids, bombs, affordability, destroyed
+targets), recovery, variety, swaps, replacement and save/restore; the performance rating and
+gradual skill; operations; world events, bounties and territory states; medals, records,
+streaks, mastery and achievements; the ledger and home production; the emergency Dart; save
+validation, repair, versions and reset; the reward bands; and the economy simulation (no profile
+ever stuck, consistent success builds paper, rewards scale with risk, abandoning earns nothing).
+
+Checked in headless Chromium at 1280×720 with no page errors: the desk with the new cards; a
+sortie through to the report (medal, records, achievement) and back to the desk with only the
+flown card replaced; the logbook and developer panel (preview, simulation, forcing a very hard
+mission); a raid's emergency card flown and paid through the mission with no double pay; a
+convoy shot down off its card paying its bounty; T5 disabled with its wrecks kept after the
+sortie; an operation from stage 1 to stage 2 with its territory held on alert; the recovery card
+and the emergency Dart at 3 paper; a shipment expiring with its card; an escorted supply run
+delivering +50; and a reload restoring paper, cards, streak and hangar with a *Welcome back* card.
+
+**Still unproven: how it *feels*.** Playtest first: whether skill moves too slowly or quickly
+(`DIRECTOR.skill`), whether the balanced and risky tiers feel right (`DIRECTOR.slots`), whether
+events come too often (`EVENTS.cooldown`), whether rewards are generous enough now they came
+down, and whether the supply run is winnable with a real mouse.
+
 ## Definition of done (v0.0.5)
 
 | Requirement | Status |
@@ -640,7 +905,7 @@ music help or clutter.
 
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.6, core multiplayer.** Two or more
-players sharing a world. The defenses, the ordnance and the AI pilots already treat every aircraft
-as an id, a side, a position and a velocity, and the AI's raids rehearse the player-versus-player
-bombing loop of v0.0.7.
+Per the [roadmap](docs/GDD.md#17-development-roadmap): **v0.0.7, core multiplayer.** Two or more
+players sharing a world. The director's rules already run on explicit inputs (a situation, a
+world context) that a server can supply per player, and saves keep recipes rather than missions,
+which is the shape server-side persistence will need.

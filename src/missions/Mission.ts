@@ -1,5 +1,5 @@
 import type { AirSpawn } from '../ai/AirTraffic';
-import type { AiRole, Difficulty, ThreatLevel } from '../config';
+import type { AiRole, Difficulty, ThreatLevel, Tier } from '../config';
 
 export type MissionType =
   | 'bombing'
@@ -21,9 +21,38 @@ export type MissionType =
   | 'bomber-intercept'
   | 'escort'
   | 'patrol'
-  | 'combined';
+  | 'combined'
+  /** World events: a high-value shipment to destroy, an enemy convoy to intercept, a friendly supply run to escort. */
+  | 'shipment'
+  | 'convoy'
+  | 'supply-run';
+
+/**
+ * What the director put on top of a mission. Escalations make a hard mission very hard (a second
+ * fighter, an escort for the bomber, an extra target, a mandatory return, a stricter clock);
+ * situational modifiers come from the world (a high-value target, a territory on alert) or the
+ * player's situation (a recovery mission, an emergency).
+ */
+export type Escalation = 'wingman' | 'escorted' | 'extra-target' | 'return' | 'tight-clock';
+export type Situational = 'high-value' | 'alert' | 'recovery' | 'emergency';
+export type ModifierId = Escalation | Situational;
+
+/** reward = B × D × M, rounded to 5. */
+export interface RewardParts {
+  /** The mission type's base reward plus the distance, threat and air bonuses. */
+  base: number;
+  /** The tier's difficulty multiplier. */
+  difficulty: number;
+  /** The product of the modifiers' multipliers. */
+  modifier: number;
+  /** A floor that applies (recovery missions pay enough for a new plane), or null. */
+  floor: number | null;
+}
 
 export type MissionStatus = 'available' | 'active' | 'succeeded' | 'failed';
+
+/** A completed mission's performance rating. */
+export type Medal = 'bronze' | 'silver' | 'gold';
 
 /**
  * missed         – every bomb is gone and a target is still standing.
@@ -83,7 +112,7 @@ export interface LowApproach {
 export type ApproachState = 'outside' | 'clean' | 'blown';
 
 /** What a destroy objective is after: practice planes, weapons, a radar station or a supply depot. */
-export type DestroyKind = 'practice' | 'defense' | 'radar' | 'supply';
+export type DestroyKind = 'practice' | 'defense' | 'radar' | 'supply' | 'shipment';
 
 export type Objective =
   | { kind: 'bomb'; territoryId: string; zone: TargetZone; precision: boolean; approach?: LowApproach }
@@ -102,7 +131,7 @@ export type Objective =
    * (`territoryId` is where the fight is expected). With `before`, it fails if one of them gets
    * away ('escape') or releases its bomb ('release') first.
    */
-  | { kind: 'intercept'; territoryId: string; targets: string[]; count: number; what: AiRole | 'aircraft'; before?: 'escape' | 'release' }
+  | { kind: 'intercept'; territoryId: string; targets: string[]; count: number; what: AiRole | 'aircraft' | 'convoy'; before?: 'escape' | 'release' }
   /** Keep friendly bomber `escort` flying until its bomb hits `zone` on `territoryId`. */
   | { kind: 'escort'; territoryId: string; escort: string; zone: TargetZone }
   /** Spend `duration` seconds in total inside a patrol area. */
@@ -123,7 +152,16 @@ export interface MissionThreat {
 
 export interface MissionSpec {
   type: MissionType;
+  /** The content difficulty: pilots' skill, threat window, bullseye sizes and the like. */
   difficulty: Difficulty;
+  /** How hard the card is as offered (a very hard card is hard content with escalations). Defaults to `difficulty`. */
+  tier?: Tier;
+  /** What the director added on top. */
+  modifiers?: ModifierId[];
+  /** How the reward was worked out, for the card and the developer panel. */
+  rewardParts?: RewardParts;
+  /** Seconds a good run takes, for the bronze / silver / gold rating. */
+  par?: number;
   title: string;
   description: string;
   reward: number;
@@ -195,9 +233,17 @@ export class Mission {
     return this.progress.every((p) => p >= 1);
   }
 
-  /** Can objective `index` be completed right now? In an ordered mission only the first unfinished one can. */
+  get tier(): Tier {
+    return this.spec.tier ?? this.spec.difficulty;
+  }
+
+  /**
+   * Can objective `index` be completed right now? In an ordered mission only the first unfinished
+   * one can, and a landing is always last: it only counts once everything else is done.
+   */
   isOpen(index: number): boolean {
     if (this.isDone(index)) return false;
+    if (this.objectives[index]?.kind === 'land' && this.objectives.some((o, i) => o.kind !== 'land' && !this.isDone(i))) return false;
     if (!this.spec.ordered) return true;
     for (let i = 0; i < index; i++) if (!this.isDone(i)) return false;
     return true;

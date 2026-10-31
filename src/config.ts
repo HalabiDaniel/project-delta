@@ -16,11 +16,20 @@ export const ECONOMY = {
   startingPaper: 100,
   /** Home produces `incomeAmount` paper every `incomeInterval` seconds… */
   incomeAmount: 1,
-  incomeInterval: 2,
-  /** …while the player holds less than this. It is a safety net; missions are how you get rich. */
-  incomeCap: 150,
+  incomeInterval: 3,
+  /** …at half that rate once the player holds this much (the home store is filling up)… */
+  incomeTaper: 60,
+  /** …and not at all from this much on: the store is full. It is a safety net; missions are how you get rich. */
+  incomeCap: 120,
   /** Enemy raids never take the balance below this, so the player can always fold a plane. */
   protectedPaper: 50,
+  /**
+   * The free emergency Dart, offered only when the player can afford no plane at all: folded from
+   * scrap, with half the ink, no bomb and a shorter range, for one sortie (it is not kept afterwards).
+   */
+  emergency: { ammo: 20, range: 1800 },
+  /** Transactions kept in the paper log. */
+  ledgerSize: 60,
 } as const;
 
 export const WORLD = {
@@ -399,7 +408,7 @@ export const THREAT: {
   /** The threat levels (lowest, highest) a mission of each difficulty sends the player into. */
   byDifficulty: { easy: [0, 1], medium: [1, 2], hard: [2, 3] },
   /** Extra reward for each defended territory a mission goes into, scaled by the type's exposure. */
-  rewardBonus: { 0: 0, 1: 8, 2: 16, 3: 26 },
+  rewardBonus: { 0: 0, 1: 5, 2: 10, 3: 16 },
 };
 
 /** Automated defenses on the territories. Numbers are first balancing guesses. */
@@ -520,6 +529,31 @@ export const DEFENSES = {
 } as const;
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
+
+/**
+ * A territory's state in the world. alert – the player struck it recently: its wrecks stay down
+ * and its defenders react at once. under-attack – an enemy raid is heading for it (home). disabled
+ * – every weapon on it is destroyed and stays that way for a while. The states reset when the
+ * event behind them ends.
+ */
+export type TerritoryState = 'peaceful' | 'alert' | 'under-attack' | 'disabled';
+
+/**
+ * How hard a mission card is, as offered. The first three are the content difficulties; a very
+ * hard card is a hard mission with one or two escalations on top (a second fighter, an escort, an
+ * extra target, a mandatory return, a stricter clock). Its difficulty multiplier is the D in
+ * reward = B × D × M.
+ */
+export type Tier = 'easy' | 'medium' | 'hard' | 'veryhard';
+
+export const TIERS: Record<Tier, { label: string; stars: number; multiplier: number; content: Difficulty; index: number }> = {
+  easy: { label: 'Easy', stars: 1, multiplier: 1, content: 'easy', index: 0 },
+  medium: { label: 'Medium', stars: 2, multiplier: 1.5, content: 'medium', index: 1 },
+  hard: { label: 'Hard', stars: 3, multiplier: 2, content: 'hard', index: 2 },
+  veryhard: { label: 'Very hard', stars: 4, multiplier: 2.5, content: 'hard', index: 3 },
+};
+
+export const TIER_ORDER: readonly Tier[] = ['easy', 'medium', 'hard', 'veryhard'];
 
 /** What an AI aircraft is for: scouts look and run, fighters hunt, bombers bomb. */
 export type AiRole = 'scout' | 'fighter' | 'bomber';
@@ -702,26 +736,29 @@ export const MISSIONS = {
   },
   /** Base reward per mission type, before the distance bonus and the difficulty multiplier. */
   baseReward: {
-    bombing: 30,
-    precision: 45,
-    recon: 25,
-    delivery: 25,
-    return: 40,
-    'multi-bomb': 50,
-    rings: 30,
-    practice: 35,
-    suppression: 40,
-    'danger-recon': 30,
-    fortified: 45,
-    'multi-stage': 45,
-    survival: 35,
-    'low-attack': 45,
-    dogfight: 45,
-    'scout-intercept': 40,
-    'bomber-intercept': 50,
-    escort: 45,
-    patrol: 40,
-    combined: 50,
+    bombing: 22,
+    precision: 30,
+    recon: 18,
+    delivery: 18,
+    return: 28,
+    'multi-bomb': 26,
+    rings: 10,
+    practice: 24,
+    suppression: 28,
+    'danger-recon': 22,
+    fortified: 30,
+    'multi-stage': 32,
+    survival: 24,
+    'low-attack': 30,
+    dogfight: 28,
+    'scout-intercept': 25,
+    'bomber-intercept': 30,
+    escort: 28,
+    patrol: 24,
+    combined: 32,
+    shipment: 25,
+    convoy: 28,
+    'supply-run': 28,
   },
   /**
    * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
@@ -748,11 +785,14 @@ export const MISSIONS = {
     escort: 1.2,
     patrol: 1,
     combined: 1.2,
+    shipment: 1.1,
+    convoy: 0.6,
+    'supply-run': 0.8,
   },
   /** Mission types built around defenses need targets with at least this threat level. */
   minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1 },
   /** Extra reward for each enemy aircraft a mission sends up, by its pilot's skill. */
-  airBonus: { easy: 10, medium: 18, hard: 28 },
+  airBonus: { easy: 6, medium: 8, hard: 10 },
   /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
   raidOrigins: { easy: ['T3', 'T7'], medium: ['T6', 'T8'], hard: ['T9'] } as Record<Difficulty, readonly string[]>,
   /**
@@ -768,7 +808,17 @@ export const MISSIONS = {
   patrolMargin: 15,
   patrolCeiling: 60,
   /** Extra paper per metre between the launch pad and the objective. */
-  distanceReward: 0.15,
+  distanceReward: 0.1,
+  /**
+   * Seconds a good run spends on the job itself, on top of the flight there at the reference
+   * speed: the par time for a gold rating.
+   */
+  parAllowance: {
+    bombing: 15, precision: 22, recon: 14, delivery: 0, return: 25, 'multi-bomb': 30, rings: 6, practice: 28,
+    suppression: 30, 'danger-recon': 22, fortified: 25, 'multi-stage': 50, survival: 18, 'low-attack': 28,
+    dogfight: 30, 'scout-intercept': 30, 'bomber-intercept': 25, escort: 45, patrol: 35, combined: 35,
+    shipment: 25, convoy: 30, 'supply-run': 45,
+  },
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
   referenceSpeed: 20,
   /** Bullseye radius for ordinary bombing targets, and for the small precision spot. */
@@ -835,6 +885,9 @@ export const SUITABILITY = {
     escort: { firepower: 3, maneuverability: 2, durability: 1, range: 1 },
     patrol: { firepower: 2, maneuverability: 2, range: 1, speed: 1 },
     combined: { payload: 1, firepower: 1, durability: 1, maneuverability: 1 },
+    shipment: { firepower: 2, payload: 2, maneuverability: 1 },
+    convoy: { speed: 2, firepower: 3, range: 1 },
+    'supply-run': { firepower: 3, maneuverability: 2, durability: 1, range: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus
@@ -843,6 +896,122 @@ export const SUITABILITY = {
   balanced: ['multi-stage', 'combined'],
   recommended: 4,
   good: 2.75,
+} as const;
+
+/**
+ * The mission director: which cards it deals, how it adapts to the player, and the world events
+ * and operations it builds missions around. All numbers are first balancing guesses.
+ */
+export const DIRECTOR = {
+  /**
+   * The three regular cards. Each slot's tier is an index (0 easy … 3 very hard) that grows with
+   * the player's skill from `[0]` (skill 0) to `[1]` (skill 1); the fraction is the chance of the
+   * tier above. The safe card always stays easy.
+   *
+   * Skill itself follows the performance rating, mapped from `skill.floor` (skill 0) to
+   * `skill.ceiling` (skill 1).
+   */
+  slots: {
+    safe: [0, 0],
+    balanced: [0.55, 2.2],
+    risky: [1.35, 3],
+  } as Record<'safe' | 'balanced' | 'risky', readonly [number, number]>,
+  /** Very hard cards get one escalation, and a second with this chance per point of skill above `secondFrom`. */
+  secondEscalation: { from: 0.75, chance: 1.6 },
+  /** What each modifier is called on a card and what it multiplies the reward by (the M in B × D × M). */
+  modifiers: {
+    // Escalations that add aircraft, targets or distance are paid through B already.
+    wingman: { label: 'Wingman', detail: 'A second enemy fighter', reward: 1 },
+    escorted: { label: 'Escorted', detail: 'The bomber has a fighter escort', reward: 1 },
+    'extra-target': { label: '+1 target', detail: 'An extra objective', reward: 1 },
+    return: { label: 'Return flight', detail: 'Land on T1 to finish', reward: 1 },
+    'tight-clock': { label: 'Tight clock', detail: 'A stricter time limit', reward: 1.1 },
+    'high-value': { label: 'High value', detail: 'A temporary high-value target', reward: 1.5 },
+    alert: { label: 'On alert', detail: 'The target territory is on alert', reward: 1.2 },
+    recovery: { label: 'Recovery', detail: 'Low risk, pays enough for a new plane', reward: 1 },
+    emergency: { label: 'Emergency', detail: 'Defend home', reward: 1 },
+  },
+  /** A recovery mission always pays at least this: enough to fold a Falcon. */
+  recoveryReward: 30,
+  /** Tight clock: the time limit is the par time times this, plus `tightExtra` seconds (existing limits shrink by `tightShrink`). */
+  tightSlack: 1.7,
+  tightExtra: 10,
+  tightShrink: 0.8,
+  /**
+   * Variety: each of the last `window` missions flown in the same category multiplies a type's
+   * weight by `category`, in the same type by `type` again. The last `repeat` flown missions
+   * (type and target) are never offered again as they were.
+   */
+  variety: { window: 6, category: 0.45, type: 0.55, repeat: 3, noise: 0.35 },
+  /** Swapping a card: at most `max` swaps in hand, one more back after every sortie. */
+  swaps: { max: 3, start: 3, perSortie: 1 },
+  /**
+   * Skill (0–1) drives the tiers. It starts at `start`, waits for `settle` missions, then moves
+   * towards the performance rating by at most `maxStep` per mission: one good sortie never makes
+   * the next much harder.
+   */
+  skill: { start: 0.2, settle: 3, gain: 0.35, maxStep: 0.07, floor: 0.35, ceiling: 0.9 },
+  /** The performance rating looks at this many recent missions, the newest counting most. */
+  window: 10,
+  recency: 0.85,
+  /** How much each indicator counts in the rating. */
+  weights: { success: 0.3, survival: 0.15, damage: 0.1, speed: 0.1, accuracy: 0.1, landings: 0.1, hard: 0.15 },
+  /** Struggling: this many planes lost in the last `lossWindow` sorties, or this many failures in the last `failWindow`. */
+  struggle: { losses: 2, lossWindow: 3, failures: 3, failWindow: 4 },
+  /** History entries kept for the developer panel and the save. */
+  historySize: 80,
+} as const;
+
+/** World events: things that happen whether or not the player asked for them. */
+export const EVENTS = {
+  /** Nothing happens until the player has flown this many sorties. */
+  afterSorties: 1,
+  /** Seconds before the first event, and between one major event ending and the next starting. */
+  first: [70, 120] as readonly [number, number],
+  cooldown: [100, 170] as readonly [number, number],
+  /** At most this many major events (raids, convoys, shipments, supply runs) at once. */
+  maxActive: 1,
+  /** How often each kind comes up. Raids keep their own pace (RAIDS) but wait their turn. */
+  weights: { 'high-value': 1, convoy: 1, 'supply-run': 0.8 },
+  /** Seconds a high-value shipment stays before it is moved away. */
+  shipmentTime: 200,
+  /** Bounty for destroying a shipment or shooting down a convoy outside the event's own card. */
+  bounty: { 'high-value': 45, convoy: 50 },
+  /** Supplies delivered to T1 by a supply run that the player escorted. */
+  supplies: 50,
+  /** A territory stays on alert this long after the player destroys something there, and its wrecks stay down. */
+  alertTime: 180,
+  /** With every weapon destroyed, a territory's defenses stay disabled this long. */
+  disabledTime: 240,
+} as const;
+
+/** Operations: short chains of missions against one territory, flown over several sorties. */
+export const OPERATIONS = {
+  /** Offered once the player has completed this many missions, and not again for `cooldown` missions after one ends. */
+  afterMissions: 2,
+  cooldown: 2,
+  /** Chance a deal includes an operation card when one may be offered. */
+  chance: 0.45,
+  /** Completing every stage pays this share of the stages' rewards on top (rounded to 5, at least `minBonus`). */
+  bonusShare: 0.25,
+  minBonus: 20,
+  /** Optional objectives: paper for meeting one. */
+  optionalBonus: { easy: 10, medium: 15, hard: 20, veryhard: 25 } as Record<Tier, number>,
+  /** "Take less than this share of damage" optional objective. */
+  lightDamage: 0.25,
+} as const;
+
+/** Ratings, records, streaks and achievements. */
+export const PROGRESS = {
+  /** Silver needs the plane to take at most this share of its health in damage. */
+  silverDamage: 0.4,
+  /** Gold also needs the mission done within par time, and the plane brought home. */
+  /** Air combat efficiency: ink accuracy at least this. */
+  silverAccuracy: 0.18,
+  /** Streak bonus: +5% from 3 in a row, +10% from 5. Modest, so a failure never hurts much. */
+  streak: [[5, 0.1], [3, 0.05]] as ReadonlyArray<readonly [number, number]>,
+  /** "Most accurate bombing run" needs at least this many bombs dropped. */
+  accuracyMinBombs: 2,
 } as const;
 
 export const CAMERA = {

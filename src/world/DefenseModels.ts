@@ -169,9 +169,10 @@ export class DefenseModels {
     }
   }
 
-  /** Everything standing again, between sorties. */
-  restoreAll(): void {
+  /** Everything standing again, between sorties, except the wrecks in `keep`. */
+  restoreAll(keep: ReadonlySet<string> = new Set()): void {
     for (const v of this.views) {
+      if (keep.has(v.inst.id) && !v.inst.alive) continue;
       v.wrecked = false;
       v.collapse = 0;
       v.shudder = 0;

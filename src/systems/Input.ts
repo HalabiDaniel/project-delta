@@ -10,7 +10,8 @@ const LOCK_REQUEST_CAP_MS = 500;
 
 const GAME_KEYS = new Set([
   'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'KeyM', 'Escape', 'Enter', 'NumpadEnter',
-  'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
+  'ShiftLeft', 'ShiftRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4',
+  'KeyX', 'KeyL', 'Backquote',
 ]);
 
 /** Mouse buttons as reported by MouseEvent.button. */
@@ -35,6 +36,8 @@ export class Input {
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
       if (!GAME_KEYS.has(e.code)) return;
+      // Keys typed into a form control (the developer panel's) are not for the game.
+      if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
       if (e.code === 'Space') e.preventDefault(); // no page scrolling or button activation
       this.held.add(e.code);
       if (!e.repeat) for (const handler of this.keyHandlers) handler(e.code);

@@ -16,6 +16,7 @@ import {
   MISSION_TYPES,
   missionReward,
   missionThreat,
+  rewardParts,
   supports,
   threatWindow,
   type MissionContext,
@@ -324,8 +325,37 @@ describe('missionReward', () => {
     }
   });
 
-  it('every mission pays more than a mid-priced plane costs', () => {
-    for (const type of MISSION_TYPES) expect(missionReward(type, 'easy', 50)).toBeGreaterThan(25);
+  it('rewards fall in the cost-to-reward bands: a Dart job pays 25+, a medium one a Falcon twice over, a hard one a Widewing', () => {
+    const rewards = (tier: 'easy' | 'medium' | 'hard') => {
+      const out: number[] = [];
+      for (const type of MISSION_TYPES) {
+        if (!supports(type, tier, ctx)) continue;
+        for (let seed = 1; seed <= 12; seed++) out.push(generateMission(type, tier, ctx, seededRng(seed)).reward);
+      }
+      return out.sort((a, b) => a - b);
+    };
+    const median = (r: number[]) => r[Math.floor(r.length / 2)];
+    const easy = rewards('easy');
+    const medium = rewards('medium');
+    const hard = rewards('hard');
+    // Easy work always beats the price of a Dart twice over, and stays below a medium job.
+    expect(easy[0]).toBeGreaterThanOrEqual(25);
+    expect(median(easy)).toBeLessThanOrEqual(55);
+    // Medium: a Falcon's mission pays 50–100 or so; hard: a Widewing's 75–150 or so.
+    expect(median(medium)).toBeGreaterThanOrEqual(50);
+    expect(median(medium)).toBeLessThanOrEqual(100);
+    expect(median(hard)).toBeGreaterThanOrEqual(75);
+    expect(median(hard)).toBeLessThanOrEqual(150);
+    expect(hard[hard.length - 1]).toBeLessThanOrEqual(200);
+  });
+
+  it('reward = B × D × M: a very hard tier pays 2.5×, modifiers multiply, a recovery mission has a floor', () => {
+    const parts = rewardParts('bombing', 'veryhard', 100, [2], ['hard'], ['tight-clock', 'alert']);
+    expect(parts.difficulty).toBe(2.5);
+    expect(parts.modifier).toBeCloseTo(1.1 * 1.2);
+    expect(parts.base).toBeCloseTo(MISSIONS.baseReward.bombing + 100 * MISSIONS.distanceReward + THREAT.rewardBonus[2] + MISSIONS.airBonus.hard);
+    expect(missionReward('bombing', 'veryhard', 100, [2], ['hard'], ['tight-clock', 'alert'])).toBe(Math.round((parts.base * 2.5 * 1.32) / 5) * 5);
+    expect(missionReward('recon', 'easy', 10, [], [], ['recovery'])).toBe(30);
   });
 
   it('danger pays: more for heavier defenses, and more for types that keep you under fire longer', () => {

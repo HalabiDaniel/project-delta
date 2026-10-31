@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
-  "description": "paperwars.io v0.0.5 - AI aircraft, dogfighting and interception",
+  "description": "paperwars.io v0.0.6 - dynamic missions, progression and game balance",
   "type": "module",
   "scripts": {
     "dev": "vite",
