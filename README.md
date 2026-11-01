@@ -1,5 +1,13 @@
-# paperwars.io: v0.0.9 in development (core multiplayer), on top of v0.0.8's visual slice
+# paperwars.io: v0.0.10 in development (persistent multiplayer), on top of v0.0.9's core multiplayer
 
+> **v0.0.10 is at developer checkpoint 1 of 3** (phases 1 to 3 of the
+> [plan](docs/roadmap/v0.0.10.md)): players have a stable, secure identity (a device token the
+> server issues and stores only hashed, invite and transfer codes, one connection per player), and
+> PostgreSQL is in place with versioned migrations, the full schema and an idempotent transaction
+> ledger. The world itself is still kept in memory until phases 4 to 6. See
+> [v0.0.10: persistent multiplayer](#v0010-persistent-multiplayer-in-progress) and
+> [docs/PERSISTENCE.md](docs/PERSISTENCE.md).
+>
 > **v0.0.9: multiplayer.** Up to eight players share a classroom on a Node + Colyseus server:
 > claim a desk, fly together, shoot each other down and raid each other's bases. Add `?mp` to the
 > address (or Menu → Multiplayer). See [v0.0.9: core multiplayer](#v009-core-multiplayer) and
@@ -23,6 +31,55 @@ instead of words, short alerts, and tips the first time something matters. The p
 Single-player still runs entirely in the browser (PlayCanvas + TypeScript, no backend).
 Multiplayer adds a Node server (`server/`) that runs the very same rule classes per player, with
 the server deciding every hit, every paper balance and every reward.
+
+## v0.0.10: persistent multiplayer (in progress)
+
+v0.0.10 turns the in-memory session into a world that remembers, and puts it online for a private
+two-player alpha ([plan](docs/roadmap/v0.0.10.md)). It is built in ten phases with three developer
+checkpoints; the details, the audit, the schema and the tests are in
+[docs/PERSISTENCE.md](docs/PERSISTENCE.md).
+
+### What is in it so far (checkpoint 1: phases 1 to 3)
+
+- **An audit of v0.0.9**: everything the server kept only in memory, where it lives, and which
+  phase persists it; a regression baseline (all 370 earlier tests still pass).
+- **Player identity**: on the first join the server issues a 256-bit device token, which the
+  browser keeps and the server stores only as a peppered hash. The same player comes back after a
+  refresh, a closed browser or a server restart. Players are known in the world by a stable public
+  id, never by the connection's session id, and the display name is only a label. A newer
+  connection of the same player takes over ("Opened in another tab").
+- **Invite-only access** (`ACCESS=invite`, the production default): a first join needs an invite
+  code or link (`?mp&invite=…`); the lobby has a Code field. **Transfer codes** move a player to
+  another computer (pause menu → Another computer), and the developer can reissue a lost pass.
+- **PostgreSQL**: a typed data-access layer with pooling, timeouts and retried transactions;
+  versioned migrations applied on start; the full schema for players, worlds, territories,
+  buildings, balances, aircraft, transactions, missions, progress, PvP records and feedback; save
+  format versions that a server refuses to read if they are newer than it; and a transaction ledger
+  that applies each change at most once.
+- **`npm run admin`**: invites (create, list, revoke) and players (list, revoke, restore, log out,
+  reissue a pass).
+
+### Playing it
+
+As v0.0.9 (`npm run server`, then `?mp`), with or without a database:
+
+```bash
+docker compose up -d && cp .env.example .env    # PostgreSQL for development; fill in TOKEN_PEPPER
+```
+
+```bash
+set -a; . ./.env; set +a; npm run server       # migrates the database, then serves ws://localhost:2567
+```
+
+```bash
+TEST_DATABASE_URL=postgres://paperwars:paperwars@localhost:5432/paperwars_test npm test
+```
+
+### Decisions for the developer (checkpoint 1)
+
+The interrupted-sortie and offline-protection rules (plan §3D and §5A), transfer-code behaviour,
+public ids and the choice of host are listed in
+[PERSISTENCE.md](docs/PERSISTENCE.md#decisions-for-the-developer-checkpoint-1).
 
 ## v0.0.9: core multiplayer
 
@@ -997,12 +1054,18 @@ src/mp/                   The multiplayer game in the browser (?mp, loaded only 
   MpViews.ts              Single-player's HUD view, built from the mirrors and the server's reports
   MpHud.ts                Connection, kill feed, scoreboard, raid banner, name and owner tags, emotes
   Lobby.ts                Classroom list, name, claim map
-  NetClient.ts            Joining, reconnecting (and after a refresh), sending frames and commands
+  NetClient.ts            Joining (device token, invite and transfer codes), reconnecting (and after a refresh), sending frames and commands
   NetBase.ts              The player's Base as a mirror whose actions become server commands
 
 server/                   The multiplayer server (Node, Colyseus)
-  index.ts                Starts the server and the room list endpoint
-  WorldRoom.ts            The classroom room: joins, claims, drops, reconnects, leaves; ticks; schema sync
+  index.ts                Starts the server (config, store, migrations) and the room list endpoint
+  config.ts               Settings from the environment (DATABASE_URL, TOKEN_PEPPER, ACCESS, PORT, ...)
+  services.ts             The store and identity service the rooms use
+  WorldRoom.ts            The classroom room: authentication, joins, takeovers, claims, drops, reconnects, leaves; ticks; schema sync
+  identity/               Device tokens, invite and transfer codes, hashing, the identity service
+  db/                     PostgreSQL pool and transactions, migrations (db/migrations/*.sql), test databases
+  store/                  The storage contract, in PostgreSQL (PgStore) and in memory (MemoryStore)
+  admin.ts                `npm run admin`: invites and players
   world/ServerWorld.ts    The authoritative world: flight, guns, bombs, AI, defenses, raids, missions, private state
   world/Pilot.ts          One player's share of it
   world/InputClock.ts     Input frames and each player's clock
@@ -1405,5 +1468,5 @@ The road to the first public release is planned version by version in
 | [v0.0.20](docs/roadmap/v0.0.20.md) | Release candidate |
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
-Next up is **v0.0.10**. From v0.1.0 on, 0.1.x releases are small improvements, 0.x.0 releases are
+**v0.0.10** is in progress (checkpoint 1 of 3). From v0.1.0 on, 0.1.x releases are small improvements, 0.x.0 releases are
 major versions, and 1.0.0 is the first full version.

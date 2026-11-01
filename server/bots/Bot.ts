@@ -4,7 +4,7 @@ import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
 import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
 import { Predictor } from '../../src/net/Prediction';
-import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, ROOM, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight } from '../../src/net/protocol';
+import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, ROOM, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
 import { sharedWorld } from '../../src/net/World';
 
@@ -41,6 +41,9 @@ const shared = sharedWorld();
  */
 export class Bot {
   room: Room<unknown, WorldState> | null = null;
+  /** Our public player id (from the welcome message), and the device token we were given. */
+  id = '';
+  token: string | null = null;
   readonly predictor = new Predictor(AIRCRAFT.falcon);
   readonly priv: MeDTO = {};
   readonly stats: BotStats = { bytesIn: 0, messagesIn: 0, framesSent: 0, reconciles: 0, corrections: 0, maxError: 0, sumError: 0, hitsDealt: 0, kills: 0, deaths: 0, serverInputs: [0, 0, 0, 0], reconnects: 0 };
@@ -63,8 +66,9 @@ export class Bot {
   ) {}
 
   async join(): Promise<void> {
-    const room = await this.sdk.joinOrCreate(ROOM, { name: this.name, v: PROTOCOL_VERSION }, WorldState);
+    const room = await this.sdk.joinOrCreate(ROOM, { name: this.name, v: PROTOCOL_VERSION, ...(this.token ? { token: this.token } : {}) }, WorldState);
     this.attach(room);
+    await this.welcomed();
     this.timer = setInterval(() => this.loop(), 1000 / NET.tickRate);
     this.last = performance.now();
   }
@@ -74,7 +78,8 @@ export class Bot {
     const room = this.room;
     if (!room) return false;
     const token = room.reconnectionToken;
-    const id = room.sessionId;
+    const id = this.id;
+    this.id = '';
     room.reconnection.enabled = false;
     room.removeAllListeners();
     (room.connection as unknown as { transport: { ws: { close(): void } } }).transport.ws.close();
@@ -82,8 +87,9 @@ export class Bot {
     await new Promise((r) => setTimeout(r, 500));
     const back = await this.sdk.reconnect(token, WorldState);
     this.attach(back);
+    await this.welcomed();
     this.stats.reconnects++;
-    return back.sessionId === id;
+    return this.id === id;
   }
 
   async leave(): Promise<void> {
@@ -106,15 +112,36 @@ export class Bot {
     room.onMessage('ev', (events: NetEvent[]) =>
       this.later(() => {
         for (const e of events) {
-          if (e.t === 'dmg' && e.by === room.sessionId) this.stats.hitsDealt++;
-          if (e.t === 'kill' && e.killer === room.sessionId) this.stats.kills++;
-          if (e.t === 'kill' && e.victim === room.sessionId) this.stats.deaths++;
+          if (e.t === 'dmg' && e.by === this.id) this.stats.hitsDealt++;
+          if (e.t === 'kill' && e.killer === this.id) this.stats.kills++;
+          if (e.t === 'kill' && e.victim === this.id) this.stats.deaths++;
         }
       }),
     );
     room.onMessage('ping', (m: { n: number }) => this.send(() => room.send('pong', m)));
     room.onMessage('claimed', () => undefined);
-    room.onMessage('welcome', () => undefined);
+    room.onMessage('welcome', (m: WelcomeDTO) => {
+      this.id = m.id;
+      if (m.token) this.token = m.token;
+      this.onWelcome?.();
+    });
+  }
+
+  private onWelcome: (() => void) | null = null;
+
+  /** Resolves once the server has told us who we are. */
+  private welcomed(): Promise<void> {
+    this.room?.send('hello');
+    if (this.id && this.room) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timeout);
+        this.onWelcome = null;
+        resolve();
+      };
+      const timeout = setTimeout(done, 5000);
+      this.onWelcome = done;
+    });
   }
 
   private onOwn(own: OwnFlight): void {
@@ -242,7 +269,7 @@ export class Bot {
     let ty = 32;
     let best = Infinity;
     room.state.planes.forEach((plane, id) => {
-      if (id === room.sessionId || plane.status !== 2) return;
+      if (id === this.id || plane.status !== 2) return;
       const d = Math.hypot(plane.x - p.x, plane.y - p.y, plane.z - p.z);
       if (d < best && d < 160) {
         best = d;

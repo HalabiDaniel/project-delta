@@ -26,6 +26,7 @@ import {
   type MeDTO,
   type NetEvent,
   type OwnFlight,
+  type WelcomeDTO,
 } from '../net/protocol';
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
@@ -137,6 +138,8 @@ export class MultiplayerGame {
   readonly network: DefenseNetwork;
   me: string | null = null;
   paused = false;
+  /** The HUD as last drawn (it is only drawn while we have a home): closed when the session ends. */
+  private lastHud: ReturnType<MpViews['hud']> | null = null;
   /** The private state, merged from the server's sections. */
   readonly priv: MeDTO = {};
   /** Mirrors of the rule classes, filled from the private state. */
@@ -256,6 +259,7 @@ export class MultiplayerGame {
       openLogbook: () => game?.hud.alert('book', 'Not in multiplayer', null, 'info', 1.6),
       openMenu: () => game?.pause(),
       resetProgress: () => game?.leaveSession(),
+      moveDevice: () => game?.net.requestTransfer(),
       dismissWelcome: () => undefined,
       toggleSound: () => game?.toggleSound(),
       setHints: () => undefined,
@@ -281,6 +285,9 @@ export class MultiplayerGame {
       join: (name, roomId) => void game?.enter(() => game!.net.join(roomId, name)),
       refresh: () => void game?.refreshRooms(),
       claim: (t) => game?.claim(t),
+      setCode: (code) => {
+        if (game) game.net.code = code;
+      },
       leave: () => void game?.leaveSession(),
       singlePlayer: () => {
         void game?.net.leave();
@@ -353,6 +360,7 @@ export class MultiplayerGame {
   async enter(open: () => Promise<unknown>): Promise<void> {
     try {
       await open();
+      this.lobby.clearCode();
       this.attach();
     } catch (error) {
       this.lobby.showRooms(null, error instanceof Error ? error.message : String(error), 'bad');
@@ -362,8 +370,9 @@ export class MultiplayerGame {
   /** A room was joined (or resumed): listen to it. */
   private attach(): void {
     const room = this.room!;
-    this.me = room.sessionId;
-    room.onMessage('welcome', (m: { id: string; reconnected?: boolean }) => {
+    // Our public player id comes with the welcome (the session id only names this connection).
+    this.me = null;
+    room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
       if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
     });
@@ -380,6 +389,9 @@ export class MultiplayerGame {
     this.net.onStatus((s) => {
       if (s === 'lost' || s === 'offline') {
         this.reset();
+        this.paused = false;
+        // The HUD stops drawing without a home: close its menu so the lobby isn't drawn over it.
+        if (this.lastHud) this.hud.render({ ...this.lastHud, paused: false, welcome: null });
         void this.refreshRooms();
       }
     });
@@ -1050,7 +1062,10 @@ export class MultiplayerGame {
     this.updateRemotes(dt);
     this.updateScene(dt);
     this.hud.root.classList.toggle('mp-pregame', !this.home);
-    if (this.home) this.hud.render(this.views.hud());
+    if (this.home) {
+      this.lastHud = this.views.hud();
+      this.hud.render(this.lastHud);
+    }
     this.mpHud.render(this.mpView());
   }
 

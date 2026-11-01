@@ -16,7 +16,40 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
+
+/**
+ * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
+ * invite for a first join, a transfer code to move a player to this computer).
+ */
+export interface JoinOptions {
+  v: number;
+  name?: string;
+  token?: string;
+  code?: string;
+  title?: string;
+}
+
+/** The first message after joining: who you are in this world. */
+export interface WelcomeDTO {
+  /** Your public player id (stable across sessions; other players' clients know you by it). */
+  id: string;
+  name: string;
+  tick: number;
+  reconnected?: boolean;
+  /** A new device token, only when one was issued just now: keep it, it is how you come back. */
+  token?: string;
+}
+
+/** A one-time code for moving this player to another computer. */
+export interface TransferDTO {
+  code: string;
+  /** Seconds it stays valid. */
+  expires: number;
+}
+
+/** Close code for a connection replaced by a newer one of the same player ("opened in another tab"). */
+export const CLOSE_TAKEN_OVER = 4011;
 
 export const NET = {
   /** Fixed simulation rate, server and client prediction alike (Hz), and its step. */

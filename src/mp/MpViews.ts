@@ -70,6 +70,14 @@ export class MpViews {
 
   constructor(private readonly g: MultiplayerGame) {}
 
+  /** The transfer code from the pause menu, while it is still valid. */
+  private transferView(): { code: string; minutes: number } | null {
+    const t = this.g.net.transfer;
+    if (!t) return null;
+    const left = t.expires - (Date.now() - t.at) / 1000;
+    return left > 0 ? { code: t.code, minutes: Math.max(1, Math.ceil(left / 60)) } : null;
+  }
+
   private get myPlane(): string {
     return `pl:${this.g.me}`;
   }
@@ -184,7 +192,8 @@ export class MpViews {
           uiScale: 1,
           graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null, outlines: outlineChoice(g.graphics), intensity: g.graphics.outlineIntensity },
         },
-        saveNote: 'Multiplayer: your paper, base and planes live on the server for this session. "Reset" leaves the classroom.',
+        saveNote: 'Multiplayer: your paper, base and planes live on the server. "Leave classroom" frees your desk.',
+        transfer: this.transferView(),
         confirmingReset: false,
       },
       garage: st && choosing && !baseOpen && mission ? this.garageView(mission) : null,

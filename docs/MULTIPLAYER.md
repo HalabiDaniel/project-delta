@@ -38,7 +38,8 @@ npm run loadtest                          # 2, 4, 8 bots, then 8 on a poor netwo
 ```
 
 The server needs Node 20+. It is a plain Node process (`tsx server/index.ts`); `PORT` changes its
-port. There is no database: sessions live in memory and end when the server stops.
+port. Sessions live in memory and end when the server stops. Since v0.0.10, players have a
+persistent identity (in PostgreSQL with `DATABASE_URL`): see [PERSISTENCE.md](PERSISTENCE.md).
 
 ## Architecture
 
@@ -246,7 +247,8 @@ Score: kill 10, assist 4, raid that got through 15, raider stopped 10, mission d
 | Situation | What happens |
 |---|---|
 | Connection drops | The SDK reconnects automatically (up to 20 tries); the server keeps the player, their territory and their plane (which flies on straight ahead) for 60 s. Others see "away" on their tag and board. Their base can't be raided meanwhile, and a raid on it is called off. |
-| Browser refresh | The reconnection token is kept in session storage: the page goes straight back into the session as the same player. |
+| Browser refresh | The reconnection token is kept in session storage: the page goes straight back into the session as the same player. If that fails, the device token (v0.0.10, kept in local storage) brings back the same player, who takes over their waiting seat. |
+| Same player twice | (v0.0.10) The newer connection takes over the seat; the older one is closed with "Opened in another tab" (code 4011). |
 | Leaving | Menu → Leave classroom (or the lobby's Leave): the base comes down, the territory is free, a plane in the air counts as lost. |
 | Not back within 60 s | Treated as leaving. |
 | Session full | The ninth player is turned away with a message in the lobby. |
