@@ -82,6 +82,18 @@ export class PgStore implements Store {
     await this.db.query('update players set display_name = $2 where id = $1', [playerId, name]);
   }
 
+  async tutorial(playerId: string): Promise<unknown> {
+    if (!isUuid(playerId)) return null;
+    const { rows } = await this.db.query('select tutorial from players where id = $1', [playerId]);
+    const t = rows[0]?.tutorial as Record<string, unknown> | undefined;
+    return t && Object.keys(t).length > 0 ? t : null;
+  }
+
+  async setTutorial(playerId: string, record: Record<string, unknown>): Promise<void> {
+    if (!isUuid(playerId)) return;
+    await this.db.query('update players set tutorial = $2::jsonb where id = $1', [playerId, JSON.stringify(record)]);
+  }
+
   async touch(playerId: string): Promise<void> {
     await this.db.query('update players set last_seen_at = now() where id = $1', [playerId]);
   }

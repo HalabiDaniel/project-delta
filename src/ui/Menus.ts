@@ -76,7 +76,7 @@ export class Menus {
         <div data-u="session"></div>
         <div class="controls">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
         <div class="menu-transfer" data-u="transfer" hidden></div>
-        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost danger small" data-u="reset"></button></div>
+        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost small" data-u="tutorial" title="Show the step-by-step tutorial again">${icon('tip')}<span>Tutorial</span></button><button class="btn ghost danger small" data-u="reset"></button></div>
       </div>`;
     root.appendChild(this.overlay);
     this.welcome = document.createElement('div');
@@ -95,6 +95,10 @@ export class Menus {
     bindButton(this.el.logbook, actions.openLogbook);
     bindButton(this.el.sound, actions.toggleSound);
     bindButton(this.el.reset, actions.resetProgress);
+    bindButton(this.el.tutorial, () => {
+      actions.restartTutorial();
+      actions.resume();
+    });
     if (this.el.move) bindButton(this.el.move, () => actions.moveDevice?.());
     bindButton(this.el['wc-go'], actions.dismissWelcome);
     this.welcome.addEventListener('click', () => actions.dismissWelcome());

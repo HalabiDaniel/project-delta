@@ -1,3 +1,4 @@
+import { parseTutorial, type TutorialRecord } from '../progress/Tutorial';
 import { emptyBaseStats, type BaseSave, type BaseStats } from '../base/Base';
 import { AIRCRAFT_ORDER, BASE, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
 import type { DirectorState, HistoryEntry, HistoryKind, OfferSource, Recipe, Slot } from '../director/MissionDirector';
@@ -45,6 +46,11 @@ export interface SaveData {
   lastSession: SessionSummary | null;
   /** T1's buildings, their condition and records; null for a brand-new game. */
   base: BaseSave | null;
+  /**
+   * The interactive tutorial's progress (its own versioned record, see progress/Tutorial.ts);
+   * null in saves from before it, which count as finished for a player who has already flown.
+   */
+  tutorial: TutorialRecord | null;
 }
 
 export interface SaveSettings {
@@ -345,6 +351,7 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     },
     lastSession: validateSession(raw.lastSession, check),
     base: raw.base === null || raw.base === undefined ? null : validateBase(raw.base, check),
+    tutorial: parseTutorial(raw.tutorial),
   };
 }
 

@@ -18,7 +18,7 @@ export class PlaneHud {
 
   constructor(
     zones: { bl: HTMLElement; bc: HTMLElement; br: HTMLElement; centre: HTMLElement },
-    actions: { build: () => void; launch: () => void; rearm: () => void; takeOff: () => void; endSortie: () => void; base: () => void },
+    actions: { build: () => void; launch: () => void; rearm: () => void; takeOff: () => void; endSortie: () => void; base: () => void; rearmAndGo?: () => void },
   ) {
     const add = (host: HTMLElement, className: string, html: string) => {
       const node = document.createElement('div');
@@ -44,6 +44,7 @@ export class PlaneHud {
       <span class="ground-where" title="Landed at T1">${icon('home')}<b>T1</b></span>
       <span class="ground-status" data-p="gr-status"></span>
       <button class="btn" data-p="rearm" title="Rearm ink and range (free)">${icon('rearm')}<span data-p="rearm-label">${SAY.rearm}</span><span class="bar mini"><i data-p="rearm-bar"></i></span><kbd>R</kbd></button>
+      <button class="btn" data-p="rearmgo" title="Rearm, then take off as soon as the ground crew is done">${icon('rearm')}${icon('plane')}<span>Rearm &amp; go</span></button>
       <button class="btn primary" data-p="takeoff">${icon('plane')}<span>${SAY.takeOff}</span><kbd>Space</kbd></button>
       <button class="btn ghost" data-p="end">${icon('close')}<span>${SAY.endSortie}</span><kbd>Enter</kbd></button>
       <button class="btn ghost" data-p="gr-base" title="Base (B)">${icon('base')}<kbd>B</kbd></button>`);
@@ -61,6 +62,7 @@ export class PlaneHud {
     bindButton(this.el.launch, actions.launch);
     bindButton(this.el.rearm, actions.rearm);
     bindButton(this.el.takeoff, actions.takeOff);
+    bindButton(this.el.rearmgo, () => actions.rearmAndGo?.());
     bindButton(this.el.end, actions.endSortie);
     bindButton(this.el['gr-base'], actions.base);
   }
@@ -133,6 +135,7 @@ export class PlaneHud {
         status.title = g.status === 'succeeded' ? 'Mission complete' : g.status === 'failed' ? 'Mission failed' : 'Mission still on: ending the sortie abandons it';
       }
       (this.el.rearm as HTMLButtonElement).disabled = !g.canRearm;
+      toggle(this.el.rearmgo, g.canRearm && g.rearming === null);
       (this.el.takeoff as HTMLButtonElement).disabled = g.rearming !== null;
       text(this.el['rearm-label'], g.rearming !== null ? SAY.rearming : g.canRearm ? SAY.rearm : SAY.armed);
       toggle(this.el['rearm-bar'].parentElement!, g.rearming !== null);
