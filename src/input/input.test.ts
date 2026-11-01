@@ -10,6 +10,7 @@ import { padHint } from './glyphs';
 import { pickInDirection, type Rect } from './FocusNav';
 import { Controls, KEYMAP, PAD_HOLD, PAD_PRESS, tuningFor, type Action } from './Controls';
 import type { Input } from '../systems/Input';
+import { controlLabel } from '../ui/controlLabels';
 
 // ---- Helpers -------------------------------------------------------------------------------------
 
@@ -358,5 +359,18 @@ describe('menu navigation and hints', () => {
     expect(padHint('LMB', 'playstation')).toBe('R2');
     expect(padHint('U', 'xbox')).toBe('');
     expect(padHint('3', 'xbox')).toBe('');
+  });
+
+  it('switches the tutorial and report control names with the device', () => {
+    const { controls, input, pads } = rig();
+    controls.context = 'home';
+    pads[0] = standardPad({ pressed: [2] });
+    controls.update(1 / 60);
+    expect(controlLabel('rearm')).toBe('X');
+    expect(controlLabel('fire')).toBe('RT');
+    pads[0] = standardPad(); // let go of the controller
+    input.press('KeyW');
+    controls.update(1 / 60);
+    expect(controlLabel('rearm')).toBe('R');
   });
 });

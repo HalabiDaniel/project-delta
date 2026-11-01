@@ -34,6 +34,16 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.playerById('not-a-uuid')).toBeNull();
     });
 
+    it("keeps a player's tutorial progress on their record", async () => {
+      const p = await store.createPlayer(player('Tutee'), h('token-tutee'), 'open');
+      expect(await store.tutorial(p.id)).toBeNull();
+      await store.setTutorial(p.id, { v: 1, step: 4, skipped: false });
+      expect(await store.tutorial(p.id)).toEqual({ v: 1, step: 4, skipped: false });
+      await store.setTutorial(p.id, { v: 1, step: 10, skipped: true });
+      expect(await store.tutorial(p.id)).toEqual({ v: 1, step: 10, skipped: true });
+      expect(await store.tutorial('not-a-uuid')).toBeNull();
+    });
+
     it('refuses a second player with the same public id or token', async () => {
       const a = player();
       await store.createPlayer(a, h(`t-${a.id}`), 'open');

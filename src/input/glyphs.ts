@@ -7,6 +7,7 @@
  */
 
 import type { PadButton, PadFamily } from './Gamepad';
+import type { ControlAction } from '../ui/controlLabels';
 
 const LABELS: Record<PadFamily, Record<PadButton, string>> = {
   xbox: {
@@ -77,4 +78,31 @@ export function applyGlyphs(root: ParentNode, family: PadFamily | null): void {
     kbd.dataset.shown = shown;
     kbd.classList.toggle('pad-hidden', family !== null && shown === '');
   }
+}
+
+/** The tutorial's, dashboard's and reports' control names (src/ui/controlLabels.ts) on a controller. */
+export function padControlLabels(family: PadFamily): Partial<Record<ControlAction, string>> {
+  const b = (button: PadButton): string => LABELS[family][button];
+  return {
+    selectCard: `${b('lt')} / ${b('rt')}`,
+    prevPlane: b('lb'),
+    nextPlane: b('rb'),
+    fold: b('south'),
+    launch: b('south'),
+    steer: 'Left stick',
+    fire: b('rt'),
+    bomb: b('lt'),
+    boost: b('rb'),
+    throttle: `${b('lb')} + left stick ↕`,
+    bank: `${b('lb')} + left stick ↔`,
+    rearm: b('west'),
+    takeOff: b('south'),
+    endSortie: `${b('south')} on End sortie`,
+    continue: b('south'),
+    base: b('north'),
+    repairAll: `${b('north')} → Repair all`,
+    quickRebuild: b('south'),
+    back: b('east'),
+    pause: b('menu'),
+  };
 }

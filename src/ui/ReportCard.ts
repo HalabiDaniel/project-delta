@@ -22,7 +22,10 @@ export class ReportCard {
     this.el.innerHTML = /* html */ `
       <div class="rp-head"><span class="rp-icon" data-r="icon"></span><b class="rp-title" data-r="title"></b><span class="medal" data-r="medal"></span></div>
       <div class="rp-mission" data-r="mission"></div>
+      <div class="rp-why" data-r="why"></div>
       <div class="rp-big" data-r="big"></div>
+      <ul class="rp-paper" data-r="paper"></ul>
+      <div class="rp-next" data-r="next"></div>
       <ul class="rp-chips" data-r="chips"></ul>
       <button class="link-btn" data-r="toggle">${icon('more')}<span>${SAY.details}</span></button>
       <dl class="rp-details" data-r="details"></dl>
@@ -58,6 +61,17 @@ export class ReportCard {
     toggle(this.q.medal, r.medal !== null);
     this.q.mission.innerHTML = `${esc(r.missionTitle)} · ${icon('plane')}<b>${esc(r.aircraftName)}</b> ${icon(r.recovered ? 'health' : 'wrecked')}<b>${r.recovered ? pct(r.health) : '0%'}</b>`;
     this.q.mission.title = r.planeLine;
+
+    // Why it failed, and what to try: in plain words, not only a headline.
+    toggle(this.q.why, r.failure !== null);
+    this.q.why.innerHTML = r.failure ? `<span>${esc(r.failure.why)}</span><span class="rp-advice">${icon('tip')}${esc(r.failure.advice)}</span>` : '';
+    // Where the paper came from and went.
+    this.q.paper.innerHTML = r.paper
+      .map((l) => `<li data-tone="${l.amount > 0 ? 'good' : 'bad'}"><span>${esc(l.label)}</span><b>${signed(l.amount)}</b></li>`)
+      .join('') + (r.paper.length > 1 ? `<li class="rp-total"><span>Net</span><b>${signed(net)}</b></li>` : '');
+    toggle(this.q.paper, r.paper.length > 0);
+    text(this.q.next, r.next);
+    toggle(this.q.next, r.next.length > 0);
 
     const big = (iconName: IconName, value: string, label: string, tone = '') => `<div class="rp-tile" title="${esc(label)}" data-tone="${tone}">${icon(iconName)}<b>${value}</b></div>`;
     const kills = r.aircraftDestroyed + r.defensesDestroyed + r.targetsDestroyed;

@@ -14,6 +14,11 @@ import type { GarageView } from './Garage';
 import type { IconName } from './icons';
 import type { MiniMapView } from './MiniMap';
 import type { ThreatView } from './ThreatHud';
+import type { TutorialView } from '../progress/Tutorial';
+import type { FailureText, PaperLine } from './reportText';
+
+export type { TutorialView } from '../progress/Tutorial';
+export type { FailureText, PaperLine } from './reportText';
 
 /** Everything the HUD shows, built fresh by the game every frame. The HUD never reads game state itself. */
 
@@ -214,6 +219,12 @@ export interface ResultView {
   achievements: Array<{ title: string; detail: string }>;
   streak: number;
   operation: string | null;
+  /** Why the mission failed and what to try (null when it succeeded). */
+  failure: FailureText | null;
+  /** Where the paper came from and went this sortie. */
+  paper: PaperLine[];
+  /** What to do next (quick rebuild, refit, repairs). */
+  next: string;
 }
 
 export interface SessionView {
@@ -390,6 +401,32 @@ export interface RaidAlertView {
   response: { key: string; label: string } | null;
 }
 
+// ---- The home dashboard -------------------------------------------------------------------------
+
+/** One suggestion on the dashboard: what to do, and the control for it. */
+export interface NextStepView {
+  text: string;
+  key: string | null;
+  tone: 'info' | 'warn' | 'good';
+}
+
+/**
+ * The home dashboard at the desk: paper and production, the base's condition, the hangar, the
+ * chosen mission and plane, and what to do next, in one panel, with the quick actions.
+ */
+export interface DashboardView {
+  paper: number;
+  capacity: number;
+  rate: number;
+  protectedPaper: number;
+  base: { ready: number; total: number; integrity: number; repairs: number; repairCost: number; canRepair: boolean; radar: 'none' | 'on' | 'off' };
+  hangar: Array<{ id: AircraftId; name: string; condition: 'ready' | 'recovered'; health: number }>;
+  mission: { title: string; reward: number; plane: string; fit: SuitabilityLevel; cost: number; kind: BuildKind } | null;
+  /** The plane lost last sortie, to fold again in one go. */
+  rebuild: { id: AircraftId; name: string; cost: number; canAfford: boolean; key: string | null } | null;
+  next: NextStepView[];
+}
+
 export interface HudView {
   phase: GamePhase;
   paused: boolean;
@@ -423,6 +460,10 @@ export interface HudView {
   air: AirView | null;
   raid: RaidAlertView | null;
   base: BaseView | null;
+  /** The interactive tutorial's current step (null once finished, skipped or not applicable here). */
+  tutorial: TutorialView | null;
+  /** The home dashboard (at the desk only). */
+  dashboard: DashboardView | null;
 }
 
 export interface HudActions {
@@ -450,6 +491,15 @@ export interface HudActions {
   setOutlines(choice: OutlineChoice): void;
   setOutlineIntensity(intensity: number): void;
   toggleBase(): void;
+  /** Ends the tutorial for good (it can be restarted from the menu). */
+  skipTutorial(): void;
+  restartTutorial(): void;
+  /** At the desk: choose the plane lost last sortie again and fold it, in one go. */
+  quickRebuild(): void;
+  /** At the desk: repair everything on the home desk without opening base management. */
+  quickRepair(): void;
+  /** Landed at home: rearm, then take off as soon as the ground crew is done. */
+  rearmAndGo(): void;
   base: {
     selectSlot(id: string): void;
     choose(kind: BuildingKind): void;

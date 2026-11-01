@@ -15,6 +15,7 @@ import {
 } from '../src/net/protocol';
 import { AiState, InstallationState, PHASES, PLANE_STATUSES, PlaneState, PlayerState, TerritoryState, WorldState, INSTALLATION_STATES } from '../src/net/schema';
 import { foldPose } from '../src/systems/GameState';
+import { parseTutorial } from '../src/progress/Tutorial';
 import { refusal, type Authenticated } from './identity/Identity';
 import { services } from './services';
 import type { PlayerRecord } from './store/Store';
@@ -81,6 +82,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** Player (public id) → their account. */
   readonly accounts = new Map<string, PlayerRecord>();
   private readonly transferAt = new Map<string, number>();
+  private readonly tutorialSavedAt = new Map<string, number>();
   /**
    * What the next welcome says, per connection: sent when the client says hello (messages sent
    * during onJoin arrive before the client can listen for them).
@@ -136,6 +138,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     });
     this.onMessage('hello', (client) => this.welcome(client));
     this.onMessage('transfer', (client) => void this.sendTransferCode(client));
+    this.onMessage('tutorial', (client, data: unknown) => void this.saveTutorial(client, data));
     this.onMessage('*', () => {
       // Unknown message types are ignored.
     });
@@ -218,6 +221,37 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (greeting?.token) welcome.token = greeting.token;
     client.send('welcome', welcome);
     this.sendPrivate(client, true);
+    void this.sendTutorial(client);
+  }
+
+  /** The player's tutorial progress, kept on their record (v0.0.11): null for a new player. */
+  private async sendTutorial(client: Client): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    if (!account) return;
+    try {
+      const record = parseTutorial(await services().store.tutorial(account.id));
+      client.send('tutorial', { t: record });
+    } catch (error) {
+      console.warn(`[room ${this.roomId}] could not load the tutorial of ${id}:`, error);
+    }
+  }
+
+  /** A client's tutorial progress: checked, then kept on the player's record. */
+  private async saveTutorial(client: Client, data: unknown): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    const record = parseTutorial((data as { t?: unknown } | null)?.t);
+    if (!account || !record) return;
+    const last = this.tutorialSavedAt.get(account.id) ?? 0;
+    // Clients send at most one a second (debounced); anything much faster is noise.
+    if (performance.now() - last < 250) return;
+    this.tutorialSavedAt.set(account.id, performance.now());
+    try {
+      await services().store.setTutorial(account.id, { ...record });
+    } catch (error) {
+      console.warn(`[room ${this.roomId}] could not save the tutorial of ${id}:`, error);
+    }
   }
 
   onLeave(client: Client): void {

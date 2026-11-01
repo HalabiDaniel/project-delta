@@ -30,7 +30,7 @@ import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
-import { foldPose, GameState, type CrashCause } from './systems/GameState';
+import { foldPose, GameState, type BuildKind, type CrashCause } from './systems/GameState';
 import { Input, MOUSE_LEFT } from './systems/Input';
 import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
@@ -38,12 +38,16 @@ import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
 import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
+import { STEER_SECONDS, Tutorial, tutorialEventFor } from './progress/Tutorial';
+import { dashboardView } from './ui/dashboardView';
+import { failureText, nextStepText, paperBreakdown } from './ui/reportText';
 import { PerfMonitor, type PerfSnapshot } from './ui/PerfOverlay';
 import { Logbook, type LogbookView } from './ui/Logbook';
 import type { GarageView } from './ui/Garage';
 import {
   HUD,
   type AlertTone,
+  type DashboardView,
   type MissionCardView,
   type SessionView,
   type AircraftStatusView,
@@ -188,6 +192,14 @@ export class Game {
   /** Licensed and own models in use, e.g. `paperwars.assets.report()` in the console. */
   assets: AssetLibrary | null = null;
   private perfMonitor: PerfMonitor | null = null;
+  /** The interactive tutorial (first visit), saved with the game. */
+  tutorial = new Tutorial();
+  /** Seconds flown with the controls in hand, for the tutorial's "fly" step. */
+  private steerTime = 0;
+  /** The plane lost last sortie, for the dashboard's quick rebuild (null once something else flies). */
+  private lostPlane: AircraftId | null = null;
+  /** Rearm and go: take off as soon as the ground crew is done. */
+  private rearmThenGo = false;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -375,6 +387,11 @@ export class Game {
       setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
       setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
+      skipTutorial: () => game?.tutorial.skip(),
+      restartTutorial: () => game?.tutorial.restart(),
+      quickRebuild: () => game?.quickRebuild(),
+      quickRepair: () => game?.quickRepair(),
+      rearmAndGo: () => game?.rearmAndGo(),
       base: {
         selectSlot: (id) => game?.baseAction('select', id),
         choose: (kind) => game?.baseAction('choose', kind),
@@ -433,6 +450,8 @@ export class Game {
       game.uiScale = saved.settings.uiScale;
       for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
+    game.tutorial = Tutorial.fromSave(saved?.tutorial ?? null, game.sortiesTotal > 0);
+    game.tutorial.onChange(() => game!.requestSave());
     game.hud.setScale(game.uiScale);
     game.outlines = outlines;
     game.assets = assets;
@@ -533,6 +552,28 @@ export class Game {
     this.boundary.reset();
     this.input.consumeMouse();
     if (!this.controls.padFlying) this.input.requestPointerLock();
+  }
+
+  /** Landed at home: rearm, then take off as soon as the ground crew is done (at once if nothing is needed). */
+  rearmAndGo(): void {
+    if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
+    if (this.state.rearm() || this.state.rearmProgress !== null) this.rearmThenGo = true;
+    else this.takeOff();
+  }
+
+  /** At the desk: the plane lost last sortie, chosen again and folded in one go. */
+  quickRebuild(): void {
+    const id = this.lostPlane;
+    if (this.paused || !id || this.state.phase !== 'desk') return;
+    if (this.state.aircraft !== id) this.selectAircraft(id);
+    this.build();
+  }
+
+  /** At the desk: everything on the home desk repaired, without opening base management. */
+  quickRepair(): void {
+    if (this.paused || !this.atHome) return;
+    if (this.base.needsRepair.length === 0) return;
+    if (!this.base.repairAll()) this.alert('paper', 'Need paper', `−${Math.max(0, this.base.repairAllCost - this.resources.paper)}`, 'bad', 2);
   }
 
   /** After landing: the plane goes into the hangar and the report comes up. */
@@ -708,6 +749,7 @@ export class Game {
     }
     if (open) {
       this.baseMode.enter();
+      this.tutorial.note('base-opened');
       this.dismissWelcome();
       this.input.exitPointerLock();
       this.tip('base', 'Click a slot, pick a building, build. Damage stays until you repair.', ['B']);
@@ -840,6 +882,7 @@ export class Game {
       settings: { muted: this.sounds.muted, dev: this.dev.open, hints: this.hints, uiScale: this.uiScale, tips: [...this.tipsSeen] },
       lastSession: this.progress.session.sorties > 0 ? this.progress.session : (this.welcome?.session ?? null),
       base: this.base.save(),
+      tutorial: this.tutorial.record(),
     };
   }
 
@@ -944,10 +987,16 @@ export class Game {
         else camera.updateDesk(dt, world.launchPosition, world.launchYaw);
         break;
       case 'flying':
+        this.rearmThenGo = false;
         this.fly(dt, mouse);
         break;
       case 'landed':
       case 'debrief':
+        if (this.rearmThenGo && state.phase === 'landed' && state.rearmProgress === null && this.rolledToStop) {
+          this.rearmThenGo = false;
+          this.takeOff();
+          break;
+        }
         if (plane.rollout(dt, world.home) && !this.rolledToStop) {
           this.rolledToStop = true;
           this.input.exitPointerLock(); // free the cursor for the ground crew's buttons
@@ -1029,6 +1078,10 @@ export class Game {
     }
     switch (result.outcome) {
       case 'flying':
+        if (this.tutorial.current === 'steer' && !autopilot) {
+          this.steerTime += dt;
+          if (this.steerTime >= STEER_SECONDS) this.tutorial.note('steered');
+        }
         state.updateFlight(plane.prevPosition, plane.position, dt);
         if (controls.held('firePrimary') && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
@@ -1908,6 +1961,10 @@ export class Game {
     });
     this.base.onEvent((e) => this.onBaseEvent(e));
     state.onEvent((event) => {
+      const step = tutorialEventFor(event.type);
+      if (step) this.tutorial.note(step);
+      if (event.type === 'built') this.lostPlane = null;
+      if (event.type === 'crashed' && state.plane && !state.emergency) this.lostPlane = state.plane.id;
       switch (event.type) {
         case 'aircraft-selected':
           this.career.rememberAircraft(event.aircraft);
@@ -1948,7 +2005,8 @@ export class Game {
           this.airTraffic.startMission(mission.spec.aircraft ?? []);
           this.career.recordSortie(state.plane!.id);
           this.alert(MISSION_ICONS[mission.spec.type], 'Go', null, 'info', 1.4);
-          this.tip(
+          if (this.tutorial.finished)
+            this.tip(
             'flight',
             this.controls.device === 'gamepad'
               ? 'Left stick steers, right stick looks around. Hold RT for ink, LT drops a bomb, RB boosts.'
@@ -2156,7 +2214,7 @@ export class Game {
       : null;
 
     // First-time tips: the desk, and each kind of objective the first time it comes up.
-    if (choosing && !this.welcome && !baseOpen && !this.paused) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
+    if (choosing && !this.welcome && !baseOpen && !this.paused && this.tutorial.finished) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
     if (flying && mission?.isActive && !this.paused) {
       const next = mission.objectives[mission.openObjectives()[0]];
       if (next && !this.tipsSeen.has(`obj-${next.kind}`)) {
@@ -2165,6 +2223,8 @@ export class Game {
       }
     }
 
+    const tutorialContext = { phase: state.phase, bombs: state.bombsLoaded > 0 || state.bombsFalling > 0, baseOpen };
+    this.tutorial.update(tutorialContext);
     const f = plane.flight;
     const income = state.income;
     return {
@@ -2240,7 +2300,27 @@ export class Game {
             this.lastRaid,
           )
         : null,
+      tutorial: this.tutorial.view(tutorialContext),
+      dashboard: choosing && !baseOpen ? this.dashboardView(buildCost, kind) : null,
     };
+  }
+
+  /** The home dashboard at the desk. */
+  private dashboardView(buildCost: number, kind: BuildKind): DashboardView {
+    const { state, resources } = this;
+    const mission = state.selectedMission;
+    return dashboardView({
+      paper: resources.paper,
+      rate: state.income.ratePerMinute(resources.paper),
+      base: this.base,
+      hangar: state.hangar,
+      mission: mission ? { title: mission.title, reward: mission.reward, bombs: mission.spec.bombs } : null,
+      plane: { id: state.aircraft, fit: state.suitability(state.aircraft).level, cost: buildCost, kind, canBuild: state.canBuild() },
+      lostPlane: this.lostPlane,
+      onPad: state.phase !== 'desk',
+      raidInbound: this.airTraffic.raids.some((r) => r.stage !== 'over' && r.detected),
+      emergency: state.emergencyAvailable() && !resources.canAfford(buildCost),
+    });
   }
 
   /** One mission card: its slot, tier, modifiers, reward breakdown, operation or event. */
@@ -3007,6 +3087,17 @@ export class Game {
       achievements: this.outcome?.progress.achievements ?? [],
       streak: this.outcome?.progress.streak ?? 0,
       operation: this.outcome?.operation ?? null,
+      failure: succeeded ? null : failureText(mission.failure),
+      paper: paperBreakdown({
+        reward: succeeded ? mission.reward : 0,
+        missionTitle: mission.title,
+        bonuses: this.outcome?.payouts ?? [],
+        earned: sortie.paperEarned,
+        spent: sortie.paperSpent,
+        lost: sortie.paperLost,
+        overflow: sortie.paperOverflow,
+      }),
+      next: nextStepText({ succeeded, recovered, aircraftName: spec.name, refitCost: spec.refitCost, cost: spec.cost, repairs: this.base.needsRepair.length }),
     };
   }
 

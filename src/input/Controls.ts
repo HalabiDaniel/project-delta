@@ -20,7 +20,8 @@ import {
 } from './analog';
 import { FocusNav } from './FocusNav';
 import { GamepadSource, padActive, type PadButton, type PadEvent, type PadFamily } from './Gamepad';
-import { applyGlyphs } from './glyphs';
+import { applyGlyphs, padControlLabels } from './glyphs';
+import { setControlLabels } from '../ui/controlLabels';
 import { MOUSE_LEFT, MOUSE_RIGHT, type Input } from '../systems/Input';
 
 export type Action =
@@ -338,6 +339,7 @@ export class Controls {
     if (family !== this.glyphFamily) {
       this.glyphFamily = family;
       this.glyphsDirty = true;
+      setControlLabels(family ? padControlLabels(family) : null);
       if (typeof document !== 'undefined') document.body.dataset.pad = family ?? '';
     }
     if (!this.glyphsDirty || !this.hudRoot) return;

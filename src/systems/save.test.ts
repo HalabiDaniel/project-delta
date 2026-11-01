@@ -52,6 +52,7 @@ function sample(): SaveData {
       store: 100,
       stats: { ...emptyBaseStats(), raids: 2, repelled: 1, paperLost: 12 },
     },
+    tutorial: { v: 1, step: 4, skipped: false },
   };
 }
 
@@ -218,5 +219,14 @@ describe('validateSave', () => {
     expect(u1.level).toBe(3);
     expect(u1.health).toBe(130);
     expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the tutorial record, and a save from before the tutorial has none', () => {
+    expect(validateSave(JSON.parse(JSON.stringify(sample())))!.tutorial).toEqual({ v: 1, step: 4, skipped: false });
+    const old = JSON.parse(JSON.stringify(sample()));
+    delete old.tutorial;
+    expect(validateSave(old)!.tutorial).toBeNull();
+    expect(validateSave({ ...sample(), tutorial: { v: 1, step: 99, skipped: true } })!.tutorial).toEqual({ v: 1, step: 10, skipped: true });
+    expect(validateSave({ ...sample(), tutorial: 'junk' })!.tutorial).toBeNull();
   });
 });
