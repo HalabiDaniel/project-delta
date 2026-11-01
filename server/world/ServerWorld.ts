@@ -1313,6 +1313,7 @@ export class ServerWorld {
       launch,
       dummies: [],
       obstacles: [
+        ...this.shared.decorGround,
         ...this.network.installations.map((i) => ({ x: i.spec.x, z: i.spec.z, r: i.spec.footprint })),
         ...this.shared.layout.barriers.filter((b) => !this.owners.has(b.territoryId)).flatMap((b) => b.solids.map(footprint)),
       ],
@@ -1328,10 +1329,13 @@ export class ServerWorld {
 
   // ---- Geometry -----------------------------------------------------------------------------------
 
-  /** Everything a plane can fly into besides the platforms: standing installations and the AI's walls. */
+  /**
+   * Everything a plane can fly into besides the platforms: every desk's landmark and tall props
+   * (the shapes the clients predict with), standing installations and the AI's walls.
+   */
   solids(): Collider[] {
     if (this.solidsCache) return this.solidsCache;
-    const solids: Collider[] = this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }));
+    const solids: Collider[] = [...this.shared.decor, ...this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }))];
     for (const b of this.shared.layout.barriers) if (!this.owners.has(b.territoryId)) solids.push({ id: b.id, shapes: b.solids });
     this.solidsCache = solids;
     return solids;

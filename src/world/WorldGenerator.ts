@@ -6,7 +6,9 @@ import { generateTerritories, homeHeading } from './Grid';
 import { setUpLighting } from '../render/lighting';
 import type { AssetLibrary } from '../assets/AssetLibrary';
 import { Dressing } from './territories/Dressing';
-import { HOME_DESK, type Detail } from './territories/themes';
+import type { Detail } from './territories/themes';
+import { allDecorColliders, territoryFacing, territoryLayout } from './territories/decor';
+import type { Collider } from '../combat/Collision';
 import { buildClassroom } from './Classroom';
 
 export interface World {
@@ -22,14 +24,18 @@ export interface World {
   sun: pc.Entity;
   /** T1 dressed as Home Desk: surface, runway, landmark and props, with their collision shapes. */
   homeDressing: Dressing;
+  /** Every territory dressed in its theme (T1 included). */
+  dressings: Map<string, Dressing>;
+  /** The landmarks' and tall props' collision shapes on every territory (the server's too). */
+  decorColliders: Collider[];
 }
 
 export { generateTerritories } from './Grid';
 
 /**
- * Creates the territories, lighting and fog. T1 is dressed as Home Desk (the art direction's
- * vertical slice: notebook surface, runway, landmark and props); the others are still plain
- * platforms, outlined, until their themes arrive.
+ * Creates the territories, lighting and fog, and dresses every territory in its theme (T1 as Home
+ * Desk with the runway). Each territory's plain platform box stays, just under the dressing, as a
+ * coloured rim: blue for home, grey otherwise, and orange or green when mission markers tint it.
  */
 export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail): World {
   const territories = generateTerritories();
@@ -41,12 +47,9 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
     const platform = box(`territory-${territory.id}`, flatMaterial(territory.isHome ? PALETTE.home : PALETTE.neutral));
-    platform.setPosition(territory.x, territory.top - territory.thickness / 2, territory.z);
-    platform.setLocalScale(territory.size, territory.thickness, territory.size);
+    asRim(platform, territory);
     app.root.addChild(platform);
     platforms.set(territory.id, platform);
-    // Home's look comes from its dressing; the box stays for code that looks platforms up.
-    if (territory.isHome) platform.render!.enabled = false;
   }
 
   // The runway runs through the centre of the home platform, pointing at the centre of the world.
@@ -54,9 +57,11 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
   const launchYaw = yawFromDirection(dir.x, dir.z);
   const startOffset = WORLD.runwayLength / 2 - 6;
   const launchPosition = new pc.Vec3(home.x - dir.x * startOffset, 0, home.z - dir.z * startOffset);
-  const homeDressing = new Dressing(app, home, HOME_DESK, assets, detail, dir, true);
+  const dressings = new Map<string, Dressing>();
+  for (const t of territories) dressings.set(t.id, new Dressing(app, t, territoryLayout(t), assets, detail, territoryFacing(t), t.isHome));
+  const homeDressing = dressings.get(home.id)!;
 
-  return { territories, home, platforms, launchPosition, launchYaw, sun, homeDressing: homeDressing };
+  return { territories, home, platforms, launchPosition, launchYaw, sun, homeDressing, dressings, decorColliders: allDecorColliders(territories) };
 }
 
 /** The multiplayer classroom's scene: every territory as a plain platform, and the light. */
@@ -66,8 +71,9 @@ export interface SharedScene {
 }
 
 /**
- * Builds the platforms and lighting for the shared world. Nobody's home is dressed yet: the
- * multiplayer game dresses each territory as a desk when a player claims it.
+ * Builds the platforms and lighting for the shared world. The multiplayer game dresses every
+ * territory (and redresses it in its owner's colours when someone claims it); the platform boxes
+ * stay as the coloured rims under the dressings.
  */
 export function buildSharedScene(app: pc.AppBase, territories: readonly Territory[], assets?: AssetLibrary): SharedScene {
   const sun = setUpLighting(app);
@@ -75,12 +81,23 @@ export function buildSharedScene(app: pc.AppBase, territories: readonly Territor
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
     const platform = box(`territory-${territory.id}`, flatMaterial(PALETTE.neutral));
-    platform.setPosition(territory.x, territory.top - territory.thickness / 2, territory.z);
-    platform.setLocalScale(territory.size, territory.thickness, territory.size);
+    asRim(platform, territory);
     app.root.addChild(platform);
     platforms.set(territory.id, platform);
   }
   return { platforms, sun };
+}
+
+/** Rim around a dressed territory: this much wider than the platform. */
+const RIM = 1;
+
+/**
+ * A platform box as the rim showing round its dressing: a little wider, its top just under the
+ * sheet, so the colour reads as a frame round the desk from the air.
+ */
+export function asRim(platform: pc.Entity, territory: Territory): void {
+  platform.setPosition(territory.x, territory.top - 0.06 - territory.thickness / 2, territory.z);
+  platform.setLocalScale(territory.size + RIM, territory.thickness, territory.size + RIM);
 }
 
 export function box(name: string, material: pc.Material): pc.Entity {
