@@ -140,6 +140,8 @@ describe('player versus player combat', () => {
     run(world, 1.5);
     expect(world.command('b', { a: 'continue' })).toBe(true);
     expect(b.state!.phase).toBe('desk');
+    // A card the Falcon (no bombs) can fly.
+    for (let i = 0; i < b.state!.offers.length && !world.suits(b, 'falcon'); i++) b.state!.select(i);
     expect(world.command('b', { a: 'build' })).toBe(true);
   });
 
@@ -151,7 +153,7 @@ describe('player versus player combat', () => {
     expect(b.state!.durability!.health).toBe(before);
   });
 
-  it('shooting down the same player again soon pays less, and an emergency Dart pays nothing', () => {
+  it('shooting down the same player again soon pays less, and an emergency Swift pays nothing', () => {
     const { world } = duel();
     const first = world.kills.record('a', 'b', 25, false, 0);
     const second = world.kills.record('a', 'b', 25, false, 10);
@@ -362,7 +364,7 @@ describe('connections', () => {
 });
 
 describe('recovery and defense', () => {
-  it('a player with no paper can always fold the free emergency Dart', () => {
+  it('a player with no paper can always fold the free emergency Swift', () => {
     const world = quietWorld();
     const a = player(world, 'a', 'T1');
     a.resources.restore(0);
@@ -372,6 +374,7 @@ describe('recovery and defense', () => {
     expect(st.emergencyAvailable()).toBe(true);
     expect(world.command('a', { a: 'build' })).toBe(bombless >= 0);
     if (bombless >= 0) expect(st.emergency).toBe(true);
+    if (bombless >= 0) expect(st.plane).toMatchObject({ id: 'swift', name: 'Emergency Swift', cost: 0 });
   });
 
   it('shooting down a raider on its way in pays the defender and counts as a defense', () => {

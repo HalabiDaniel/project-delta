@@ -1,4 +1,14 @@
-# paperwars.io: v0.0.11 part 1 (assets) and v0.0.10 in development, on top of v0.0.9 multiplayer
+# paperwars.io: v0.0.11 (coding complete, awaiting the developer's checks) and v0.0.10 in development, on top of v0.0.9 multiplayer
+
+> **v0.0.11, part 2: controller support and the rest of the plan's coding.** The game is playable
+> with an Xbox or PlayStation controller (flight, weapons, landing, base, every menu, the lobby),
+> interchangeably with keyboard and mouse. The Swift is now the starter and emergency plane, the
+> Dart fast recon and the Falcon the agile fighter, with saves migrated. All 16 desks have a theme
+> and a landmark, a tutorial and home dashboard welcome new players, and the world draws in far
+> fewer draw calls. What is left needs the developer (real controller, licences, playtest): see
+> [v0.0.11 part 2](#v0011-part-2-controller-re-roled-aircraft-territories-onboarding-and-performance)
+> and the [checklist](docs/roadmap/v0.0.11.md#12-definition-of-done).
+>
 
 > **v0.0.11, part 1: the custom assets.** The game now plays in a classroom: 16 desks (T1–T16)
 > instead of 9 floating platforms, eleven aircraft to choose from instead of four, and buildings
@@ -36,6 +46,177 @@ instead of words, short alerts, and tips the first time something matters. The p
 Single-player still runs entirely in the browser (PlayCanvas + TypeScript, no backend).
 Multiplayer adds a Node server (`server/`) that runs the very same rule classes per player, with
 the server deciding every hit, every paper balance and every reward.
+
+## v0.0.11 part 2: controller, re-roled aircraft, territories, onboarding and performance
+
+The rest of [v0.0.11](docs/roadmap/v0.0.11.md)'s coding: every section that does not need the
+developer's hardware, licences, assets or a playtest. What is left for the developer is the
+checklist at the end of the plan ([Definition of done](docs/roadmap/v0.0.11.md#12-definition-of-done)).
+
+### Controller support (section 7)
+
+- **One input-action layer** (`src/input/`). Keyboard, mouse and controller all feed the same
+  named actions (`firePrimary`, `fireSecondary`, `boost`, `confirm`, `back`, `pause`, `service`,
+  `prevAircraft`, `emote1`, ...). `Game` and `MultiplayerGame` read actions, never keys or
+  buttons; the keyboard keeps its v0.0.10 keys (`KEYMAP` in `src/input/Controls.ts`).
+- **Gamepad detection** through the browser Gamepad API: Xbox and PlayStation controllers with the
+  standard mapping, plus fixes for the raw layouts browsers report when they don't recognise one
+  (the Linux xpad driver with triggers and D-pad on axes, raw DualShock / DualSense), and a
+  fallback that reads anything else as standard. Controllers can be plugged in or out at any
+  time; the game follows the last one used.
+- **Analog flight.** Radial and per-axis dead zones, a response curve, smoothing. The left stick
+  steers the same mouse-aim flight model: sideways sets how far the aim leads the nose (hold to
+  keep turning, let go and the plane straightens out), up and down move the aim's pitch at a rate
+  (the usual auto-level eases it back). The stick's steering is turned into the mouse movement
+  that would have produced it, so the flight model, the server and the prediction are unchanged
+  and a controller can do nothing a mouse can't (*fairness*). **Aim help** for sticks only: near
+  an enemy aircraft the stick slows a little and the aim is pulled gently towards it; hits are
+  judged exactly as before. The **right stick looks around** the plane and recentres when let go.
+- **Menus with a controller.** Every screen with buttons (desk, garage, mission cards, base
+  management, report, pause menu, logbook, multiplayer lobby and desk claim) can be driven with
+  the D-pad or left stick and A: an orange **highlight** moves to the nearest button in that
+  direction, never under an open menu, and starts on the screen's main button (Fold, Launch,
+  Continue, Quick join...). What a mouse player reads by hovering (a button's title) shows under
+  the highlight, so nothing is hover-only.
+- **Hints follow the last device.** While a controller is in use every key hint on screen shows
+  its controller button instead (✕ ○ □ △ / L1 R1 L2 R2 for PlayStation, A B X Y / LB RB LT RT
+  otherwise), or disappears where the highlight does the job; the pause menu shows the controller
+  mapping and three settings: **Invert Y**, **Stick** and **Camera** sensitivity (Low / Med / High,
+  kept per browser). The tutorial and report texts switch too. Touch the keyboard or mouse and
+  everything switches back, without a restart.
+- **Disconnecting** mid-flight pauses (single-player) or pauses the controls (multiplayer, where the
+  world doesn't stop for one player); a notice says so either way.
+
+| Controller | In flight | At home and in menus |
+|---|---|---|
+| Left stick | Steer (pitch and yaw) | Move the highlight |
+| Right stick | Look around | Turn the plane preview |
+| RT / R2 | Fire ink (hold) | Next mission card |
+| LT / L2 | Drop a bomb | Previous mission card |
+| RB / R1 | Boost | Next aircraft |
+| LB / L1 | Hold: the left stick throttles (↕) and banks (↔) | Previous aircraft |
+| A / ✕ | | Press the highlighted button (fold, launch, take off, continue, build...) |
+| B / ○ | | Back: close base management, the logbook, the pause menu |
+| X / □ | Rearm (landed at home) | Rearm (landed), repair (base management) |
+| Y / △ | Hold: hints | Base management |
+| D-pad | ↑ ← → emotes (multiplayer) | Move the highlight |
+| View / Share | Hold: scoreboard (multiplayer) | Logbook |
+| Menu / Options | Pause | Pause |
+
+The mapping follows the plan's section 7C, with one change: throttle had no button there, so it
+is LB + left stick (LB is the plan's "assisted banking modifier"). It may change after the
+playtest; rebinding is v0.0.14. Tests: `src/input/input.test.ts` (dead zones, curves, steering
+against the real flight model, the raw layouts, connection and switching, context mapping,
+navigation, hints).
+
+### Re-roled aircraft and the save migration (section 2B–2D)
+
+- **Swift** is the starter (first in the garage, cheapest) and the **free emergency plane**
+  (`STARTER_AIRCRAFT`, `emergencyPlane()`); **Falcon** is the agile fighter (best turn rate, no
+  bombs, a stealth value that does nothing until v0.0.15); **Dart** is the fast recon plane
+  (fastest in the game, longest range of the four, no bombs, recon objectives fill 1.5× faster);
+  **Widewing** is unchanged. Numbers in the [aircraft table](#aircraft).
+- **Saves migrate** (single-player save format 3): every aircraft id is kept; only "Emergency
+  Dart" entries in the paper log are renamed, and kept planes are capped at their design's new
+  health. Server: migration `0002_emergency_swift.sql` for persisted emergency planes.
+- **Remote planes** in multiplayer now show their bomb racks and the fold animation on their pad.
+
+### Territories (section 4)
+
+All 16 desks have a **theme** (Notebook, Graph Paper, Cardboard, Colored Paper, Art Desk), a
+code-built **landmark** and props, with work areas kept clear and **ownership** shown by tape and
+pennants (blue yours, red another player's or the AI's, grey unclaimed). Landmarks and tall props
+have **collision shapes from one module** (`src/world/territories/decor.ts`) that the client, the
+multiplayer prediction and the server all use, so multiplayer homes get them too. Homes use the
+lab's runway model. Screenshots: [docs/checkpoints/0.0.11-territories/](docs/checkpoints/0.0.11-territories/).
+
+| Desk | Name | Theme | Landmark |
+|---|---|---|---|
+| T1 | Home Desk | Notebook | Pencil cup |
+| T2 | Pencil Point | Graph Paper | Bundle of giant pencils |
+| T3 | Notebook Ridge | Notebook | Spiral notebook standing like a tent |
+| T4 | Eraser Fields | Colored (pink) | Stack of giant erasers |
+| T5 | Margin Hill | Notebook | Hill of notebooks with a flag |
+| T6 | Ink Valley | Art Desk | Ink bottle and dip pen in a pool of ink |
+| T7 | Cardboard Fort | Cardboard | Cardboard tube tower |
+| T8 | Ruler Crossing | Graph Paper | Ruler bridge on eraser piers |
+| T9 | Scrap Corner | Colored (yellow) | Overflowing wastepaper bin |
+| T10 | Glue Gulch | Art Desk | Glue bottle in a puddle |
+| T11 | Paper Citadel | Cardboard | Cardboard citadel with four towers |
+| T12 | Crayon Canyon | Art Desk | Open crayon box |
+| T13 | Sharpener Point | Graph Paper | Sharpener with a pencil in it |
+| T14 | Compass Rise | Graph Paper | Drawing compass and its circle |
+| T15 | Stapler Bay | Cardboard | Open stapler and a staple |
+| T16 | Back Row | Colored (mint) | Lunch box, apple and juice box |
+
+### Onboarding, dashboard and the mission loop (section 5)
+
+- **Tutorial**: ten steps (card, plane, fold, launch, fly, fire, bomb, land, rearm or end, base),
+  each done by doing it; skippable, restartable from the pause menu. Stored in the single-player
+  save, and per player on the server in multiplayer (migration `0003_player_tutorial.sql`).
+- **Home dashboard** at the desk: production and storage, defenses and condition, hangar, the
+  chosen mission and how well the plane fits it, and up to three next steps.
+- **Loop polish**: quick rebuild of the plane lost last sortie, repair-all from the desk, "Rearm &
+  go" after landing. **Reports** say why a mission failed and what to try, and break the paper
+  down line by line.
+- Mission target rings, ring gates and crash wrecks get pencil outlines (with the outline setting).
+
+### Performance and asset delivery (sections 6 and 1)
+
+- **Instancing** (`src/render/Instancer.ts`): repeated meshes in the same material (the 16 desks,
+  AI installations, target crates and stands) draw as one instanced draw, culled per copy; small
+  parts beyond a per-preset distance are dropped. **Static merging** (`src/render/StaticMerge.ts`)
+  merges the classroom's one-off meshes by material. `?nobatch` turns both off for comparison.
+- **Budgets** per preset (triangles, draw calls, strokes, texture and buffer memory) in
+  `src/render/GraphicsSettings.ts`, reported by `?perf`, `paperwars.budget()` and
+  `paperwars.assets.report()`.
+- A **loading screen** with progress, which says when models fell back to their stand-ins; a
+  service worker caches model files in production builds.
+- **Synty slots** (`src/assets/synty.ts`): 18 environment slots (furniture, architecture, props,
+  obstacles), each with a code-built placeholder at its target size; a classroom backdrop
+  (`src/world/Backdrop.ts`: shelves, radiators, clocks, notice boards, ceiling lights).
+- **Tools:** `npm run validate-glb` (triangles, materials, fit), `licensed:check`,
+  `licensed:fetch` (from `PAPERWARS_LICENSED_DIR`, or a `.tar.gz` at `PAPERWARS_LICENSED_URL`),
+  `compress` (brotli / gzip: `dist/` 22.6 MB → 3.6 MB), `build:deploy` and `measure`. Delivery of
+  licensed files step by step: [assets/licensed/README.md](assets/licensed/README.md). KTX2 /
+  Basis texture compression was skipped: the models' textures are small JPEGs.
+
+| Draw calls, desk view (incl. shadows) | Before | After |
+|---|---|---|
+| Low | 1,055 | 235 |
+| Medium | 1,349 | 397 |
+| High | 1,351 | 550 |
+
+Triangles on High rose from about 145k to 209k (the backdrop and landmarks). Measured in headless
+Chromium with software rendering, so frame rates are the developer's to measure; the in-flight
+sample could not be taken headless.
+
+
+### Known limitations (part 2)
+
+- The controller has only been tested with simulated controllers in headless Chromium (every
+  screen, flight, unplugging), not on real hardware: that is the developer's check (section 8C).
+- Browsers don't count controller buttons as a user gesture: sound starts after the first key
+  press or click, and pointer lock is not used while flying with a controller (not needed).
+- A text field (the multiplayer name and codes) can be highlighted but not typed into with a
+  controller; an empty name joins as "Pilot".
+- High altitude for the Dart is not in (the ceiling is one shared value).
+- Chairs, backpacks and walls still have no collision shapes; bombs pass through landmarks.
+- The helipad is not placed (no helicopters yet).
+- The `licensed:fetch` download path (`PAPERWARS_LICENSED_URL`) is untested; the folder copy is.
+- The Synty desk-top slots have placeholders but are not placed on desks yet.
+
+### Decisions for the developer (part 2)
+
+- The controller mapping above (especially throttle on LB + stick) and the aim help's strength
+  (`PAD_ASSIST` in `src/input/analog.ts`).
+- The re-roled stats and prices of Swift, Dart and Falcon, and the mission fits they produce: with
+  bombs only on the Swift (one small) and the Widewing among the original four, multi-stage and
+  combined attacks now best suit the Lightning.
+- The territory names, themes and landmarks above, the ownership colours, the runway model on
+  homes, and the T1 globe showing at every graphics level.
+- The tutorial's wording; whether existing multiplayer players should see it; the dashboard's
+  place on screen.
 
 ## v0.0.11 part 1: custom assets, the classroom and the roster
 
@@ -905,9 +1086,9 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 
 | Aircraft | Role | Cost | Refit | Health | Range | Guns | Bombs | Signature | Against defenses |
 |---|---|---|---|---|---|---|---|---|---|
-| Dart | Recon | 10 | 3 | 45 | 2.6 km | 1 light, 40 ink | 1 mini | 0.65 | Cheap and hard to spot, but two bursts bring it down |
-| Falcon | Fighter | 25 | 6 | 100 | 1.6 km | 2, 120 ink | 1 | 0.9 | Out-turns and outruns rockets, kills turrets fast; one bomb |
-| Swift | Multipurpose | 30 | 7 | 110 | 1.9 km | 2, 80 ink | 2 | 1.0 | Good at everything a multi-stage strike asks |
+| Swift | Basic fighter (starter) | 10 | 3 | 90 | 2.0 km | 2, 70 ink | 1 mini | 1.0 | Cheap and forgiving; the free emergency plane |
+| Dart | Fast recon | 25 | 6 | 50 | 2.8 km | 1 light, 40 ink | – | 0.65 | The fastest plane; recon fills 1.5× faster, but it can't take a hit |
+| Falcon | Agile fighter | 30 | 7 | 100 | 1.6 km | 2, 130 ink | – | 0.85 | The best turn rate: out-turns rockets and fighters; no bombs |
 | Widewing | Bomber | 40 | 10 | 150 | 1.3 km | 1, 50 ink | 4 | 1.25 | Several targets in one run, but rockets catch it and it is easy to hit |
 | Specter | Surveillance drone | 30 | 6 | 60 | 3.2 km | 1 light, 30 ink | – | 0.55 | Flies furthest and quietest; nothing to fight with |
 | Thug | Ground attack | 40 | 9 | 150 | 1.5 km | rotary, 220 ink | 3 mini | 1.15 | Slow and tough, shreds turrets on low passes |
@@ -917,32 +1098,33 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 | Lancer | Supersonic bomber | 55 | 12 | 135 | 1.7 km | 1, 50 ink | 3 | 1.1 | Outruns fighters with a bomb load |
 | Ghost | Stealth bomber | 60 | 13 | 140 | 2.3 km | 1, 30 ink | 4 | 0.5 | Defenses barely notice it; no dogfighting |
 
-The last seven arrived in v0.0.11 with provisional numbers.
+Swift, Dart and Falcon were re-roled in v0.0.11 (starting values, to tune in the playtest); the
+last seven arrived in v0.0.11 with provisional numbers.
 
 ### Missions
 
 | Type | Objective | Best fit |
 |---|---|---|
 | Bombing | Hit the bullseye on one of T2 to T9 | Widewing |
-| Precision bombing | Hit a small ink-blue spot placed off-centre (kept clear of props and defenses) | Widewing, Swift |
+| Precision bombing | Hit a small ink-blue spot placed off-centre (kept clear of props and defenses) | Widewing (Swift possible) |
 | Reconnaissance | Spend 3 / 4.5 / 6 s inside a territory's airspace, below 30 / 22 / 15 m | Dart |
 | Timed delivery | Reach a territory's airspace before the clock runs out | Dart |
 | Strike & return | Bomb a target, **then land on T1** | Widewing |
 | Multi-target | Hit two bullseyes in one flight, in any order (needs a 2-bomb rack) | Widewing |
 | Flight challenge | Fly through 4 / 5 / 6 paper rings in order, over the gaps | Falcon, Dart |
 | Target practice | Shoot down 2 / 3 / 3 practice planes on one territory (Hard is timed) | Falcon |
-| Suppression | Destroy the defenses on a territory | Falcon, Swift |
+| Suppression | Destroy the defenses on a territory | Falcon |
 | Dangerous recon | Reconnoitre a defended territory, then escape | Dart, Falcon |
 | Fortified bombing | Destroy the supply depot inside guarded or fortified ground | Widewing |
-| Multi-stage strike | Radar, then supply depot, then land on T1 | Swift |
+| Multi-stage strike | Radar, then supply depot, then land on T1 | Lightning |
 | Survival challenge | Hold out in a defended territory's airspace | Falcon |
-| Low-altitude attack | Bomb a bullseye while staying low near it | Falcon, Swift, Widewing |
+| Low-altitude attack | Bomb a bullseye while staying low near it | Widewing (Swift possible) |
 | Dogfight | Shoot down an enemy fighter patrolling a territory | Falcon |
-| Scout interception | Shoot down a scout before it escapes the map | Falcon, Dart, Swift |
-| Bomber interception | Shoot down the raider before it releases (escorted on Hard) | Falcon, Swift |
-| Bomber escort | Keep your Widewing flying until its bomb hits | Falcon, Swift |
+| Scout interception | Shoot down a scout before it escapes the map | Falcon, Dart |
+| Bomber interception | Shoot down the raider before it releases (escorted on Hard) | Falcon |
+| Bomber escort | Keep your Widewing flying until its bomb hits | Falcon |
 | Airspace patrol | Patrol a territory for 20 / 25 / 30 s and shoot down every intruder | Falcon |
-| Combined attack | Bomb a defended bullseye with a fighter patrolling overhead | Swift |
+| Combined attack | Bomb a defended bullseye with a fighter patrolling overhead | Lightning |
 
 Bombs offered = one per target (one for a structure to knock down), plus 2 spares on Easy and 1 on
 Medium. Easy cards go to threat 0–1, Medium to 1–2, Hard to 2–3.
@@ -953,6 +1135,8 @@ escapes or releases its bomb, or when the bomber you escort is shot down. An air
 shoot down counts whoever finishes it (T1's guns included).
 
 ### Controls
+
+Keyboard and mouse below; for a controller see the [controller table](#controller-support-section-7).
 
 | Input | Action |
 |---|---|
@@ -983,9 +1167,9 @@ shoot down counts whoever finishes it (T1's guns included).
 | Event | Paper |
 |---|---|
 | Starting resources | +100 |
-| Fold a new plane | −10 / −25 / −30 / −40 |
+| Fold a new plane (Swift / Dart / Falcon / Widewing) | −10 / −25 / −30 / −40 |
 | Refit a recovered plane (and repair it) | −3 / −6 / −7 / −10 |
-| Roll out a stowed plane, or fold the emergency Dart (when nothing is affordable) | 0 |
+| Roll out a stowed plane, or fold the emergency Swift (when nothing is affordable) | 0 |
 | Rearm ink and range after landing | 0 |
 | Home production | 5 per minute + workshops (+2 / +5 / +9 each), ×3 below 50, halved with the store wrecked, stops at capacity |
 | Capacity | 300, +200 / +500 / +900 per storage box; earnings beyond it are lost |
@@ -1076,6 +1260,13 @@ src/
                           intercept, escort, patrol), progress and failure
     MissionGenerator.ts   Missions from templates: types, threat windows, targets (or a forced one), escalations,
                           the aircraft each one sends up, event missions, par times, rewards (B × D × M)
+
+  input/                  (v0.0.11) Keyboard, mouse and controller as one set of named actions
+    Controls.ts           The action layer: key map, controller mapping per context, settings, device switching
+    Gamepad.ts            Gamepad API polling, the standard mapping and raw-layout fixes, connect / disconnect
+    analog.ts             Dead zones, response curve, smoothing, stick steering as mouse movement, stick aim help
+    FocusNav.ts           The controller's highlight over the page's buttons, and hover titles under it
+    glyphs.ts             Key hints relabelled with the controller's buttons (Xbox or PlayStation)
 
   systems/
     GameState.ts          The rules: garage and hangar, fold/refit/roll-out, launch, weapons, health,

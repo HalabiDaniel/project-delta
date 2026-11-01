@@ -90,7 +90,7 @@ export class DefenseModels {
   private readonly views: View[] = [];
   private readonly byId = new Map<string, View>();
   private time = 0;
-  private readonly root: pc.Entity;
+  readonly root: pc.Entity;
   private preview: { key: string; entity: pc.Entity } | null = null;
   private readonly pads = new Map<string, { entity: pc.Entity; material: pc.StandardMaterial; state: SlotHighlight }>();
 

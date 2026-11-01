@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { shownByInstancer } from '../Instancer';
 import { OUTLINE, OUTLINE_TIERS, type OutlineTier, type StrokeStyle } from '../style';
 import {
   buildEdgeTopology,
@@ -200,7 +201,7 @@ export class OutlineRenderer {
       let visible = on && tiers.includes(s.tier);
       if (visible) {
         if (s.render) {
-          visible = s.render.enabled && s.render.entity.enabled && !!s.source && s.source.visible && opaque(s.source.material);
+          visible = s.render.enabled && s.render.entity.enabled && !!s.source && shownByInstancer(s.source) && opaque(s.source.material);
         } else {
           visible = (s.node as pc.Entity).enabled;
         }

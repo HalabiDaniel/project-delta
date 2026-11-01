@@ -266,4 +266,26 @@ describe('player identity in the room', () => {
     const again = await enter(r, { name: 'Bo', token: bo.welcome.token });
     expect(again.id).toBe(bo.id);
   });
+
+  it("sends a player's tutorial progress after the welcome and keeps what they send back", async () => {
+    const r = await room();
+    // The progress follows the welcome at once, so listen before saying hello.
+    const tutorialOf = async (options: Record<string, unknown>) => {
+      const client = await colyseus.connectTo(r, { ...join, ...options });
+      const got: unknown[] = [];
+      client.onMessage('tutorial', (m) => got.push(m));
+      client.send('hello');
+      const welcome = (await client.waitForMessage('welcome')) as WelcomeDTO;
+      for (let i = 0; i < 40 && got.length === 0; i++) await wait(25);
+      return { client, welcome, got };
+    };
+    const first = await tutorialOf({ name: 'Tess' });
+    expect(first.got).toEqual([{ t: null }]);
+    first.client.send('tutorial', { t: { v: 1, step: 5, skipped: false } });
+    first.client.send('tutorial', { t: 'junk' });
+    await wait(150);
+    await first.client.leave();
+    const again = await tutorialOf({ name: 'Tess', token: first.welcome.token });
+    expect(again.got).toEqual([{ t: { v: 1, step: 5, skipped: false } }]);
+  });
 });
