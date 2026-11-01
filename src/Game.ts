@@ -82,6 +82,7 @@ import { buildWorld, type World } from './world/WorldGenerator';
 import { installOutlines, type OutlineRenderer } from './render/outline/OutlineRenderer';
 import {
   browserStorage,
+  DETAIL_DISTANCE,
   loadGraphics,
   matchesPreset,
   outlineChoice,
@@ -90,9 +91,12 @@ import {
   withIntensity,
   withOutlines,
   withPreset,
+  type BudgetCheck,
   type GraphicsSettings,
 } from './render/GraphicsSettings';
 import { setShadowQuality } from './render/lighting';
+import { instanceScenery, type Instancer } from './render/Instancer';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { AssetLibrary } from './assets/AssetLibrary';
 import { TextureBank } from './render/shading/textures';
 import { PaperShading } from './render/shading/PaperShading';
@@ -200,6 +204,8 @@ export class Game {
   private lostPlane: AircraftId | null = null;
   /** Rearm and go: take off as soon as the ground crew is done. */
   private rearmThenGo = false;
+  /** Repeated scenery drawn instanced (v0.0.11). */
+  instancer: Instancer | null = null;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -275,7 +281,9 @@ export class Game {
     installMaterials(new MaterialLibrary(textures));
     const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
-    await assets.preload();
+    const loading = new LoadingScreen();
+    await assets.preload(undefined, (p) => loading.progress(p));
+    loading.done(assets.failures());
     const graphics = loadGraphics(browserStorage());
     const world = buildWorld(app, assets, graphics.detail);
     const targetSpecs = layoutTargetRange(world.territories);
@@ -457,6 +465,9 @@ export class Game {
     game.assets = assets;
     game.setGraphics(graphics);
     game.perfMonitor = new PerfMonitor(app, () => outlines.stats(), new URLSearchParams(window.location.search).has('perf'));
+    game.perfMonitor.preset = () => game!.graphics.preset;
+    game.perfMonitor.instanced = () => game!.instancer?.stats ?? null;
+    assets.attachPerf(() => game!.perfMonitor?.budget() ?? null);
     if (new URLSearchParams(window.location.search).has('dev')) game.dev.toggle(true);
     // The session summary is kept for next time, and the game saved, whenever the page goes away.
     const leave = () => void game!.saveNow();
@@ -466,6 +477,9 @@ export class Game {
     game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
+    // After the game has moved everything: repeated scenery drawn instanced, then strokes and stats.
+    game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
+    game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
     app.on('update', () => {
       outlines.update();
       game!.perfMonitor?.frame();
@@ -713,6 +727,11 @@ export class Game {
     return this.perfMonitor?.snapshot() ?? null;
   }
 
+  /** This frame against the graphics preset's budget (draw calls, triangles, strokes, textures). */
+  budget(): BudgetCheck | null {
+    return this.perfMonitor?.budget() ?? null;
+  }
+
   /** Applies and remembers graphics settings (outlines, shadows, decoration, resolution). */
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
@@ -721,6 +740,7 @@ export class Game {
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.world.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.world.dressings.values()) d.setDetail(settings.detail);
+    if (this.instancer) this.instancer.detailDistance = DETAIL_DISTANCE[settings.preset];
     const device = this.app.graphicsDevice;
     const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
     if (device.maxPixelRatio !== ratio) {

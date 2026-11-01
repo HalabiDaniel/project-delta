@@ -2,6 +2,7 @@ import type { Shape } from '../combat/Collision';
 import type { MaterialId, OutlineTier } from '../render/style';
 import { MeshBuilder } from '../world/props/MeshBuilder';
 import { Model } from '../world/props/Model';
+import { SYNTY_PROPS, type SyntyCategory, type SyntyPropId } from './synty';
 import { bookStack, eraser, glueStick, lyingCrayon, lyingPencil, paperBall, paperClip, paperFlag, paperStack, protractor, ruler, shavings, stickyNote, tapeRoll } from '../world/props/stationery';
 
 /**
@@ -36,7 +37,9 @@ export type PropId =
   | 'glueStick'
   | 'stickyNote.green'
   | 'bookStack'
-  | 'globe';
+  | 'globe'
+  // The environment slots for licensed models (v0.0.11): src/assets/synty.ts.
+  | SyntyPropId;
 
 export interface PropBuild {
   model: Model;
@@ -69,6 +72,8 @@ export interface PropDef {
   tier: OutlineTier;
   /** Simple collision shapes in the prop's own space, for props tall enough to fly into. */
   colliders?: readonly Shape[];
+  /** What a licensed slot is for (classroom furniture, architecture, props, obstacles). */
+  category?: SyntyCategory;
 }
 
 export const PROPS: Record<PropId, PropDef> = {
@@ -129,6 +134,7 @@ export const PROPS: Record<PropId, PropDef> = {
       { kind: 'box', x: 0, y: 0.8, z: 0, hx: 0.9, hy: 0.8, hz: 0.9, yaw: 0 },
     ],
   },
+  ...SYNTY_PROPS,
 };
 
 /** An original stand-in for a classroom globe: a faceted blue ball with green land, on a tilted ring and a stand. */

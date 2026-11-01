@@ -161,9 +161,35 @@ lab's runway model. Screenshots: [docs/checkpoints/0.0.11-territories/](docs/che
   down line by line.
 - Mission target rings, ring gates and crash wrecks get pencil outlines (with the outline setting).
 
-### Performance and asset delivery (section 6)
+### Performance and asset delivery (sections 6 and 1)
 
-In progress: instancing and batching, loading progress, per-preset budgets and the licensed-asset delivery step are being merged.
+- **Instancing** (`src/render/Instancer.ts`): repeated meshes in the same material (the 16 desks,
+  AI installations, target crates and stands) draw as one instanced draw, culled per copy; small
+  parts beyond a per-preset distance are dropped. **Static merging** (`src/render/StaticMerge.ts`)
+  merges the classroom's one-off meshes by material. `?nobatch` turns both off for comparison.
+- **Budgets** per preset (triangles, draw calls, strokes, texture and buffer memory) in
+  `src/render/GraphicsSettings.ts`, reported by `?perf`, `paperwars.budget()` and
+  `paperwars.assets.report()`.
+- A **loading screen** with progress, which says when models fell back to their stand-ins; a
+  service worker caches model files in production builds.
+- **Synty slots** (`src/assets/synty.ts`): 18 environment slots (furniture, architecture, props,
+  obstacles), each with a code-built placeholder at its target size; a classroom backdrop
+  (`src/world/Backdrop.ts`: shelves, radiators, clocks, notice boards, ceiling lights).
+- **Tools:** `npm run validate-glb` (triangles, materials, fit), `licensed:check`,
+  `licensed:fetch` (from `PAPERWARS_LICENSED_DIR`, or a `.tar.gz` at `PAPERWARS_LICENSED_URL`),
+  `compress` (brotli / gzip: `dist/` 22.6 MB → 3.6 MB), `build:deploy` and `measure`. Delivery of
+  licensed files step by step: [assets/licensed/README.md](assets/licensed/README.md). KTX2 /
+  Basis texture compression was skipped: the models' textures are small JPEGs.
+
+| Draw calls, desk view (incl. shadows) | Before | After |
+|---|---|---|
+| Low | 1,055 | 235 |
+| Medium | 1,349 | 397 |
+| High | 1,351 | 550 |
+
+Triangles on High rose from about 145k to 209k (the backdrop and landmarks). Measured in headless
+Chromium with software rendering, so frame rates are the developer's to measure; the in-flight
+sample could not be taken headless.
 
 
 ### Known limitations (part 2)
@@ -177,6 +203,8 @@ In progress: instancing and batching, loading progress, per-preset budgets and t
 - High altitude for the Dart is not in (the ceiling is one shared value).
 - Chairs, backpacks and walls still have no collision shapes; bombs pass through landmarks.
 - The helipad is not placed (no helicopters yet).
+- The `licensed:fetch` download path (`PAPERWARS_LICENSED_URL`) is untested; the folder copy is.
+- The Synty desk-top slots have placeholders but are not placed on desks yet.
 
 ### Decisions for the developer (part 2)
 
