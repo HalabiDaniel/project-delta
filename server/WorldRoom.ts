@@ -14,6 +14,7 @@ import {
   type WelcomeDTO,
 } from '../src/net/protocol';
 import { AiState, InstallationState, PHASES, PLANE_STATUSES, PlaneState, PlayerState, TerritoryState, WorldState, INSTALLATION_STATES } from '../src/net/schema';
+import { foldPose } from '../src/systems/GameState';
 import { refusal, type Authenticated } from './identity/Identity';
 import { services } from './services';
 import type { PlayerRecord } from './store/Store';
@@ -386,8 +387,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       plane.speed = m.speed;
       plane.hp = Math.round((p.state?.durability?.fraction ?? 1) * 255);
       plane.boost = m.boost.active;
-      plane.fold = Math.round((p.state?.phase === 'building' ? p.state.buildProgress : 1) * 255);
-      plane.bombs = p.state?.bombsLoaded ?? 0;
+      plane.fold = Math.round((p.state?.phase === 'building' ? foldPose(p.state.buildProgress, p.state.buildKind) : 1) * 255);
+      // Bombs hang under the plane once it is loaded at take-off, as on the pilot's own screen.
+      const phase = p.state?.phase;
+      plane.bombs = phase === 'flying' || phase === 'landed' ? (p.state?.bombsLoaded ?? 0) : 0;
       plane.emergency = p.state?.emergency ?? false;
     }
     // AI aircraft.

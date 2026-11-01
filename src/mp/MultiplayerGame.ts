@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PVP, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PVP, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -30,7 +30,7 @@ import {
 } from '../net/protocol';
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
-import { emergencyDart, GameState, type GamePhase } from '../systems/GameState';
+import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/GameState';
 import { Input, MOUSE_LEFT, MOUSE_RIGHT } from '../systems/Input';
 import { ResourceManager } from '../systems/ResourceManager';
 import { HUD } from '../ui/HUD';
@@ -90,7 +90,10 @@ export class RemoteAircraft implements ShownAircraft {
   emoteUntil = 0;
   status: AircraftStatus = 'flying';
   role = 'fighter';
-  bombs = 0;
+  /** Bombs on the rack (players' planes, from the server's state); undefined for the AI's, which draw no rack. */
+  bombs: number | undefined = undefined;
+  /** Fold pose on the pad, 0 (flat sheet) to 1 (finished), as the server reports it; undefined for the AI's. */
+  fold: number | undefined = undefined;
   target: string | null = null;
   attacking = false;
   leaving = false;
@@ -214,7 +217,7 @@ export class MultiplayerGame {
     network: DefenseNetwork,
   ) {
     this.network = network;
-    this.predictor = new Predictor(AIRCRAFT.dart);
+    this.predictor = new Predictor(AIRCRAFT[STARTER_AIRCRAFT]);
     this.views = new MpViews(this);
   }
 
@@ -310,7 +313,7 @@ export class MultiplayerGame {
       new ChaseCamera(app),
       new Effects(app, ground),
       new FlightTrails(app),
-      new PlaneController(app, 'falcon', assets.models),
+      new PlaneController(app, STARTER_AIRCRAFT, assets.models),
       new Bombs(app, 16),
       new OrdnanceView(app),
       new AircraftModels(app, players, assets.models),
@@ -621,7 +624,7 @@ export class MultiplayerGame {
         st.durability = null;
         st.gun = null;
       } else {
-        const spec = d.emergency ? emergencyDart() : AIRCRAFT[d.id];
+        const spec = d.emergency ? emergencyPlane() : AIRCRAFT[d.id];
         if (st.plane?.id !== spec.id || st.emergency !== d.emergency) {
           st.plane = spec;
           st.durability = new Durability(spec.maxHealth);
@@ -782,6 +785,7 @@ export class MultiplayerGame {
       r.status = PLANE_STATUSES[p.status] ?? 'flying';
       r.durability.fraction = p.hp / 255;
       r.bombs = p.bombs;
+      r.fold = p.fold / 255;
       r.buffer.push(s.time, { x: p.x, y: p.y, z: p.z, yaw: signedAngle(p.yaw), pitch: signedAngle(p.pitch), roll: signedAngle(p.roll) });
     });
     for (const [id, r] of this.remotes) {
@@ -1203,7 +1207,7 @@ export class MultiplayerGame {
       this.plane.setBombs(phase === 'flying' || phase === 'landed' ? st.bombsLoaded : 0);
       this.plane.pose(true);
     } else if (st && (phase === 'building' || phase === 'ready')) {
-      if (phase === 'building') this.plane.setFold(st.buildKind === 'fold' ? st.buildProgress : st.buildKind === 'rollout' ? 1 : st.buildProgress < 0.35 ? 1 - (st.buildProgress / 0.35) * 0.5 : 0.5 + ((st.buildProgress - 0.35) / 0.65) * 0.5);
+      if (phase === 'building') this.plane.setFold(foldPose(st.buildProgress, st.buildKind));
       else this.plane.setFold(1);
     }
     this.plane.animate(dt);

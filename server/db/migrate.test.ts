@@ -50,6 +50,30 @@ describe.skipIf(!TEST_DATABASE_URL)('migrating PostgreSQL', () => {
     await t!.db.query(`insert into worlds (id, name, format, note) values (gen_random_uuid(), 'w', 1, 'hello')`);
   });
 
+  it('0002 moves persisted emergency Darts to the Swift and leaves every other aircraft alone (v0.0.11)', async () => {
+    t = await testDatabase();
+    const all = loadMigrations();
+    await migrate(t!.db, all.slice(0, 1));
+    const db = t!.db;
+    const world = (await db.query<{ id: string }>(`insert into worlds (id, name, format) values (gen_random_uuid(), 'w', 1) returning id`)).rows[0].id;
+    const player = (await db.query<{ id: string }>(`insert into players (id, public_id, display_name) values (gen_random_uuid(), 'pat001', 'Pat') returning id`)).rows[0].id;
+    const plane = async (type: string, loadout: object, status = 'ready') =>
+      (await db.query<{ id: string }>(
+        `insert into aircraft (id, world_id, player_id, type, status, health, loadout, destroyed_at) values (gen_random_uuid(), $1, $2, $3, $4, 40, $5, $6) returning id`,
+        [world, player, type, status, JSON.stringify(loadout), status === 'destroyed' ? new Date() : null],
+      )).rows[0].id;
+    const emergency = await plane('dart', { emergency: true });
+    const folded = await plane('dart', {});
+    const falcon = await plane('falcon', { emergency: false });
+    const wreck = await plane('dart', { emergency: true }, 'destroyed');
+    await migrate(t!.db, all);
+    const type = async (id: string) => (await db.query<{ type: string }>('select type from aircraft where id = $1', [id])).rows[0].type;
+    expect(await type(emergency)).toBe('swift');
+    expect(await type(folded)).toBe('dart');
+    expect(await type(falcon)).toBe('falcon');
+    expect(await type(wreck)).toBe('dart');
+  });
+
   it('rolls a failing migration back completely', async () => {
     t = await testDatabase();
     const base = loadMigrations();

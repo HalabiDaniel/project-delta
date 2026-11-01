@@ -5,7 +5,7 @@ import { layoutTargetRange } from '../combat/Destructibles';
 import { AIRCRAFT, AIRCRAFT_ORDER, DIRECTOR, OPERATIONS, TIERS, type AircraftId } from '../config';
 import { layoutDefenses } from '../defenses/Layout';
 import { threatOf, type MissionContext } from '../missions/MissionGenerator';
-import { emergencyDart } from '../systems/GameState';
+import { emergencyPlane } from '../systems/GameState';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
 import { flyable, mainTarget, MissionDirector, SLOTS, type Situation } from './MissionDirector';
@@ -107,10 +107,10 @@ describe('MissionDirector: eligibility', () => {
     }
   });
 
-  it('a broke player only gets missions the free emergency Dart can fly (no bombs needed)', () => {
+  it('a broke player only gets missions the free emergency Swift can fly (no bombs needed)', () => {
     for (let seed = 1; seed <= 30; seed++) {
       const { d } = director(seed, { paper: 4 });
-      for (const m of d.deal()) expect(assessSuitability(emergencyDart(), m.spec).level).not.toBe('unsuitable');
+      for (const m of d.deal()) expect(assessSuitability(emergencyPlane(), m.spec).level).not.toBe('unsuitable');
     }
   });
 

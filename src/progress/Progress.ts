@@ -107,7 +107,7 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   { id: 'defender', title: 'Home guard', detail: 'Beat off a raid or see a friendly bomber home' },
   { id: 'world-event', title: 'Opportunist', detail: 'Win a world event: a shipment, a convoy or a supply run' },
   { id: 'all-planes', title: 'Hangar regular', detail: 'Complete a mission in every design' },
-  { id: 'emergency', title: 'Scrap paper hero', detail: 'Complete a mission in the emergency Dart' },
+  { id: 'emergency', title: 'Scrap paper hero', detail: 'Complete a mission in the free emergency plane' },
   { id: 'ace', title: 'Paper ace', detail: 'Shoot down five enemy aircraft' },
 ];
 

@@ -2,7 +2,7 @@ import { assessSuitability, type SuitabilityLevel } from '../aircraft/Aircraft';
 import { AIRCRAFT, AIRCRAFT_ORDER, BASE, ECONOMY, TIER_ORDER, type AircraftId, type AircraftSpec, type Tier } from '../config';
 import type { MissionContext } from '../missions/MissionGenerator';
 import { Progress } from '../progress/Progress';
-import { emergencyDart } from '../systems/GameState';
+import { emergencyPlane } from '../systems/GameState';
 import { HomeIncome } from '../systems/HomeIncome';
 import { Ledger } from '../systems/Ledger';
 import { ResourceManager } from '../systems/ResourceManager';
@@ -29,7 +29,7 @@ export interface SimulationResult {
   missions: number;
   successes: number;
   planesLost: number;
-  /** Sorties flown in the free emergency Dart. */
+  /** Sorties flown in the free emergency plane. */
   emergencies: number;
   paperStart: number;
   paperEnd: number;
@@ -56,7 +56,7 @@ const SUIT_BONUS: Record<SuitabilityLevel, number> = { recommended: 0.06, good: 
 /**
  * Plays a profile through `missions` sorties with the real director, generator, economy and
  * performance rating: it picks cards the way the profile likes to, folds the best affordable plane
- * for the job (or refits one from the hangar, or takes the emergency Dart), rolls success by
+ * for the job (or refits one from the hangar, or takes the emergency plane), rolls success by
  * the profile's odds at that tier, and loses the plane by its odds on a failure. It shows whether
  * paper grows too fast, or whether players get stuck, without flying dozens of missions by hand.
  */
@@ -186,7 +186,7 @@ export function simulateEconomy(opts: SimulationOptions): SimulationResult {
 
 /**
  * The plane a player would take: the best suited affordable one (a stowed or recovered plane
- * counts at its roll-out or refit price), cheaper on a tie; the emergency Dart if nothing is
+ * counts at its roll-out or refit price), cheaper on a tie; the emergency plane if nothing is
  * affordable and it can fly the mission.
  */
 function bestPlane(spec: Parameters<typeof assessSuitability>[1], paper: number, costFor: (id: AircraftId) => number) {
@@ -201,9 +201,9 @@ function bestPlane(spec: Parameters<typeof assessSuitability>[1], paper: number,
   }
   if (best) return best;
   const nothing = AIRCRAFT_ORDER.every((id) => costFor(id) > paper);
-  const dart = emergencyDart();
-  const level = assessSuitability(dart, spec).level;
-  return nothing && level !== 'unsuitable' ? { plane: dart, cost: 0, level, emergency: true } : null;
+  const plane = emergencyPlane();
+  const level = assessSuitability(plane, spec).level;
+  return nothing && level !== 'unsuitable' ? { plane, cost: 0, level, emergency: true } : null;
 }
 
 /** Runs every profile, for the developer panel. */
