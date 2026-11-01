@@ -250,7 +250,7 @@ Score: kill 10, assist 4, raid that got through 15, raider stopped 10, mission d
 | Leaving | Menu → Leave classroom (or the lobby's Leave): the base comes down, the territory is free, a plane in the air counts as lost. |
 | Not back within 60 s | Treated as leaving. |
 | Session full | The ninth player is turned away with a message in the lobby. |
-| Server stops | The session ends. Clients show "reconnecting" while the SDK retries, then go back to the lobby, which says the server can't be reached. (No persistence yet: v0.0.11.) |
+| Server stops | The session ends. Clients show "reconnecting" while the SDK retries, then go back to the lobby, which says the server can't be reached. (No persistence yet: v0.0.10.) |
 
 ## Testing
 
@@ -306,7 +306,7 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 
 ## Known limitations
 
-- **Single server process, in memory.** No persistence, accounts or campaign lifecycle (v0.0.11).
+- **Single server process, in memory.** No persistence, accounts or campaign lifecycle (persistence in v0.0.10, accounts and the campaign lifecycle in v0.0.19).
   A server restart ends every session.
 - **Three-by-three classroom**: eight claimable desks. With eight players only the centre is left
   to the AI; more territory slots are future work (GDD §3.1 suggests 12–16).

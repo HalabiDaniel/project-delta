@@ -227,19 +227,29 @@ This simplifies the construction interface while preserving the fantasy of creat
 
 **Multipurpose aircraft:** Balanced designs capable of completing several types of missions.
 
-### 5.3 Example Aircraft
+### 5.3 Aircraft Roster
 
-| Aircraft | Role | Strength | Weakness |
+Every aircraft is a stylised folded-paper interpretation inspired by a real aircraft, not a replica: its silhouette is recognisable at a glance, but its folds, colours and flight characteristics belong to paperwars.io.
+
+| Aircraft | Inspiration | Role | Arrives in |
 |---|---|---|---|
-| Dart | Basic scout | Cheap and fast | Limited offensive capability |
-| Falcon | Fighter | Agile in combat | Limited bombing capacity |
-| Widewing | Bomber | Heavy payload | Slow and vulnerable |
-| Shadow | Advanced fighter | High combat performance | Expensive construction |
-| Courier | Recon/support | Endurance and efficiency | Weak combat capability |
+| Swift | F-16 | Basic fighter; the starter and free emergency plane | 0.0.3 (remodelled in 0.0.11) |
+| Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.15) |
+| Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
+| Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
+| Raptor | F-22 | Air superiority | 0.0.12 |
+| Lancer | B-1B Lancer | Supersonic bomber | 0.0.13 |
+| Lightning | F-35 | Stealth multirole | 0.0.15 |
+| Thug | A-10 Thunderbolt II | Ground attack | 0.0.15 |
+| Ghost | B-2 Spirit | Stealth bomber | 0.0.16 |
+| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.16 |
+| Jumper | AV-8B Harrier | VTOL fighter | 0.0.17 |
+| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.17 |
+| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.18 |
 
-All aircraft names and statistics are provisional.
+New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.15), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.17), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
 
-The F-35-inspired folded-paper Falcon can be a prominent visual design, without attempting to reproduce actual fighter flight characteristics.
+Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.19).
 
 ### 5.4 Aircraft Costs
 
@@ -889,7 +899,7 @@ Single-player still. AI-controlled paper planes fly the same flight model as the
 
 ### Version 0.0.6: Dynamic Missions, Progression and Game Balance
 
-Single-player still. A mission director deals a safe, a balanced and a high-risk card from templates and explicit rules, adapting tiers (easy to very hard) to a rolling performance rating, with recovery missions, variety memory, eligibility checks and limited swaps. Rewards follow R = B × D × M, balanced against plane costs, with a free emergency Dart and capped home production. World events (raids, high-value shipments, convoys, supply runs) and territory states, short multi-sortie operations, medals, records, streaks, aircraft mastery, achievements, a local save, and developer tools for the director and the economy.
+Single-player still. A mission director deals a safe, a balanced and a high-risk card from templates and explicit rules, adapting tiers (easy to very hard) to a rolling performance rating, with recovery missions, variety memory, eligibility checks and limited swaps. Rewards follow R = B × D × M, balanced against plane costs, with a free emergency Dart (the Swift from 0.0.11) and capped home production. World events (raids, high-value shipments, convoys, supply runs) and territory states, short multi-sortie operations, medals, records, streaks, aircraft mastery, achievements, a local save, and developer tools for the director and the economy.
 
 ### Version 0.0.7: Territory Management, Base Building and a New HUD
 
@@ -899,29 +909,65 @@ Single-player still. The home territory becomes a base the player builds in fixe
 
 Single-player still. The game gets its permanent look: a playable sketchbook with pencil outlines, paper materials and soft cartoon light (see §2.1). The abstract grid becomes a classroom: territories become themed desks and cardboard platforms (Notebook, Cardboard, Graph Paper, Colored Paper, Art Desk) with names (Home Desk, Pencil Point, Notebook Ridge, Eraser Fields, Ink Valley, Cardboard Fort, Ruler Crossing, Paper Citadel, Scrap Corner), landmarks, props and a few obstacles. Licensed environment assets can be dropped in without being committed. New players get an interactive tutorial, the home base a unified dashboard, and the mission loop quick rebuild, repair and rearm, clearer rewards and failure reasons. Paper-themed audio, effects and animation, graphics presets and accessibility settings.
 
-Built in reviewable phases with developer checkpoints: (1) visual vertical slice on one territory, (2) world expansion, (3) territory identity and navigation, (4) home dashboard and onboarding, (5) gameplay flow and polish, (6) testing and refinement.
+Built in reviewable phases with developer checkpoints: (1) visual vertical slice on one territory, (2) world expansion, (3) territory identity and navigation, (4) home dashboard and onboarding, (5) gameplay flow and polish, (6) testing and refinement. Phase 1 shipped; phases 2 to 6 are completed in version 0.0.11 alongside the full asset integration.
 
 ### Version 0.0.9: Core Multiplayer
 
 Up to eight players share a classroom on an authoritative Node + Colyseus server: they join an ongoing session, claim one of eight territories as their base (the centre stays the AI's), and fly together. The server runs single-player's rule classes for every player (economy, base, mission board, sortie) and decides every position, hit, kill, balance and reward; clients send input frames and commands, predict their own plane and interpolate everyone else's. Player-versus-player combat with kill and assist credit and bounties that can't be farmed; raid missions against eligible player bases with capped losses above the protected reserve, new-player protection, shields, cooldowns and decaying rewards; defenders warned, given an interception card and backed by their guns; rival missions (raid, scout, shoot down, intercept) alongside each player's own board; names, tags, a scoreboard, a kill feed and emotes (no chat); reconnection with a grace period. Sessions live in memory. Built in eight reviewable phases with bots and a load test; see [MULTIPLAYER.md](MULTIPLAYER.md).
 
-### Version 0.0.10: Player Territory Bombing
+### Versions 0.0.10 to 0.0.20: towards the first public release
 
-Building on 0.0.9's raids: deeper attacks on built bases (multi-structure targets, escorts), the mission director's bounties and cooperation offers between players (escorting another player's bomber, joint defense), reputation and retaliation, and balance from playtesting.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md). Version 0.0.9's multiplayer becomes a persistent private alpha first, so two real players test every version that follows.
 
-### Version 0.0.11: Persistent Sessions
+### Version 0.0.10: Persistent Multiplayer and Private Alpha
 
-Player accounts, session reconnection, persistent economies, and campaign lifecycle.
+Lightweight secure player identity, PostgreSQL persistence for territories, buildings, resources, aircraft and progression, duplicate-proof server-authoritative transactions, defined rules for interrupted sorties, one persistent world that survives everyone leaving and a server restart, offline protection, a hardened server, and an externally reachable invite-only deployment (HTTPS, secure WebSockets) for the developer and one friend, with a feedback log and deployment and restore docs. See [v0.0.10](roadmap/v0.0.10.md).
 
-### Version 0.0.12: AI Escort Aircraft
+### Version 0.0.11: Art Integration and Controller Support
 
-Purchasable single-use supporting aircraft.
+Synty environment models adapted to the sketchbook look, the four existing aircraft remodelled and re-roled for the new roster (Swift as the F-16-inspired starter fighter, Falcon, Dart as high-speed reconnaissance, Widewing), custom buildings with construction, damage and repair states, all nine territories completed (the remaining v0.0.8 phases), browser delivery and performance work, and full gamepad support through one input-action layer shared with keyboard and mouse. See [v0.0.11](roadmap/v0.0.11.md).
 
-### Version 0.1.0: Early Public Alpha
+### Version 0.0.12: HUD and UI Revamp
 
-Integrated multiplayer gameplay, balance, onboarding, stability, and progression.
+A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. New aircraft: Raptor (air superiority). See [v0.0.12](roadmap/v0.0.12.md).
 
-Cosmetic monetization should be introduced only after the core gameplay and retention have been validated.
+### Version 0.0.13: Audio and Music Revamp
+
+Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. New aircraft: Lancer (supersonic bomber). See [v0.0.13](roadmap/v0.0.13.md).
+
+### Version 0.0.14: Menus, Settings and Branding
+
+Logo and branding, main menu, lobby, full settings with rebinding, loading screens, transitions, a first-launch flow and clear error screens. See [v0.0.14](roadmap/v0.0.14.md).
+
+### Version 0.0.15: Economy and Content Depth
+
+Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, multiplayer world events, server-side medals and achievements, and an economy simulator. New aircraft: Lightning (stealth multirole, with the radar signature and stealth system) and Thug (ground attack). See [v0.0.15](roadmap/v0.0.15.md).
+
+### Version 0.0.16: Advanced Multiplayer
+
+AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers between players, deeper raids, reputation, social features with mute and report (§12), and anti-farming rules. New aircraft: Ghost (stealth bomber) and Specter (surveillance drone). See [v0.0.16](roadmap/v0.0.16.md).
+
+### Version 0.0.17: World Scale and Environments
+
+12 to 16 territories per world, new environments (bedroom, library, art room), interest-based network updates (§16.4), regional servers and level of detail. New aircraft: Jumper (VTOL fighter, with a hover flight mode) and Wasp (light attack helicopter). See [v0.0.17](roadmap/v0.0.17.md).
+
+### Version 0.0.18: Customization and Social
+
+Cosmetic-only aircraft and territory customization (§5.6), earned cosmetics, an inventory, friends and small alliances. New aircraft: Hawk (heavy attack helicopter). See [v0.0.18](roadmap/v0.0.18.md).
+
+### Version 0.0.19: Public Readiness
+
+Public accounts, matchmaking, the campaign lifecycle and resets (§3.3), inactivity rules (§3.4), moderation and abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.19](roadmap/v0.0.19.md).
+
+### Version 0.0.20: Release Candidate
+
+LiveOps tools, cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests, a browser matrix, support channels and a feature freeze. See [v0.0.20](roadmap/v0.0.20.md).
+
+### Version 0.1.0: First Public Release (Public Alpha)
+
+After 0.0.20, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
+
+Version numbering from here: 0.1.x are small improvements, 0.x.0 are major versions, and 1.0.0 is the first full version. Cosmetic monetization (§14) is enabled in a later major version, only after the core gameplay and retention have been validated.
 
 ---
 

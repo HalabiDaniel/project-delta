@@ -110,7 +110,7 @@ readability on real hardware still need playtesting.
 ### Known limitations
 
 - Sessions live in memory on one server process: no accounts, persistence or campaign yet
-  (v0.0.11). A server restart ends every session.
+  (persistence in v0.0.10, accounts and the campaign in v0.0.19). A server restart ends every session.
 - Eight claimable desks in the 3 × 3 classroom; more territory slots come with the world expansion.
 - Homes are dressed without the Home Desk landmark and tall props (the server doesn't know their
   collision shapes); remote planes don't show bomb racks or the fold animation.
@@ -1387,8 +1387,23 @@ T1 well on unusual screen shapes.
 
 ## Next milestone
 
-Per the [roadmap](docs/GDD.md#17-development-roadmap): v0.0.8's remaining phases (the classroom,
-territory identity and navigation, onboarding, polish) still need the art-direction approval of
-checkpoint 1, and apply to multiplayer too. After that, **v0.0.10**: the player-versus-player loop
-deepened with bounties and cooperation offers between players from the mission director, and
-**v0.0.11**: accounts, persistence and the campaign lifecycle on the server.
+The road to the first public release is planned version by version in
+[docs/roadmap/](docs/roadmap/README.md) (summary in [GDD §17](docs/GDD.md#17-development-roadmap)):
+
+| Version | Theme |
+|---|---|
+| [v0.0.10](docs/roadmap/v0.0.10.md) | Persistent multiplayer and a private two-player alpha |
+| [v0.0.11](docs/roadmap/v0.0.11.md) | Art integration (finishing v0.0.8's phases) and controller support |
+| [v0.0.12](docs/roadmap/v0.0.12.md) | HUD and UI revamp |
+| [v0.0.13](docs/roadmap/v0.0.13.md) | Audio and music revamp |
+| [v0.0.14](docs/roadmap/v0.0.14.md) | Menus, settings and branding |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | Economy and content depth |
+| [v0.0.16](docs/roadmap/v0.0.16.md) | Advanced multiplayer |
+| [v0.0.17](docs/roadmap/v0.0.17.md) | World scale and environments |
+| [v0.0.18](docs/roadmap/v0.0.18.md) | Customization and social |
+| [v0.0.19](docs/roadmap/v0.0.19.md) | Public readiness |
+| [v0.0.20](docs/roadmap/v0.0.20.md) | Release candidate |
+| [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
+
+Next up is **v0.0.10**. From v0.1.0 on, 0.1.x releases are small improvements, 0.x.0 releases are
+major versions, and 1.0.0 is the first full version.
