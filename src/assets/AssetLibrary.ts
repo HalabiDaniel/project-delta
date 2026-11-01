@@ -25,6 +25,28 @@ export interface PropReport {
   error?: string;
 }
 
+/** How far loading has got, for the loading screen. */
+export interface LoadProgress {
+  done: number;
+  total: number;
+  /** The file that just finished (or failed). */
+  file: string | null;
+  failed: number;
+}
+
+/** What `paperwars.assets.report()` returns: every prop's source, every model file, and the frame's budget. */
+export interface AssetReport {
+  props: PropReport[];
+  models: Array<{ file: string; state: 'loaded' | 'loading' | 'failed' | 'missing'; error?: string }>;
+  /** Files that failed and fell back to their built-in stand-ins. */
+  failures: string[];
+  /** Licensed slots still on their placeholder (files not supplied). */
+  placeholders: PropId[];
+  /** Seconds the preload took. */
+  loadSeconds: number | null;
+  budget: unknown;
+}
+
 /** A prop ready to place: geometry to merge into a territory's batch, or an imported entity. */
 export type PropInstance = { kind: 'built'; build: PropBuild } | { kind: 'imported'; entity: pc.Entity };
 
@@ -39,6 +61,8 @@ export class AssetLibrary {
   private readonly errors = new Map<string, string>();
   /** The game's own models from the asset labs: classroom, aircraft, buildings. */
   readonly models: ModelStore;
+  private loadSeconds: number | null = null;
+  private perf: () => unknown = () => null;
 
   constructor(private readonly app: pc.AppBase, urls: Record<string, string> = MODEL_URLS) {
     this.models = new ModelStore(app);
@@ -50,15 +74,57 @@ export class AssetLibrary {
     return new Set(this.urls.keys());
   }
 
-  /** Loads every model file the manifest can use (none, if none were supplied). */
-  async preload(timeoutMs = 15000): Promise<void> {
+  /**
+   * Loads every model file the game will place: the licensed and own prop models the manifest
+   * resolves to, the classroom, the aircraft and the buildings in play. Each file is fetched once
+   * and kept (copies share its meshes and materials); a file that fails or times out leaves its
+   * prop or model on the built-in stand-in. `onProgress` hears about every file as it settles.
+   */
+  async preload(timeoutMs = 15000, onProgress?: (p: LoadProgress) => void): Promise<void> {
+    const started = performance.now();
     const wanted = new Set<string>();
     for (const def of Object.values(PROPS)) {
       const source = resolveProp(def, this.available);
       if (source.kind === 'licensed' || source.kind === 'model') wanted.add(source.file);
     }
-    const custom = [...classroomFiles(), ...Object.values(CATALOG.aircraft).map((a) => a.file), ...IN_GAME_BUILDINGS.map((id) => CATALOG.buildings[id].file)];
-    await Promise.all([...[...wanted].map((file) => this.load(file, timeoutMs)), ...custom.map((file) => this.models.load(file, timeoutMs * 2))]);
+    const custom = [...new Set([...classroomFiles(), ...Object.values(CATALOG.aircraft).map((a) => a.file), ...IN_GAME_BUILDINGS.map((id) => CATALOG.buildings[id].file)])];
+    const total = wanted.size + custom.length;
+    let done = 0;
+    let failed = 0;
+    const settle = (file: string, ok: boolean) => {
+      done++;
+      if (!ok) failed++;
+      onProgress?.({ done, total, file, failed });
+    };
+    onProgress?.({ done: 0, total, file: null, failed: 0 });
+    await Promise.all([
+      ...[...wanted].map((file) => this.load(file, timeoutMs).then(() => settle(file, !this.errors.has(file)))),
+      ...custom.map((file) => this.models.load(file, timeoutMs * 2).then((e) => settle(file, !!e))),
+    ]);
+    this.loadSeconds = (performance.now() - started) / 1000;
+  }
+
+  /** Files that failed to load (their props and models use the built-in stand-ins). */
+  failures(): string[] {
+    return [...new Set([...this.errors.keys(), ...this.models.errors.keys()])].filter((f) => this.urls.has(f) || this.models.has(f));
+  }
+
+  /** Lets the report include the frame's performance budget check. */
+  attachPerf(budget: () => unknown): void {
+    this.perf = budget;
+  }
+
+  /** Everything about the assets in one place: `paperwars.assets.report()` in the console. */
+  report(): AssetReport {
+    const props = this.propReport();
+    return {
+      props,
+      models: this.models.report().map((m) => (this.models.errors.has(m.file) ? { ...m, error: this.models.errors.get(m.file) } : m)),
+      failures: this.failures(),
+      placeholders: props.filter((p) => p.source === 'placeholder').map((p) => p.id),
+      loadSeconds: this.loadSeconds,
+      budget: this.perf(),
+    };
   }
 
   /** A prop to place. Imported ones come as a fresh entity each time. */
@@ -73,7 +139,7 @@ export class AssetLibrary {
   }
 
   /** What each prop is using right now. */
-  report(): PropReport[] {
+  propReport(): PropReport[] {
     return (Object.keys(PROPS) as PropId[]).map((id) => {
       const def = PROPS[id];
       const source = resolveProp(def, this.available);

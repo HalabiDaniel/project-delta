@@ -48,7 +48,9 @@ import { Dressing } from '../world/territories/Dressing';
 import { buildSharedScene, type SharedScene, type World } from '../world/WorldGenerator';
 import { AssetLibrary } from '../assets/AssetLibrary';
 import { installOutlines, type OutlineRenderer } from '../render/outline/OutlineRenderer';
-import { browserStorage, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
+import { instanceScenery, type Instancer } from '../render/Instancer';
+import { LoadingScreen } from '../ui/LoadingScreen';
+import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
 import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
@@ -160,6 +162,8 @@ export class MultiplayerGame {
   readonly clock = new ServerClock();
   readonly predictor: Predictor;
   graphics: GraphicsSettings = loadGraphics(browserStorage());
+  /** Repeated scenery drawn instanced (v0.0.11). */
+  instancer: Instancer | null = null;
   markers: MissionMarkers | null = null;
   readonly views: MpViews;
   crashPoint = new pc.Vec3();
@@ -236,7 +240,9 @@ export class MultiplayerGame {
     installMaterials(new MaterialLibrary(textures));
     const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
-    await assets.preload();
+    const loading = new LoadingScreen();
+    await assets.preload(undefined, (p) => loading.progress(p));
+    loading.done(assets.failures());
 
     const shared = sharedWorld();
     const scene = buildSharedScene(app, shared.territories, assets);
@@ -324,6 +330,9 @@ export class MultiplayerGame {
     game.bindInput();
     game.camera.updateDesk(0, new pc.Vec3(0, 0, 0), 0, true);
     app.on('update', (dt: number) => game!.tick(dt));
+    // After the game has moved everything: repeated scenery drawn instanced (v0.0.11).
+    game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
+    game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
     app.on('update', () => outlines.update());
     app.start();
     // A refresh lands back in the session if the server still keeps our place.
@@ -511,6 +520,7 @@ export class MultiplayerGame {
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.scene.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.dressings.values()) d.setDetail(settings.detail);
+    if (this.instancer) this.instancer.detailDistance = DETAIL_DISTANCE[settings.preset];
     const device = this.app.graphicsDevice;
     const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
     if (device.maxPixelRatio !== ratio) {

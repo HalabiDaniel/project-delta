@@ -8,6 +8,7 @@ import type { AssetLibrary } from '../assets/AssetLibrary';
 import { Dressing } from './territories/Dressing';
 import { HOME_DESK, type Detail } from './territories/themes';
 import { buildClassroom } from './Classroom';
+import { buildBackdrop } from './Backdrop';
 
 export interface World {
   territories: Territory[];
@@ -37,6 +38,7 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
 
   const sun = setUpLighting(app);
   buildClassroom(app, assets.models);
+  buildBackdrop(app, assets);
 
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
@@ -71,7 +73,10 @@ export interface SharedScene {
  */
 export function buildSharedScene(app: pc.AppBase, territories: readonly Territory[], assets?: AssetLibrary): SharedScene {
   const sun = setUpLighting(app);
-  if (assets) buildClassroom(app, assets.models);
+  if (assets) {
+    buildClassroom(app, assets.models);
+    buildBackdrop(app, assets);
+  }
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
     const platform = box(`territory-${territory.id}`, flatMaterial(PALETTE.neutral));
