@@ -73,7 +73,9 @@ export function applyGlyphs(root: ParentNode, family: PadFamily | null): void {
     // A hint the HUD rewrote since we last touched it carries a new key.
     if (kbd.dataset.shown === undefined || kbd.textContent !== kbd.dataset.shown) kbd.dataset.key = kbd.textContent ?? '';
     const key = kbd.dataset.key ?? '';
-    const shown = family ? padHint(key, family) : key;
+    // A hint can name its controller button outright (data-pad), where the key alone is ambiguous.
+    const named = kbd.dataset.pad as PadButton | undefined;
+    const shown = family ? (named && LABELS[family][named] ? LABELS[family][named] : padHint(key, family)) : key;
     if (kbd.textContent !== shown) kbd.textContent = shown;
     kbd.dataset.shown = shown;
     kbd.classList.toggle('pad-hidden', family !== null && shown === '');
