@@ -1,0 +1,25 @@
+# Local PostgreSQL for development and tests (v0.0.10):
+#
+#   docker compose up -d
+#   cp .env.example .env        # then: set -a; . ./.env; set +a
+#
+# One server, two databases: paperwars (the dev world) and paperwars_test (automated tests; each
+# test file works in its own throw-away schema).
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: paperwars
+      POSTGRES_PASSWORD: paperwars
+      POSTGRES_DB: paperwars
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./server/db/docker-init.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperwars"]
+      interval: 2s
+      retries: 15
+volumes:
+  pgdata:

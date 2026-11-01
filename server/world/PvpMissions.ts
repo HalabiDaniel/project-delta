@@ -83,7 +83,7 @@ export function huntMission(rivalId: string, rivalName: string, rivalHome: Terri
     bombs: 0,
     timeLimit: PVP.huntTime,
     ordered: false,
-    objectives: [{ kind: 'intercept', territoryId: rivalHome?.id ?? 'T5', targets: [planeId(rivalId)], count: 1, what: role }],
+    objectives: [{ kind: 'intercept', territoryId: rivalHome?.id ?? PVP.centre, targets: [planeId(rivalId)], count: 1, what: role }],
     codename: `Hunt for ${rivalName}`,
   };
 }

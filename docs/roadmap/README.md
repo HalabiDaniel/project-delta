@@ -24,7 +24,7 @@ not because the code compiles. Working features from earlier versions are preser
 
 | Version | Theme | Summary |
 |---|---|---|
-| [v0.0.10](v0.0.10.md) | Persistent multiplayer and private alpha | Player identity, PostgreSQL persistence, restart recovery, offline protection, a hardened server and an externally reachable, invite-only deployment for the developer and one friend. |
+| [v0.0.10](v0.0.10.md) (in progress: [checkpoint 1](../PERSISTENCE.md)) | Persistent multiplayer and private alpha | Player identity, PostgreSQL persistence, restart recovery, offline protection, a hardened server and an externally reachable, invite-only deployment for the developer and one friend. |
 | [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the four existing aircraft remodelled for the new roster (Swift, Falcon, Dart, Widewing), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
 | [v0.0.12](v0.0.12.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. New aircraft: Raptor. |
 | [v0.0.13](v0.0.13.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. New aircraft: Lancer. |
