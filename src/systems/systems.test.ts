@@ -77,11 +77,11 @@ describe('assessTouchdown', () => {
 });
 
 describe('Boundary', () => {
-  it('warns past the radius and cancels when the player turns back', () => {
+  it('warns past the square edge and cancels when the player turns back', () => {
     const b = new Boundary(100, 5, 20);
-    expect(b.update(0.1, 50, 50)).toBe('inside');
-    expect(b.update(0.1, 90, 50)).toBe('warning');
-    b.update(2, 90, 50);
+    expect(b.update(0.1, 90, 90)).toBe('inside');
+    expect(b.update(0.1, 105, 50)).toBe('warning');
+    b.update(2, 105, 50);
     expect(b.countdown).toBeCloseTo(3);
     expect(b.update(0.1, 60, 50)).toBe('inside');
   });

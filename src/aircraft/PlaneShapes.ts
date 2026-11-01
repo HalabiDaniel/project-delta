@@ -1,4 +1,4 @@
-import { BOMB, type AircraftId } from '../config';
+import { AIRCRAFT, BOMB, type AircraftId, type BaseShapeId } from '../config';
 
 /**
  * Low-poly folded-paper geometry for each design, as flat-shaded triangles so every fold catches
@@ -250,9 +250,35 @@ const WIDEWING: PlaneShape = {
   muzzles: [[0, -0.05, -1.3]],
 };
 
-export const PLANE_SHAPES: Record<AircraftId, PlaneShape> = {
+const BASE_SHAPES: Record<BaseShapeId, PlaneShape> = {
   dart: DART,
   falcon: FALCON,
   swift: SWIFT,
   widewing: WIDEWING,
 };
+
+/**
+ * A newer design's stand-in: the base shape it borrows (AircraftSpec.shape), with as many gun
+ * muzzles as it has barrels and as many bomb racks as it carries bombs.
+ */
+export function derivedShape(base: PlaneShape, barrels: number, bombs: number): PlaneShape {
+  let muzzles = base.muzzles;
+  if (barrels === 1 && muzzles.length !== 1) {
+    const [, y, z] = muzzles[0];
+    muzzles = [[0, y, z]];
+  } else if (barrels === 2 && muzzles.length === 1) {
+    const [, y, z] = muzzles[0];
+    muzzles = [[-0.35, y, z], [0.35, y, z]];
+  }
+  const bombSlots: V3[] = base.bombSlots.slice(0, bombs);
+  while (bombSlots.length < bombs) bombSlots.push([0, -BOMB.hangOffset, 0.1 + 0.35 * (bombSlots.length - base.bombSlots.length)]);
+  return { ...base, muzzles, bombSlots };
+}
+
+export const PLANE_SHAPES: Record<AircraftId, PlaneShape> = Object.fromEntries(
+  (Object.keys(AIRCRAFT) as AircraftId[]).map((id) => {
+    const spec = AIRCRAFT[id];
+    const base = BASE_SHAPES[spec.shape];
+    return [id, id === spec.shape ? base : derivedShape(base, spec.gun.barrels, spec.bombs.capacity)];
+  }),
+) as Record<AircraftId, PlaneShape>;

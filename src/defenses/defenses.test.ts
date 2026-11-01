@@ -1,3 +1,4 @@
+import { homeHeading } from '../world/Grid';
 import { describe, expect, it } from 'vitest';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
@@ -40,7 +41,7 @@ describe('threat levels', () => {
     expect(level(0) + level(1)).toBeGreaterThanOrEqual(2);
     expect(level(0)).toBeGreaterThanOrEqual(2);
     for (const n of [1, 2, 3] as const) expect(level(n)).toBeGreaterThan(0);
-    expect(territories.find((t) => t.id === 'T8')!.threat).toBe(3);
+    expect(territories.find((t) => t.id === 'T16')!.threat).toBe(3);
   });
 
   it('nothing shoots over home, and the safe zone ends near its edge', () => {
@@ -251,8 +252,8 @@ describe('sides', () => {
     for (const i of [store, ...specs]) {
       expect(i.side).toBe('player');
       expect(home.containsXZ(i.x, i.z, -Math.min(i.footprint, 2.5))).toBe(true);
-      // Off the runway (7 m wide, along the diagonal through the middle) with room for a wing.
-      const u = { x: -home.x / Math.hypot(home.x, home.z), z: -home.z / Math.hypot(home.x, home.z) };
+      // Off the runway (7 m wide, through the middle towards the room's centre) with room for a wing.
+      const u = homeHeading(home);
       const side = Math.abs((i.x - home.x) * -u.z + (i.z - home.z) * u.x);
       expect(side - i.footprint).toBeGreaterThan(WORLD.runwayWidth / 2);
       expect(Math.hypot(i.x - launch.x, i.z - launch.z)).toBeGreaterThan(6);
@@ -377,12 +378,14 @@ describe('sides', () => {
   });
 });
 
-/** Flies a plane in a straight line through T8's turrets; returns the damage it takes from ink. */
+/** Flies a plane in a straight line through a fortified desk's turrets (T16); returns the damage it takes from ink. */
 function straightPass(id: AircraftId, speed: number, seed: number, line = 0): number {
-  const net = new DefenseNetwork(layout.installations.filter((i) => i.territoryId === 'T8' && i.kind !== 'launcher'), seededRng(seed));
+  const net = new DefenseNetwork(layout.installations.filter((i) => i.territoryId === 'T16' && i.kind !== 'launcher'), seededRng(seed));
+  const t16 = territories.find((t) => t.id === 'T16')!;
+  line += t16.x;
   const fire = new Ordnance();
   let damage = 0;
-  for (let z = -40; z < 190; ) {
+  for (let z = t16.z - 110; z < t16.z + 120; ) {
     const before = z;
     z += speed * DT;
     for (const o of net.update(DT, [{ id: 'plane', side: 'player', x: line, y: 20, z, vx: 0, vy: 0, vz: speed, signature: AIRCRAFT[id].signature }]).orders) fire.spawn(o);

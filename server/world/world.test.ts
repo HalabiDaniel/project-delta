@@ -12,7 +12,7 @@ describe('joining and claiming territories', () => {
     world.join('b', 'Bo');
     expect(world.claim('a', 'T3')).toBeNull();
     expect(world.claim('b', 'T3')).toBe('taken');
-    expect(world.claim('b', 'T5')).toBe('not claimable');
+    expect(world.claim('b', 'T11')).toBe('not claimable');
     expect(world.claim('a', 'T7')).toBe('already claimed');
     expect(world.claim('b', 'T7')).toBeNull();
     expect(world.owners.get('T3')).toBe('a');

@@ -89,7 +89,7 @@ export class MiniMap {
     this.time += dt;
     const { ctx, size } = this;
     const c = size / 2;
-    const scale = (c - 8) / v.boundaryRadius;
+    const scale = (c - 8) / (v.boundaryRadius * 1.12);
     // World (x, z) → map: x' = z, y' = -x. Home (−x, −z) lands bottom left.
     const sx = (_x: number, z: number) => c + z * scale;
     const sy = (x: number, _z: number) => c - x * scale;
@@ -105,7 +105,8 @@ export class MiniMap {
     // The edge of the airspace.
     const flash = v.warning && Math.sin(this.time * 10) > 0;
     ctx.beginPath();
-    ctx.arc(c, c, v.boundaryRadius * scale, 0, Math.PI * 2);
+    const edge = v.boundaryRadius * scale;
+    ctx.rect(c - edge, c - edge, edge * 2, edge * 2);
     ctx.setLineDash([4, 4]);
     ctx.lineWidth = flash ? 3 : 1.5;
     ctx.strokeStyle = v.warning ? COLORS.warning : COLORS.boundary;

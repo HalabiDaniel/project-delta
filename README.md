@@ -1,5 +1,10 @@
-# paperwars.io: v0.0.10 in development (persistent multiplayer), on top of v0.0.9's core multiplayer
+# paperwars.io: v0.0.11 part 1 (assets) and v0.0.10 in development, on top of v0.0.9 multiplayer
 
+> **v0.0.11, part 1: the custom assets.** The game now plays in a classroom: 16 desks (T1–T16)
+> instead of 9 floating platforms, eleven aircraft to choose from instead of four, and buildings
+> with three levels and four damage states, all from the developer's asset labs, without pencil
+> strokes. See [v0.0.11 part 1](#v0011-part-1-custom-assets-the-classroom-and-the-roster).
+>
 > **v0.0.10 is at developer checkpoint 1 of 3** (phases 1 to 3 of the
 > [plan](docs/roadmap/v0.0.10.md)): players have a stable, secure identity (a device token the
 > server issues and stores only hashed, invite and transfer codes, one connection per player), and
@@ -31,6 +36,93 @@ instead of words, short alerts, and tips the first time something matters. The p
 Single-player still runs entirely in the browser (PlayCanvas + TypeScript, no backend).
 Multiplayer adds a Node server (`server/`) that runs the very same rule classes per player, with
 the server deciding every hit, every paper balance and every reward.
+
+## v0.0.11 part 1: custom assets, the classroom and the roster
+
+The first part of [v0.0.11](docs/roadmap/v0.0.11.md), working with the assets made so far. The
+models come from three asset labs (Aircraft Lab, Model Lab, Environment Lab), kept in
+`tools/labs/` as the source of the designs and exported to GLB by `npm run export-models`.
+Screenshots are in [docs/checkpoints/0.0.11-assets/](docs/checkpoints/0.0.11-assets/).
+
+### What is in it
+
+- **The classroom.** The world is the Environment Lab's classroom: 7.2 × 8.2 m with a blackboard,
+  three windows, a door, the teacher's desk and **16 student desks in a 4 × 4 grid**, each with its
+  chair and backpack. Every territory is the sheet of paper on one desk (T1–T16), in single-player
+  and multiplayer alike. The room is scaled by 4/3 so a desk top (52 × 40) holds a 40 m
+  territory; desks are 128 m apart. The airspace is a square inside the walls
+  (`WORLD.boundaryRadius` 262, |x| and |z|), and the minimap draws it square. Runways lie square
+  on their desks, pointing towards the middle of the room along the desk (`homeHeading` in
+  `src/world/Grid.ts`), and the Home Desk sheet, its slots and props follow.
+- **Sixteen territories.** Threat levels rise with distance from T1 (T2/T5 safe, the back row
+  fortified); the AI's own desk in multiplayer is T11 (no desk sits in the exact middle); new
+  names for T10–T16; raids set out from the far desks; mission distance pay was scaled so a hop
+  between neighbouring desks pays what it did.
+- **Eleven aircraft.** The garage offers every model built so far: Dart, Falcon, Specter, Swift,
+  Thug, Jumper, Raptor, Lightning, Widewing, Lancer and Ghost, each with provisional stats
+  (`AIRCRAFT` in `src/config.ts`). The Raptor and the Specter carry no bombs and are ruled out of
+  bombing work. They are drawn as the lab's paper jets (`src/aircraft/JetModel.ts`), tinted for
+  their side, with all-moving tail planes following pitch and roll, the Lancer's swing wings
+  sweeping back at speed, the Jumper's nozzles swinging down when slow, the Thug's rotary gun
+  spinning, an **afterburner** flame that grows with throttle and boost, and dashed **wind lines**
+  off the wingtips at speed and in hard turns. A plane being folded grows from a flat sheet.
+  The garage preview shows the jet as a blueprint ghost. Practice targets stay simple folded
+  paper planes.
+- **Buildings with levels and damage.** Turrets, rocket launchers, radars, workshops and storage
+  boxes use the Model Lab's cardboard models (`src/world/BuildingRig.ts`). Player buildings show
+  their level 1–3 (upgrades change the model); AI installations show their territory's threat.
+  Health picks the damage state: none, minor (≥ 95 %), medium (≤ 60 %) or critical (≤ 30 %, and
+  every wreck). Damage adds scorch marks, broken windows, holes and rubble, and **smoke**: grey
+  from medium, thick and black when critical. The paper store is the Command Center (beacons,
+  lit windows, sliding doors), enemy supply depots are Ink Depots (pump turning, gauges rising and
+  falling). Turrets turn and elevate where they aim and their guns **recoil**; launchers tilt
+  their pod and the front rocket disappears while reloading; radars sweep. Buildings **light
+  their windows** (with a flicker), blink their beacons, open their **doors** now and then, and
+  workshop chimneys smoke. Every home desk has an **aircraft hangar** behind the runway that
+  grows from level 1 to 3 with the planes kept in it.
+- **No pencil strokes.** The models are clean low-poly; pencil outlines are off by default (still
+  in the menu). Planes use the Paper skin, buildings cardboard, the classroom its real colours.
+
+### Assets and the export
+
+`npm run export-models` (or `… aircraft | buildings | classroom`) opens each lab in headless
+Chromium with three.js from `node_modules`, builds every model in the look the game uses, runs it
+through the lab's own GLB export (pencil, sockets and viewer-only effects stripped, joints at rest,
+lights off), merges each rigid group per material and writes `assets/models/custom/` plus
+`catalog.json` (joints, smoke points, beacon timings, flight-effect anchors). The files are
+committed: they are the game's own art. If a model is missing or fails to load, the game falls
+back to its code-built stand-in. Details in [assets/models/README.md](assets/models/README.md).
+
+### Measurements
+
+| | Files | Size | Gzipped |
+|---|---|---|---|
+| Aircraft (11) | one GLB each | 1.5 MB | about a third |
+| Buildings (10 × 12 variants) | one GLB per building | 14 MB raw (8 preloaded) | about 1/7 |
+| Classroom (room, floor, desk, chairs and bags) | 5 | 5.4 MB | about 1/6 |
+
+Planes have 320–1,600 triangles, building variants 350–1,950, the chairs and backpacks 43k
+together. In the desk view the scene submits about 1,000–1,500 draw calls; the AI installations
+on 15 desks (about 15 mesh instances each) and the practice targets are most of it.
+
+### Known limitations
+
+- The four original aircraft keep their v0.0.9 roles and stats; the planned re-roling (Swift as
+  the starter and emergency plane, the Dart as fast recon) and its save migration are still to do.
+  Stealth and VTOL hover are not in yet: stealthy planes only have a lower `signature`.
+- Hawk and Wasp (helicopters) have no models yet, so they are not in the roster.
+- Chairs, backpacks and walls have no collision shapes; the square airspace keeps planes inside
+  the room. Territories other than Home Desk are still plain sheets (no themes or landmarks).
+- No instancing or batching yet: draw calls are high (see above). Building GLBs carry their
+  geometry uncompressed; serve them gzipped.
+- The runway and helipad models are exported but not placed yet.
+
+### Decisions for the developer
+
+- The territory names for T10–T16 (Glue Gulch, Paper Citadel, Crayon Canyon, Sharpener Point,
+  Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
+- The provisional stats and prices of the seven new aircraft.
+- Whether practice targets should become jets too (they cost a lot of draw calls as jets).
 
 ## v0.0.10: persistent multiplayer (in progress)
 
@@ -817,6 +909,15 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 | Falcon | Fighter | 25 | 6 | 100 | 1.6 km | 2, 120 ink | 1 | 0.9 | Out-turns and outruns rockets, kills turrets fast; one bomb |
 | Swift | Multipurpose | 30 | 7 | 110 | 1.9 km | 2, 80 ink | 2 | 1.0 | Good at everything a multi-stage strike asks |
 | Widewing | Bomber | 40 | 10 | 150 | 1.3 km | 1, 50 ink | 4 | 1.25 | Several targets in one run, but rockets catch it and it is easy to hit |
+| Specter | Surveillance drone | 30 | 6 | 60 | 3.2 km | 1 light, 30 ink | – | 0.55 | Flies furthest and quietest; nothing to fight with |
+| Thug | Ground attack | 40 | 9 | 150 | 1.5 km | rotary, 220 ink | 3 mini | 1.15 | Slow and tough, shreds turrets on low passes |
+| Jumper | VTOL fighter | 40 | 9 | 100 | 1.5 km | 1, 90 ink | 2 mini | 0.95 | Slowest stall speed with jets; hover comes later |
+| Raptor | Air superiority | 45 | 10 | 120 | 1.8 km | 2 heavy, 140 ink | – | 0.75 | The best gun platform; no bombs |
+| Lightning | Stealth multirole | 45 | 10 | 110 | 2.0 km | 1, 100 ink | 2 | 0.65 | Hard to spot, good at everything |
+| Lancer | Supersonic bomber | 55 | 12 | 135 | 1.7 km | 1, 50 ink | 3 | 1.1 | Outruns fighters with a bomb load |
+| Ghost | Stealth bomber | 60 | 13 | 140 | 2.3 km | 1, 30 ink | 4 | 0.5 | Defenses barely notice it; no dogfighting |
+
+The last seven arrived in v0.0.11 with provisional numbers.
 
 ### Missions
 
@@ -1090,9 +1191,11 @@ position, a velocity and a signature, so another player's plane can take the AI'
 ### Adding a plane
 
 1. Add an entry to `AIRCRAFT` in `src/config.ts` (and its id to `AircraftId` and `AIRCRAFT_ORDER`),
-   including its detection `signature` and `hitRadius`.
-2. Add a shape to `PLANE_SHAPES` in `src/aircraft/PlaneShapes.ts` with at least as many muzzles as
-   barrels and bomb slots as its rack holds.
+   including its detection `signature`, `hitRadius` and the stand-in `shape` it borrows (one of
+   the original four; muzzles and bomb racks are derived from its guns and bombs).
+2. Build it in the Aircraft Lab (`tools/labs/aircraft-lab.html`) and run
+   `npm run export-models aircraft`: the jet model and its catalog entry (nozzles, wingtips,
+   joints) are picked up by id.
 
 The flight controller, garage, ratings, suitability, defenses, HUD and practice range pick it up from there.
 

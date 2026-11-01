@@ -235,7 +235,7 @@ export class Game {
 
     const options = new pc.AppOptions();
     options.graphicsDevice = device;
-    options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem];
+    options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem, pc.ParticleSystemComponentSystem];
     // Textures and glTF containers, for licensed models in assets/licensed/ (none needed otherwise).
     options.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler];
     const app = new pc.AppBase(canvas);
@@ -376,7 +376,7 @@ export class Game {
       state,
       career,
       range,
-      new PlaneController(app, state.aircraft),
+      new PlaneController(app, state.aircraft, assets.models),
       new Bombs(app),
       new Projectiles(app),
       new ChaseCamera(app),
@@ -388,16 +388,16 @@ export class Game {
         return i ? { x: i.x, z: i.z, r: i.footprint + 0.6 } : null;
       }),
       new FlightTrails(app),
-      new HangarPreview(app),
+      new HangarPreview(app, assets.models),
       new Input(canvas),
       hud,
       defenses,
-      new DefenseModels(app, layout, defenses, world),
+      new DefenseModels(app, layout, defenses, world, assets.models),
       new Ordnance(),
       new OrdnanceView(app),
       new Sounds(),
       airTraffic,
-      new AircraftModels(app),
+      new AircraftModels(app, undefined, assets.models),
       new Bombs(app, 6),
       layout,
       director,
@@ -937,6 +937,8 @@ export class Game {
         break;
     }
 
+    plane.animate(dt);
+    world.homeDressing.updateHangar(dt, state.hangar.size);
     // The bombs are loaded at take-off; on the pad they would only sit in the way of the fold.
     plane.setBombs(state.phase === 'flying' || state.phase === 'landed' ? state.bombsLoaded : 0);
     if (state.durability && !atDesk) plane.setDamage(state.durability.fraction);

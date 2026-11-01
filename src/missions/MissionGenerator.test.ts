@@ -59,7 +59,7 @@ describe('generateOffers', () => {
     }
   });
 
-  it('over many offers, targets cover T2–T9 and never home', () => {
+  it('over many offers, targets cover T2–T16 and never home', () => {
     const targets = new Set<string>();
     for (let seed = 1; seed <= 200; seed++) {
       for (const m of generateOffers(ctx, seededRng(seed))) {
@@ -68,7 +68,7 @@ describe('generateOffers', () => {
         }
       }
     }
-    expect([...targets].sort()).toEqual(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9']);
+    expect([...targets].sort()).toEqual(Array.from({ length: 15 }, (_, i) => `T${i + 2}`).sort());
   });
 });
 

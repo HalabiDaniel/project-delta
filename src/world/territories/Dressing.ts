@@ -9,6 +9,7 @@ import { LANDMARKS } from '../props/landmarks';
 import { Model } from '../props/Model';
 import type { Territory } from '../Territory';
 import { THEMES, type Detail, type TerritoryLayout } from './themes';
+import { BuildingRig } from '../BuildingRig';
 
 /**
  * A territory dressed in its theme: the platform's slab and the sheet on top, the owner's tape
@@ -23,6 +24,9 @@ export class Dressing {
   private readonly yaw: number;
   private propColliders: Collider[] = [];
   private landmarkColliders: Collider[] = [];
+  /** The aircraft hangar behind the runway's start (homes only), when its model has loaded. */
+  readonly hangar: BuildingRig | null = null;
+  private hangarLevel = 1;
 
   constructor(
     private readonly app: pc.AppBase,
@@ -45,6 +49,29 @@ export class Dressing {
     this.buildSurface();
     this.buildLandmark();
     this.buildDetails();
+    if (runway && BuildingRig.available(assets.models, 'hangar')) {
+      // Behind the launch card, door towards the runway (the frame's +u): scenery, not a target.
+      const rig = new BuildingRig(assets.models, 'hangar');
+      rig.root.setLocalPosition(-WORLD.runwayLength / 2 - 1, 0.02, 0);
+      rig.root.setLocalEulerAngles(0, -90, 0);
+      rig.show(1, 1, true);
+      this.root.addChild(rig.root);
+      this.hangar = rig;
+    }
+  }
+
+  /**
+   * The hangar grows with the planes kept in it: level 1 for one or none, 2 for two or three,
+   * 3 for four or more.
+   */
+  updateHangar(dt: number, planesKept: number): void {
+    if (!this.hangar) return;
+    const level = planesKept >= 4 ? 3 : planesKept >= 2 ? 2 : 1;
+    if (level !== this.hangarLevel) {
+      this.hangarLevel = level;
+      this.hangar.show(level, 1, true);
+    }
+    this.hangar.update(dt, { yaw: 0, pitch: 0, sinceShot: 99, alive: true });
   }
 
   /** Every collision shape the dressing adds (landmark and tall props), in world space. */

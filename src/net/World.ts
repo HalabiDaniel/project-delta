@@ -4,7 +4,7 @@ import { generateTerritories } from '../world/Grid';
 import type { Territory } from '../world/Territory';
 
 /**
- * The shared classroom: the same 3 × 3 territories as single-player but with no home of its own,
+ * The shared classroom: the same 4 × 4 desks as single-player but with no home of its own,
  * and the AI's defenses on every defended territory. Server and clients both build it from the
  * same pure functions, so an installation id means the same thing everywhere. When a player claims
  * a territory its AI defenses are taken away (the player's base goes up instead); when it is
@@ -39,11 +39,18 @@ export const TERRITORY_NAMES: Record<string, string> = {
   T2: 'Pencil Point',
   T3: 'Notebook Ridge',
   T4: 'Eraser Fields',
-  T5: 'Paper Citadel',
+  T5: 'Margin Hill',
   T6: 'Ink Valley',
   T7: 'Cardboard Fort',
   T8: 'Ruler Crossing',
   T9: 'Scrap Corner',
+  T10: 'Glue Gulch',
+  T11: 'Paper Citadel',
+  T12: 'Crayon Canyon',
+  T13: 'Sharpener Point',
+  T14: 'Compass Rise',
+  T15: 'Stapler Bay',
+  T16: 'Back Row',
 };
 
 export function territoryName(id: string): string {

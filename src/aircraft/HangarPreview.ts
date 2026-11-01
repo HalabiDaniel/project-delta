@@ -2,6 +2,8 @@ import * as pc from 'playcanvas';
 import { AIRCRAFT_ORDER, PALETTE, type AircraftId } from '../config';
 import { FoldablePlane } from './PlaneModel';
 import { PLANE_SHAPES } from './PlaneShapes';
+import { CATALOG, type ModelStore } from '../assets/CustomModels';
+import { JET_SCALE } from './JetModel';
 
 /** See-through and self-lit: a ghost of the plane, clearly not a real one yet. */
 function blueprintMaterial(brightness: number): pc.StandardMaterial {
@@ -27,7 +29,7 @@ const DRAG_HOLD = 2.5;
  */
 export class HangarPreview {
   private readonly root: pc.Entity;
-  private readonly models = new Map<AircraftId, FoldablePlane>();
+  private readonly models = new Map<AircraftId, { entity: pc.Entity }>();
   private shown: AircraftId | null = null;
   private angle = 0;
   private tilt = 8;
@@ -35,12 +37,31 @@ export class HangarPreview {
   private visibility = 0;
   private sinceDrag = Infinity;
 
-  constructor(app: pc.AppBase) {
+  constructor(app: pc.AppBase, store: ModelStore | null = null) {
     this.root = new pc.Entity('hangar-preview');
     const materials = { paper: blueprintMaterial(1), accent: blueprintMaterial(0.55) };
     for (const id of AIRCRAFT_ORDER) {
-      const model = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials, 0, null, null);
-      model.entity.render!.castShadows = false;
+      const jet = store && CATALOG.aircraft[id] ? store.instance(CATALOG.aircraft[id].file) : null;
+      let model: { entity: pc.Entity };
+      if (jet) {
+        // The jet as a blueprint ghost: every surface in the see-through blue, the darker parts dimmer.
+        for (const r of jet.findComponents('render') as pc.RenderComponent[]) {
+          r.castShadows = false;
+          for (const mi of r.meshInstances) {
+            const dark = /Rubber|Tape|Nozzle|Mouth|Canopy|Dark/i.test(mi.material?.name ?? '');
+            mi.material = dark ? materials.accent : materials.paper;
+          }
+        }
+        jet.setLocalEulerAngles(0, 180, 0);
+        jet.setLocalScale(JET_SCALE, JET_SCALE, JET_SCALE);
+        const entity = new pc.Entity(`preview-${id}`);
+        entity.addChild(jet);
+        model = { entity };
+      } else {
+        const folded = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials, 0, null, null);
+        folded.entity.render!.castShadows = false;
+        model = folded;
+      }
       model.entity.enabled = false;
       this.root.addChild(model.entity);
       this.models.set(id, model);

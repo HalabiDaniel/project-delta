@@ -1,0 +1,2647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aircraft Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1d1c1b; --panel:#262423; --panel2:#2e2b29; --line:#3a3633;
+    --text:#ece6df; --muted:#9d958c; --kraft:#c49a6c; --kraft-d:#8a6a47; --dark:#4a4440;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"Space Grotesk",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:300px minmax(0,1fr);height:100vh;height:100dvh}
+  aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:20px 20px 14px;border-bottom:1px solid var(--line)}
+  .brand h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  .brand h1 .box{width:16px;height:16px;background:var(--kraft);border-radius:2px;box-shadow:inset -4px -4px 0 var(--kraft-d)}
+  .brand p{margin:6px 0 0;color:var(--muted);font-size:12px}
+  .section-label{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:16px 20px 8px}
+  .model-list{padding:0 12px;display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0}
+  .model-list .section-label{padding:10px 8px 2px}
+  .model-item{all:unset;cursor:pointer;display:flex;gap:12px;align-items:center;padding:10px;border-radius:8px;border:1px solid transparent}
+  .model-item:hover{background:var(--panel2)}
+  .model-item[aria-selected="true"]{background:var(--panel2);border-color:var(--kraft-d)}
+  .model-item:focus-visible{outline:2px solid var(--kraft)}
+  .thumb{width:44px;height:44px;border-radius:6px;background:#1f1e1d;flex:none;display:grid;place-items:center;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .model-item .t{font-size:14px;font-weight:500}
+  .model-item.soon{opacity:.4;cursor:default}
+  .model-item.soon:hover{background:none}
+  .model-item.soon .thumb{color:var(--muted);font-size:18px}
+  .model-item .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .details{margin-top:auto;border-top:1px solid var(--line);padding-bottom:16px;overflow:auto}
+  .details .desc{padding:0 20px;font-size:13px;line-height:1.5;color:#cfc7be}
+  .specs{margin:12px 20px 0;display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-family:"JetBrains Mono",monospace;font-size:12px}
+  .specs dt{color:var(--muted)} .specs dd{margin:0;text-align:right}
+  .placeholder{margin:10px 20px 0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px;font-size:12px;color:var(--muted)}
+  main{position:relative;min-width:0;background:radial-gradient(ellipse at 50% 40%,#353230 0%,#232120 60%,#1b1a19 100%)}
+  #viewport{position:absolute;inset:0}
+  #viewport canvas{display:block;outline:none}
+  .topbar{position:absolute;top:16px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+  .title-block{pointer-events:auto;min-width:0}
+  .title-block h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-only{display:none}
+  .guide-about{padding:14px 20px 0;font-size:13.5px;line-height:1.5;color:#cfc7be}
+  .guide-about .specs{margin:10px 0 0}
+  .title-block .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--kraft)}
+  .title-block h2{margin:4px 0 0;font-size:24px;font-weight:600}
+  .toolbar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:6px;background:rgba(38,36,35,.92);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(8px)}
+  .toolbar{max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none}
+  .toolbar::-webkit-scrollbar{display:none}
+  .toolbar > *{flex:none}
+  .btn{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text);white-space:nowrap}
+  .btn:hover{background:var(--panel2)}
+  .btn:focus-visible{outline:2px solid var(--kraft)}
+  .btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .btn.primary{background:var(--kraft);color:#24190d}
+  .btn.primary:hover{background:#d2aa7e}
+  .btn[disabled]{opacity:.4;cursor:not-allowed}
+  .toggle .pill{width:28px;height:16px;border-radius:99px;background:#4a4542;position:relative;transition:background .15s}
+  .toggle .pill::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#d8d0c7;transition:transform .15s}
+  .toggle[aria-pressed="true"] .pill{background:var(--kraft)}
+  .toggle[aria-pressed="true"] .pill::after{transform:translateX(12px);background:#fff}
+  .sep{width:1px;background:var(--line);margin:4px 2px}
+  .hint{position:absolute;bottom:26px;right:20px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  .top-right{display:flex;gap:10px;align-items:center;pointer-events:auto}
+  .btn.ghost{background:rgba(38,36,35,.85);border:1px solid var(--line)}
+  .btn.icon{padding:8px}
+  .hud{font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:none;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:rgba(38,36,35,.85);border:1px solid var(--line)}
+  .hud.on{display:flex}
+  .hud::before{content:"";width:8px;height:8px;border-radius:50%;background:#8a8178}
+  .hud.on::before{background:var(--kraft)}
+  .hud.hot{color:#ffb27a}
+  .hud.hot::before{background:#ff7a3c;box-shadow:0 0 8px #ff7a3c}
+  .guide{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:rgba(34,32,31,.97);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:5;backdrop-filter:blur(10px)}
+  .guide[hidden]{display:none}
+  .guide-head{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+  .guide-head .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--kraft)}
+  .guide-head h3{margin:4px 0 0;font-size:20px;font-weight:600}
+  .guide-body{overflow:auto;padding:4px 20px 28px;font-size:13.5px;line-height:1.55;color:#d9d1c8}
+  .guide-body h4{margin:22px 0 8px;font-size:11px;font-family:"JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  .guide-body pre{margin:0;background:#1a1918;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.55;overflow:auto;color:#e6ddd2}
+  .guide-body pre .j{color:#ffb27a} .guide-body pre .s{color:var(--muted)}
+  .guide-body ol{margin:0;padding-left:20px} .guide-body li{margin:4px 0}
+  .guide-body code{font-family:"JetBrains Mono",monospace;font-size:12px;background:#1a1918;padding:1px 5px;border-radius:4px;color:#f0c79a}
+  .guide-body table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .guide-body th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;padding:6px 8px 6px 0;border-bottom:1px solid var(--line)}
+  .guide-body td{padding:8px 8px 8px 0;border-bottom:1px solid #322f2c;vertical-align:top}
+  .guide-body td:first-child{white-space:nowrap}
+  .guide-body .note{color:var(--muted);font-size:12.5px}
+  .props{position:absolute;top:84px;left:20px;background:rgba(38,36,35,.92);border:1px solid var(--line);border-radius:12px;padding:10px 6px 6px;min-width:200px;max-width:300px;backdrop-filter:blur(8px)}
+  .props[hidden]{display:none}
+  .props .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 8px 6px}
+  .props .seg{display:flex;flex-wrap:wrap;gap:4px;padding:0 4px 6px}
+  .props .seg button{min-width:52px}
+  .props .seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:7px 4px;white-space:nowrap;border-radius:7px;font-size:13px;font-weight:600;background:#2e2b29;color:var(--muted);border:1px solid var(--line)}
+  .props .seg button[aria-pressed="true"]{background:var(--kraft);color:#24190d;border-color:var(--kraft)}
+  .props .seg button:focus-visible{outline:2px solid var(--kraft)}
+  .props .seg-note{margin:2px 8px 6px;font-size:12px;line-height:1.45;color:#cfc7be;max-width:240px}
+  .props .btn{width:100%;justify-content:space-between;box-sizing:border-box;padding:8px 10px}
+  .toast{position:absolute;top:20px;left:50%;transform:translate(-50%,-8px);opacity:0;transition:all .2s;background:#2e2b29;border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:13px;pointer-events:none}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  @media (max-width:1600px){.hint{display:none}}
+  /* ---------- Tablets: slimmer sidebar ---------- */
+  @media (max-width:1100px) and (min-width:821px){
+    .app{grid-template-columns:240px minmax(0,1fr)}
+    .toolbar .btn{padding:8px 10px;font-size:12.5px}
+    .hint,.btn .lbl-long{display:none}
+    .details{max-height:42%}
+  }
+  /* ---------- Phones: viewer first ---------- */
+  @media (max-width:820px){
+    .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+    aside{min-width:0;border-right:0;border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:baseline;gap:10px;padding:max(10px, env(safe-area-inset-top)) 14px 4px}
+    .brand h1{font-size:15px}
+    .brand p{margin:0;font-size:11px}
+    .model-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:6px 10px 10px;gap:6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .model-list::-webkit-scrollbar{display:none}
+    .model-list .section-label{display:flex;align-items:center;flex:none;padding:0 2px 0 6px;writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.14em;border-left:1px solid var(--line)}
+    .model-list .section-label:first-child{border-left:0}
+    .model-item{flex:none;flex-direction:column;gap:4px;padding:5px;width:78px;text-align:center;scroll-snap-align:start}
+    .thumb{width:60px;height:60px}
+    .model-item .s{display:none}
+    .model-item .t{font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px}
+    .details{display:none}
+    .mobile-only{display:block}
+    .topbar{top:10px;left:12px;right:12px;gap:8px}
+    .title-block .k{font-size:9.5px}
+    .title-block h2{font-size:18px;margin-top:2px}
+    .top-right{gap:6px;flex:none}
+    #btnGuide{padding:8px}
+    #btnGuide .lbl{display:none}
+    .hud{font-size:9.5px;padding:6px 8px;letter-spacing:.05em}
+    .hint{display:none}
+    .btn .lbl-long{display:none}
+    .toolbar{left:0;right:0;bottom:0;transform:none;border-radius:0;border-left:0;border-right:0;border-bottom:0;
+      overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start;gap:4px;
+      padding:6px 8px calc(6px + env(safe-area-inset-bottom));scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .toolbar::-webkit-scrollbar{display:none}
+    .toolbar .btn{flex:none;padding:9px 11px;font-size:12.5px;gap:7px}
+    .toolbar .sep{flex:none}
+    .props{top:auto;left:8px;right:8px;bottom:calc(58px + env(safe-area-inset-bottom));min-width:0;padding:6px;border-radius:10px}
+    .props .k{display:none}
+    #propsList{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+    .props .seg{flex:1 1 100%;padding:0 0 2px}
+    .props .seg button{padding:8px 0}
+    .props .seg-note{display:none}
+    .props .btn{width:auto;flex:1 1 auto;padding:7px 10px;font-size:12.5px;gap:8px;background:#2e2b29;border-radius:7px}
+    .guide{position:fixed;inset:0;width:100%;border-left:0;z-index:20}
+    .guide-head{padding-top:max(14px, env(safe-area-inset-top))}
+    .guide-body{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+    .guide-body table{font-size:12px}
+    .guide-body td:first-child{white-space:normal}
+    .toast{top:auto;bottom:calc(66px + env(safe-area-inset-bottom))}
+  }
+  /* Phones in landscape: slim side list, compact controls */
+  @media (max-height:500px) and (max-width:1000px){
+    .app{grid-template-columns:190px minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+    aside{min-width:0;border-right:1px solid var(--line);border-bottom:0;padding-left:env(safe-area-inset-left)}
+    .brand,.details{display:none}
+    .model-list{flex-direction:column;overflow-x:hidden;overflow-y:auto;padding:6px;gap:2px;scroll-snap-type:none}
+    .model-list .section-label{writing-mode:horizontal-tb;transform:none;border-left:0;padding:8px 6px 2px;font-size:9.5px}
+    .model-item{width:auto;flex-direction:row;gap:8px;padding:4px 6px;text-align:left}
+    .thumb{width:30px;height:30px}
+    .model-item .s{display:none}
+    .model-item .t{font-size:12px;max-width:none}
+    .mobile-only{display:block}
+    .topbar{top:8px;left:12px;right:calc(12px + env(safe-area-inset-right))}
+    .title-block .k{font-size:9px}
+    .title-block h2{font-size:16px;margin-top:2px}
+    #btnGuide{padding:7px} #btnGuide .lbl{display:none}
+    .hud{font-size:9.5px;padding:5px 8px}
+    .hint,.btn .lbl-long{display:none}
+    .toolbar{left:8px;right:calc(8px + env(safe-area-inset-right));bottom:calc(6px + env(safe-area-inset-bottom));transform:none;border-radius:10px;border:1px solid var(--line);
+      overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding:4px;scrollbar-width:none}
+    .toolbar::-webkit-scrollbar{display:none}
+    .toolbar .btn{flex:none;padding:6px 9px;font-size:12px;gap:6px}
+    .toolbar .sep{flex:none}
+    .props{top:56px;bottom:auto;left:10px;right:auto;min-width:0;max-width:240px;padding:5px;border-radius:10px}
+    .props .k,.props .seg-note{display:none}
+    #propsList{display:flex;flex-direction:column;gap:3px}
+    .props .seg{padding:0}
+    .props .seg button{padding:5px 0;font-size:12px}
+    .props .btn{width:100%;padding:5px 8px;font-size:12px}
+    .guide{position:fixed;inset:0;width:100%;border-left:0;z-index:20}
+    .toast{top:auto;bottom:56px}
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1><span class="box"></span>Aircraft Lab</h1>
+      <p>paperwars.io · low-poly paper planes</p>
+    </div>
+    <div class="model-list" id="modelList" role="listbox" aria-label="Models"></div>
+    <div class="details">
+      <div class="section-label">Details</div>
+      <div class="desc" id="modelDesc"></div>
+      <dl class="specs" id="modelSpecs"></dl>
+      <div class="section-label">Properties &amp; variants</div>
+      <div class="placeholder" id="variantsBox">None yet</div>
+    </div>
+  </aside>
+  <main>
+    <div id="viewport"></div>
+    <div class="topbar">
+      <div class="title-block"><div class="k" id="modelKicker">Model</div><h2 id="modelTitle">—</h2></div>
+      <div class="top-right">
+        <div class="hud" id="hud"></div>
+        <button class="btn ghost" id="btnGuide" aria-label="Assembly guide" aria-expanded="false" aria-controls="guide"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M9 7h6M9 11h6"/></svg><span class="lbl">Assembly guide</span></button>
+      </div>
+    </div>
+    <aside class="guide" id="guide" aria-label="Assembly guide" hidden>
+      <div class="guide-head"><div><div class="k">Guide</div><h3 id="guideTitle">—</h3></div>
+        <button class="btn icon" id="btnGuideClose" aria-label="Close guide"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="guide-about mobile-only" id="guideAbout"></div>
+      <div class="guide-body" id="guideBody"></div>
+    </aside>
+    <div class="props" id="propsCard" hidden><div class="k">Properties</div><div id="propsList"></div></div>
+    <div class="toast" id="toast"></div>
+    <div class="toolbar">
+      <button class="btn toggle" id="btnRotate" aria-pressed="true" title="Toggle auto-rotate (R)"><span class="pill"></span>Auto-rotate</button>
+      <button class="btn" id="btnReset" title="Reset view (F)"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Reset</button>
+      <span class="sep"></span>
+      <button class="btn toggle" id="btnJoints" aria-pressed="true" title="Play the animation (J)"><span class="pill"></span>Animate</button>
+      <button class="btn toggle" id="btnPencil" aria-pressed="true" title="Hand-drawn pencil edges (P)"><span class="pill"></span>Pencil</button>
+      <span class="sep"></span>
+      <button class="btn" id="btnShots" disabled title="Front, right, back and left views in one PNG"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>Screenshot<span class="lbl-long">&nbsp;×4</span></button>
+      <button class="btn primary" id="btnGlb" disabled title="GLB, packed in a .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>Download GLB</button>
+    </div>
+    <div class="hint">R rotate · J animate · P pencil · G guide</div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+/* ------------------------------------------------------------------
+   Materials: procedural cardboard
+------------------------------------------------------------------ */
+function makeCardboardTexture(seed = 1, base = [196, 154, 108]) {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const i = (y * S + x) * 4;
+      const n = (rnd() - 0.5) * 18;
+      const corr = Math.sin(x / S * Math.PI * 2 * 48) * 3.2;   // corrugation ribs
+      const blot = Math.sin(x * 0.013 + y * 0.009) * Math.cos(y * 0.017 - x * 0.004) * 6;
+      img.data[i]   = base[0] + n + corr + blot;
+      img.data[i+1] = base[1] + n * 0.9 + corr + blot;
+      img.data[i+2] = base[2] + n * 0.75 + corr * 0.8 + blot * 0.8;
+      img.data[i+3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // fibers
+  for (let k = 0; k < 220; k++) {
+    g.strokeStyle = `rgba(${rnd() > .5 ? '90,62,35' : '235,205,165'},${0.08 + rnd() * 0.12})`;
+    g.lineWidth = 0.6 + rnd();
+    const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI, l = 4 + rnd() * 14;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  // edge darkening (torn/folded card edges)
+  const grd = g.createLinearGradient(0, 0, 0, S);
+  grd.addColorStop(0, 'rgba(80,55,30,.35)'); grd.addColorStop(.05, 'rgba(80,55,30,0)');
+  grd.addColorStop(.95, 'rgba(80,55,30,0)'); grd.addColorStop(1, 'rgba(80,55,30,.35)');
+  g.fillStyle = grd; g.fillRect(0, 0, S, S);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+let showSockets = true, animateJoints = true, pencilOn = true;
+
+// Textures are generated once per look and shared by every model —
+// regenerating 512² canvases per material was slow and memory-hungry on phones.
+const TEX_CACHE = new Map();
+function cachedTexture(kind, maker, seed, base) {
+  const key = `${kind}:${seed}:${base}`;
+  if (!TEX_CACHE.has(key)) { const t = maker(seed, base); t.userData.shared = true; TEX_CACHE.set(key, t); }
+  return TEX_CACHE.get(key);
+}
+function cardboardTexture(seed, base) { return cachedTexture('card', makeCardboardTexture, seed, base); }
+
+const OFFSET = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+const MAT = {
+  cardboard: () => new THREE.MeshStandardMaterial({ name: 'Cardboard', map: cardboardTexture(3), roughness: 0.92, metalness: 0, flatShading: true, ...OFFSET }),
+  cardboardLid: () => new THREE.MeshStandardMaterial({ name: 'CardboardLid', map: cardboardTexture(7, [204, 163, 117]), roughness: 0.9, metalness: 0, flatShading: true, ...OFFSET }),
+  rubber: () => new THREE.MeshStandardMaterial({ name: 'DarkTape', color: 0x4a4440, roughness: 0.85, metalness: 0, flatShading: true, ...OFFSET }),
+};
+
+/* ------------------------------------------------------------------
+   Edge styling – viewer only, stripped from exports
+   • Pencil (default): every hard edge redrawn as 2–3 graphite strokes,
+     never running past the corners, like a sketch.
+   • Seams: the plain thin fold lines (shown when Pencil is off).
+------------------------------------------------------------------ */
+const PENCIL = {
+  heavy: new LineMaterial({ color: 0x2a2623, linewidth: 2.6, transparent: true, opacity: 0.92, depthWrite: false }),
+  light: new LineMaterial({ color: 0x3a342f, linewidth: 1.6, transparent: true, opacity: 0.6, depthWrite: false }),
+};
+Object.values(PENCIL).forEach(m => { m.userData.shared = true; m.userData.baseWidth = m.linewidth; });
+function setPencilResolution(w, h, widthScale = 1) {
+  Object.values(PENCIL).forEach(m => { m.resolution.set(w, h); m.linewidth = m.userData.baseWidth * widthScale; });
+}
+
+let pencilSeed = 1337;
+const prand = () => ((pencilSeed = (pencilSeed * 16807) % 2147483647) / 2147483647);
+
+function makePencil(edges) {
+  const src = edges.attributes.position.array;
+  const heavy = [], light = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), j = new THREE.Vector3();
+  const jitter = amt => j.set(prand() - 0.5, prand() - 0.5, prand() - 0.5).multiplyScalar(amt * 2);
+  // Strokes never extend past the edge's endpoints: they start/stop at the
+  // corner or a little short of it (inset), so nothing pokes out of the model.
+  const stroke = (out, wobble, inset) => {
+    const len = d.subVectors(b, a).length();
+    d.normalize();
+    const maxIn = Math.min(inset, len * 0.2);
+    const p = a.clone().addScaledVector(d, prand() * maxIn).add(jitter(wobble));
+    const q = b.clone().addScaledVector(d, -prand() * maxIn).add(jitter(wobble));
+    out.push(p.x, p.y, p.z, q.x, q.y, q.z);
+  };
+  for (let i = 0; i < src.length; i += 6) {
+    a.fromArray(src, i); b.fromArray(src, i + 3);
+    stroke(heavy, 0.0015, 0);                          // firm line, corner to corner
+    stroke(light, 0.003, 0.05);                        // looser pass, stops short
+    if (prand() < 0.45) stroke(light, 0.004, 0.09);    // occasional extra pass
+  }
+  const g = new THREE.Group();
+  g.userData.helper = true; g.userData.pencil = true;
+  g.visible = pencilOn;
+  [[heavy, PENCIL.heavy], [light, PENCIL.light]].forEach(([arr, mat]) => {
+    const geo = new LineSegmentsGeometry(); geo.setPositions(arr);
+    const l = new LineSegments2(geo, mat);
+    l.userData.helper = true;
+    l.renderOrder = 2;
+    g.add(l);
+  });
+  return g;
+}
+
+function addSeams(mesh, color = 0x6e5234, opacity = 0.55, threshold = 25) {
+  const edges = new THREE.EdgesGeometry(mesh.geometry, threshold);
+  const e = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+  e.userData.helper = true; e.userData.seam = true;
+  e.visible = !pencilOn;
+  mesh.add(e);
+  mesh.add(makePencil(edges));
+  return mesh;
+}
+
+// Bounding box of the solid geometry only (ignores strokes, markers)
+function solidBox(obj) {
+  const box = new THREE.Box3(), tmp = new THREE.Box3();
+  obj.updateWorldMatrix(true, true);                 // include parents (stage lift / hover)
+  obj.traverse(o => {
+    if (!o.isMesh || o.userData.helper) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+    box.union(tmp);
+  });
+  return box;
+}
+
+/* ------------------------------------------------------------------
+   Sockets & assembly
+   A socket is an empty node named "socket_<name>". It is exported in
+   the GLB so the game can find it and parent the next part to it.
+------------------------------------------------------------------ */
+function makeSocket(name, x, y, z) {
+  const s = new THREE.Object3D();
+  s.name = `socket_${name}`;
+  s.userData.socket = name;
+  s.position.set(x, y, z);
+  const marker = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.07),
+    new THREE.MeshBasicMaterial({ color: 0xff9a3c, wireframe: true, depthTest: false, transparent: true })
+  );
+  marker.renderOrder = 10;
+  marker.userData.helper = true;
+  marker.userData.socketMarker = true;
+  marker.visible = showSockets;
+  s.add(marker);
+  return s;
+}
+
+function finishPart(root) {
+  root.traverse(o => { if (o.isMesh && !o.userData.helper) { o.castShadow = true; o.receiveShadow = true; } });
+}
+
+function findSocket(obj, name) {
+  let found = null;
+  obj.traverse(o => { if (!found && o.userData.socket === name) found = o; });
+  return found;
+}
+
+// Builds parts in order; each one after the first plugs into the named socket
+function buildAssembly(parts, level) {
+  let root = null;
+  for (const p of parts) {
+    const part = MODELS.find(m => m.id === p.model).build(level);
+    if (!root) { root = part; continue; }
+    const socket = findSocket(root, p.socket);
+    if (!socket) { console.warn('Missing socket', p.socket); continue; }
+    if (/_\d+$/.test(p.socket) || root.getObjectByName(part.name)) {           // e.g. 6× Rocket → Rocket_0…5
+      const m = /(\d+)$/.exec(p.socket); part.name += '_' + (m ? m[1] : root.id);
+    }
+    socket.add(part);
+    socket.children.filter(c => c.userData.socketMarker).forEach(m => m.userData.occupied = true);
+  }
+  root.traverse(o => { if (o.userData.occupied) o.visible = false; });
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Plane skins — Cardboard (default), Grey paper, Paper
+------------------------------------------------------------------ */
+function makePaperTexture(seed = 5, base = [236, 231, 220]) {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 7919 + 104729;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    const n = (rnd() - 0.5) * 9;
+    const cloud = Math.sin(x * 0.021 + y * 0.013) * Math.cos(y * 0.019 - x * 0.007) * 4;
+    img.data[i] = base[0] + n + cloud; img.data[i + 1] = base[1] + n + cloud; img.data[i + 2] = base[2] + n * 0.9 + cloud;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  for (let k = 0; k < 260; k++) {                     // short paper fibres
+    g.strokeStyle = `rgba(${rnd() > .5 ? '110,104,96' : '255,255,250'},${0.05 + rnd() * 0.08})`;
+    g.lineWidth = 0.5 + rnd() * 0.6;
+    const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI, l = 3 + rnd() * 9;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+const paperTex = (seed, base) => cachedTexture('paper', makePaperTexture, seed, base);
+
+const SKINS = {
+  cardboard: {
+    label: 'Cardboard',
+    skin: () => { const m = MAT.cardboard(); m.name = 'Skin_Cardboard'; return m; },
+    canopy: 0x5c636b, seam: 0x6e5234,
+  },
+  grey: {
+    label: 'Grey paper',
+    skin: () => new THREE.MeshStandardMaterial({ name: 'Skin_GreyPaper', map: paperTex(9, [150, 150, 152]), roughness: 0.95, flatShading: true, ...OFFSET }),
+    canopy: 0x7f6347, seam: 0x3c3e42,                 // muted bronze glass, like the Lightning sheet
+  },
+  paper: {
+    label: 'Paper',
+    skin: () => new THREE.MeshStandardMaterial({ name: 'Skin_Paper', map: paperTex(5), roughness: 0.95, flatShading: true, ...OFFSET }),
+    canopy: 0x7f6347, seam: 0x6a645c,
+  },
+};
+const SKIN_VARIANTS = Object.entries(SKINS).map(([id, s]) => ({ id, label: s.label }));
+
+/* ------------------------------------------------------------------
+   Plane geometry helpers
+   • loftRings: closed faceted solid through cross-section rings
+     (back → front), each ring an array of Vector3 with the same count.
+     Ends are a point (tip) or a flat cap. Faces always point outward.
+   • prism: a flat convex outline given thickness (wings, fins…),
+     optionally tapering per vertex.
+   • boxUV: planar UVs per face so the texture never smears.
+------------------------------------------------------------------ */
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const ringCentre = r => r.reduce((a, p) => a.add(p), V3(0, 0, 0)).divideScalar(r.length);
+
+function boxUV(g, s = 0.5) {
+  const p = g.attributes.position.array, uv = [];
+  const a = V3(), b = V3(), c = V3(), n = V3();
+  for (let i = 0; i < p.length; i += 9) {
+    a.fromArray(p, i); b.fromArray(p, i + 3); c.fromArray(p, i + 6);
+    n.subVectors(b, a).cross(c.clone().sub(a));
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    for (let k = 0; k < 9; k += 3) {
+      const x = p[i + k], y = p[i + k + 1], z = p[i + k + 2];
+      if (ay >= ax && ay >= az) uv.push(z * s, x * s);           // top / bottom: ribs run nose → tail
+      else if (ax >= az) uv.push(z * s, y * s);
+      else uv.push(x * s, y * s);
+    }
+  }
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return g;
+}
+
+function loftRings(rings, { tipBack = null, tipFront = null, capBack = true, capFront = true, inside = null } = {}) {
+  const pos = [];
+  const e1 = V3(), e2 = V3(), n = V3(), c = V3();
+  const tri = (a, b, d, inside) => {
+    e1.subVectors(b, a); e2.subVectors(d, a); n.crossVectors(e1, e2);
+    c.copy(a).add(b).add(d).divideScalar(3).sub(inside);
+    if (n.dot(c) < 0) [b, d] = [d, b];
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, d.x, d.y, d.z);
+  };
+  const N = rings[0].length, cs = rings.map(ringCentre);
+  for (let i = 0; i < rings.length - 1; i++) {
+    const r0 = rings[i], r1 = rings[i + 1], mid = inside || cs[i].clone().add(cs[i + 1]).multiplyScalar(0.5);
+    for (let k = 0; k < N; k++) {
+      const a = r0[k], b = r0[(k + 1) % N], d = r1[(k + 1) % N], e = r1[k];
+      tri(a, b, d, mid); tri(a, d, e, mid);
+    }
+  }
+  const end = (ring, centre, tip, neighbour) => {
+    if (tip) {
+      const inside = centre.clone().lerp(tip, 0.3);
+      for (let k = 0; k < N; k++) tri(tip, ring[k], ring[(k + 1) % N], inside);
+    } else {
+      for (let k = 0; k < N; k++) tri(centre, ring[k], ring[(k + 1) % N], neighbour);
+    }
+  };
+  const L = rings.length - 1;
+  if (capBack || tipBack) end(rings[0], cs[0], tipBack, L ? cs[1] : cs[0]);
+  if (capFront || tipFront) end(rings[L], cs[L], tipFront, L ? cs[L - 1] : cs[L]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  boxUV(g);
+  g.computeVertexNormals();
+  return g;
+}
+
+function prism(outline, dir, thick) {
+  const t = i => (Array.isArray(thick) ? thick[i] : thick) / 2;
+  const lo = outline.map((p, i) => p.clone().addScaledVector(dir, -t(i)));
+  const hi = outline.map((p, i) => p.clone().addScaledVector(dir, t(i)));
+  return loftRings([lo, hi]);
+}
+
+// Convex outline shrunk inward by d, staying in its plane (normal = dir)
+function insetOutline(outline, dir, d) {
+  const c = ringCentre(outline), N = outline.length;
+  const inward = (a, b) => {
+    const e = V3().subVectors(b, a).normalize(), n = V3().crossVectors(dir, e).normalize();
+    if (n.dot(V3().subVectors(c, a)) < 0) n.negate();
+    return n;
+  };
+  return outline.map((p, i) => {
+    const n1 = inward(outline[(i + N - 1) % N], p), n2 = inward(p, outline[(i + 1) % N]);
+    const k = d / (1 + n1.dot(n2));
+    return p.clone().addScaledVector(n1.add(n2), k);
+  });
+}
+
+// Thick slab with a chamfer all round the top and bottom faces — reads as
+// folded cardboard with a visible edge band instead of a paper-thin sheet.
+function bevelSlab(outline, dir, thick, bevel) {
+  const t = i => (Array.isArray(thick) ? thick[i] : thick) / 2;
+  const at = (pts, f) => pts.map((p, i) => p.clone().addScaledVector(dir, f(i)));
+  const inner = insetOutline(outline, dir, bevel);
+  return loftRings([
+    at(inner, i => -t(i)),
+    at(outline, i => -t(i) * 0.35),
+    at(outline, i => t(i) * 0.35),
+    at(inner, i => t(i)),
+  ]);
+}
+
+/* ------------------------------------------------------------------
+   Model: Lightning (F-35-inspired, single-engine stealth multirole)
+   Nose +Z, Y up, origin near the centre of gravity. Built from:
+   faceted 7-sided chined fuselage (flat belly, pointed nose), a
+   faceted canopy that flows back into the spine, raked wedge intakes
+   with dark mouths, tapered thick wings and tail planes, twin
+   outward-canted fins and one octagonal nozzle.
+------------------------------------------------------------------ */
+// Fuselage stations (tail → nose). Half-profile, top to belly:
+//   ht   spine height          sh  shoulder [x, y]
+//   wall flat side wall [x, top y, bottom y] — straight where the intakes sit
+//   bot  belly corner [x, y]
+const LIGHTNING_BODY = [
+  { z: -1.60, ht: 0.23, sh: [0.18, 0.20], wall: [0.30, 0.03, -0.03], bot: [0.20, -0.20] },
+  { z: -1.10, ht: 0.30, sh: [0.30, 0.26], wall: [0.52, 0.04, -0.04], bot: [0.34, -0.21] },
+  { z: -0.35, ht: 0.33, sh: [0.28, 0.29], wall: [0.40, 0.10, -0.16], bot: [0.30, -0.23] },
+  { z:  0.45, ht: 0.34, sh: [0.24, 0.27], wall: [0.29, 0.14, -0.21], bot: [0.22, -0.24] },
+  { z:  1.05, ht: 0.25, sh: [0.20, 0.21], wall: [0.28, 0.06, -0.05], bot: [0.20, -0.15] },
+  { z:  1.40, ht: 0.15, sh: [0.13, 0.12], wall: [0.19, 0.02, -0.03], bot: [0.12, -0.10] },
+  { z:  1.58, ht: 0.08, sh: [0.07, 0.07], wall: [0.10, 0.00, -0.02], bot: [0.06, -0.06] },
+];
+const LIGHTNING_NOSE = [0, -0.01, 1.70];
+
+function lightningTopAt(z) {           // fuselage centre-line height, for seating the canopy
+  const S = LIGHTNING_BODY, last = S[S.length - 1];
+  if (z >= last.z) return last.ht + (LIGHTNING_NOSE[1] - last.ht) * (z - last.z) / (LIGHTNING_NOSE[2] - last.z);
+  for (let i = 0; i < S.length - 1; i++) {
+    const A = S[i], B = S[i + 1];
+    if (z >= A.z && z <= B.z) return A.ht + (B.ht - A.ht) * (z - A.z) / (B.z - A.z);
+  }
+  return S[0].ht;
+}
+
+function buildLightning(skin = 'cardboard') {
+  const S = SKINS[skin] || SKINS.cardboard;
+  const root = new THREE.Group(); root.name = 'Lightning';
+  root.userData.part = 'lightning';
+  const flight = new THREE.Group(); flight.name = 'Lightning_Flight';   // banking / bobbing lives here
+  root.add(flight);
+
+  const skinMat = S.skin();
+  const dark = MAT.rubber(); dark.color.set(0x34302d);
+  const canopyMat = new THREE.MeshStandardMaterial({ name: 'Canopy', color: S.canopy, roughness: 0.6, metalness: 0.05, flatShading: true, ...OFFSET });
+  const mouthMat = new THREE.MeshStandardMaterial({ name: 'IntakeMouth', color: 0x1e1b19, roughness: 1, side: THREE.DoubleSide });
+  const burner = new THREE.MeshStandardMaterial({ name: 'Afterburner', color: 0x1a1512, emissive: 0xff8a2a, emissiveIntensity: 0, roughness: 1 });
+  burner.userData.exportOff = true;
+  root.userData.burner = burner;
+
+  const add = (geo, mat, name, seams = true, parent = flight) => {
+    const m = new THREE.Mesh(geo, mat); m.name = name;
+    if (seams) addSeams(m, mat === dark ? 0x2c2826 : S.seam, 0.6);
+    parent.add(m); return m;
+  };
+
+  // Fuselage — 9-sided rings: spine, shoulders, flat side walls, belly corners
+  const ring = ({ z, ht, sh, wall, bot }) => {
+    const half = [[sh[0], sh[1]], [wall[0], wall[1]], [wall[0], wall[2]], [bot[0], bot[1]]];
+    return [[0, ht], ...half, ...half.slice().reverse().map(([x, y]) => [-x, y])].map(([x, y]) => V3(x, y, z));
+  };
+  add(loftRings(LIGHTNING_BODY.map(ring), { tipFront: V3(...LIGHTNING_NOSE) }), skinMat, 'Fuselage');
+
+  // Canopy — faceted, seated into the body, pointed front and a tail that
+  // runs back into the spine
+  const cRing = (z, w, h) => {
+    const by = lightningTopAt(z) - 0.07;
+    return [[-w, 0], [-w * 0.6, h * 0.8], [0, h], [w * 0.6, h * 0.8], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(-0.05, 0.17, 0.12), cRing(0.38, 0.21, 0.17), cRing(0.76, 0.19, 0.14)], {
+    tipBack: V3(0, lightningTopAt(-0.5) + 0.005, -0.5),
+    tipFront: V3(0, lightningTopAt(1.1) - 0.015, 1.1),
+  }), canopyMat, 'Canopy');
+
+  // Intakes — the inner wall is the fuselage's own flat side. The cowling
+  // starts at a raked trapezoid mouth, then sinks and flattens as it runs
+  // back until it lands on the wing root and fades out.
+  [-1, 1].forEach((s, i) => {
+    // points: inner-bottom, outer-bottom, outer-top, inner-top, each [x, y, dz]
+    const q = (z, pts) => pts.map(([x, y, dz = 0]) => V3(s * x, y, z + dz));
+    const mouth = q( 0.40, [[0.29, -0.23, 0.00], [0.58, -0.18, -0.07], [0.60, -0.01, -0.04], [0.29, 0.12, 0.04]]);
+    const r1    = q( 0.00, [[0.30, -0.23], [0.64, -0.18], [0.66, 0.00], [0.30, 0.13]]);
+    const r2    = q(-0.45, [[0.37, -0.15], [0.74, -0.10], [0.75, 0.03], [0.37, 0.09]]);
+    // last ring and tail point sit inside the wing, so the cowling's top
+    // face slopes down and disappears into the wing surface
+    const r3    = q(-0.90, [[0.46, -0.08], [0.80, -0.07], [0.80, 0.0], [0.46, 0.015]]);
+    add(loftRings([r3, r2, r1, mouth], { tipBack: V3(s * 0.6, -0.03, -1.2), capFront: false }), skinMat, `Intake_${i}`);
+    // opening: a cardboard lip bevelled inward, then a short all-black duct
+    const c = ringCentre(mouth);
+    const nrm = V3().subVectors(mouth[1], mouth[0]).cross(V3().subVectors(mouth[3], mouth[0])).normalize();
+    if (nrm.z < 0) nrm.negate();
+    const lip = mouth.map(p => p.clone().lerp(c, 0.26).addScaledVector(nrm, -0.03));
+    add(loftRings([mouth, lip], { capBack: false, capFront: false, inside: c.clone().addScaledVector(nrm, -0.3) }), skinMat, `IntakeRim_${i}`);
+    const deep = lip.map(p => p.clone().lerp(c, 0.1).addScaledVector(nrm, -0.1));
+    add(loftRings([deep, lip], { capFront: false }), mouthMat, `IntakeMouth_${i}`, false);
+  });
+
+  // Wings — broad clipped trapezoids with a long root that runs back into
+  // the rear fuselage; thick, chamfered edges
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.36, 0.02], [1.46, -0.62], [1.46, -0.96], [0.36, -1.32]].map(([x, z]) => V3(s * x, -0.03, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.13, 0.055, 0.055, 0.13], 0.035), skinMat, `Wing_${i}`);
+  });
+
+  // Horizontal tail — all-moving: each half pivots on its own node
+  // (Stabiliser_L / _R, rotation.x) around a spar near the root's mid-chord
+  [-1, 1].forEach((s, i) => {
+    const P = V3(s * 0.24, -0.07, -1.56);
+    const pivot = new THREE.Group();
+    pivot.name = `Stabiliser_${s < 0 ? 'L' : 'R'}`;
+    pivot.position.copy(P);
+    pivot.userData.joint = { type: 'rotate', axis: 'x', min: -0.4, max: 0.4, label: 'Elevator',
+      note: 'Same direction = pitch, opposite = roll. + tilts the leading edge down.' };
+    flight.add(pivot);
+    const o = [[0.22, -1.20], [1.10, -1.50], [1.10, -1.76], [0.22, -1.88]].map(([x, z]) => V3(s * x, -0.07, z).sub(P));
+    add(bevelSlab(o, V3(0, 1, 0), [0.08, 0.045, 0.045, 0.08], 0.025), skinMat, `Stabiliser_${i}_Mesh`, true, pivot);
+  });
+
+  // Twin fins — broad swept trapezoid slabs, canted outward ~24°. The
+  // leading and trailing edges carry on down into the fuselage, so the fin
+  // meets the body in one clean crease
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.38, -0.15], [-1.12, 0.64], [-1.38, 0.64], [-1.58, -0.15]].map(([z, y]) => V3(0, y, z));
+    const fin = add(bevelSlab(o, V3(1, 0, 0), [0.09, 0.055, 0.055, 0.09], 0.025), skinMat, `Fin_${i}`);
+    fin.position.set(s * 0.34, 0.16, 0);
+    fin.rotation.z = -s * 0.42;
+  });
+
+  // Single engine — short octagonal grey rim set into the tail, with a
+  // near-black recessed opening (which glows when the afterburner is on)
+  const rimMat = MAT.rubber(); rimMat.color.set(skin === 'cardboard' ? 0x6b5a47 : 0x5e5b58); rimMat.name = 'NozzleRim';
+  const nozG = new THREE.CylinderGeometry(0.25, 0.23, 0.16, 8);
+  nozG.rotateY(Math.PI / 8); nozG.rotateX(Math.PI / 2);   // flat top, axis along Z
+  const noz = add(nozG, rimMat, 'Nozzle');
+  noz.position.z = -1.66;
+  const holeG = new THREE.CylinderGeometry(0.16, 0.16, 0.02, 8);
+  holeG.rotateY(Math.PI / 8); holeG.rotateX(Math.PI / 2);
+  const hole = add(holeG, dark, 'NozzleRing');
+  hole.position.z = -1.742;
+  const glowG = new THREE.CircleGeometry(0.12, 8);
+  glowG.rotateZ(Math.PI / 8); glowG.rotateY(Math.PI);     // faces backwards
+  const glow = add(glowG, burner, 'NozzleGlow', false);
+  glow.position.z = -1.754;
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.z = -1.85; flight.add(ex);
+
+  // Viewer-only effects (not exported): afterburner flame + wind lines
+  root.userData.fx = buildFlightFx(flight, {
+    nozzleZ: -1.755, nozzleR: 0.16,
+    tips: [[1.47, -0.03, -0.96], [-1.47, -0.03, -0.96]],   // trailing corner of each wingtip
+    streaks: [],
+  });
+
+  finishPart(root);
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Flight FX — viewer only (helpers: stripped from GLB, ignored for fit)
+   • Afterburner: layered additive cones (hot core + orange plume) and
+     faint shock diamonds that flicker and stretch.
+   • Wind lines: one dashed streak off each wingtip, scrolling back and
+     fading out behind the plane.
+------------------------------------------------------------------ */
+function fxTexture(kind) {
+  return cachedTexture('fx', (seed, k) => {
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d');
+    if (k === 'fade') {                          // alpha: strong near the plane → gone at the end
+      c.width = 256; c.height = 4;
+      const gr = g.createLinearGradient(0, 0, 256, 0);
+      gr.addColorStop(0, '#000'); gr.addColorStop(0.06, '#fff'); gr.addColorStop(0.45, '#999'); gr.addColorStop(1, '#000');
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 4);
+    } else {                                     // dashes, white on black (additive)
+      c.width = 256; c.height = 8;
+      g.fillStyle = '#000'; g.fillRect(0, 0, 256, 8);
+      let x = 0, r = seed;
+      const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+      while (x < 256) { const l = 30 + rnd() * 60; g.fillStyle = `rgba(255,255,255,${0.6 + rnd() * 0.4})`; g.fillRect(x, 2, l, 4); x += l + 20 + rnd() * 50; }
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping;
+    return t;
+  }, kind === 'fade' ? 1 : 2, kind);
+}
+
+function buildFlightFx(parent, { nozzleZ, nozzleR, nozzles, tips, streaks = [] }) {
+  const fx = new THREE.Group(); fx.name = 'FX'; fx.userData.helper = true; fx.visible = false;
+  parent.add(fx);
+  const helper = o => { o.userData.helper = true; o.castShadow = o.receiveShadow = false; return o; };
+  const glowMat = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+
+  // Afterburner plume(s) — one per nozzle, sharing materials
+  nozzles = nozzles || [{ x: 0, y: 0, z: nozzleZ, r: nozzleR }];
+  const M = { plume: glowMat(0xff7a1e, 0.55), core: glowMat(0xfff0c8, 0.9), blue: glowMat(0x7fb4ff, 0.45),
+              dia: [0, 1, 2].map(() => glowMat(0xffd28a, 0.5)) };
+  const cone = (r, h, mat) => {
+    const g = new THREE.ConeGeometry(r, h, 8, 1, true);
+    g.rotateY(Math.PI / 8); g.rotateX(-Math.PI / 2); g.translate(0, 0, -h / 2);   // base at 0, tip toward −Z
+    return helper(new THREE.Mesh(g, mat));
+  };
+  const plumes = [], cores = [], attached = [];
+  nozzles.forEach(({ x = 0, y = 0, z, r, parent: host }) => {
+    const burner = new THREE.Group(); burner.position.set(x, y, z);
+    if (host) { burner.userData.helper = true; burner.visible = false; host.add(burner); attached.push(burner); } else fx.add(burner);
+    const plume = cone(r * 1.05, r * 7, M.plume), core = cone(r * 0.7, r * 3.8, M.core), blue = cone(r * 0.85, r * 2, M.blue);
+    burner.add(plume, core, blue); plumes.push(plume); cores.push(core);
+    [2, 3.5, 4.9].map(f => f * r).forEach((dz, k) => {
+      const d = helper(new THREE.Mesh(new THREE.OctahedronGeometry(r * (0.55 - k * 0.12)), M.dia[k]));
+      d.scale.z = 1.6; d.position.z = -dz; burner.add(d);
+    });
+  });
+
+  // Wind lines
+  const lines = [];
+  const strip = (pos, len, width, speed, seedOffset) => {
+    const map = fxTexture('dash').clone(); map.userData = {}; map.needsUpdate = true; map.offset.x = seedOffset;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, map, alphaMap: fxTexture('fade'), transparent: true, opacity: 0.0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const grp = new THREE.Group(); grp.position.set(pos[0], pos[1], pos[2]);
+    if (pos[3]) { grp.userData.helper = true; grp.visible = false; pos[3].add(grp); attached.push(grp); } else fx.add(grp);
+    [0, Math.PI / 2].forEach(rx => {                // crossed ribbons: visible from any angle
+      const g = new THREE.PlaneGeometry(len, width);
+      g.rotateX(rx); g.rotateY(Math.PI / 2); g.translate(0, 0, -len / 2);   // runs back from 0 to −len
+      grp.add(helper(new THREE.Mesh(g, mat)));
+    });
+    lines.push({ mat, speed, base: 0.85 });
+  };
+  tips.forEach(p => strip(p, 2.6, 0.035, 1.9, Math.random()));
+  streaks.forEach((p, k) => strip(p, 2.4, 0.022, 1.4 + (k % 3) * 0.35, Math.random()));
+  lines.forEach((l, k) => { l.base = k < tips.length ? 0.9 : 0.55; });
+
+  return {
+    group: fx,
+    reset() { fx.visible = false; attached.forEach(b => b.visible = false); },
+    update(t, dt, e) {
+      fx.visible = e > 0.01;
+      attached.forEach(b => b.visible = fx.visible);
+      const flick = 0.85 + Math.sin(t * 37) * 0.08 + Math.sin(t * 23 + 1) * 0.07;
+      plumes.forEach((p, k) => p.scale.set(1, 1, flick * (1 + Math.sin(t * 7 + k) * 0.06)));
+      cores.forEach((c, k) => c.scale.set(1, 1, 0.9 + Math.sin(t * 41 + k * 2) * 0.12));
+      M.plume.opacity = 0.5 * flick * e;
+      M.core.opacity = 0.85 * e;
+      M.blue.opacity = (0.4 + Math.sin(t * 29) * 0.08) * e;
+      M.dia.forEach((m, k) => { m.opacity = (0.35 - k * 0.08 + Math.sin(t * 19 + k) * 0.06) * e; });
+      lines.forEach(l => { l.mat.map.offset.x -= dt * l.speed * 0.6; l.mat.opacity = l.base * e; });
+    },
+  };
+}
+
+/* Gentle cruise: bob, bank, a flickering afterburner, and the all-moving
+   tail planes following the manoeuvre (pitch together, roll opposite). */
+function planeController(root) {
+  const flight = root.getObjectByName(`${root.name}_Flight`);
+  const burner = root.userData.burner;
+  const stabL = root.getObjectByName(`Stabiliser_L`), stabR = root.getObjectByName(`Stabiliser_R`);
+  if (!flight) return null;
+  const gunSpin = root.getObjectByName('Gun_Spin');
+  const vtol = root.userData.vtol || [];
+  const sweep = root.userData.sweep || [];
+  let t = 0;
+  return {
+    state: 'Cruising',
+    reset() {
+      t = 0; flight.position.set(0, 0, 0); flight.rotation.set(0, 0, 0);
+      root.userData.fx?.reset();
+      if (stabL) stabL.rotation.x = 0; if (stabR) stabR.rotation.x = 0;
+      if (gunSpin) gunSpin.rotation.z = 0;
+      vtol.forEach(n => n.rotation.x = 0);
+      sweep.forEach(([n]) => n.rotation.y = 0);
+      if (burner) burner.emissiveIntensity = 0;
+    },
+    update(dt) {
+      t += dt;
+      const e = Math.min(1, t / 1.2);
+      flight.position.y = Math.sin(t * 1.1) * 0.06 * e;
+      flight.rotation.z = (Math.sin(t * 0.5) * 0.22 + Math.sin(t * 1.3) * 0.04) * e;   // bank
+      flight.rotation.x = Math.sin(t * 0.8 + 1) * 0.04 * e;                           // pitch
+      flight.rotation.y = Math.sin(t * 0.5 - 0.4) * 0.08 * e;                         // yaw into the turn
+      // control surfaces lead the motion: rate of pitch / roll → deflection
+      const pitchCmd = Math.cos(t * 0.8 + 1) * 0.22;
+      const rollCmd = Math.cos(t * 0.5) * 0.2 + Math.cos(t * 1.3) * 0.06;
+      if (stabL) stabL.rotation.x = (pitchCmd - rollCmd) * e;
+      if (stabR) stabR.rotation.x = (pitchCmd + rollCmd) * e;
+      if (burner) burner.emissiveIntensity = (1.6 + Math.sin(t * 31) * 0.35 + Math.sin(t * 17) * 0.25) * e;
+      if (gunSpin) gunSpin.rotation.z += dt * 8 * e;
+      if (sweep.length) {                                  // swing wings: spread ⇄ swept back
+        const u = (Math.sin(t * 0.35 - Math.PI / 2) + 1) / 2, h = u * u * (3 - 2 * u);
+        sweep.forEach(([n, s]) => n.rotation.y = s * 1.0 * h * e);
+        this.state = h > 0.6 ? 'Wings swept' : 'Wings spread';
+      }
+      if (vtol.length) {                                   // cruise ⇄ hover: swing the nozzles down and back
+        const u = (Math.sin(t * 0.45 - Math.PI / 2) + 1) / 2, h = u * u * (3 - 2 * u);
+        vtol.forEach(n => n.rotation.x = -1.45 * h * e);
+        this.state = h > 0.6 ? 'Hovering' : 'Cruising';
+      }
+      root.userData.fx?.update(t, dt, e);
+    },
+  };
+}
+
+/* ------------------------------------------------------------------
+   Shared: generic fuselage ring + spine height lookup
+   Station: { z, ht, sh:[x,y], wall:[x, top, bottom], bot:[x,y] }
+------------------------------------------------------------------ */
+function bodyRing({ z, ht, sh, wall, bot }) {
+  const half = [[sh[0], sh[1]], [wall[0], wall[1]], [wall[0], wall[2]], [bot[0], bot[1]]];
+  return [[0, ht], ...half, ...half.slice().reverse().map(([x, y]) => [-x, y])].map(([x, y]) => V3(x, y, z));
+}
+function stationTopAt(S, nose, z) {
+  const last = S[S.length - 1];
+  if (z >= last.z) return last.ht + (nose[1] - last.ht) * (z - last.z) / (nose[2] - last.z);
+  for (let i = 0; i < S.length - 1; i++) {
+    const A = S[i], B = S[i + 1];
+    if (z >= A.z && z <= B.z) return A.ht + (B.ht - A.ht) * (z - A.z) / (B.z - A.z);
+  }
+  return S[0].ht;
+}
+
+/* ------------------------------------------------------------------
+   Model: Swift (F-16-inspired basic fighter)
+   Nose +Z, Y up. Rounded 9-sided fuselage, tall bubble canopy, chin
+   intake under the cockpit, strakes blending into cropped delta wings,
+   wingtip missile rails, one tall fin, two small ventral fins,
+   all-moving tail planes and a single nozzle.
+------------------------------------------------------------------ */
+const SWIFT_BODY = [
+  { z: -1.70, ht: 0.18, sh: [0.140, 0.15], wall: [0.205, 0.04, -0.04], bot: [0.140, -0.15] },
+  { z: -1.20, ht: 0.25, sh: [0.205, 0.21], wall: [0.298, 0.05, -0.06], bot: [0.205, -0.20] },
+  { z: -0.40, ht: 0.29, sh: [0.223, 0.24], wall: [0.335, 0.05, -0.08], bot: [0.223, -0.23] },
+  { z:  0.40, ht: 0.27, sh: [0.205, 0.22], wall: [0.279, 0.05, -0.08], bot: [0.186, -0.20] },
+  { z:  1.00, ht: 0.22, sh: [0.158, 0.18], wall: [0.214, 0.03, -0.06], bot: [0.140, -0.15] },
+  { z:  1.45, ht: 0.14, sh: [0.102, 0.11], wall: [0.140, 0.01, -0.04], bot: [0.084, -0.09] },
+  { z:  1.68, ht: 0.07, sh: [0.056, 0.05], wall: [0.074, 0.00, -0.02], bot: [0.047, -0.05] },
+];
+const SWIFT_NOSE = [0, 0.0, 1.88];
+
+function buildSwift(skin = 'cardboard') {
+  const S = SKINS[skin] || SKINS.cardboard;
+  const root = new THREE.Group(); root.name = 'Swift';
+  root.userData.part = 'swift';
+  const flight = new THREE.Group(); flight.name = 'Swift_Flight';
+  root.add(flight);
+
+  const skinMat = S.skin();
+  const dark = MAT.rubber(); dark.color.set(0x34302d);
+  const canopyMat = new THREE.MeshStandardMaterial({ name: 'Canopy', color: 0x7f97b5, roughness: 0.5, metalness: 0.05, flatShading: true, ...OFFSET });
+  const mouthMat = new THREE.MeshStandardMaterial({ name: 'IntakeMouth', color: 0x1e1b19, roughness: 1, side: THREE.DoubleSide });
+  const burner = new THREE.MeshStandardMaterial({ name: 'Afterburner', color: 0x1a1512, emissive: 0xff8a2a, emissiveIntensity: 0, roughness: 1 });
+  burner.userData.exportOff = true;
+  root.userData.burner = burner;
+  const topAt = z => stationTopAt(SWIFT_BODY, SWIFT_NOSE, z);
+
+  const add = (geo, mat, name, seams = true, parent = flight) => {
+    const m = new THREE.Mesh(geo, mat); m.name = name;
+    if (seams) addSeams(m, mat === dark ? 0x2c2826 : S.seam, 0.6);
+    parent.add(m); return m;
+  };
+
+  // Fuselage + a paler radome nose cone (like the reference sheet)
+  const noseMat = skinMat.clone(); noseMat.name = 'NoseCone';
+  noseMat.map = skin === 'cardboard' ? cardboardTexture(11, [226, 200, 162]) : skin === 'grey' ? paperTex(9, [196, 196, 198]) : paperTex(5, [246, 243, 236]);
+  const rings = SWIFT_BODY.map(bodyRing);
+  add(loftRings(rings.slice(0, 6)), skinMat, 'Fuselage');
+  add(loftRings(rings.slice(5), { tipFront: V3(...SWIFT_NOSE) }), noseMat, 'NoseCone');
+
+  // Bubble canopy — tall and far forward, tail running into the spine
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.05;
+    return [[-w, 0], [-w * 0.75, h * 0.7], [-w * 0.3, h], [w * 0.3, h], [w * 0.75, h * 0.7], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(0.72, 0.13, 0.13), cRing(0.96, 0.16, 0.18), cRing(1.17, 0.13, 0.13)], {
+    tipBack: V3(0, topAt(0.35) + 0.01, 0.35),
+    tipFront: V3(0, topAt(1.36) - 0.01, 1.36),
+  }), canopyMat, 'Canopy');
+
+  // Chin intake — wide mouth under the cockpit, lower lip pushed forward;
+  // the duct fairing runs back under the belly and fades into it
+  {
+    const q = (z, pts) => pts.map(([x, y, dz = 0]) => V3(x, y, z + dz));
+    // order: bottom-left, bottom-right, top-right, top-left
+    const mouth = q( 0.78, [[-0.19, -0.39, 0.07], [0.19, -0.39, 0.07], [0.23, -0.15, 0], [-0.23, -0.15, 0]]);
+    const r1    = q( 0.05, [[-0.21, -0.39], [0.21, -0.39], [0.25, -0.14], [-0.25, -0.14]]);
+    const r2    = q(-0.55, [[-0.18, -0.32], [0.18, -0.32], [0.23, -0.15], [-0.23, -0.15]]);
+    const r3    = q(-1.05, [[-0.10, -0.23], [0.10, -0.23], [0.14, -0.15], [-0.14, -0.15]]);
+    add(loftRings([r3, r2, r1, mouth], { tipBack: V3(0, -0.17, -1.4), capFront: false }), skinMat, 'Intake');
+    const c = ringCentre(mouth);
+    const nrm = V3().subVectors(mouth[1], mouth[0]).cross(V3().subVectors(mouth[3], mouth[0])).normalize();
+    if (nrm.z < 0) nrm.negate();
+    const lip = mouth.map(p => p.clone().lerp(c, 0.26).addScaledVector(nrm, -0.03));
+    add(loftRings([mouth, lip], { capBack: false, capFront: false, inside: c.clone().addScaledVector(nrm, -0.3) }), skinMat, 'IntakeRim');
+    const deep = lip.map(p => p.clone().lerp(c, 0.1).addScaledVector(nrm, -0.1));
+    add(loftRings([deep, lip], { capFront: false }), mouthMat, 'IntakeMouth', false);
+  }
+
+  // Strakes (leading-edge root extensions) blending into the wings
+  [-1, 1].forEach((s, i) => {
+    // back half runs on inside the wing, so only the front triangle shows
+    const o = [[0.19, 0.85], [0.56, -0.22], [0.56, -0.62], [0.19, -0.62]].map(([x, z]) => V3(s * x, -0.012, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.06, 0.035, 0.035, 0.06], 0.015), skinMat, `Strake_${i}`);
+  });
+
+  // Wings — cropped delta, ~40° leading-edge sweep
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.30, -0.05], [1.45, -0.95], [1.45, -1.15], [0.30, -1.30]].map(([x, z]) => V3(s * x, -0.02, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.10, 0.05, 0.05, 0.10], 0.03), skinMat, `Wing_${i}`);
+  });
+
+  // Wingtip rails — thin chamfered bars with pointed ends
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.04, -0.72], [0.0, -0.66], [0.04, -0.72], [0.04, -1.32], [-0.04, -1.32]].map(([x, z]) => V3(s * 1.49 + x, -0.02, z));
+    add(bevelSlab(o, V3(0, 1, 0), 0.08, 0.015), skinMat, `WingRail_${i}`);
+  });
+
+  // All-moving tail planes (same pivots/names as every plane)
+  [-1, 1].forEach((s, i) => {
+    const P = V3(s * 0.17, -0.04, -1.6);
+    const pivot = new THREE.Group();
+    pivot.name = `Stabiliser_${s < 0 ? 'L' : 'R'}`;
+    pivot.position.copy(P);
+    pivot.userData.joint = { type: 'rotate', axis: 'x', min: -0.4, max: 0.4, label: 'Elevator',
+      note: 'Same direction = pitch, opposite = roll. + tilts the leading edge down.' };
+    flight.add(pivot);
+    const o = [[0.17, -1.28], [0.98, -1.60], [0.98, -1.82], [0.17, -1.94]].map(([x, z]) => V3(s * x, -0.04, z).sub(P));
+    add(bevelSlab(o, V3(0, 1, 0), [0.07, 0.04, 0.04, 0.07], 0.022), skinMat, `Stabiliser_${i}_Mesh`, true, pivot);
+  });
+
+  // One tall fin, edges carried down into the spine
+  {
+    const o = [[-0.62, -0.12], [-1.30, 0.70], [-1.54, 0.70], [-1.68, -0.12]].map(([z, y]) => V3(0, y, z));
+    const fin = add(bevelSlab(o, V3(1, 0, 0), [0.09, 0.055, 0.055, 0.09], 0.025), skinMat, 'Fin');
+    fin.position.y = 0.2;
+  }
+
+  // Two small ventral fins under the tail, canted outward
+  [-1, 1].forEach((s, i) => {
+    const o = [[-1.08, 0.04], [-1.30, -0.20], [-1.46, -0.20], [-1.46, 0.04]].map(([z, y]) => V3(0, y, z));
+    const v = add(bevelSlab(o, V3(1, 0, 0), 0.045, 0.012), dark, `VentralFin_${i}`);
+    v.position.set(s * 0.15, -0.14, 0);
+    v.rotation.z = s * 0.45;
+  });
+
+  // Nozzle — longer octagonal can than Lightning's, dark rim, black core
+  const rimMat = MAT.rubber(); rimMat.color.set(0x55504b); rimMat.name = 'NozzleRim';
+  const nozG = new THREE.CylinderGeometry(0.19, 0.16, 0.28, 8);
+  nozG.rotateY(Math.PI / 8); nozG.rotateX(Math.PI / 2);
+  const noz = add(nozG, rimMat, 'Nozzle');
+  noz.position.z = -1.82;
+  const holeG = new THREE.CylinderGeometry(0.12, 0.12, 0.02, 8);
+  holeG.rotateY(Math.PI / 8); holeG.rotateX(Math.PI / 2);
+  const hole = add(holeG, dark, 'NozzleRing');
+  hole.position.z = -1.962;
+  const glowG = new THREE.CircleGeometry(0.095, 8);
+  glowG.rotateZ(Math.PI / 8); glowG.rotateY(Math.PI);
+  const glow = add(glowG, burner, 'NozzleGlow', false);
+  glow.position.z = -1.974;
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.z = -2.05; flight.add(ex);
+
+  root.userData.fx = buildFlightFx(flight, {
+    nozzleZ: -1.975, nozzleR: 0.13,
+    tips: [[1.49, -0.02, -1.32], [-1.49, -0.02, -1.32]],   // back end of each wingtip rail
+    streaks: [],
+  });
+
+  finishPart(root);
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Plane kit — shared pieces for newer planes
+------------------------------------------------------------------ */
+function planeKit(name, skin, canopyColor) {
+  const S = SKINS[skin] || SKINS.cardboard;
+  const root = new THREE.Group(); root.name = name;
+  root.userData.part = name.toLowerCase();
+  const flight = new THREE.Group(); flight.name = `${name}_Flight`;
+  root.add(flight);
+  const skinMat = S.skin();
+  const dark = MAT.rubber(); dark.color.set(0x34302d);
+  const rimMat = MAT.rubber(); rimMat.color.set(0x55504b); rimMat.name = 'NozzleRim';
+  const canopyMat = new THREE.MeshStandardMaterial({ name: 'Canopy', color: canopyColor, roughness: 0.55, metalness: 0.05, flatShading: true, ...OFFSET });
+  const mouthMat = new THREE.MeshStandardMaterial({ name: 'IntakeMouth', color: 0x1e1b19, roughness: 1, side: THREE.DoubleSide });
+  const burner = new THREE.MeshStandardMaterial({ name: 'Afterburner', color: 0x1a1512, emissive: 0xff8a2a, emissiveIntensity: 0, roughness: 1 });
+  burner.userData.exportOff = true;
+  root.userData.burner = burner;
+  const add = (geo, mat, nm, seams = true, parent = flight) => {
+    const m = new THREE.Mesh(geo, mat); m.name = nm;
+    if (seams) addSeams(m, (mat === dark || mat === rimMat) ? 0x2c2826 : S.seam, 0.6);
+    parent.add(m); return m;
+  };
+  return { S, root, flight, skinMat, dark, rimMat, canopyMat, mouthMat, burner, add };
+}
+
+// Newell normal of a (possibly non-planar) ring, pointing toward +Z
+function ringNormal(r) {
+  const n = V3();
+  for (let i = 0; i < r.length; i++) {
+    const a = r[i], b = r[(i + 1) % r.length];
+    n.x += (a.y - b.y) * (a.z + b.z); n.y += (a.z - b.z) * (a.x + b.x); n.z += (a.x - b.x) * (a.y + b.y);
+  }
+  n.normalize(); if (n.z < 0) n.negate();
+  return n;
+}
+
+// Intake: a cowling lofted through rings (back → front, last = mouth),
+// a cardboard lip bevelled inward and a short all-black duct.
+function addIntake(K, rings, name, { tipBack = null } = {}) {
+  const mouth = rings[rings.length - 1];
+  K.add(loftRings(rings, { tipBack, capFront: false }), K.skinMat, name);
+  const c = ringCentre(mouth), nrm = ringNormal(mouth);
+  const lip = mouth.map(p => p.clone().lerp(c, 0.26).addScaledVector(nrm, -0.03));
+  K.add(loftRings([mouth, lip], { capBack: false, capFront: false, inside: c.clone().addScaledVector(nrm, -0.3) }), K.skinMat, `${name}Rim`);
+  const deep = lip.map(p => p.clone().lerp(c, 0.1).addScaledVector(nrm, -0.1));
+  K.add(loftRings([deep, lip], { capFront: false }), K.mouthMat, `${name}Mouth`, false);
+}
+
+// All-moving tail planes on Stabiliser_L / _R pivots
+function addStabilisers(K, outline, y, pivot, thick = [0.08, 0.045, 0.045, 0.08]) {
+  [-1, 1].forEach((s, i) => {
+    const P = V3(s * pivot[0], y, pivot[1]);
+    const g = new THREE.Group();
+    g.name = `Stabiliser_${s < 0 ? 'L' : 'R'}`;
+    g.position.copy(P);
+    g.userData.joint = { type: 'rotate', axis: 'x', min: -0.4, max: 0.4, label: 'Elevator',
+      note: 'Same direction = pitch, opposite = roll. + tilts the leading edge down.' };
+    K.flight.add(g);
+    const o = outline.map(([x, z]) => V3(s * x, y, z).sub(P));
+    K.add(bevelSlab(o, V3(0, 1, 0), thick, 0.025), K.skinMat, `Stabiliser_${i}_Mesh`, true, g);
+  });
+}
+
+// Round-ish (octagonal) nozzle can with a black core and glow disc
+function addOctNozzle(K, x, y, zFront, len, r0, r1, name) {
+  const g = new THREE.CylinderGeometry(r0, r1, len, 8);
+  g.rotateY(Math.PI / 8); g.rotateX(Math.PI / 2);
+  const n = K.add(g, K.rimMat, name); n.position.set(x, y, zFront - len / 2);
+  const hole = new THREE.CylinderGeometry(r1 * 0.72, r1 * 0.72, 0.02, 8);
+  hole.rotateY(Math.PI / 8); hole.rotateX(Math.PI / 2);
+  K.add(hole, K.dark, `${name}Ring`).position.set(x, y, zFront - len - 0.002);
+  const gl = new THREE.CircleGeometry(r1 * 0.58, 8); gl.rotateZ(Math.PI / 8); gl.rotateY(Math.PI);
+  K.add(gl, K.burner, `${name}Glow`, false).position.set(x, y, zFront - len - 0.014);
+  return { x, y, z: zFront - len - 0.015, r: r1 * 0.8 };
+}
+
+const flightGuide = (name, tipNote, { stabs = true, flames = 'the nozzles' } = {}) => ({
+  assemble: [
+    'Single model — nose points +Z, Y up, origin near the centre of gravity (the viewer floats it above the ground).',
+    `Everything visible lives under <code>${name}_Flight</code>; animate that node for banking and bobbing.` + (stabs ? ' The moving tail surfaces hang off their own pivots, <code>Stabiliser_L</code> and <code>Stabiliser_R</code>.' : ''),
+    `Skin material is <code>Skin_Cardboard</code>, <code>Skin_GreyPaper</code> or <code>Skin_Paper</code>. <code>exhaust_point</code> sits behind the nozzles; ${tipNote}`,
+  ],
+  animate: [
+    [`${name}_Flight`, 'rotation.z', '≈ ±0.25 rad', 'Bank into turns. Demo: 0.22·sin(0.5t) + 0.04·sin(1.3t).'],
+    [`${name}_Flight`, 'rotation.x / .y', 'small', 'Slight pitch and yaw so the turn reads naturally.'],
+    ...(stabs ? [['Stabiliser_L / _R', 'rotation.x', '±0.4 rad', 'Pitch: both the same. Roll: L = pitch − roll, R = pitch + roll.']] : []),
+    ['Afterburner', 'emissiveIntensity', '0 … ~2', 'Nozzle glow flicker. Exported off.'],
+    ['FX (viewer only)', 'flame + wind lines', '—', `Not in the GLB. Spawn your own exhaust at ${flames} and the wingtip trails at the wingtips.`],
+  ],
+});
+
+/* ------------------------------------------------------------------
+   Model: Raptor (F-22-inspired air-superiority fighter)
+   Wide chined body, long grey canopy, raked caret intakes on flat side
+   walls, big diamond wings, large tail planes right behind them, twin
+   outward-canted fins and twin flat (2-D) nozzles.
+------------------------------------------------------------------ */
+const RAPTOR_BODY = [
+  { z: -1.75, ht: 0.17, sh: [0.30, 0.15], wall: [0.44, 0.05, -0.05], bot: [0.30, -0.13] },
+  { z: -1.10, ht: 0.27, sh: [0.32, 0.24], wall: [0.58, 0.06, -0.08], bot: [0.38, -0.19] },
+  { z: -0.30, ht: 0.32, sh: [0.28, 0.28], wall: [0.46, 0.08, -0.17], bot: [0.32, -0.22] },
+  { z:  0.45, ht: 0.33, sh: [0.21, 0.27], wall: [0.26, 0.12, -0.19], bot: [0.19, -0.22] },
+  { z:  1.05, ht: 0.24, sh: [0.18, 0.20], wall: [0.27, 0.04, -0.05], bot: [0.17, -0.14] },
+  { z:  1.45, ht: 0.14, sh: [0.12, 0.11], wall: [0.18, 0.01, -0.03], bot: [0.10, -0.09] },
+  { z:  1.65, ht: 0.07, sh: [0.06, 0.06], wall: [0.09, 0.00, -0.02], bot: [0.05, -0.05] },
+];
+const RAPTOR_NOSE = [0, -0.01, 1.82];
+
+function buildRaptor(skin = 'cardboard') {
+  const K = planeKit('Raptor', skin, 0x666c74);
+  const { add, skinMat, dark, flight } = K;
+  const topAt = z => stationTopAt(RAPTOR_BODY, RAPTOR_NOSE, z);
+
+  add(loftRings(RAPTOR_BODY.map(bodyRing), { tipFront: V3(...RAPTOR_NOSE) }), skinMat, 'Fuselage');
+
+  // Canopy — long faceted bubble flowing into the spine
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.06;
+    return [[-w, 0], [-w * 0.6, h * 0.8], [0, h], [w * 0.6, h * 0.8], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(0.30, 0.15, 0.14), cRing(0.72, 0.19, 0.19), cRing(1.08, 0.15, 0.14)], {
+    tipBack: V3(0, topAt(-0.25) + 0.005, -0.25),
+    tipFront: V3(0, topAt(1.38) - 0.01, 1.38),
+  }), K.canopyMat, 'Canopy');
+
+  // Caret intakes — parallelogram mouths raked back from top to bottom,
+  // fairing back and down into the wing roots
+  [-1, 1].forEach((s, i) => {
+    const q = (z, pts) => pts.map(([x, y, dz = 0]) => V3(s * x, y, z + dz));
+    addIntake(K, [
+      q(-1.00, [[0.50, -0.08], [0.76, -0.07], [0.76, 0.0], [0.50, 0.015]]),
+      q(-0.60, [[0.40, -0.15], [0.70, -0.10], [0.70, 0.03], [0.40, 0.09]]),
+      q(-0.10, [[0.27, -0.21], [0.62, -0.17], [0.64, 0.06], [0.27, 0.15]]),
+      q( 0.35, [[0.26, -0.20, -0.06], [0.56, -0.16, -0.12], [0.58, 0.06, 0.0], [0.26, 0.14, 0.08]]),
+    ], `Intake_${i}`, { tipBack: V3(s * 0.62, -0.03, -1.3) });
+  });
+
+  // Diamond wings — swept leading edge, forward-swept trailing edge
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.36, 0.0], [1.40, -0.86], [1.40, -1.06], [0.36, -1.36]].map(([x, z]) => V3(s * x, -0.03, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.12, 0.05, 0.05, 0.12], 0.035), skinMat, `Wing_${i}`);
+  });
+
+  // Big tail planes sitting right behind the wing's trailing edge
+  addStabilisers(K, [[0.30, -1.42], [1.00, -1.74], [1.00, -1.92], [0.30, -2.04]], -0.06, [0.30, -1.74]);
+
+  // Twin fins — large clipped trapezoids, canted ~27°, edges carried into the body
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.62, -0.15], [-1.22, 0.72], [-1.48, 0.72], [-1.64, -0.15]].map(([z, y]) => V3(0, y, z));
+    const fin = add(bevelSlab(o, V3(1, 0, 0), [0.09, 0.055, 0.055, 0.09], 0.025), skinMat, `Fin_${i}`);
+    fin.position.set(s * 0.40, 0.14, 0);
+    fin.rotation.z = -s * 0.47;
+  });
+
+  // Twin flat (2-D) nozzles
+  const nozzles = [-1, 1].map((s, i) => {
+    const box = boxUV(new THREE.BoxGeometry(0.28, 0.17, 0.22).toNonIndexed()); box.computeVertexNormals();
+    const n = add(box, K.rimMat, `Nozzle_${i}`); n.position.set(s * 0.22, 0.0, -1.80);
+    const hole = add(new THREE.PlaneGeometry(0.2, 0.09).rotateY(Math.PI), dark, `NozzleHole_${i}`, false);
+    hole.position.set(s * 0.22, 0.0, -1.912);
+    const glow = add(new THREE.PlaneGeometry(0.16, 0.06).rotateY(Math.PI), K.burner, `NozzleGlow_${i}`, false);
+    glow.position.set(s * 0.22, 0.0, -1.916);
+    return { x: s * 0.22, y: 0, z: -1.92, r: 0.085 };
+  });
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.z = -2.0; flight.add(ex);
+
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[1.40, -0.03, -1.06], [-1.40, -0.03, -1.06]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Falcon (Su-57-inspired agile stealth fighter)
+   Slim central spine with a dark canopy on a wide flat lifting body,
+   two separate engine pods underneath with forward intakes under the
+   body's leading edges, swept wings, small canted fins, tail planes
+   on the pods, round nozzles, a tail stinger and red stars.
+------------------------------------------------------------------ */
+const FALCON_BODY = [
+  { z: -1.55, ht: 0.12, sh: [0.10, 0.10], wall: [0.15, 0.03, -0.03], bot: [0.10, -0.09] },
+  { z: -0.80, ht: 0.20, sh: [0.15, 0.17], wall: [0.24, 0.04, -0.05], bot: [0.16, -0.12] },
+  { z:  0.20, ht: 0.28, sh: [0.16, 0.24], wall: [0.25, 0.05, -0.08], bot: [0.16, -0.14] },
+  { z:  0.90, ht: 0.25, sh: [0.15, 0.21], wall: [0.23, 0.04, -0.07], bot: [0.14, -0.13] },
+  { z:  1.40, ht: 0.15, sh: [0.11, 0.12], wall: [0.16, 0.01, -0.04], bot: [0.09, -0.09] },
+  { z:  1.70, ht: 0.07, sh: [0.05, 0.06], wall: [0.08, 0.00, -0.02], bot: [0.04, -0.04] },
+];
+const FALCON_NOSE = [0, -0.01, 1.90];
+
+function buildFalcon(skin = 'cardboard') {
+  const K = planeKit('Falcon', skin, 0x50565e);
+  const { add, skinMat, flight } = K;
+  const topAt = z => stationTopAt(FALCON_BODY, FALCON_NOSE, z);
+
+  // Central spine + nose, ending in a short tail stinger between the engines
+  add(loftRings(FALCON_BODY.map(bodyRing), { tipFront: V3(...FALCON_NOSE), tipBack: V3(0, 0.0, -2.0) }), skinMat, 'Fuselage');
+
+  // Canopy
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.06;
+    return [[-w, 0], [-w * 0.6, h * 0.8], [0, h], [w * 0.6, h * 0.8], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(0.60, 0.12, 0.12), cRing(0.98, 0.15, 0.16), cRing(1.28, 0.11, 0.11)], {
+    tipBack: V3(0, topAt(0.2) + 0.005, 0.2),
+    tipFront: V3(0, topAt(1.5) - 0.01, 1.5),
+  }), K.canopyMat, 'Canopy');
+
+  // Wide flat lifting body, its front corners forming the leading-edge extensions
+  {
+    const o = [[-0.62, -1.48], [0.62, -1.48], [0.70, -0.30], [0.26, 1.10], [-0.26, 1.10], [-0.70, -0.30]].map(([x, z]) => V3(x, 0.0, z));
+    add(bevelSlab(o, V3(0, 1, 0), 0.1, 0.03), skinMat, 'LiftingBody');
+  }
+
+  // Engine pods with forward intakes tucked under the body's leading edge
+  const POD = { x: 0.40, y: -0.11 };
+  const podRing = (z, w, h, rake = 0) => [[-w, -h * 0.5, rake], [-w * 0.6, -h, rake], [w * 0.6, -h, rake], [w, -h * 0.5, rake * 0.5],
+    [w, h * 0.5, 0], [w * 0.6, h, 0], [-w * 0.6, h, 0], [-w, h * 0.5, rake * 0.5]];
+  const nozzles = [-1, 1].map((s, i) => {
+    const r = (z, w, h, rake) => podRing(z, w, h, rake).map(([x, y, dz]) => V3(s * POD.x + x, POD.y + y, z + dz));
+    // back ring is closed by the nozzle; front ring is the intake mouth (lower lip forward)
+    addIntake(K, [r(-1.62, 0.15, 0.12, 0), r(-1.30, 0.17, 0.13, 0), r(-0.45, 0.19, 0.14, 0), r(0.12, 0.17, 0.13, 0.08)], `EnginePod_${i}`);
+    return addOctNozzle(K, s * POD.x, POD.y, -1.60, 0.24, 0.15, 0.13, `Nozzle_${i}`);
+  });
+
+  // Swept wings from the lifting body's sides
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.62, -0.05], [1.42, -0.82], [1.42, -1.00], [0.62, -1.30]].map(([x, z]) => V3(s * x, 0.0, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.1, 0.045, 0.045, 0.1], 0.03), skinMat, `Wing_${i}`);
+  });
+
+  // Tail planes behind the wings, on the outer sides of the pods
+  addStabilisers(K, [[0.60, -1.36], [1.08, -1.62], [1.08, -1.78], [0.60, -1.86]], 0.0, [0.60, -1.62], [0.07, 0.04, 0.04, 0.07]);
+
+  // Small canted fins over the pods, edges carried down into the body
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.88, -0.12], [-1.26, 0.48], [-1.44, 0.48], [-1.56, -0.12]].map(([z, y]) => V3(0, y, z));
+    const fin = add(bevelSlab(o, V3(1, 0, 0), [0.08, 0.05, 0.05, 0.08], 0.022), skinMat, `Fin_${i}`);
+    fin.position.set(s * 0.46, 0.08, 0);
+    fin.rotation.z = -s * 0.5;
+  });
+
+  // Red stars on the wings
+  const starMat = new THREE.MeshStandardMaterial({ name: 'Star', color: 0xc0392b, roughness: 0.8, flatShading: true });
+  const star = new THREE.Shape();
+  for (let k = 0; k < 10; k++) {
+    const a = Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 0.045 : 0.11;
+    k ? star.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : star.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  [-1, 1].forEach((s, i) => {
+    const g = new THREE.ShapeGeometry(star); g.rotateX(-Math.PI / 2); g.rotateY(Math.PI);   // point toward the nose
+    add(g, starMat, `Star_${i}`, false).position.set(s * 1.08, 0.037, -0.82);
+  });
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.z = -1.95; flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[1.42, 0.0, -1.0], [-1.42, 0.0, -1.0]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Shared bits: octagon rings, blocks, flat decals (stars, roundels)
+------------------------------------------------------------------ */
+const octRing = (cx, cy, z, r, ry = r) => Array.from({ length: 8 }, (_, k) => {
+  const a = Math.PI / 8 + k * Math.PI / 4;
+  return V3(cx + Math.cos(a) * r, cy + Math.sin(a) * ry, z);
+});
+function addBlock(K, name, w, h, d, x, y, z, mat = K.skinMat) {
+  const g = boxUV(new THREE.BoxGeometry(w, h, d).toNonIndexed()); g.computeVertexNormals();
+  const m = K.add(g, mat, name); m.position.set(x, y, z); return m;
+}
+function starShape(R, r) {
+  const sh = new THREE.Shape();
+  for (let k = 0; k < 10; k++) {
+    const a = Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r : R;
+    k ? sh.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : sh.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  return sh;
+}
+// Flat roundel lying on a top surface: dark disc, cream star, optional side bars
+function addRoundel(K, name, x, y, z, r, bars = false) {
+  const disc = new THREE.MeshStandardMaterial({ name: 'RoundelDisc', color: 0x4a4440, roughness: 0.85, ...OFFSET });
+  const cream = new THREE.MeshStandardMaterial({ name: 'RoundelStar', color: 0xeee6d6, roughness: 0.85 });
+  const flat = g => { g.rotateX(-Math.PI / 2); g.rotateY(Math.PI); return g; };
+  const grp = new THREE.Group(); grp.name = name; grp.position.set(x, y, z); K.flight.add(grp);
+  const d = new THREE.Mesh(flat(new THREE.CircleGeometry(r, 16)), disc); grp.add(d);
+  if (bars) [-1, 1].forEach(s => {
+    const b = new THREE.Mesh(flat(new THREE.PlaneGeometry(r * 1.0, r * 0.42)), disc); b.position.x = s * r * 1.35; grp.add(b);
+    const w = new THREE.Mesh(flat(new THREE.PlaneGeometry(r * 0.9, r * 0.14)), cream); w.position.set(s * r * 1.38, 0.002, 0); grp.add(w);
+  });
+  const st = new THREE.Mesh(flat(new THREE.ShapeGeometry(starShape(r * 0.88, r * 0.36))), cream); st.position.y = 0.002; grp.add(st);
+  return grp;
+}
+
+/* ------------------------------------------------------------------
+   Model: Dart (SR-71-inspired high-speed reconnaissance)
+   Long flat-chined body with a tiny dark canopy and a tail cone, a
+   big delta wing, engine pods at mid-span with spike cones in their
+   intakes, and two inward-canted fins on the pods. No tail planes.
+------------------------------------------------------------------ */
+const DART_BODY = [
+  { z: -1.90, ht: 0.10, sh: [0.08, 0.08], wall: [0.15, 0.01, -0.02], bot: [0.08, -0.07] },
+  { z: -1.00, ht: 0.16, sh: [0.14, 0.13], wall: [0.32, 0.02, -0.01], bot: [0.14, -0.11] },
+  { z:  0.00, ht: 0.17, sh: [0.14, 0.14], wall: [0.36, 0.02, -0.01], bot: [0.14, -0.11] },
+  { z:  1.00, ht: 0.15, sh: [0.12, 0.12], wall: [0.30, 0.02, -0.01], bot: [0.11, -0.09] },
+  { z:  1.80, ht: 0.10, sh: [0.08, 0.08], wall: [0.18, 0.01, -0.01], bot: [0.07, -0.06] },
+  { z:  2.30, ht: 0.05, sh: [0.04, 0.04], wall: [0.08, 0.00, 0.00], bot: [0.03, -0.03] },
+];
+const DART_NOSE = [0, 0.0, 2.62];
+
+function buildDart(skin = 'cardboard') {
+  const K = planeKit('Dart', skin, 0x3c3b3b);
+  const { add, skinMat, flight } = K;
+  const topAt = z => stationTopAt(DART_BODY, DART_NOSE, z);
+
+  add(loftRings(DART_BODY.map(bodyRing), { tipFront: V3(...DART_NOSE), tipBack: V3(0, 0.02, -2.2) }), skinMat, 'Fuselage');
+
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.03;
+    return [[-w, 0], [-w * 0.6, h * 0.8], [0, h], [w * 0.6, h * 0.8], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(1.30, 0.07, 0.07), cRing(1.55, 0.08, 0.08)], {
+    tipBack: V3(0, topAt(0.95) + 0.005, 0.95), tipFront: V3(0, topAt(1.85) - 0.005, 1.85),
+  }), K.canopyMat, 'Canopy');
+
+  // Delta wing, thin
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.30, 0.25], [1.18, -1.18], [1.18, -1.40], [0.30, -1.55]].map(([x, z]) => V3(s * x, 0.0, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.08, 0.035, 0.035, 0.08], 0.02), skinMat, `Wing_${i}`);
+  });
+
+  // Engine pods with spike cones, through the middle of each wing
+  const PX = 0.66;
+  const nozzles = [-1, 1].map((s, i) => {
+    const cx = s * PX;
+    addIntake(K, [octRing(cx, 0, -1.55, 0.16), octRing(cx, 0, -1.25, 0.175), octRing(cx, 0, 0.15, 0.175), octRing(cx, 0, 0.45, 0.15)], `EnginePod_${i}`);
+    const sp = new THREE.ConeGeometry(0.085, 0.45, 8); sp.rotateX(Math.PI / 2);
+    add(sp, skinMat, `InletSpike_${i}`).position.set(cx, 0, 0.56);
+    return addOctNozzle(K, cx, 0, -1.55, 0.14, 0.155, 0.14, `Nozzle_${i}`);
+  });
+
+  // Fins on the pods, canted inward
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.72, -0.12], [-1.12, 0.56], [-1.32, 0.56], [-1.42, -0.12]].map(([z, y]) => V3(0, y, z));
+    const fin = add(bevelSlab(o, V3(1, 0, 0), [0.07, 0.045, 0.045, 0.07], 0.02), skinMat, `Fin_${i}`);
+    fin.position.set(s * PX, 0.14, 0);
+    fin.rotation.z = s * 0.22;
+  });
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.z = -1.75; flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[1.18, 0, -1.4], [-1.18, 0, -1.4]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Thug (A-10-inspired ground attack)
+   Boxy body with a blunt nose, spinning gatling gun, blue
+   canopy, straight low wings with bomb blocks and roundels, two big
+   engines high on the rear body, a twin-fin tail with moving elevators.
+------------------------------------------------------------------ */
+const THUG_BODY = [
+  { z: -1.65, ht: 0.12, sh: [0.10, 0.11], wall: [0.12, 0.06, -0.04], bot: [0.09, -0.08] },
+  { z: -0.60, ht: 0.21, sh: [0.16, 0.19], wall: [0.20, 0.10, -0.10], bot: [0.15, -0.17] },
+  { z:  0.40, ht: 0.28, sh: [0.20, 0.25], wall: [0.26, 0.12, -0.18], bot: [0.20, -0.25] },
+  { z:  1.10, ht: 0.30, sh: [0.20, 0.27], wall: [0.27, 0.10, -0.18], bot: [0.20, -0.25] },
+  { z:  1.60, ht: 0.18, sh: [0.18, 0.16], wall: [0.24, 0.05, -0.16], bot: [0.18, -0.22] },
+  { z:  1.76, ht: 0.08, sh: [0.13, 0.07], wall: [0.18, 0.02, -0.12], bot: [0.14, -0.17] },
+];
+
+function buildThug(skin = 'cardboard') {
+  const K = planeKit('Thug', skin, 0x7f97b5);
+  const { add, skinMat, dark, flight } = K;
+  const topAt = z => stationTopAt(THUG_BODY, [0, 0, 1.8], z);
+
+  add(loftRings(THUG_BODY.map(bodyRing)), skinMat, 'Fuselage');
+
+  // Boxy canopy
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.05;
+    return [[-w, 0], [-w * 0.85, h * 0.85], [-w * 0.4, h], [w * 0.4, h], [w * 0.85, h * 0.85], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(0.80, 0.16, 0.14), cRing(1.12, 0.18, 0.19), cRing(1.38, 0.16, 0.13)], {
+    tipBack: V3(0, topAt(0.5) + 0.01, 0.5), tipFront: V3(0, topAt(1.58) + 0.01, 1.58),
+  }), K.canopyMat, 'Canopy');
+
+  // Gatling gun
+  const gun = new THREE.CylinderGeometry(0.075, 0.075, 0.3, 8); gun.rotateX(Math.PI / 2);
+  add(gun, dark, 'GunBody').position.set(0, -0.09, 1.79);           // tucked back into the nose
+  // Rotating barrel cluster (Gun_Spin, rotation.z)
+  const spin = new THREE.Group(); spin.name = 'Gun_Spin'; spin.position.set(0, -0.09, 1.96);
+  spin.userData.joint = { type: 'rotate', axis: 'z', label: 'Gun spin', note: 'Spin while firing: rotation.z += ~8 rad/s.' };
+  flight.add(spin);
+  const barrelMat = new THREE.MeshStandardMaterial({ name: 'GunBarrels', color: 0x1f1c1a, roughness: 0.9, flatShading: true });
+  const plate = new THREE.CylinderGeometry(0.07, 0.07, 0.025, 6); plate.rotateX(Math.PI / 2);
+  add(plate, dark, 'GunPlate', true, spin).position.z = 0.0;
+  for (let k = 0; k < 6; k++) {
+    const a = k * Math.PI / 3, b = new THREE.CylinderGeometry(0.016, 0.016, 0.12, 6); b.rotateX(Math.PI / 2);
+    add(b, barrelMat, `GunBarrel_${k}`, false, spin).position.set(Math.cos(a) * 0.045, Math.sin(a) * 0.045, 0.06);
+  }
+  const muzzle = new THREE.Object3D(); muzzle.name = 'muzzle_point'; muzzle.position.set(0, -0.09, 2.14); flight.add(muzzle);
+
+  // Straight, low wings with bomb blocks and roundels
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.22, 0.35], [1.85, 0.16], [1.85, -0.24], [0.22, -0.30]].map(([x, z]) => V3(s * x, -0.13, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.11, 0.055, 0.055, 0.11], 0.03), skinMat, `Wing_${i}`);
+    // blocks hang flush against the wing's underside (wing thins toward the tip)
+    [0.6, 1.0, 1.4].forEach((x, k) => {
+      const t = 0.11 - (x - 0.22) / (1.85 - 0.22) * 0.055;
+      addBlock(K, `Bomb_${i}_${k}`, 0.12, 0.11, 0.3, s * x, -0.13 - t / 2 - 0.05, 0.04);
+    });
+    addRoundel(K, `Roundel_${i}`, s * 1.2, -0.087, 0.0, 0.14);
+  });
+
+  // Two big engines high on the rear body, on short pylons
+  const nozzles = [-1, 1].map((s, i) => {
+    const cx = s * 0.36, cy = 0.42;
+    addIntake(K, [octRing(cx, cy, -1.0, 0.2), octRing(cx, cy, -0.75, 0.22), octRing(cx, cy, -0.15, 0.22)], `Engine_${i}`);
+    const hub = new THREE.CircleGeometry(0.07, 8);
+    add(hub, K.rimMat, `EngineFan_${i}`, false).position.set(cx, cy, -0.26);
+    addBlock(K, `EnginePylon_${i}`, 0.08, 0.18, 0.5, s * 0.2, 0.27, -0.6);
+    return addOctNozzle(K, cx, cy, -1.0, 0.1, 0.19, 0.17, `Nozzle_${i}`);
+  });
+
+  // Tail: fixed tailplane + moving elevators, twin fins on its tips
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.08, -1.30], [1.02, -1.34], [1.02, -1.60], [0.08, -1.60]].map(([x, z]) => V3(s * x, 0.10, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.07, 0.05, 0.05, 0.07], 0.02), skinMat, `Tailplane_${i}`);
+    const f = [[-1.24, -0.22], [-1.32, 0.48], [-1.72, 0.48], [-1.78, -0.22]].map(([z, y]) => V3(0, y, z));
+    add(bevelSlab(f, V3(1, 0, 0), 0.07, 0.02), skinMat, `Fin_${i}`).position.set(s * 1.02, 0.10, 0);
+  });
+  addStabilisers(K, [[0.10, -1.61], [0.95, -1.61], [0.95, -1.78], [0.10, -1.78]], 0.10, [0.5, -1.61], [0.05, 0.035, 0.035, 0.05]);
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.set(0, 0.42, -1.15); flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[1.85, -0.13, -0.24], [-1.85, -0.13, -0.24]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Widewing (B-52-inspired heavy bomber)
+   Long boxy body with a blunt nose and dark cockpit windows, big swept
+   high wings with four twin-engine pods on pylons, a tall fin, moving
+   tail planes and roundels.
+------------------------------------------------------------------ */
+const WIDE_BODY = [
+  { z: -2.20, ht: 0.10, sh: [0.07, 0.09], wall: [0.10, 0.04, -0.02], bot: [0.06, -0.06] },
+  { z: -1.20, ht: 0.22, sh: [0.15, 0.19], wall: [0.21, 0.10, -0.12], bot: [0.15, -0.20] },
+  { z:  0.50, ht: 0.25, sh: [0.17, 0.22], wall: [0.23, 0.12, -0.15], bot: [0.17, -0.24] },
+  { z:  1.60, ht: 0.25, sh: [0.17, 0.22], wall: [0.23, 0.12, -0.15], bot: [0.17, -0.24] },
+  { z:  2.05, ht: 0.20, sh: [0.15, 0.17], wall: [0.21, 0.08, -0.13], bot: [0.15, -0.21] },
+  { z:  2.30, ht: 0.09, sh: [0.10, 0.08], wall: [0.15, 0.02, -0.07], bot: [0.10, -0.13] },
+];
+const WIDE_NOSE = [0, -0.03, 2.40];
+
+function buildWidewing(skin = 'cardboard') {
+  const K = planeKit('Widewing', skin, 0x3c3f45);
+  const { add, skinMat, flight } = K;
+  const topAt = z => stationTopAt(WIDE_BODY, WIDE_NOSE, z);
+
+  add(loftRings(WIDE_BODY.map(bodyRing), { tipFront: V3(...WIDE_NOSE), tipBack: V3(0, 0.03, -2.45) }), skinMat, 'Fuselage');
+
+  // Cockpit windows — a low dark band on the nose
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.04;
+    return [[-w, 0], [-w * 0.7, h * 0.85], [0, h], [w * 0.7, h * 0.85], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(1.98, 0.16, 0.06), cRing(2.14, 0.14, 0.05)], {
+    tipBack: V3(0, topAt(1.85) + 0.005, 1.85), tipFront: V3(0, topAt(2.3) - 0.005, 2.3),
+  }), K.canopyMat, 'CockpitWindows');
+
+  // Swept high wings
+  const LE = x => 0.85 - (x - 0.2) * (1.6 / 2.45);
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.20, 0.85], [2.65, -0.75], [2.65, -1.0], [0.20, -0.35]].map(([x, z]) => V3(s * x, 0.14, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.1, 0.04, 0.04, 0.1], 0.025), skinMat, `Wing_${i}`);
+    addRoundel(K, `Roundel_${i}`, s * 2.0, 0.172, -0.45, 0.13, true);
+  });
+
+  // Four twin-engine pods hanging on pylons
+  const nozzles = [];
+  [-1, 1].forEach((s, i) => [0.85, 1.75].forEach((px, j) => {
+    const x = s * px, zf = LE(px) + 0.3, y = -0.05;
+    addBlock(K, `Pylon_${i}_${j}`, 0.04, 0.12, 0.34, x, 0.06, zf - 0.32);
+    [-1, 1].forEach((t, k) => {
+      const cx = x + t * 0.088;
+      addIntake(K, [octRing(cx, y, zf - 0.62, 0.07), octRing(cx, y, zf - 0.15, 0.085), octRing(cx, y, zf, 0.085)], `Engine_${i}_${j}_${k}`);
+      nozzles.push(addOctNozzle(K, cx, y, zf - 0.62, 0.06, 0.07, 0.062, `Nozzle_${i}_${j}_${k}`));
+    });
+  }));
+
+  // Tall fin + moving tail planes
+  {
+    const o = [[-1.35, -0.05], [-1.98, 0.98], [-2.24, 0.98], [-2.34, -0.05]].map(([z, y]) => V3(0, y, z));
+    add(bevelSlab(o, V3(1, 0, 0), [0.08, 0.05, 0.05, 0.08], 0.022), skinMat, 'Fin').position.y = 0.16;
+  }
+  addStabilisers(K, [[0.08, -1.72], [0.98, -2.08], [0.98, -2.28], [0.08, -2.34]], 0.06, [0.12, -2.05], [0.07, 0.04, 0.04, 0.07]);
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.set(0, -0.05, -0.5); flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[2.65, 0.14, -1.0], [-2.65, 0.14, -1.0]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Jumper (AV-8B Harrier-inspired VTOL fighter)
+   Chunky body with a tall canopy and big D-shaped side intakes,
+   shoulder wings drooping toward the tips with pylons and stores, a
+   tall swept fin, moving tail planes, and two swivelling side
+   nozzles (Nozzle_RL/RR, rotation.x: 0 = aft, −1.45 = down).
+------------------------------------------------------------------ */
+const JUMPER_BODY = [
+  { z: -1.75, ht: 0.11, sh: [0.07, 0.09], wall: [0.10, 0.03, -0.03], bot: [0.07, -0.07] },
+  { z: -1.00, ht: 0.21, sh: [0.15, 0.18], wall: [0.20, 0.06, -0.08], bot: [0.14, -0.15] },
+  { z: -0.20, ht: 0.28, sh: [0.20, 0.24], wall: [0.27, 0.10, -0.16], bot: [0.20, -0.24] },
+  { z:  0.50, ht: 0.31, sh: [0.16, 0.26], wall: [0.18, 0.12, -0.17], bot: [0.15, -0.23] },
+  { z:  1.05, ht: 0.30, sh: [0.15, 0.25], wall: [0.20, 0.08, -0.12], bot: [0.14, -0.17] },
+  { z:  1.50, ht: 0.16, sh: [0.12, 0.13], wall: [0.16, 0.02, -0.06], bot: [0.10, -0.11] },
+  { z:  1.75, ht: 0.07, sh: [0.06, 0.06], wall: [0.08, 0.00, -0.03], bot: [0.05, -0.05] },
+];
+const JUMPER_NOSE = [0, -0.01, 1.92];
+
+function buildJumper(skin = 'cardboard') {
+  const K = planeKit('Jumper', skin, 0xa9b0b8);
+  const { add, skinMat, flight } = K;
+  const topAt = z => stationTopAt(JUMPER_BODY, JUMPER_NOSE, z);
+  const blockIn = (parent, name, w, h, d, x, y, z) => {
+    const g = boxUV(new THREE.BoxGeometry(w, h, d).toNonIndexed()); g.computeVertexNormals();
+    const m = add(g, skinMat, name, true, parent); m.position.set(x, y, z); return m;
+  };
+
+  add(loftRings(JUMPER_BODY.map(bodyRing), { tipFront: V3(...JUMPER_NOSE), tipBack: V3(0, 0.04, -2.0) }), skinMat, 'Fuselage');
+
+  // Tall canopy
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.06;
+    return [[-w, 0], [-w * 0.75, h * 0.8], [-w * 0.3, h], [w * 0.3, h], [w * 0.75, h * 0.8], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(0.68, 0.13, 0.13), cRing(0.97, 0.15, 0.18), cRing(1.22, 0.125, 0.12)], {
+    tipBack: V3(0, topAt(0.3) + 0.01, 0.3), tipFront: V3(0, topAt(1.45) - 0.01, 1.45),
+  }), K.canopyMat, 'Canopy');
+
+  // Big D-shaped side intakes: flat against the body, rounded outside
+  const D = [[0.17, -0.20], [0.29, -0.22], [0.39, -0.14], [0.43, 0.02], [0.39, 0.17], [0.29, 0.26], [0.17, 0.24]];   // tucked in against the body
+  [-1, 1].forEach((s, i) => {
+    const ring = (z, k = 1, dz = 0) => D.map(([x, y], j) => V3(s * (0.17 + (x - 0.17) * k), y * (0.4 + 0.6 * k), z + (j >= 3 ? dz : 0)));
+    addIntake(K, [ring(-0.55, 0.3), ring(0.0, 1), ring(0.55, 0.96, -0.05)], `Intake_${i}`, { tipBack: V3(s * 0.22, 0.0, -0.95) });
+  });
+
+  // Shoulder wings with anhedral, pylons and stores underneath
+  const LE = x => 0.15 - (x - 0.10) * (0.70 / 1.15);
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.10, 0.15], [1.25, -0.55], [1.25, -0.75], [0.10, -0.85]].map(([x, z]) => V3(s * (x - 0.10), 0, z));
+    const wing = add(bevelSlab(o, V3(0, 1, 0), [0.1, 0.045, 0.045, 0.1], 0.03), skinMat, `Wing_${i}`);
+    wing.position.set(s * 0.10, 0.14, 0);                     // sunk into the body's shoulders
+    wing.rotation.z = -s * 0.16;                              // droop toward the tips
+    [0.74, 1.04].forEach((x, k) => {
+      const lx = s * (x - 0.10), t = 0.1 - (x - 0.1) / 1.15 * 0.055, zc = LE(x) - 0.26 + (k === 1 ? 0.12 : 0);   // outer one sits further forward
+      blockIn(wing, `Pylon_${i}_${k}`, 0.035, 0.08, 0.24, lx, -t / 2 - 0.035, zc);
+      blockIn(wing, `Store_${i}_${k}`, 0.08, 0.08, 0.40, lx, -t / 2 - 0.11, zc + 0.04);
+    });
+  });
+
+  // Tall swept fin + moving tail planes
+  {
+    const o = [[-0.95, -0.1], [-1.55, 0.66], [-1.76, 0.66], [-1.82, -0.1]].map(([z, y]) => V3(0, y, z));
+    add(bevelSlab(o, V3(1, 0, 0), [0.08, 0.05, 0.05, 0.08], 0.022), skinMat, 'Fin').position.y = 0.14;
+  }
+  addStabilisers(K, [[0.07, -1.32], [0.72, -1.60], [0.72, -1.75], [0.07, -1.82]], 0.03, [0.10, -1.56], [0.07, 0.04, 0.04, 0.07]);
+
+  // Four swivelling nozzles on the body sides
+  const vtol = [], nozzles = [];
+  [['R', -0.38]].forEach(([fr, z]) => [-1, 1].forEach(s => {
+    const pivot = new THREE.Group(); pivot.name = `Nozzle_${fr}${s < 0 ? 'L' : 'R'}`;
+    pivot.position.set(s * 0.33, -0.08, z);
+    pivot.userData.joint = { type: 'rotate', axis: 'x', min: -1.45, max: 0, label: 'Thrust vector',
+      note: '0 = pointing aft (cruise), −1.45 = pointing down (hover).' };
+    flight.add(pivot);
+    const g = new THREE.CylinderGeometry(0.085, 0.075, 0.22, 8); g.rotateY(Math.PI / 8); g.rotateX(Math.PI / 2);
+    add(g, K.rimMat, `${pivot.name}_Can`, true, pivot).position.z = -0.08;
+    const hole = new THREE.CircleGeometry(0.055, 8); hole.rotateZ(Math.PI / 8); hole.rotateY(Math.PI);
+    add(hole, K.burner, `${pivot.name}_Glow`, false, pivot).position.z = -0.193;
+    const out = new THREE.Object3D(); out.name = `exhaust_${fr}${s < 0 ? 'L' : 'R'}`; out.position.z = -0.2; pivot.add(out);
+    vtol.push(pivot);
+    nozzles.push({ x: 0, y: 0, z: -0.195, r: 0.06, parent: pivot });
+  }));
+  K.root.userData.vtol = vtol;
+
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips: [[1.25, -0.04, -0.75], [-1.25, -0.04, -0.75]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Ghost (B-2 Spirit-inspired stealth bomber)
+   Flying wing: flat panels thick at the centre and thin at the tips,
+   saw-tooth trailing edge, a raised cockpit hump with dark windows,
+   two engine humps with dark intakes, dark exhaust troughs on top,
+   and moving elevons on the outer trailing edges (Stabiliser_L / _R,
+   rotation.x about the hinge line). No tail.
+------------------------------------------------------------------ */
+function buildGhost(skin = 'cardboard') {
+  const K = planeKit('Ghost', skin, 0x3a3d42);
+  const { add, skinMat, flight } = K;
+  const LE = x => 1.0 - Math.abs(x) * 0.592;            // leading edge, nose at z = 1.0
+  const T = x => 0.12 - Math.abs(x) * 0.034;            // panel thickness, centre → tip
+  // Each panel: top face at +T/2, bottom at −T/2. Bottom leading-edge vertices are
+  // pulled back and bottom trailing-edge vertices pushed forward, so the front and
+  // back edges are sloped wedges instead of flat vertical walls.
+  const SLOPE = 0.06;
+  const slab = (pts, name) => {
+    const hi = pts.map(([x, z]) => V3(x, T(x) / 2, z));
+    const lo = pts.map(([x, z]) => {
+      const onLE = Math.abs(z - LE(x)) < 1e-6;
+      return V3(x, -T(x) / 2, z + (onLE ? -SLOPE : SLOPE));
+    });
+    add(loftRings([lo, hi]), skinMat, name);
+  };
+
+  // Wing panels (each convex) — centre + three per side; seams read as cardboard panels
+  slab([[0, 1.0], [0.34, LE(0.34)], [0.34, -0.36], [0, -0.62], [-0.34, -0.36], [-0.34, LE(0.34)]], 'CentrePanel');
+  [-1, 1].forEach((s, i) => {
+    const m = pts => pts.map(([x, z]) => [s * x, z]);
+    slab(m([[0.34, LE(0.34)], [0.68, LE(0.68)], [0.68, -0.64], [0.34, -0.36]]), `InnerPanel_${i}`);
+    slab(m([[0.68, LE(0.68)], [1.30, LE(1.30)], [1.30, -0.16], [0.68, -0.64]]), `MidPanel_${i}`);
+    slab(m([[1.30, LE(1.30)], [2.50, LE(2.50)], [2.50, -0.95], [1.30, -0.16]]), `OuterPanel_${i}`);   // deeper outer chord
+  });
+
+  // Raised humps: profile rings sitting on the wing's top surface
+  const hump = (cx, z, w, h) => {
+    const by = T(cx) / 2 - 0.01;
+    return [[-w, 0], [-w * 0.7, h * 0.85], [0, h], [w * 0.7, h * 0.85], [w, 0]].map(([x, y]) => V3(cx + x, by + y, z));
+  };
+  const cockpit = [hump(0, -0.40, 0.26, 0.08), hump(0, 0.0, 0.32, 0.17), hump(0, 0.55, 0.30, 0.17), hump(0, 0.85, 0.14, 0.05)];
+  add(loftRings(cockpit, { tipBack: V3(0, T(0) / 2, -0.62), tipFront: V3(0, T(0) / 2, 0.98) }), skinMat, 'CockpitHump');
+
+  // Cockpit windows: dark panes on the upper facets of the hump's front slope
+  const lerpRing = (A, B, u) => A.map((p, k) => p.clone().lerp(B[k], u));
+  const a = lerpRing(cockpit[3], cockpit[2], 0.25), b = lerpRing(cockpit[3], cockpit[2], 0.85);
+  [0, 1, 2, 3].forEach(k => {
+    const quad = [a[k], a[k + 1], b[k + 1], b[k]];
+    const c = ringCentre(quad);
+    const n = V3().subVectors(quad[1], quad[0]).cross(V3().subVectors(quad[3], quad[0])).normalize();
+    if (n.y < 0) n.negate();
+    const q = quad.map(p => p.clone().lerp(c, 0.14));
+    add(prism(q, n, 0.02), K.canopyMat, `Window_${k}`);      // 0.01 proud, 0.01 sunk into the hump
+  });
+
+  // Engine humps with forward-facing dark intakes; their tails sink into the wing
+  [-1, 1].forEach((s, i) => {
+    const cx = s * 0.58;
+    addIntake(K, [hump(cx, -0.30, 0.14, 0.05), hump(cx, -0.05, 0.20, 0.11), hump(cx, 0.32, 0.20, 0.11)], `EngineHump_${i}`,
+      { tipBack: V3(cx, T(cx) / 2 - 0.02, -0.46) });
+  });
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.set(0, 0.08, -0.62); flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles: [], tips: [[2.5, 0, -0.95], [-2.5, 0, -0.95]] });   // wind lines only
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Specter (RQ-4 Global Hawk-inspired surveillance drone)
+   Bulbous windowless nose, slim body, a big engine pod on top at the
+   back, very long thin wings with slight dihedral and a V-tail.
+------------------------------------------------------------------ */
+const SPECTER_BODY = [
+  { z: -1.30, ht: 0.09, sh: [0.07, 0.08], wall: [0.10, 0.03, -0.02], bot: [0.07, -0.07] },
+  { z: -0.60, ht: 0.14, sh: [0.11, 0.12], wall: [0.15, 0.04, -0.05], bot: [0.10, -0.12] },
+  { z:  0.20, ht: 0.16, sh: [0.12, 0.14], wall: [0.17, 0.04, -0.08], bot: [0.12, -0.15] },
+  { z:  0.75, ht: 0.25, sh: [0.18, 0.22], wall: [0.24, 0.06, -0.10], bot: [0.17, -0.18] },
+  { z:  1.15, ht: 0.26, sh: [0.19, 0.23], wall: [0.25, 0.06, -0.10], bot: [0.18, -0.18] },
+  { z:  1.40, ht: 0.19, sh: [0.15, 0.17], wall: [0.20, 0.04, -0.08], bot: [0.14, -0.14] },
+  { z:  1.52, ht: 0.10, sh: [0.08, 0.09], wall: [0.11, 0.01, -0.05], bot: [0.08, -0.08] },
+];
+
+function buildSpecter(skin = 'cardboard') {
+  const K = planeKit('Specter', skin, 0x3c3f45);
+  const { add, skinMat, flight } = K;
+
+  add(loftRings(SPECTER_BODY.map(bodyRing), { tipFront: V3(0, -0.02, 1.58), tipBack: V3(0, 0.02, -1.45) }), skinMat, 'Fuselage');
+
+  // Engine pod on top, round intake at the front
+  addIntake(K, [octRing(0, 0.27, -1.18, 0.10), octRing(0, 0.27, -0.95, 0.145), octRing(0, 0.27, -0.25, 0.16), octRing(0, 0.27, 0.12, 0.135)], 'EnginePod');
+  addOctNozzle(K, 0, 0.27, -1.18, 0.08, 0.10, 0.085, 'Nozzle');
+
+  // Very long, thin, tapered wings with a little dihedral
+  [-1, 1].forEach((s, i) => {
+    const o = [[0, 0.35], [2.78, 0.06], [2.78, -0.09], [0, -0.06]].map(([x, z]) => V3(s * x, 0, z));
+    const w = add(bevelSlab(o, V3(0, 1, 0), [0.07, 0.025, 0.025, 0.07], 0.012), skinMat, `Wing_${i}`);
+    w.position.set(s * 0.12, 0.04, 0);
+    w.rotation.z = s * 0.05;
+  });
+
+  // V-tail
+  [-1, 1].forEach((s, i) => {
+    const o = [[-0.82, -0.06], [-1.16, 0.52], [-1.32, 0.52], [-1.40, -0.06]].map(([z, y]) => V3(0, y, z));
+    const f = add(bevelSlab(o, V3(1, 0, 0), [0.06, 0.035, 0.035, 0.06], 0.015), skinMat, `Fin_${i}`);
+    f.position.set(s * 0.05, 0.10, 0);
+    f.rotation.z = -s * 0.85;
+  });
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.set(0, 0.27, -1.3); flight.add(ex);
+  K.root.userData.fx = buildFlightFx(flight, { nozzles: [], tips: [[2.9, 0.18, -0.1], [-2.9, 0.18, -0.1]] });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Lancer (B-1B Lancer-inspired supersonic bomber)
+   Long blended body with a drooped nose and dark cockpit, wide fixed
+   wing gloves, swing wings on pivots (WingSweep_L/R, rotation.y), four
+   engines in two pairs under the gloves, a tall fin with tail planes
+   mounted half-way up it.
+------------------------------------------------------------------ */
+const LANCER_BODY = [
+  { z: -2.05, ht: 0.16, sh: [0.12, 0.14], wall: [0.18, 0.04, -0.04], bot: [0.12, -0.12] },
+  { z: -1.30, ht: 0.22, sh: [0.18, 0.20], wall: [0.30, 0.05, -0.06], bot: [0.20, -0.16] },
+  { z: -0.50, ht: 0.25, sh: [0.22, 0.22], wall: [0.40, 0.04, -0.06], bot: [0.24, -0.18] },
+  { z:  0.40, ht: 0.26, sh: [0.20, 0.23], wall: [0.32, 0.04, -0.07], bot: [0.20, -0.18] },
+  { z:  1.20, ht: 0.22, sh: [0.15, 0.20], wall: [0.22, 0.05, -0.08], bot: [0.15, -0.16] },
+  { z:  1.90, ht: 0.15, sh: [0.11, 0.13], wall: [0.15, 0.02, -0.06], bot: [0.10, -0.11] },
+  { z:  2.25, ht: 0.07, sh: [0.05, 0.06], wall: [0.07, 0.00, -0.04], bot: [0.05, -0.06] },
+];
+const LANCER_NOSE = [0, -0.05, 2.42];
+
+function buildLancer(skin = 'cardboard') {
+  const K = planeKit('Lancer', skin, 0x3c3f45);
+  const { add, skinMat, flight } = K;
+  const topAt = z => stationTopAt(LANCER_BODY, LANCER_NOSE, z);
+
+  add(loftRings(LANCER_BODY.map(bodyRing), { tipFront: V3(...LANCER_NOSE), tipBack: V3(0, 0.03, -2.3) }), skinMat, 'Fuselage');
+
+  // Small dark cockpit windows
+  const cRing = (z, w, h) => {
+    const by = topAt(z) - 0.04;
+    return [[-w, 0], [-w * 0.7, h * 0.85], [0, h], [w * 0.7, h * 0.85], [w, 0]].map(([x, y]) => V3(x, by + y, z));
+  };
+  add(loftRings([cRing(1.55, 0.13, 0.07), cRing(1.78, 0.11, 0.06)], {
+    tipBack: V3(0, topAt(1.35) + 0.005, 1.35), tipFront: V3(0, topAt(1.98) - 0.005, 1.98),
+  }), K.canopyMat, 'Canopy');
+
+  // Fixed wing gloves blending out of the body
+  [-1, 1].forEach((s, i) => {
+    const o = [[0.30, 0.70], [0.92, -0.45], [0.92, -0.80], [0.30, -1.05]].map(([x, z]) => V3(s * x, 0.02, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.11, 0.09, 0.09, 0.11], 0.025), skinMat, `Glove_${i}`);
+  });
+
+  // Swing wings: pivots near the glove tips; rotation 0 = fully spread
+  const sweep = [];
+  [-1, 1].forEach((s, i) => {
+    const pivot = new THREE.Group(); pivot.name = `WingSweep_${s < 0 ? 'L' : 'R'}`;
+    pivot.position.set(s * 0.74, 0.02, -0.55);
+    pivot.userData.joint = { type: 'rotate', axis: 'y', min: s < 0 ? -1.0 : 0, max: s < 0 ? 0 : 1.0, label: 'Wing sweep',
+      note: '0 = spread (take-off, cruise), ±1.0 = swept back (high speed). Both wings together, mirrored.' };
+    flight.add(pivot);
+    const o = [[-0.02, 0.14], [1.70, -0.14], [1.70, -0.33], [-0.02, -0.26]].map(([x, z]) => V3(s * x, 0, z));
+    add(bevelSlab(o, V3(0, 1, 0), [0.06, 0.03, 0.03, 0.06], 0.015), skinMat, `Wing_${i}`, true, pivot);
+    sweep.push([pivot, s]);
+  });
+  K.root.userData.sweep = sweep;
+
+  // Four engines in two pairs under the gloves, box intakes, round nozzles
+  const rect = (cx, cy, z, w, h) => [[-w, -h * 0.6], [-w * 0.6, -h], [w * 0.6, -h], [w, -h * 0.6], [w, h * 0.6], [w * 0.6, h], [-w * 0.6, h], [-w, h * 0.6]]
+    .map(([x, y]) => V3(cx + x, cy + y, z));
+  const nozzles = [];
+  [-1, 1].forEach((s, i) => [0.36, 0.56].forEach((px, j) => {
+    const cx = s * px, cy = -0.17;
+    addIntake(K, [rect(cx, cy, -1.40, 0.085, 0.09), rect(cx, cy, -0.9, 0.095, 0.10), rect(cx, cy, -0.25, 0.095, 0.10)], `Engine_${i}_${j}`);
+    nozzles.push(addOctNozzle(K, cx, cy, -1.40, 0.12, 0.09, 0.08, `Nozzle_${i}_${j}`));
+  }));
+
+  // Tall fin + tail planes half-way up it
+  {
+    const o = [[-1.32, -0.06], [-1.96, 0.88], [-2.22, 0.88], [-2.32, -0.06]].map(([z, y]) => V3(0, y, z));
+    add(bevelSlab(o, V3(1, 0, 0), [0.09, 0.05, 0.05, 0.09], 0.022), skinMat, 'Fin').position.y = 0.16;
+  }
+  addStabilisers(K, [[0.04, -1.80], [0.86, -2.08], [0.86, -2.24], [0.04, -2.30]], 0.48, [0.06, -2.05], [0.06, 0.035, 0.035, 0.06]);
+
+  const ex = new THREE.Object3D(); ex.name = 'exhaust_point'; ex.position.set(0, -0.17, -1.6); flight.add(ex);
+  const tips = sweep.map(([p, s]) => [s * 1.70, 0, -0.33, p]);       // wind lines ride on the swing wings
+  K.root.userData.fx = buildFlightFx(flight, { nozzles, tips });
+  finishPart(K.root);
+  return K.root;
+}
+
+/* ------------------------------------------------------------------
+   Roster — every plane planned for paperwars.io. Ones with a model in
+   MODELS are selectable; the rest show as "coming soon".
+------------------------------------------------------------------ */
+const ROSTER = [
+  ['swift', 'Swift', 'F-16 · Basic fighter'],
+  ['lightning', 'Lightning', 'F-35 · Stealth multirole'],
+  ['raptor', 'Raptor', 'F-22 · Air superiority'],
+  ['falcon', 'Falcon', 'Su-57 · Agile stealth fighter'],
+  ['thug', 'Thug', 'A-10 · Ground attack'],
+  ['jumper', 'Jumper', 'AV-8B · VTOL fighter'],
+  ['dart', 'Dart', 'SR-71 · High-speed recon'],
+  ['specter', 'Specter', 'RQ-4 · Surveillance drone'],
+  ['widewing', 'Widewing', 'B-52 · Heavy bomber'],
+  ['ghost', 'Ghost', 'B-2 · Stealth bomber'],
+  ['lancer', 'Lancer', 'B-1B · Supersonic bomber'],
+  ['hawk', 'Hawk', 'AH-64 · Heavy attack helicopter'],
+  ['wasp', 'Wasp', 'AH-6 · Light attack helicopter'],
+];
+
+const MODELS = [
+  {
+    id: 'swift',
+    kind: 'plane',
+    name: 'Swift',
+    kicker: 'F-16 inspired · Basic fighter',
+    description: 'Simple low-poly cardboard jet after the F-16: rounded body with a tall blue bubble canopy, chin intake under the cockpit, strakes blending into cropped delta wings, wingtip rails, one tall fin, two dark ventral fins, a pale nose cone and a single dark nozzle.',
+    build: (skin) => buildSwift(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '1', Fins: '1 + 2 ventral', Length: '≈ 3.9 u', Span: '≈ 3.0 u' },
+    properties: {},
+    guide: {
+      assemble: [
+        'Single model — nose points +Z, Y up, origin near the centre of gravity (the viewer floats it above the ground).',
+        'Everything visible lives under <code>Swift_Flight</code>; animate that node for banking and bobbing. The tail planes hang off their own pivots, <code>Stabiliser_L</code> and <code>Stabiliser_R</code>.',
+        'Skin material is <code>Skin_Cardboard</code>, <code>Skin_GreyPaper</code> or <code>Skin_Paper</code>. <code>exhaust_point</code> sits just behind the nozzle; wingtip trails start at the back of the wingtip rails (x = ±1.49, z = −1.32).',
+      ],
+      animate: [
+        ['Swift_Flight', 'rotation.z', '≈ ±0.25 rad', 'Bank into turns. Demo: 0.22·sin(0.5t) + 0.04·sin(1.3t).'],
+        ['Swift_Flight', 'rotation.x / .y', 'small', 'Slight pitch and yaw so the turn reads naturally.'],
+        ['Stabiliser_L / _R', 'rotation.x', '±0.4 rad', 'All-moving tail. Pitch: both the same. Roll: L = pitch − roll, R = pitch + roll.'],
+        ['Afterburner', 'emissiveIntensity', '0 … ~2', 'Nozzle glow flicker. Exported off.'],
+        ['FX (viewer only)', 'flame + wind lines', '—', 'Not in the GLB. Spawn your own flame at exhaust_point and the wingtip trails at the rail ends.'],
+      ],
+    },
+  },
+  {
+    id: 'lightning',
+    kind: 'plane',
+    name: 'Lightning',
+    kicker: 'F-35 inspired · Stealth multirole',
+    description: 'Simple low-poly cardboard jet after the F-35: a wide faceted body with a short wedge nose, a low bronze canopy flowing into the spine, big recessed intakes, thick chamfered wings blended into the body, broad canted fins and one short recessed octagonal nozzle.',
+    build: (skin) => buildLightning(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '1', Fins: '2, canted 24°', Length: '≈ 3.4 u', Span: '≈ 2.9 u' },
+    properties: {},
+    guide: {
+      assemble: [
+        'Single model — nose points +Z, Y up, origin near the centre of gravity (the viewer floats it above the ground).',
+        'Everything visible lives under <code>Lightning_Flight</code>; animate that node for banking and bobbing so the root stays clean for your flight code. The tail planes hang off their own pivots, <code>Stabiliser_L</code> and <code>Stabiliser_R</code>.',
+        'Skin material is <code>Skin_Cardboard</code>, <code>Skin_GreyPaper</code> or <code>Skin_Paper</code> depending on the texture. <code>exhaust_point</code> sits just behind the nozzle for trails.',
+      ],
+      animate: [
+        ['Lightning_Flight', 'rotation.z', '≈ ±0.25 rad', 'Bank into turns. Demo: 0.22·sin(0.5t) + 0.04·sin(1.3t).'],
+        ['Lightning_Flight', 'rotation.x / .y', 'small', 'Slight pitch and yaw so the turn reads naturally.'],
+        ['Lightning_Flight', 'position.y', '±0.06', 'Gentle bob: 0.06·sin(1.1t).'],
+        ['Stabiliser_L / _R', 'rotation.x', '±0.4 rad', 'All-moving tail. Pitch: both the same. Roll: L = pitch − roll, R = pitch + roll.'],
+        ['Afterburner', 'emissiveIntensity', '0 … ~2', 'Nozzle glow flicker: 1.6 + 0.35·sin(31t) + 0.25·sin(17t). Exported off.'],
+        ['FX (viewer only)', 'flame + wind lines', '—', 'Not in the GLB. Spawn your own flame at exhaust_point and wingtip trails at the trailing corner of each wingtip (x = ±1.47, z = −0.96).'],
+      ],
+    },
+  },
+  {
+    id: 'raptor',
+    kind: 'plane',
+    name: 'Raptor',
+    kicker: 'F-22 inspired · Air superiority',
+    description: 'Simple low-poly cardboard jet after the F-22: wide chined body, long grey canopy, raked caret intakes fairing into the wing roots, big diamond wings with large tail planes right behind them, twin canted fins and twin flat nozzles.',
+    build: (skin) => buildRaptor(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '2', Fins: '2, canted 27°', Length: '≈ 3.9 u', Span: '≈ 2.8 u' },
+    properties: {},
+    guide: flightGuide('Raptor', 'wingtip trails start at the back corner of each wingtip (x = ±1.40, z = −1.06).'),
+  },
+  {
+    id: 'falcon',
+    kind: 'plane',
+    name: 'Falcon',
+    kicker: 'Su-57 inspired · Agile stealth fighter',
+    description: 'Simple low-poly cardboard jet after the Su-57: slim spine with a dark canopy on a wide flat lifting body, two separate engine pods with intakes tucked under its leading edges, swept wings, small canted fins, round nozzles, a tail stinger and red stars.',
+    build: (skin) => buildFalcon(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '2, in pods', Fins: '2, canted 29°', Length: '≈ 3.9 u', Span: '≈ 2.8 u' },
+    properties: {},
+    guide: flightGuide('Falcon', 'wingtip trails start at the back corner of each wingtip (x = ±1.42, z = −1.0).'),
+  },
+  {
+    id: 'thug',
+    kind: 'plane',
+    name: 'Thug',
+    kicker: 'A-10 inspired · Ground attack',
+    description: 'Simple low-poly cardboard ground-attack plane after the A-10: boxy body with a spinning gatling gun and blue canopy, straight low wings with bomb blocks and roundels, two big engines high on the rear body and a twin-fin tail.',
+    build: (skin) => buildThug(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '2, rear-mounted', Fins: '2, on the tailplane tips', Length: '≈ 3.9 u', Span: '≈ 3.7 u' },
+    properties: {},
+    guide: flightGuide('Thug', 'the gun has a <code>muzzle_point</code> and spins on <code>Gun_Spin</code>; wingtip trails start at the back corner of each wingtip (x = ±1.85, z = −0.24).', { flames: 'the two engine nozzles' }),
+  },
+  {
+    id: 'dart',
+    kind: 'plane',
+    name: 'Dart',
+    kicker: 'SR-71 inspired · High-speed recon',
+    description: 'Simple low-poly cardboard spy plane after the SR-71: long flat-edged body with a tiny dark canopy, big delta wing, engine pods at mid-wing with spike cones in their intakes and two inward-canted fins.',
+    build: (skin) => buildDart(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '2, in mid-wing pods', Fins: '2, canted inward', Length: '≈ 4.8 u', Span: '≈ 2.4 u' },
+    properties: {},
+    guide: flightGuide('Dart', 'wingtip trails start at the back corner of each wingtip (x = ±1.18, z = −1.4).', { stabs: false, flames: 'the two pod nozzles' }),
+  },
+  {
+    id: 'widewing',
+    kind: 'plane',
+    name: 'Widewing',
+    kicker: 'B-52 inspired · Heavy bomber',
+    description: 'Simple low-poly cardboard bomber after the B-52: long boxy body with dark cockpit windows, big swept high wings with four twin-engine pods on pylons and roundels, a tall fin and moving tail planes.',
+    build: (skin) => buildWidewing(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '8, in 4 pods', Fins: '1', Length: '≈ 4.9 u', Span: '≈ 5.3 u' },
+    properties: {},
+    guide: flightGuide('Widewing', 'wingtip trails start at the back corner of each wingtip (x = ±2.65, z = −1.0).', { flames: 'the eight engine nozzles' }),
+  },
+  {
+    id: 'jumper',
+    kind: 'plane',
+    name: 'Jumper',
+    kicker: 'AV-8B inspired · VTOL fighter',
+    description: 'Simple low-poly cardboard jump jet after the AV-8B Harrier: chunky body with a tall canopy and big D-shaped side intakes, drooping shoulder wings with pylons and stores, a tall swept fin, and two swivelling side nozzles that swing down to hover.',
+    build: (skin) => buildJumper(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '1, two swivel nozzles', Fins: '1', Length: '≈ 3.9 u', Span: '≈ 2.5 u' },
+    properties: {},
+    guide: (() => {
+      const g = flightGuide('Jumper', 'each swivel nozzle carries its own <code>exhaust_RL / exhaust_RR</code>; wingtip trails start at the back corner of each wingtip (x = ±1.25, z = −0.75).', { flames: 'the two exhaust_ points' });
+      g.animate.splice(3, 0, ['Nozzle_RL / RR', 'rotation.x', '−1.45 … 0 rad', 'Thrust vectoring, both together: 0 = aft for cruise, −1.45 = straight down for hover / jump. Demo cycles between them.']);
+      return g;
+    })(),
+  },
+  {
+    id: 'ghost',
+    kind: 'plane',
+    name: 'Ghost',
+    kicker: 'B-2 inspired · Stealth bomber',
+    description: 'Simple low-poly cardboard flying wing after the B-2 Spirit: panels with sloped wedge edges and a saw-tooth trailing edge, a raised cockpit hump with inset dark windows, and two engine humps with dark intakes that fade into the wing.',
+    build: (skin) => buildGhost(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '4, in 2 humps', Fins: 'none', Length: '≈ 1.9 u', Span: '≈ 5.0 u' },
+    properties: {},
+    guide: flightGuide('Ghost', 'wingtip trails start at the back corner of each wingtip (x = ±2.5, z = −0.95).', { stabs: false, flames: 'exhaust_point (no afterburner on this one)' }),
+  },
+  {
+    id: 'specter',
+    kind: 'plane',
+    name: 'Specter',
+    kicker: 'RQ-4 inspired · Surveillance drone',
+    description: 'Simple low-poly cardboard drone after the RQ-4 Global Hawk: bulbous windowless nose, slim body, a big engine pod on top at the back, very long thin wings and a V-tail.',
+    build: (skin) => buildSpecter(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '1, top pod', Fins: 'V-tail', Length: '≈ 3.0 u', Span: '≈ 5.8 u' },
+    properties: {},
+    guide: flightGuide('Specter', 'wingtip trails start at the back corner of each wingtip (x = ±2.9, z = −0.1).', { stabs: false, flames: 'exhaust_point (no afterburner on this one)' }),
+  },
+  {
+    id: 'lancer',
+    kind: 'plane',
+    name: 'Lancer',
+    kicker: 'B-1B inspired · Supersonic bomber',
+    description: 'Simple low-poly cardboard bomber after the B-1B Lancer: long blended body with a drooped nose and dark cockpit, fixed wing gloves with swing wings that sweep back, four engines in two pairs underneath, and a tall fin with tail planes half-way up.',
+    build: (skin) => buildLancer(skin),
+    controller: planeController,
+    hover: 0.9,
+    variantLabel: 'Texture',
+    variants: SKIN_VARIANTS,
+    specs: { Engines: '4, in 2 pairs', Fins: '1', Length: '≈ 4.7 u', Span: '≈ 4.9 u spread' },
+    properties: {},
+    guide: (() => {
+      const g = flightGuide('Lancer', 'the wingtip trails ride on the swing wings (back corner of each tip).', { flames: 'the four engine nozzles' });
+      g.animate.splice(2, 0, ['WingSweep_L / _R', 'rotation.y', 'R: 0 … 1.0, L: −1.0 … 0', 'Swing wings: 0 = spread, ±1.0 = swept back. Mirror the value for the left wing. Demo cycles slowly.']);
+      return g;
+    })(),
+  },
+];
+
+/* ------------------------------------------------------------------
+   Scene
+------------------------------------------------------------------ */
+const host = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const IS_MOBILE = matchMedia('(max-width: 820px), (pointer: coarse)').matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE ? 1.5 : 2));
+// If the browser drops the GL context (memory pressure), let three.js restore it
+renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); toast('3D view paused — restoring…'); });
+renderer.domElement.addEventListener('webglcontextrestored', () => toast('3D view restored'));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.6;
+controls.minDistance = 1.5;
+controls.maxDistance = 30;
+
+scene.add(new THREE.HemisphereLight(0xfff4e6, 0x6b6056, 1.2));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(4, 7, 5);
+key.castShadow = true;
+key.shadow.mapSize.set(IS_MOBILE ? 1024 : 2048, IS_MOBILE ? 1024 : 2048);
+key.shadow.radius = 6;
+Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 25 });
+key.shadow.bias = -0.0005;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xfff0e0, 0.55);   // soft bounce so undersides aren't black
+fill.position.set(1, -4, 3);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffe2c0, 0.8);
+rim.position.set(-5, 3, -4);
+scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.32 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const stage = new THREE.Group(); stage.name = '__stage'; scene.add(stage);
+let controller = null;
+let current = null, currentDef = null, fit = { target: new THREE.Vector3(), dist: 6, radius: 1 };
+
+function disposeObject(o) {
+  o.traverse(n => {
+    n.geometry?.dispose?.();
+    const m = n.material; if (!m) return;
+    (Array.isArray(m) ? m : [m]).forEach(mm => { if (mm.userData?.shared) return; if (!mm.map?.userData?.shared) mm.map?.dispose?.(); mm.dispose(); });
+  });
+}
+
+function computeFit(obj) {
+  const box = solidBox(obj);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const r = sphere.radius;
+  const dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.12;
+  return { target: sphere.center.clone(), dist, radius: r };
+}
+
+function resetView() {
+  const el = THREE.MathUtils.degToRad(22), az = THREE.MathUtils.degToRad(35);
+  camera.position.set(
+    fit.target.x + fit.dist * Math.cos(el) * Math.sin(az),
+    fit.target.y + fit.dist * Math.sin(el),
+    fit.target.z + fit.dist * Math.cos(el) * Math.cos(az)
+  );
+  controls.target.copy(fit.target);
+  controls.update();
+}
+
+function countTris(obj) {
+  let t = 0;
+  obj.traverse(o => {
+    if (o.isMesh && !o.userData.helper) {
+      const g = o.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    }
+  });
+  return t;
+}
+
+let currentVariant;
+function selectModel(id, variant) {
+  const def = MODELS.find(m => m.id === id) || MODELS[0];
+  const vs = def.variants || [];
+  currentVariant = vs.length ? (vs.some(v => v.id === variant) ? variant : vs[0].id) : undefined;
+  controller?.dispose?.(); controller = null;
+  if (current) { stage.remove(current); disposeObject(current); }
+  current = def.build(currentVariant);
+  currentDef = def;
+  stage.add(current);
+  liftToGround(stage, current);
+  stage.position.y += def.hover || 0;               // planes float above the ground
+  controller = def.controller ? def.controller(current) : null;
+  renderProps(def);
+  renderGuide();
+  fit = computeFit(current);
+  resetView();
+
+  document.getElementById('modelTitle').textContent = def.name;
+  document.getElementById('modelKicker').textContent = def.kicker || 'Model';
+  document.getElementById('modelDesc').textContent = def.description || '';
+  const specs = { ...def.specs };
+  if (def.kind === 'part') {
+    specs.Joint = def.joint || 'Static';
+    specs['Plugs into'] = def.plugsInto || '—';
+    specs.Sockets = (def.sockets || []).map(n => `socket_${n}`).join(', ') || '—';
+  } else if (def.parts) {
+    specs.Parts = (def.partsFor ? def.partsFor(currentVariant) : def.parts).map(p => MODELS.find(m => m.id === p.model).name).join(' › ');
+  }
+  specs.Triangles = countTris(current).toLocaleString();
+  document.getElementById('modelSpecs').innerHTML =
+    Object.entries(specs).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  const nv = (def.variants || []).length, np = Object.keys(def.properties || {}).length;
+  document.getElementById('variantsBox').textContent =
+    nv || np ? [nv && `${nv} ${(def.variantLabel || 'level').toLowerCase()}s (now: ${def.variants.find(v => v.id === currentVariant)?.label})`, np && `${np} properties`].filter(Boolean).join(' · ') : 'None yet';
+  document.querySelectorAll('.model-item').forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === def.id)));
+  // Phones: details live at the top of the guide sheet; keep the chosen chip in view
+  document.getElementById('guideAbout').innerHTML =
+    `<p style="margin:0">${esc(def.description || '')}</p><dl class="specs">${document.getElementById('modelSpecs').innerHTML}</dl>`;
+  const chip = document.querySelector(`.model-item[data-id="${def.id}"]`);
+  if (chip && matchMedia('(max-width:820px)').matches) chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  try { localStorage.setItem('aircraftlab:model', def.id); } catch {}
+}
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = w + 'px';
+  renderer.domElement.style.height = h + 'px';
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  setPencilResolution(w, h);
+}
+new ResizeObserver(resize).observe(host);
+resize();
+
+const clock = new THREE.Clock();
+function liftToGround(wrapper, obj) {
+  wrapper.position.y = 0; wrapper.updateMatrixWorld(true);
+  const box = solidBox(obj);
+  wrapper.position.y = box.min.y < 0 ? -box.min.y : 0;
+}
+function restJoints(obj) {
+  obj?.traverse(o => {
+    const j = o.userData.joint; if (!j) return;
+    if (j.type === 'translate') o.position[j.axis] = 0;
+    else if (j.type === 'scale') o.scale[j.axis] = 1;
+    else o.rotation[j.axis] = 0;
+  });
+}
+function applyJoints(t) {
+  current?.traverse(o => {
+    const j = o.userData.joint;
+    if (!j || j.type === 'scale') return;
+    if (j.type === 'translate') {       // recoil-style: kick at 2.5/s, ease back
+      const ph = (t % 0.4) / 0.4;
+      o.position[j.axis] = ph < 0.12 ? j.min * ph / 0.12 : j.min * Math.pow(1 - (ph - 0.12) / 0.88, 3);
+      return;
+    }
+    if (j.min !== undefined) {          // limited joint (pitch): ease between limits
+      const u = (Math.sin(t * 0.8 + 1) + 1) / 2;
+      o.rotation[j.axis] = j.min + (j.max - j.min) * u;
+    } else {                            // free yaw: sweep like tracking a target
+      o.rotation[j.axis] = Math.sin(t * 0.9) * 1.3 + Math.sin(t * 0.37) * 0.6;
+    }
+  });
+}
+const hud = document.getElementById('hud');
+let wasAnimating = true;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (controller?.independent) controller.update(dt);
+  else if (animateJoints) {
+    if (controller) controller.update(dt); else applyJoints(clock.elapsedTime);
+  } else if (wasAnimating) { restJoints(current); controller?.reset(); }
+  wasAnimating = animateJoints;
+  const label = (animateJoints || controller?.independent) && controller ? controller.state : '';
+  if (hud.dataset.label !== label) {
+    hud.dataset.label = label;
+    hud.textContent = label;
+    hud.className = 'hud' + (label ? ' on' : '') + (/^(Locked|Firing)/.test(label) ? ' hot' : '');
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+/* ------------------------------------------------------------------
+   Offscreen rendering (thumbnails + 4-angle sheet)
+------------------------------------------------------------------ */
+// ONE offscreen renderer, reused for thumbnails and screenshots. Creating a
+// renderer per thumbnail exhausted phones' WebGL context limit and killed
+// the main viewer (models didn't render on mobile).
+let offscreen = null;
+function getOffscreen() {
+  if (!offscreen) {
+    offscreen = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    offscreen.setPixelRatio(1);
+    offscreen.outputColorSpace = THREE.SRGBColorSpace;
+    offscreen.shadowMap.enabled = true; offscreen.shadowMap.type = THREE.PCFSoftShadowMap;
+  }
+  return offscreen;
+}
+function renderAngles(obj, angles, size, bg) {
+  const r = getOffscreen();
+  r.setSize(size, size, false);
+  setPencilResolution(size, size, Math.max(1, size / 600));
+  r.outputColorSpace = THREE.SRGBColorSpace;
+  r.toneMapping = renderer.toneMapping; r.toneMappingExposure = renderer.toneMappingExposure;
+  r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+  const f = computeFit(obj);
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 200);
+  const dist = f.radius / Math.sin(THREE.MathUtils.degToRad(15)) * 1.08;
+  const el = THREE.MathUtils.degToRad(14);
+  const prevBg = scene.background;
+  scene.background = bg ? new THREE.Color(bg) : null;
+  const shown = [];
+  const markers = [];
+  scene.traverse(o => { if (o.userData.socketMarker) { markers.push([o, o.visible]); o.visible = false; } });
+  if (!stage.getObjectById(obj.id) && obj !== stage) { shown.push([stage, stage.visible]); stage.visible = false; }
+  const out = angles.map(a => {
+    const az = THREE.MathUtils.degToRad(a);
+    cam.position.set(f.target.x + dist * Math.cos(el) * Math.sin(az), f.target.y + dist * Math.sin(el), f.target.z + dist * Math.cos(el) * Math.cos(az));
+    cam.lookAt(f.target);
+    r.render(scene, cam);
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    c.getContext('2d').drawImage(r.domElement, 0, 0);
+    return c;
+  });
+  shown.forEach(([c, v]) => c.visible = v);
+  markers.forEach(([o, v]) => o.visible = v);
+  scene.background = prevBg;
+  setPencilResolution(host.clientWidth, host.clientHeight);
+  return out;
+}
+
+async function screenshotSheet() {
+  const size = 900, labels = ['FRONT', 'RIGHT', 'BACK', 'LEFT'];
+  const frames = renderAngles(current, [0, 90, 180, 270], size, '#2a2928');
+  const sheet = document.createElement('canvas');
+  sheet.width = size * 4; sheet.height = size;
+  const g = sheet.getContext('2d');
+  g.fillStyle = '#2a2928'; g.fillRect(0, 0, sheet.width, sheet.height);
+  frames.forEach((c, i) => {
+    g.drawImage(c, i * size, 0);
+    g.fillStyle = 'rgba(236,230,223,.45)';
+    g.font = '500 20px "JetBrains Mono", monospace';
+    g.textAlign = 'center';
+    g.fillText(labels[i], i * size + size / 2, size - 34);
+  });
+  return new Promise(res => sheet.toBlob(res, 'image/png'));
+}
+
+/* ------------------------------------------------------------------
+   GLB export (packed into a .zip — .glb isn't an allowed download type)
+------------------------------------------------------------------ */
+async function exportGLB(obj) {
+  const clone = obj.clone(true);
+  const strip = [];
+  clone.traverse(o => { if (o.userData.helper) strip.push(o); });
+  strip.forEach(o => o.parent.remove(o));
+  restJoints(clone);                                   // export in rest pose
+  clone.traverse(o => {                                // lights off in the file
+    if (o.material?.userData?.exportOff) {
+      const m = o.material.clone(); m.emissiveIntensity = 0; o.material = m;
+    }
+  });
+  clone.position.set(0, clone.position.y, 0);
+  const exporter = new GLTFExporter();
+  return exporter.parseAsync(clone, { binary: true, onlyVisible: true });
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+function makeZip(files) { // [{name, data:Uint8Array}] – stored, no compression
+  const enc = new TextEncoder(), parts = [], central = [];
+  const d = new Date();
+  const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true);
+    ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + size;
+  }
+  const cdSize = central.reduce((s, p) => s + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+}
+
+/* ------------------------------------------------------------------
+   UI
+------------------------------------------------------------------ */
+const toastEl = document.getElementById('toast');
+let toastT;
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+// Model list with rendered thumbnails
+const list = document.getElementById('modelList');
+{
+  const h = document.createElement('div');
+  h.className = 'section-label'; h.textContent = 'Aircraft';
+  list.appendChild(h);
+  ROSTER.forEach(([id, name, role]) => {
+    const def = MODELS.find(m => m.id === id);
+    if (def) { addListItem(def); return; }
+    const b = document.createElement('button');
+    b.className = 'model-item soon'; b.disabled = true; b.setAttribute('aria-disabled', 'true');
+    b.innerHTML = `<span class="thumb">✈</span><span><div class="t"></div><div class="s"></div></span>`;
+    b.querySelector('.t').textContent = name;
+    b.querySelector('.s').textContent = role + ' · soon';
+    list.appendChild(b);
+  });
+}
+function addListItem(def) {
+  const b = document.createElement('button');
+  b.className = 'model-item'; b.dataset.id = def.id; b.setAttribute('role', 'option');
+  b.innerHTML = `<span class="thumb"></span><span><div class="t"></div><div class="s"></div></span>`;
+  b.querySelector('.t').textContent = def.name;
+  b.querySelector('.s').textContent = def.kicker || '';
+  b.addEventListener('click', () => selectModel(def.id));
+  list.appendChild(b);
+}
+
+let savedId = MODELS[0].id;
+try { savedId = localStorage.getItem('aircraftlab:model') || savedId; } catch {}
+selectModel(savedId);
+
+// thumbnails: one model per tick, after the main view is up, so phones stay responsive
+(function thumbs(i = 0) {
+  if (i >= MODELS.length) return;
+  setTimeout(() => {
+    const def = MODELS[i];
+    try {
+      const obj = def.build();
+      const wrap = new THREE.Group(); wrap.add(obj); scene.add(wrap);
+      liftToGround(wrap, obj);
+      wrap.position.y += def.hover || 0;
+      const [c] = renderAngles(wrap, [35], 120, '#1f1e1d');
+      scene.remove(wrap); disposeObject(obj);
+      const img = new Image(); img.src = c.toDataURL('image/png'); img.alt = '';
+      list.querySelector(`[data-id="${def.id}"] .thumb`).appendChild(img);
+    } catch (e) { console.warn('thumbnail failed', def.id, e); }
+    thumbs(i + 1);
+  }, i === 0 ? 400 : 40);
+})();
+
+const btnRotate = document.getElementById('btnRotate');
+function setRotate(on) { controls.autoRotate = on; btnRotate.setAttribute('aria-pressed', String(on)); }
+btnRotate.addEventListener('click', () => setRotate(!controls.autoRotate));
+document.getElementById('btnReset').addEventListener('click', resetView);
+
+const btnJoints = document.getElementById('btnJoints');
+function setJoints(on) { animateJoints = on; btnJoints.setAttribute('aria-pressed', String(on)); }
+btnJoints.addEventListener('click', () => setJoints(!animateJoints));
+
+
+const btnPencil = document.getElementById('btnPencil');
+function setPencil(on) {
+  pencilOn = on; btnPencil.setAttribute('aria-pressed', String(on));
+  scene.traverse(o => {
+    if (o.userData.pencil) o.visible = on;
+    if (o.userData.seam) o.visible = !on;
+  });
+}
+btnPencil.addEventListener('click', () => setPencil(!pencilOn));
+addEventListener('keydown', e => {
+  if (e.target.closest?.('input,textarea')) return;
+  if (e.key === 'r' || e.key === 'R') setRotate(!controls.autoRotate);
+  if (e.key === 'f' || e.key === 'F') resetView();
+  if (e.key === 'j' || e.key === 'J') setJoints(!animateJoints);
+  if (e.key === 'g' || e.key === 'G') setGuide(guideEl.hidden);
+  if (e.key === 'p' || e.key === 'P') setPencil(!pencilOn);
+  if (e.key === 'Escape') setGuide(false);
+});
+
+
+/* ------------------------------------------------------------------
+   Assembly guide (generated from the built hierarchy + model notes)
+------------------------------------------------------------------ */
+function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const guideEl = document.getElementById('guide');
+const btnGuide = document.getElementById('btnGuide');
+
+function hierarchyLines(obj) {
+  const lines = [];
+  const interesting = o => o.userData.part || o.userData.socket || o.userData.joint || o.name === 'muzzle_point' || o.name === 'exhaust_point' || o.name === 'beam_point' || o.name === 'smoke_point';
+  const label = o => {
+    const j = o.userData.joint;
+    let tag = '';
+    if (o.userData.socket) tag = '<span class="s">  socket</span>';
+    else if (o.name === 'muzzle_point') tag = '<span class="s">  shot spawn point</span>';
+    else if (o.name === 'exhaust_point') tag = '<span class="s">  smoke spawn point</span>';
+    else if (o.name === 'beam_point') tag = '<span class="s">  beam / ping point</span>';
+    else if (o.name === 'smoke_point') tag = '<span class="s">  smoke spawn point</span>';
+    if (j) tag += `<span class="j">  ← ${esc(j.label || 'Joint')}: ${j.type === 'translate' ? 'position' : 'rotation'}.${j.axis}</span>`;
+    else if (o.userData.part) tag += '<span class="s">  part root</span>';
+    return esc(o.name) + tag;
+  };
+  const walk = (o, prefix, isLast, isRoot) => {
+    if (interesting(o) || isRoot) {
+      lines.push(isRoot ? label(o) : prefix + (isLast ? '└─ ' : '├─ ') + label(o));
+      prefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ');
+    }
+    const kids = [];
+    const collect = c => { if (interesting(c)) kids.push(c); else c.children.forEach(collect); };
+    if (interesting(o) || isRoot) o.children.forEach(collect);
+    kids.forEach((k, i) => walk(k, prefix, i === kids.length - 1, false));
+  };
+  walk(obj, '', true, true);
+  return lines.join('\n');
+}
+
+function jointRows(obj) {
+  const rows = [];
+  obj.traverse(o => {
+    const j = o.userData.joint; if (!j) return;
+    const prop = ({ translate: 'position.', scale: 'scale.' }[j.type] || 'rotation.') + j.axis;
+    let range = 'free';
+    if (j.min !== undefined) range = j.type !== 'rotate'
+      ? `${j.min} … ${j.max}`
+      : `${j.min} … ${j.max} rad (${Math.round(j.min * 57.3)}° … ${Math.round(j.max * 57.3)}°)`;
+    rows.push(`<tr><td><code>${esc(o.name)}</code></td><td>${prop}</td><td>${esc(range)}</td><td class="note">${esc(j.note || '')}</td></tr>`);
+  });
+  return rows.join('');
+}
+
+function renderGuide() {
+  const def = currentDef;
+  document.getElementById('guideTitle').textContent = def.name;
+  let html = `<h4>Hierarchy</h4><pre>${hierarchyLines(current)}</pre>`;
+  const jr = jointRows(current);
+  html += jr
+    ? `<h4>Moving nodes</h4><table><thead><tr><th>Node</th><th>Property</th><th>Range</th><th></th></tr></thead><tbody>${jr}</tbody></table>`
+    : `<h4>Moving nodes</h4><p class="note">None — this part is static.</p>`;
+  if (def.kind === 'part') {
+    html += `<h4>Attaching</h4><ol>`;
+    html += def.plugsInto ? `<li>Parent this part's root (<code>${esc(current.name)}</code>) to <code>${esc(def.plugsInto.split('→ ')[1])}</code> on <b>${esc(MODELS.find(m => def.plugsInto.startsWith(m.id))?.name || '')}</b>.</li><li>Keep its local position and rotation at 0 and scale at 1.</li>` : `<li>This is the root part. Place it on the ground; its origin is at ground level.</li>`;
+    if ((def.sockets || []).length) html += `<li>Next parts attach to: ${def.sockets.map(n => `<code>socket_${esc(n)}</code>`).join(', ')}.</li>`;
+    html += `</ol>`;
+  }
+  if (def.levelNotes) {
+    html += `<h4>Levels</h4><table><tbody>${Object.entries(def.levelNotes).map(([k, v]) =>
+      `<tr><td><b>${k == currentVariant ? '▸ ' : ''}Level ${esc(k)}</b></td><td class="note">${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+  }
+  const g = def.guide;
+  if (g) {
+    if (g.assemble) html += `<h4>How to assemble</h4><ol>${g.assemble.map(x => `<li>${x}</li>`).join('')}</ol>`;
+    if (g.animate) html += `<h4>How to animate</h4><table><thead><tr><th>Node</th><th>Property</th><th>Range</th><th>Rule</th></tr></thead><tbody>${
+      g.animate.map(r => `<tr><td><code>${esc(r[0])}</code></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td class="note">${esc(r[3])}</td></tr>`).join('')}</tbody></table>`;
+    if (g.behaviour) html += `<h4>Behaviour loop</h4><table><tbody>${
+      g.behaviour.map(r => `<tr><td><b>${esc(r[0])}</b></td><td class="note">${esc(r[1])}</td></tr>`).join('')}</tbody></table>`;
+    if (g.code) html += `<h4>Reference code (three.js-style)</h4><pre>${esc(g.code)}</pre>
+      <p class="note" style="margin-top:8px">Joint data (type, axis, limits) is also stored in each joint node's glTF <code>extras</code>, so your loader can read it instead of hard-coding.</p>`;
+  }
+  document.getElementById('guideBody').innerHTML = html;
+}
+
+function setGuide(open) {
+  guideEl.hidden = !open;
+  btnGuide.setAttribute('aria-expanded', String(open));
+}
+btnGuide.addEventListener('click', () => setGuide(guideEl.hidden));
+document.getElementById('btnGuideClose').addEventListener('click', () => setGuide(false));
+
+
+/* ------------------------------------------------------------------
+   Properties (per-model toggles, e.g. Workshop smoke/lights/door)
+------------------------------------------------------------------ */
+function fileBase() {
+  if (currentVariant === undefined) return currentDef.id;
+  return currentDef.id + (currentDef.variantLabel ? `-${currentVariant}` : `-level${currentVariant}`);
+}
+function renderProps(def) {
+  const card = document.getElementById('propsCard'), listEl = document.getElementById('propsList');
+  const entries = Object.entries(def.properties || {});
+  const vs = def.variants || [];
+  card.hidden = !entries.length && !vs.length;
+  card.querySelector('.k').textContent = vs.length && !entries.length ? (def.variantLabel || 'Level') : 'Properties';
+  listEl.innerHTML = '';
+  if (vs.length) {
+    const seg = document.createElement('div');
+    seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', def.variantLabel || 'Level');
+    vs.forEach(v => {
+      const b = document.createElement('button');
+      b.textContent = v.label.replace('Level ', 'L');
+      b.title = v.label;
+      b.setAttribute('aria-pressed', String(v.id === currentVariant));
+      b.addEventListener('click', () => { if (v.id !== currentVariant) selectModel(def.id, v.id); });
+      seg.appendChild(b);
+    });
+    listEl.appendChild(seg);
+    const note = def.levelNotes?.[currentVariant];
+    if (note) { const n = document.createElement('p'); n.className = 'seg-note'; n.textContent = note; listEl.appendChild(n); }
+  }
+  entries.forEach(([key, p]) => {
+    let on = !!p.default;
+    controller?.setProp?.(key, on);
+    const b = document.createElement('button');
+    b.className = 'btn toggle'; b.setAttribute('aria-pressed', String(on));
+    b.innerHTML = '<span class="lbl"></span><span class="pill"></span>';
+    b.querySelector('.lbl').textContent = p.label;
+    b.addEventListener('click', () => {
+      on = !on; b.setAttribute('aria-pressed', String(on));
+      controller?.setProp?.(key, on);
+    });
+    listEl.appendChild(b);
+  });
+}
+
+// Downloads via the artifact runtime
+const btnGlb = document.getElementById('btnGlb');
+const btnShots = document.getElementById('btnShots');
+let downloads = null;
+
+async function save(filename, data) {
+  if (!downloads) { toast('Downloads aren’t available in this view'); return; }
+  try {
+    const r = await downloads.save({ filename, data });
+    if (r?.status === 'saved') toast(`Saved ${filename}`);
+  } catch (err) {
+    if (err?.code === 'declined') toast('Download cancelled');
+    else if (err?.code === 'rate_limited') toast('A download prompt is already open');
+    else toast('Couldn’t save the file');
+  }
+}
+
+btnGlb.addEventListener('click', async () => {
+  btnGlb.disabled = true;
+  try {
+    controller?.reset?.();                              // rockets back in their tubes
+    const glb = new Uint8Array(await exportGLB(current));
+    const zip = makeZip([{ name: `${fileBase()}.glb`, data: glb }]);
+    await save(`${fileBase()}-glb.zip`, zip);
+  } catch (e) { console.error(e); toast('Export failed'); }
+  btnGlb.disabled = !downloads;
+});
+
+btnShots.addEventListener('click', async () => {
+  btnShots.disabled = true;
+  try { await save(`${fileBase()}-4-angles.png`, await screenshotSheet()); }
+  catch (e) { console.error(e); toast('Screenshot failed'); }
+  btnShots.disabled = !downloads;
+});
+
+(async () => {
+  for (let i = 0; i < 50 && !window.claude?.use; i++) await new Promise(r => setTimeout(r, 200));
+  try { downloads = window.claude?.use ? await window.claude.use('downloads') : null; } catch { downloads = null; }
+  btnGlb.disabled = btnShots.disabled = !downloads;
+  if (!downloads) { btnGlb.title = btnShots.title = 'Downloads aren’t available in this view'; }
+})();
+
+// expose for quick testing
+window.__aircraftLab = { get current() { return current; }, camera, controls, MODELS, selectModel, exportGLB, screenshotSheet, makeZip };
+</script>
+</body>
+</html>

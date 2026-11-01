@@ -112,7 +112,7 @@ export class MissionPanel {
       `<span class="kit card-expires" title="Event ends in">${icon('warn')}<b></b></span>`,
     ].join('');
     const fits = c.fits
-      .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" title="${esc(`${f.name}: ${SUITABILITY_LABELS[f.level]}`)}">${esc(f.name.charAt(0))}</span>`)
+      .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" title="${esc(`${f.name}: ${SUITABILITY_LABELS[f.level]}`)}">${esc(shortName(f.name))}</span>`)
       .join('');
     const op = c.operation;
     const opHtml = op
@@ -179,4 +179,10 @@ export class MissionPanel {
       li.classList.toggle('now', o === current && !o.done);
     });
   }
+}
+
+/** One letter per design, two where names share a first letter (Swift / Specter, Lancer / Lightning). */
+const SHORT: Record<string, string> = { Specter: 'Sp', Swift: 'Sw', Lancer: 'La', Lightning: 'Li' };
+function shortName(name: string): string {
+  return SHORT[name] ?? name.charAt(0);
 }
