@@ -5,7 +5,14 @@ under soft cartoon light, outlined in graphite, made of paper, cardboard and sch
 miniature classroom. This document is the reference for that look and for the code that makes it,
 so future aircraft, buildings, territories and props can reuse it instead of replacing it.
 
-> **Status: vertical slice, awaiting art-direction review.** Home Desk (T1) shows the complete look;
+> **v0.0.11 update: no more pencil strokes.** The developer's asset labs (`tools/labs/`) now supply
+> the models: clean low-poly planes in the Paper skin, cardboard buildings and a real-colour
+> classroom, without outlines. Pencil outlines are off by default (they stay in the graphics menu,
+> and the code below still works for anything that asks for them). The paper and cardboard
+> materials, the light and the low-poly shapes remain the direction. See
+> [assets/models/README.md](../assets/models/README.md#custom-models-from-the-asset-labs-v0011).
+>
+> **Status (v0.0.8): vertical slice, awaiting art-direction review.** Home Desk (T1) shows the complete look;
 > the other eight territories keep their plain platforms until the direction is approved (plan
 > phase 2). Outlines and shading already apply to every object in the game.
 

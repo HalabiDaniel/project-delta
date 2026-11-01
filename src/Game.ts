@@ -938,6 +938,7 @@ export class Game {
     }
 
     plane.animate(dt);
+    world.homeDressing.updateHangar(dt, state.hangar.size);
     // The bombs are loaded at take-off; on the pad they would only sit in the way of the fold.
     plane.setBombs(state.phase === 'flying' || state.phase === 'landed' ? state.bombsLoaded : 0);
     if (state.durability && !atDesk) plane.setDamage(state.durability.fraction);

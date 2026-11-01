@@ -1192,6 +1192,8 @@ export class MultiplayerGame {
       else this.plane.setFold(1);
     }
     this.plane.animate(dt);
+    // Home hangars: ours grows with the planes we keep in it; rivals' show their first level.
+    for (const [id, d] of this.dressings) d.updateHangar(dt, id === this.home?.id ? (st?.hangar.size ?? 0) : 0);
 
     // The camera, as single-player's.
     const baseOpen = !!this.baseMode?.open;

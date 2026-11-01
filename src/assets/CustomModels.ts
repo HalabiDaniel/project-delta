@@ -101,10 +101,10 @@ export const CATALOG = catalogJson as unknown as Catalog;
 export type BuildingModelId = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage' | 'command' | 'hangar' | 'runway' | 'helipad' | 'ink';
 
 /**
- * The building models the game places today (the rest are exported for later: runway, helipad,
- * hangar). Only these are preloaded.
+ * The building models the game places today (the runway and helipad are exported for later).
+ * Only these are preloaded.
  */
-export const IN_GAME_BUILDINGS: readonly BuildingModelId[] = ['turret', 'launcher', 'radar', 'workshop', 'storage', 'command', 'ink'];
+export const IN_GAME_BUILDINGS: readonly BuildingModelId[] = ['turret', 'launcher', 'radar', 'workshop', 'storage', 'command', 'ink', 'hangar'];
 
 /** Damage states the models show: 0 none, 1 minor, 2 medium, 3 critical. */
 export type DamageState = 0 | 1 | 2 | 3;
