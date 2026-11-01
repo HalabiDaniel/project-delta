@@ -5,10 +5,18 @@ import { WORLD } from '../config';
  * warning   – past the boundary; the countdown is running and the player can still turn back.
  * autopilot – the countdown ran out; the autopilot is flying the plane back towards home.
  */
+/**
+ * How far out (x, z) is, in the boundary's own measure: the classroom's airspace is a square
+ * centred on the world, so this is the larger of |x| and |z| (compare it with WORLD.boundaryRadius).
+ */
+export function boundaryDistance(x: number, z: number): number {
+  return Math.max(Math.abs(x), Math.abs(z));
+}
+
 export type BoundaryState = 'inside' | 'warning' | 'autopilot';
 
 /**
- * Keeps the plane near the play area. Crossing the boundary (a circle around the world centre)
+ * Keeps the plane near the play area. Crossing the boundary (a square around the world centre)
  * starts a countdown. Turning back in time cancels it; otherwise the autopilot takes over and
  * returns control once the plane is comfortably back inside.
  */
@@ -26,7 +34,7 @@ export class Boundary {
   }
 
   update(dt: number, x: number, z: number): BoundaryState {
-    const distance = Math.hypot(x, z);
+    const distance = boundaryDistance(x, z);
     switch (this.state) {
       case 'inside':
         if (distance > this.radius) {

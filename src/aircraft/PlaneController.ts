@@ -5,7 +5,9 @@ import type { Territory } from '../world/Territory';
 import type { Boost } from './Boost';
 import { FlightModel, type AircraftStatus, type FlightControls, type FlightResult } from './FlightModel';
 import type { TouchdownCheck, TouchdownState } from './Landing';
-import { buildPaperBallMesh, createPaperMaterial, FoldablePlane, inkBlotMaterial, planeMaterials } from './PlaneModel';
+import { buildPaperBallMesh, createPaperMaterial, inkBlotMaterial } from './PlaneModel';
+import { createPlaneModel, type PlaneModelView } from './JetModel';
+import type { ModelStore } from '../assets/CustomModels';
 import { PLANE_SHAPES } from './PlaneShapes';
 import { outline } from '../render/outline/OutlineRenderer';
 
@@ -16,7 +18,7 @@ const RAD_TO_DEG = 180 / Math.PI;
 
 interface Airframe {
   spec: AircraftSpec;
-  model: FoldablePlane;
+  model: PlaneModelView;
   /** Paper balls hanging under the plane, one per bomb slot. */
   bombs: pc.Entity[];
 }
@@ -38,14 +40,14 @@ export class PlaneController {
   private readonly qPitch = new pc.Quat();
   private readonly qRoll = new pc.Quat();
 
-  constructor(app: pc.AppBase, initial: AircraftId = 'falcon') {
+  constructor(app: pc.AppBase, initial: AircraftId = 'falcon', models: ModelStore | null = null) {
     this.root = new pc.Entity('plane');
     const blots = inkBlotMaterial();
     const ballMaterial = createPaperMaterial(new pc.Color(...PALETTE.paperBall));
     const ballMesh = buildPaperBallMesh(app.graphicsDevice, BOMB.kinds.standard.radius);
     for (const spec of Object.values(AIRCRAFT)) {
       const shape = PLANE_SHAPES[spec.id];
-      const model = new FoldablePlane(app.graphicsDevice, shape, planeMaterials(PALETTE.paper, spec.accent), PLANE.parkedHeight - 0.07, blots);
+      const model = createPlaneModel(app.graphicsDevice, models, spec.id, { paper: PALETTE.paper, accent: spec.accent }, { restDrop: PLANE.parkedHeight - 0.07, blots });
       model.entity.enabled = false;
       this.root.addChild(model.entity);
       const scale = BOMB.kinds[spec.bombs.kind].radius / BOMB.kinds.standard.radius;
@@ -76,7 +78,7 @@ export class PlaneController {
     return this.airframe.spec.flight;
   }
 
-  get model(): FoldablePlane {
+  get model(): PlaneModelView {
     return this.airframe.model;
   }
 
@@ -138,6 +140,11 @@ export class PlaneController {
     this.airframe = next;
     next.model.entity.enabled = true;
     this.motion.setAircraft(next.spec);
+  }
+
+  /** Moves the model's control surfaces and effects (afterburner, wind lines) with the flight. */
+  animate(dt: number): void {
+    this.airframe.model.animate?.(dt, this.root.enabled ? this.motion : null);
   }
 
   /** Health 1 → 0: the paper crumples and stains, and below a threshold the plane gets harder to fly. */

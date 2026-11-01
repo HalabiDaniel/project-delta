@@ -52,7 +52,7 @@ describe('the classroom room', () => {
     expect(state.players.get(bo.sessionId)?.name).toBe('Boscript');
     expect(state.territories.get('T1')?.owner).toBe(ann.sessionId);
     expect(state.territories.get('T9')?.owner).toBe(bo.sessionId);
-    expect(state.territories.get('T5')?.claimable).toBe(false);
+    expect(state.territories.get('T11')?.claimable).toBe(false);
     expect([...state.installations.values()].some((i) => i.owner === bo.sessionId && i.slot === 'store')).toBe(true);
     // Ann's private state: her paper and her cards, nobody else's.
     const merged = Object.assign({}, ...me) as MeDTO;

@@ -117,7 +117,7 @@ describe('target range', () => {
   const specs = layoutTargetRange(territories);
 
   it('puts three practice planes and two props on every unclaimed territory, none at home', () => {
-    expect(specs).toHaveLength(8 * 5);
+    expect(specs).toHaveLength((territories.length - 1) * 5);
     expect(specs.some((s) => s.territoryId === 'T1')).toBe(false);
     for (const t of territories.filter((x) => !x.isHome)) {
       const own = specs.filter((s) => s.territoryId === t.id);

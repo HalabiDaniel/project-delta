@@ -34,21 +34,27 @@ export const ECONOMY = {
 } as const;
 
 export const WORLD = {
-  /** Territories per side; the grid is gridSize × gridSize. */
-  gridSize: 3,
-  /** Edge length of one square territory. */
+  /**
+   * Territories per side; the grid is gridSize × gridSize. Since v0.0.11 they are the 16 student
+   * desks of the classroom (4 × 4), 1.6 m apart as in the Environment Lab's layout.
+   */
+  gridSize: 4,
+  /** Edge length of one square territory: the sheet on a desk top. */
   territorySize: 40,
-  /** Empty space between neighbouring territories. */
-  gap: 30,
+  /** Empty space between neighbouring territories (desk centres are 128 apart). */
+  gap: 88,
   /** Platform thickness. Platform tops sit at y = 0. */
   thickness: 1.2,
   homeId: 'T1',
-  /** Anything that sinks below this height has fallen into the void. */
+  /** Anything that sinks below this height has fallen too far: off the desks, towards the classroom floor. */
   voidY: -30,
   /** Soft altitude limit for the plane. */
   ceilingY: 70,
-  /** Horizontal distance from the world centre where the airspace ends. */
-  boundaryRadius: 190,
+  /**
+   * Where the airspace ends, measured from the world centre. The classroom is boxy, so the boundary
+   * is a square (|x| and |z| both within this), inside the walls.
+   */
+  boundaryRadius: 262,
   /** Seconds the player gets to turn back before the autopilot takes over. */
   boundaryCountdown: 5,
   /** The autopilot hands control back once the plane is this far inside the boundary. */
@@ -135,7 +141,20 @@ export interface GunSpec {
 }
 
 export type BombKind = 'standard' | 'small';
-export type AircraftId = 'dart' | 'falcon' | 'swift' | 'widewing';
+export type AircraftId =
+  | 'dart'
+  | 'falcon'
+  | 'swift'
+  | 'widewing'
+  | 'raptor'
+  | 'lightning'
+  | 'thug'
+  | 'jumper'
+  | 'specter'
+  | 'lancer'
+  | 'ghost';
+/** The four designs the code-built stand-in shapes exist for (aircraft/PlaneShapes.ts). */
+export type BaseShapeId = 'dart' | 'falcon' | 'swift' | 'widewing';
 export type AircraftRole = 'recon' | 'fighter' | 'multirole' | 'bomber';
 
 export interface AircraftSpec {
@@ -163,6 +182,13 @@ export interface AircraftSpec {
   /** How big a target it is for enemy ink and rockets (a sphere around its centre). */
   hitRadius: number;
   accent: readonly [number, number, number];
+  /** The real aircraft it is a paper interpretation of (garage card). */
+  inspiration: string;
+  /**
+   * The code-built shape it borrows while its model loads (and where its guns and bomb racks
+   * sit): one of the original four designs.
+   */
+  shape: BaseShapeId;
 }
 
 /**
@@ -194,6 +220,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     signature: 0.65,
     hitRadius: 0.9,
     accent: [0.08, 0.62, 0.56],
+    inspiration: 'SR-71 Blackbird',
+    shape: 'dart',
   },
   falcon: {
     id: 'falcon',
@@ -218,6 +246,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     signature: 0.9,
     hitRadius: 1.0,
     accent: [0.2, 0.45, 0.95],
+    inspiration: 'Su-57',
+    shape: 'falcon',
   },
   swift: {
     id: 'swift',
@@ -242,6 +272,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     signature: 1.0,
     hitRadius: 1.05,
     accent: [0.95, 0.58, 0.1],
+    inspiration: 'F-16',
+    shape: 'swift',
   },
   widewing: {
     id: 'widewing',
@@ -266,11 +298,196 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     signature: 1.25,
     hitRadius: 1.4,
     accent: [0.82, 0.2, 0.32],
+    inspiration: 'B-52 Stratofortress',
+    shape: 'widewing',
+  },
+  // ---- v0.0.11: the rest of the roster built so far. Stats are first guesses for playtesting. ----
+  raptor: {
+    id: 'raptor',
+    name: 'Raptor',
+    role: 'fighter',
+    roleLabel: 'Air superiority',
+    cost: 45,
+    refitCost: 10,
+    tagline: 'The fastest fighter with the heaviest guns. No bombs: it rules the air.',
+    flight: {
+      minSpeed: 11, cruiseSpeed: 23, maxSpeed: 36,
+      throttleAccel: 17, speedResponse: 2.6, pitchSpeedEffect: 8,
+      maxTurnRate: 1.7, maxPitchRate: 1.45, aimGain: 3.4, rollResponse: 8, pitchResponse: 7, maxBank: 62 * DEG,
+      boostSpeed: 15, boostResponse: 5.5, boostDuration: 1.3, boostCooldown: 3.2,
+      collisionRadius: 0.85,
+    },
+    maxHealth: 120,
+    range: 1800,
+    gun: { barrels: 2, ammo: 140, interval: 0.075, damage: 8, speed: 82, range: 90 },
+    gunLabel: 'Twin heavy ink guns',
+    bombs: { capacity: 0, kind: 'standard' },
+    signature: 0.75,
+    hitRadius: 1.05,
+    accent: [0.35, 0.38, 0.45],
+    inspiration: 'F-22',
+    shape: 'falcon',
+  },
+  lightning: {
+    id: 'lightning',
+    name: 'Lightning',
+    role: 'multirole',
+    roleLabel: 'Stealth multirole',
+    cost: 45,
+    refitCost: 10,
+    tagline: 'Hard to spot, good at everything: guns for a fight, two bombs for the target.',
+    flight: {
+      minSpeed: 10, cruiseSpeed: 21, maxSpeed: 31,
+      throttleAccel: 14, speedResponse: 2.1, pitchSpeedEffect: 8,
+      maxTurnRate: 1.5, maxPitchRate: 1.25, aimGain: 3.1, rollResponse: 6.5, pitchResponse: 6.2, maxBank: 56 * DEG,
+      boostSpeed: 13, boostResponse: 5, boostDuration: 1.2, boostCooldown: 3.4,
+      collisionRadius: 0.8,
+    },
+    maxHealth: 110,
+    range: 2000,
+    gun: { barrels: 1, ammo: 100, interval: 0.1, damage: 7, speed: 74, range: 80 },
+    gunLabel: 'Internal ink gun',
+    bombs: { capacity: 2, kind: 'standard' },
+    signature: 0.65,
+    hitRadius: 1.0,
+    accent: [0.55, 0.45, 0.3],
+    inspiration: 'F-35',
+    shape: 'swift',
+  },
+  thug: {
+    id: 'thug',
+    name: 'Thug',
+    role: 'multirole',
+    roleLabel: 'Ground attack',
+    cost: 40,
+    refitCost: 9,
+    tagline: 'Slow, armoured and loud. A spinning ink cannon and three mini bombs for low passes.',
+    flight: {
+      minSpeed: 8, cruiseSpeed: 17, maxSpeed: 26,
+      throttleAccel: 11, speedResponse: 1.6, pitchSpeedEffect: 9,
+      maxTurnRate: 1.35, maxPitchRate: 1.1, aimGain: 2.8, rollResponse: 5, pitchResponse: 5, maxBank: 52 * DEG,
+      boostSpeed: 10, boostResponse: 4, boostDuration: 1.1, boostCooldown: 4,
+      collisionRadius: 0.95,
+    },
+    maxHealth: 150,
+    range: 1500,
+    gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70 },
+    gunLabel: 'Rotary ink cannon',
+    bombs: { capacity: 3, kind: 'small' },
+    signature: 1.15,
+    hitRadius: 1.3,
+    accent: [0.45, 0.55, 0.3],
+    inspiration: 'A-10 Thunderbolt II',
+    shape: 'swift',
+  },
+  jumper: {
+    id: 'jumper',
+    name: 'Jumper',
+    role: 'multirole',
+    roleLabel: 'VTOL fighter',
+    cost: 40,
+    refitCost: 9,
+    tagline: 'Flies slower than anything else with jets, and turns tight. Hover mode comes later.',
+    flight: {
+      minSpeed: 7, cruiseSpeed: 19, maxSpeed: 29,
+      throttleAccel: 15, speedResponse: 2.4, pitchSpeedEffect: 8,
+      maxTurnRate: 1.6, maxPitchRate: 1.3, aimGain: 3.2, rollResponse: 7, pitchResponse: 6.5, maxBank: 58 * DEG,
+      boostSpeed: 12, boostResponse: 5, boostDuration: 1.1, boostCooldown: 3.6,
+      collisionRadius: 0.8,
+    },
+    maxHealth: 100,
+    range: 1500,
+    gun: { barrels: 1, ammo: 90, interval: 0.11, damage: 6, speed: 70, range: 75 },
+    gunLabel: 'Gun pod',
+    bombs: { capacity: 2, kind: 'small' },
+    signature: 0.95,
+    hitRadius: 1.0,
+    accent: [0.3, 0.5, 0.62],
+    inspiration: 'AV-8B Harrier',
+    shape: 'swift',
+  },
+  specter: {
+    id: 'specter',
+    name: 'Specter',
+    role: 'recon',
+    roleLabel: 'Surveillance drone',
+    cost: 30,
+    refitCost: 6,
+    tagline: 'A long, quiet glider that flies further than anything. Barely armed, no bombs.',
+    flight: {
+      minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
+      throttleAccel: 12, speedResponse: 2, pitchSpeedEffect: 7,
+      maxTurnRate: 1.15, maxPitchRate: 0.95, aimGain: 2.6, rollResponse: 4.5, pitchResponse: 4.5, maxBank: 48 * DEG,
+      boostSpeed: 10, boostResponse: 4, boostDuration: 1.2, boostCooldown: 4,
+      collisionRadius: 0.8,
+    },
+    maxHealth: 60,
+    range: 3200,
+    gun: { barrels: 1, ammo: 30, interval: 0.2, damage: 4, speed: 60, range: 60 },
+    gunLabel: 'Light ink gun',
+    bombs: { capacity: 0, kind: 'small' },
+    signature: 0.55,
+    hitRadius: 1.15,
+    accent: [0.6, 0.62, 0.66],
+    inspiration: 'RQ-4 Global Hawk',
+    shape: 'dart',
+  },
+  lancer: {
+    id: 'lancer',
+    name: 'Lancer',
+    role: 'bomber',
+    roleLabel: 'Supersonic bomber',
+    cost: 55,
+    refitCost: 12,
+    tagline: 'A bomber that can outrun fighters: swing wings, three bombs, a quick dash home.',
+    flight: {
+      minSpeed: 11, cruiseSpeed: 22, maxSpeed: 34,
+      throttleAccel: 12, speedResponse: 1.6, pitchSpeedEffect: 10,
+      maxTurnRate: 1.15, maxPitchRate: 0.95, aimGain: 2.6, rollResponse: 3.8, pitchResponse: 4, maxBank: 48 * DEG,
+      boostSpeed: 13, boostResponse: 4, boostDuration: 1.3, boostCooldown: 4,
+      collisionRadius: 1,
+    },
+    maxHealth: 135,
+    range: 1700,
+    gun: { barrels: 1, ammo: 50, interval: 0.18, damage: 6, speed: 64, range: 65 },
+    gunLabel: 'Tail ink gun',
+    bombs: { capacity: 3, kind: 'standard' },
+    signature: 1.1,
+    hitRadius: 1.3,
+    accent: [0.7, 0.35, 0.2],
+    inspiration: 'B-1B Lancer',
+    shape: 'widewing',
+  },
+  ghost: {
+    id: 'ghost',
+    name: 'Ghost',
+    role: 'bomber',
+    roleLabel: 'Stealth bomber',
+    cost: 60,
+    refitCost: 13,
+    tagline: 'A flying wing defenses barely notice. Four bombs, long legs, no dogfighting.',
+    flight: {
+      minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
+      throttleAccel: 9, speedResponse: 1.2, pitchSpeedEffect: 10,
+      maxTurnRate: 1.0, maxPitchRate: 0.85, aimGain: 2.4, rollResponse: 3.2, pitchResponse: 3.5, maxBank: 45 * DEG,
+      boostSpeed: 10, boostResponse: 3.5, boostDuration: 1, boostCooldown: 4.5,
+      collisionRadius: 1,
+    },
+    maxHealth: 140,
+    range: 2300,
+    gun: { barrels: 1, ammo: 30, interval: 0.22, damage: 5, speed: 60, range: 60 },
+    gunLabel: 'Defensive ink gun',
+    bombs: { capacity: 4, kind: 'standard' },
+    signature: 0.5,
+    hitRadius: 1.45,
+    accent: [0.3, 0.3, 0.34],
+    inspiration: 'B-2 Spirit',
+    shape: 'widewing',
   },
 };
 
-/** Garage order, cheapest first. */
-export const AIRCRAFT_ORDER: readonly AircraftId[] = ['dart', 'falcon', 'swift', 'widewing'];
+/** Garage order, roughly cheapest first (fighters, then multirole, then bombers). */
+export const AIRCRAFT_ORDER: readonly AircraftId[] = ['dart', 'falcon', 'specter', 'swift', 'thug', 'jumper', 'raptor', 'lightning', 'widewing', 'lancer', 'ghost'];
 
 /**
  * The garage's 1–5 ratings are worked out from the specs, mapped linearly over these ranges, so
@@ -399,7 +616,7 @@ export const THREAT: {
   byDifficulty: Record<Difficulty, readonly [ThreatLevel, ThreatLevel]>;
   rewardBonus: Record<ThreatLevel, number>;
 } = {
-  map: { T2: 0, T4: 0, T5: 1, T7: 1, T3: 2, T6: 2, T8: 3, T9: 3 },
+  map: { T2: 0, T5: 0, T3: 1, T6: 1, T9: 1, T4: 1, T13: 1, T7: 2, T10: 2, T8: 2, T11: 2, T14: 2, T12: 3, T15: 3, T16: 3 },
   levels: {
     0: { label: 'Unprotected', turrets: 0, launchers: 0, radar: false, supply: false },
     1: { label: 'Light', turrets: 1, launchers: 0, radar: false, supply: false },
@@ -713,7 +930,7 @@ export const RAIDS = {
   /** Seconds between raids, counted only while the game runs (not on the report or paused). */
   interval: [170, 280] as readonly [number, number],
   /** Where raids set out from. */
-  origins: ['T9', 'T8', 'T6', 'T3'],
+  origins: ['T16', 'T15', 'T12', 'T14', 'T8'],
   /** Paid for shooting the raider down (or helping to). */
   reward: 60,
   /**
@@ -741,8 +958,11 @@ export const RAIDS = {
  * The rules that use them are in server/world/Attacks.ts and server/world/ServerWorld.ts.
  */
 export const PVP = {
-  /** The territory in the middle stays the AI's: nobody can claim it (homes need a runway pointing inward). */
-  centre: 'T5',
+  /**
+   * The AI's own desk: nobody can claim it. With 4 × 4 desks nothing sits exactly in the middle, so
+   * it is one of the four middle desks, the one furthest from the single-player home.
+   */
+  centre: 'T11',
   /** A new player's base can't be raided for this long after claiming it (seconds), unless they raid first. */
   newPlayerProtection: 300,
   /** After a raid on a player's base gets through, nobody can raid it again for this long. */
@@ -870,11 +1090,11 @@ export const BASE = {
   slots: [
     { id: 'D1', kind: 'defense', at: [9, 11] },
     { id: 'D2', kind: 'defense', at: [9, -11] },
-    { id: 'R1', kind: 'radar', at: [2, -21] },
+    { id: 'R1', kind: 'radar', at: [2, -17] },
     { id: 'E1', kind: 'economy', at: [-15, 8] },
     { id: 'E2', kind: 'economy', at: [-15, -8] },
-    { id: 'U1', kind: 'utility', at: [1, 20] },
-    { id: 'U2', kind: 'utility', at: [-3, -12] },
+    { id: 'U1', kind: 'utility', at: [1, 17] },
+    { id: 'U2', kind: 'utility', at: [-5, -10] },
   ] as ReadonlyArray<{ id: string; kind: SlotKind; at: readonly [number, number] }>,
   /** What a brand-new game starts with: one ink turret. */
   starter: [{ slot: 'D1', kind: 'turret' }] as ReadonlyArray<{ slot: string; kind: BuildingKind }>,
@@ -995,7 +1215,7 @@ export const MISSIONS = {
   /** Extra reward for each enemy aircraft a mission sends up, by its pilot's skill. */
   airBonus: { easy: 6, medium: 8, hard: 10 },
   /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
-  raidOrigins: { easy: ['T3', 'T7'], medium: ['T6', 'T8'], hard: ['T9'] } as Record<Difficulty, readonly string[]>,
+  raidOrigins: { easy: ['T3', 'T9'], medium: ['T7', 'T10', 'T14'], hard: ['T16', 'T12', 'T15'] } as Record<Difficulty, readonly string[]>,
   /**
    * Missions that only go as far as guarded ground: an escorted bomber has to survive the guns too,
    * and a patrol is about the fight in the air, not sitting under rocket launchers.
@@ -1009,7 +1229,7 @@ export const MISSIONS = {
   patrolMargin: 15,
   patrolCeiling: 60,
   /** Extra paper per metre between the launch pad and the objective. */
-  distanceReward: 0.1,
+  distanceReward: 0.05,
   /**
    * Seconds a good run spends on the job itself, on top of the flight there at the reference
    * speed: the par time for a gold rating.
@@ -1253,7 +1473,7 @@ export const TRAILS = {
 
 /** Flat colours (sRGB 0–1). */
 export const PALETTE = {
-  sky: [0.74, 0.86, 0.96],
+  sky: [0.86, 0.85, 0.81],
   home: [0.23, 0.48, 0.93],
   target: [0.98, 0.56, 0.16],
   targetDone: [0.45, 0.78, 0.5],

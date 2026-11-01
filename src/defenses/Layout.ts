@@ -1,6 +1,7 @@
 import type { Shape } from '../combat/Collision';
 import { BASE, DEFENSES, MISSIONS, THREAT, WORLD, type BuildingKind, type Side, type ThreatLevel } from '../config';
 import type { Territory } from '../world/Territory';
+import { homeHeading } from '../world/Grid';
 
 /**
  * turret   – an ink turret: rapid fire, short range, a blind spot behind it.
@@ -186,9 +187,7 @@ export function homeDefenses(home: Territory, side: Side = 'player'): Installati
  * middle of the platform.
  */
 export function homePoint(home: Territory, [u, v]: readonly [number, number]): { x: number; z: number; tag: SlotTag } {
-  const len = Math.hypot(home.x, home.z) || 1;
-  const fx = -home.x / len;
-  const fz = -home.z / len;
+  const { x: fx, z: fz } = homeHeading(home);
   return { x: home.x + u * fx - v * fz, z: home.z + u * fz + v * fx, tag: 'inner' };
 }
 

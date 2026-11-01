@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
-import { inkBlotMaterial, planeMaterials, FoldablePlane } from '../aircraft/PlaneModel';
-import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
+import { inkBlotMaterial } from '../aircraft/PlaneModel';
+import { createPlaneModel, type PlaneModelView } from '../aircraft/JetModel';
 import type { Collider } from '../combat/Collision';
 import { Destructible, type TargetSpec } from '../combat/Destructibles';
 import { PALETTE } from '../config';
@@ -16,7 +16,7 @@ interface TargetView {
   root: pc.Entity;
   /** What shudders and leans: the plane on a stand, the crate stack, the board. */
   body: pc.Entity;
-  plane: FoldablePlane | null;
+  plane: PlaneModelView | null;
   /** Props darken as they take damage. */
   material: pc.StandardMaterial | null;
   shudder: number;
@@ -38,7 +38,7 @@ export class TargetRange {
   constructor(app: pc.AppBase, specs: readonly TargetSpec[]) {
     this.targets = specs.map((spec) => new Destructible(spec));
     const blots = inkBlotMaterial();
-    const dummyMaterials = planeMaterials(PALETTE.dummyPaper, PALETTE.dummyAccent);
+    const dummyPaint = { paper: PALETTE.dummyPaper, accent: PALETTE.dummyAccent };
     const mat = {
       pencil: flatMaterial(PALETTE.pencil),
       wood: flatMaterial(PALETTE.pencilWood),
@@ -54,7 +54,7 @@ export class TargetRange {
       root.setPosition(s.x, s.kind === 'dummy' ? 0 : s.y, s.z);
       app.root.addChild(root);
       let body: pc.Entity;
-      let plane: FoldablePlane | null = null;
+      let plane: PlaneModelView | null = null;
       let material: pc.StandardMaterial | null = null;
       if (s.kind === 'dummy') {
         const height = s.y;
@@ -66,7 +66,8 @@ export class TargetRange {
         body = new pc.Entity('dummy');
         body.setLocalPosition(0, height, 0);
         body.setEulerAngles(0, (s.yaw * 180) / Math.PI, 0);
-        plane = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[s.aircraft!], dummyMaterials, 0, blots);
+        // Practice targets stay simple folded paper planes (one draw call each), not the detailed jets.
+        plane = createPlaneModel(app.graphicsDevice, null, s.aircraft!, dummyPaint, { blots });
         body.addChild(plane.entity);
         root.addChild(body);
       } else if (s.kind === 'crates') {

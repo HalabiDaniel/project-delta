@@ -1,0 +1,2654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Environment Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1d1c1b; --panel:#262423; --panel2:#2e2b29; --line:#3a3633;
+    --text:#ece6df; --muted:#9d958c; --kraft:#c49a6c; --kraft-d:#8a6a47; --dark:#4a4440;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"Space Grotesk",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:300px minmax(0,1fr);height:100vh;height:100dvh}
+  aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:20px 20px 14px;border-bottom:1px solid var(--line)}
+  .brand h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  .brand h1 .box{width:16px;height:16px;background:var(--kraft);border-radius:2px;box-shadow:inset -4px -4px 0 var(--kraft-d)}
+  .brand p{margin:6px 0 0;color:var(--muted);font-size:12px}
+  .section-label{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:16px 20px 8px}
+  .model-list{padding:0 12px;display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0}
+  .model-list .section-label{padding:10px 8px 2px}
+  .model-item{all:unset;cursor:pointer;display:flex;gap:12px;align-items:center;padding:10px;border-radius:8px;border:1px solid transparent}
+  .model-item:hover{background:var(--panel2)}
+  .model-item[aria-selected="true"]{background:var(--panel2);border-color:var(--kraft-d)}
+  .model-item:focus-visible{outline:2px solid var(--kraft)}
+  .thumb{width:44px;height:44px;border-radius:6px;background:#1f1e1d;flex:none;display:grid;place-items:center;overflow:hidden}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .model-item .t{font-size:14px;font-weight:500}
+  .model-item.soon{opacity:.4;cursor:default}
+  .model-item.soon:hover{background:none}
+  .model-item.soon .thumb{color:var(--muted);font-size:18px}
+  .model-item .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .details{margin-top:auto;border-top:1px solid var(--line);padding-bottom:16px;overflow:auto}
+  .details .desc{padding:0 20px;font-size:13px;line-height:1.5;color:#cfc7be}
+  .specs{margin:12px 20px 0;display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-family:"JetBrains Mono",monospace;font-size:12px}
+  .specs dt{color:var(--muted)} .specs dd{margin:0;text-align:right}
+  .placeholder{margin:10px 20px 0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px;font-size:12px;color:var(--muted)}
+  main{position:relative;min-width:0;background:radial-gradient(ellipse at 50% 40%,#353230 0%,#232120 60%,#1b1a19 100%)}
+  #viewport{position:absolute;inset:0}
+  #viewport canvas{display:block;outline:none}
+  .topbar{position:absolute;top:16px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+  .title-block{pointer-events:auto;min-width:0}
+  .title-block h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-only{display:none}
+  .guide-about{padding:14px 20px 0;font-size:13.5px;line-height:1.5;color:#cfc7be}
+  .guide-about .specs{margin:10px 0 0}
+  .title-block .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--kraft)}
+  .title-block h2{margin:4px 0 0;font-size:24px;font-weight:600}
+  .toolbar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:6px;background:rgba(38,36,35,.92);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(8px)}
+  .toolbar{max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none}
+  .toolbar::-webkit-scrollbar{display:none}
+  .toolbar > *{flex:none}
+  .btn{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text);white-space:nowrap}
+  .btn:hover{background:var(--panel2)}
+  .btn:focus-visible{outline:2px solid var(--kraft)}
+  .btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .btn.primary{background:var(--kraft);color:#24190d}
+  .btn.primary:hover{background:#d2aa7e}
+  .btn[disabled]{opacity:.4;cursor:not-allowed}
+  .toggle .pill{width:28px;height:16px;border-radius:99px;background:#4a4542;position:relative;transition:background .15s}
+  .toggle .pill::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#d8d0c7;transition:transform .15s}
+  .toggle[aria-pressed="true"] .pill{background:var(--kraft)}
+  .toggle[aria-pressed="true"] .pill::after{transform:translateX(12px);background:#fff}
+  .sep{width:1px;background:var(--line);margin:4px 2px}
+  .hint{position:absolute;bottom:26px;right:20px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  .top-right{display:flex;gap:10px;align-items:center;pointer-events:auto}
+  .btn.ghost{background:rgba(38,36,35,.85);border:1px solid var(--line)}
+  .btn.icon{padding:8px}
+  .hud{font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:none;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:rgba(38,36,35,.85);border:1px solid var(--line)}
+  .hud.on{display:flex}
+  .hud::before{content:"";width:8px;height:8px;border-radius:50%;background:#8a8178}
+  .hud.on::before{background:var(--kraft)}
+  .hud.hot{color:#ffb27a}
+  .hud.hot::before{background:#ff7a3c;box-shadow:0 0 8px #ff7a3c}
+  .guide{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:rgba(34,32,31,.97);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:5;backdrop-filter:blur(10px)}
+  .guide[hidden]{display:none}
+  .guide-head{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+  .guide-head .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--kraft)}
+  .guide-head h3{margin:4px 0 0;font-size:20px;font-weight:600}
+  .guide-body{overflow:auto;padding:4px 20px 28px;font-size:13.5px;line-height:1.55;color:#d9d1c8}
+  .guide-body h4{margin:22px 0 8px;font-size:11px;font-family:"JetBrains Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  .guide-body pre{margin:0;background:#1a1918;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.55;overflow:auto;color:#e6ddd2}
+  .guide-body pre .j{color:#ffb27a} .guide-body pre .s{color:var(--muted)}
+  .guide-body ol{margin:0;padding-left:20px} .guide-body li{margin:4px 0}
+  .guide-body code{font-family:"JetBrains Mono",monospace;font-size:12px;background:#1a1918;padding:1px 5px;border-radius:4px;color:#f0c79a}
+  .guide-body table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .guide-body th{text-align:left;font-weight:500;color:var(--muted);font-size:11px;padding:6px 8px 6px 0;border-bottom:1px solid var(--line)}
+  .guide-body td{padding:8px 8px 8px 0;border-bottom:1px solid #322f2c;vertical-align:top}
+  .guide-body td:first-child{white-space:nowrap}
+  .guide-body .note{color:var(--muted);font-size:12.5px}
+  .props{position:absolute;top:84px;left:20px;background:rgba(38,36,35,.92);border:1px solid var(--line);border-radius:12px;padding:10px 6px 6px;min-width:200px;max-width:300px;backdrop-filter:blur(8px)}
+  .props[hidden]{display:none}
+  .props .k{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 8px 6px}
+  .props .seg{display:flex;flex-wrap:wrap;gap:4px;padding:0 4px 6px}
+  .props .seg button{min-width:52px}
+  .props .axis-label{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:2px 8px 4px}
+  .props .k{display:none}
+  .props .seg button{all:unset;cursor:pointer;flex:1;text-align:center;padding:7px 4px;white-space:nowrap;border-radius:7px;font-size:13px;font-weight:600;background:#2e2b29;color:var(--muted);border:1px solid var(--line)}
+  .props .seg button[aria-pressed="true"]{background:var(--kraft);color:#24190d;border-color:var(--kraft)}
+  .props .seg button:focus-visible{outline:2px solid var(--kraft)}
+  .props .seg-note{margin:2px 8px 6px;font-size:12px;line-height:1.45;color:#cfc7be;max-width:240px}
+  .props .btn{width:100%;justify-content:space-between;box-sizing:border-box;padding:8px 10px}
+  .toast{position:absolute;top:20px;left:50%;transform:translate(-50%,-8px);opacity:0;transition:all .2s;background:#2e2b29;border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:13px;pointer-events:none}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  @media (max-width:1600px){.hint{display:none}}
+  body.flying #viewport canvas{cursor:grab}
+  .fly-pad{position:absolute;left:14px;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:flex-end;z-index:4;touch-action:none;user-select:none;-webkit-user-select:none}
+  .fly-pad[hidden]{display:none}
+  .pad-grid{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px);gap:6px}
+  .pad-col{display:flex;flex-direction:column;gap:6px}
+  .fly-pad button{all:unset;width:48px;height:48px;display:grid;place-items:center;border-radius:12px;background:rgba(38,36,35,.85);border:1px solid var(--line);color:var(--text);font-size:18px;touch-action:none}
+  .fly-pad button:active{background:var(--kraft);color:#24190d}
+  #viewport canvas{touch-action:none}
+  @media (max-width:820px){.props .axis-label{flex:1 1 100%;padding:2px 2px 0} body.flying .props{display:none}}
+  /* ---------- Tablets: slimmer sidebar ---------- */
+  @media (max-width:1100px) and (min-width:821px){
+    .app{grid-template-columns:240px minmax(0,1fr)}
+    .toolbar .btn{padding:8px 10px;font-size:12.5px}
+    .hint,.btn .lbl-long{display:none}
+    .details{max-height:42%}
+  }
+  /* ---------- Phones: viewer first ---------- */
+  @media (max-width:820px){
+    .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+    aside{min-width:0;border-right:0;border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:baseline;gap:10px;padding:max(10px, env(safe-area-inset-top)) 14px 4px}
+    .brand h1{font-size:15px}
+    .brand p{margin:0;font-size:11px}
+    .model-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:6px 10px 10px;gap:6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .model-list::-webkit-scrollbar{display:none}
+    .model-list .section-label{display:flex;align-items:center;flex:none;padding:0 2px 0 6px;writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;letter-spacing:.14em;border-left:1px solid var(--line)}
+    .model-list .section-label:first-child{border-left:0}
+    .model-item{flex:none;flex-direction:column;gap:4px;padding:5px;width:78px;text-align:center;scroll-snap-align:start}
+    .thumb{width:60px;height:60px}
+    .model-item .s{display:none}
+    .model-item .t{font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px}
+    .details{display:none}
+    .mobile-only{display:block}
+    .topbar{top:10px;left:12px;right:12px;gap:8px}
+    .title-block .k{font-size:9.5px}
+    .title-block h2{font-size:18px;margin-top:2px}
+    .top-right{gap:6px;flex:none}
+    #btnGuide{padding:8px}
+    #btnGuide .lbl{display:none}
+    .hud{font-size:9.5px;padding:6px 8px;letter-spacing:.05em}
+    .hint{display:none}
+    .btn .lbl-long{display:none}
+    .toolbar{left:0;right:0;bottom:0;transform:none;border-radius:0;border-left:0;border-right:0;border-bottom:0;
+      overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start;gap:4px;
+      padding:6px 8px calc(6px + env(safe-area-inset-bottom));scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .toolbar::-webkit-scrollbar{display:none}
+    .toolbar .btn{flex:none;padding:9px 11px;font-size:12.5px;gap:7px}
+    .toolbar .sep{flex:none}
+    .props{top:auto;left:8px;right:8px;bottom:calc(58px + env(safe-area-inset-bottom));min-width:0;padding:6px;border-radius:10px}
+    .props .k{display:none}
+    #propsList{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+    .props .seg{flex:1 1 100%;padding:0 0 2px}
+    .props .seg button{padding:8px 0}
+    .props .seg-note{display:none}
+    .props .btn{width:auto;flex:1 1 auto;padding:7px 10px;font-size:12.5px;gap:8px;background:#2e2b29;border-radius:7px}
+    .guide{position:fixed;inset:0;width:100%;border-left:0;z-index:20}
+    .guide-head{padding-top:max(14px, env(safe-area-inset-top))}
+    .guide-body{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+    .guide-body table{font-size:12px}
+    .guide-body td:first-child{white-space:normal}
+    .toast{top:auto;bottom:calc(66px + env(safe-area-inset-bottom))}
+  }
+  /* Phones in landscape: slim side list, compact controls */
+  @media (max-height:500px) and (max-width:1000px){
+    .app{grid-template-columns:190px minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+    aside{min-width:0;border-right:1px solid var(--line);border-bottom:0;padding-left:env(safe-area-inset-left)}
+    .brand,.details{display:none}
+    .model-list{flex-direction:column;overflow-x:hidden;overflow-y:auto;padding:6px;gap:2px;scroll-snap-type:none}
+    .model-list .section-label{writing-mode:horizontal-tb;transform:none;border-left:0;padding:8px 6px 2px;font-size:9.5px}
+    .model-item{width:auto;flex-direction:row;gap:8px;padding:4px 6px;text-align:left}
+    .thumb{width:30px;height:30px}
+    .model-item .s{display:none}
+    .model-item .t{font-size:12px;max-width:none}
+    .mobile-only{display:block}
+    .topbar{top:8px;left:12px;right:calc(12px + env(safe-area-inset-right))}
+    .title-block .k{font-size:9px}
+    .title-block h2{font-size:16px;margin-top:2px}
+    #btnGuide{padding:7px} #btnGuide .lbl{display:none}
+    .hud{font-size:9.5px;padding:5px 8px}
+    .hint,.btn .lbl-long{display:none}
+    .toolbar{left:8px;right:calc(8px + env(safe-area-inset-right));bottom:calc(6px + env(safe-area-inset-bottom));transform:none;border-radius:10px;border:1px solid var(--line);
+      overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding:4px;scrollbar-width:none}
+    .toolbar::-webkit-scrollbar{display:none}
+    .toolbar .btn{flex:none;padding:6px 9px;font-size:12px;gap:6px}
+    .toolbar .sep{flex:none}
+    .props{top:56px;bottom:auto;left:10px;right:auto;min-width:0;max-width:240px;padding:5px;border-radius:10px}
+    .props .k,.props .seg-note{display:none}
+    #propsList{display:flex;flex-direction:column;gap:3px}
+    .props .seg{padding:0}
+    .props .seg button{padding:5px 0;font-size:12px}
+    .props .btn{width:100%;padding:5px 8px;font-size:12px}
+    .guide{position:fixed;inset:0;width:100%;border-left:0;z-index:20}
+    .toast{top:auto;bottom:56px}
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1><span class="box"></span>Environment Lab</h1>
+      <p>paperwars.io · rooms, furniture &amp; levels</p>
+    </div>
+    <div class="model-list" id="modelList" role="listbox" aria-label="Models"></div>
+    <div class="details">
+      <div class="section-label">Details</div>
+      <div class="desc" id="modelDesc"></div>
+      <dl class="specs" id="modelSpecs"></dl>
+      <div class="section-label">Current look</div>
+      <div class="placeholder" id="variantsBox">None yet</div>
+    </div>
+  </aside>
+  <main>
+    <div id="viewport"></div>
+    <div class="topbar">
+      <div class="title-block"><div class="k" id="modelKicker">Model</div><h2 id="modelTitle">—</h2></div>
+      <div class="top-right">
+        <div class="hud" id="hud"></div>
+        <button class="btn ghost" id="btnGuide" aria-label="Guide" aria-expanded="false" aria-controls="guide"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M9 7h6M9 11h6"/></svg><span class="lbl">Guide</span></button>
+      </div>
+    </div>
+    <aside class="guide" id="guide" aria-label="Assembly guide" hidden>
+      <div class="guide-head"><div><div class="k">Guide</div><h3 id="guideTitle">—</h3></div>
+        <button class="btn icon" id="btnGuideClose" aria-label="Close guide"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="guide-about mobile-only" id="guideAbout"></div>
+      <div class="guide-body" id="guideBody"></div>
+    </aside>
+    <div class="props" id="propsCard" hidden><div class="k">Properties</div><div id="propsList"></div></div>
+    <div class="toast" id="toast"></div>
+    <div class="toolbar">
+      <button class="btn toggle" id="btnRotate" aria-pressed="false" title="Toggle auto-rotate (R)"><span class="pill"></span>Auto-rotate</button>
+      <button class="btn" id="btnReset" title="Overview (1 / F)"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Overview</button>
+      <button class="btn" data-view="top" title="Top-down (2)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg>Top</button>
+      <button class="btn" data-view="board" title="From the board wall (3)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="11" rx="1"/><path d="M8 20l4-5 4 5"/></svg>Board</button>
+      <button class="btn" data-view="eye" title="Paper-plane eye level (4)"><svg viewBox="0 0 24 24"><path d="M3 11l18-7-7 18-2-8z"/></svg>Plane eye</button>
+      <button class="btn toggle" id="btnFly" aria-pressed="false" title="First-person fly mode (V)"><span class="pill"></span>Fly</button>
+      <span class="sep"></span>
+      <button class="btn" id="btnShots" disabled title="Front, right, back and left views in one PNG"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>Screenshot<span class="lbl-long">&nbsp;×4</span></button>
+      <button class="btn primary" id="btnGlb" disabled title="GLB, packed in a .zip"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>Download GLB</button>
+    </div>
+    <div class="hint">WASD move · Q/E turn · V fly · 1–4 views · G guide</div>
+    <div class="fly-pad" id="flyPad" hidden>
+      <div class="pad-grid">
+        <span></span><button data-move="f" aria-label="Forward">▲</button><span></span>
+        <button data-move="l" aria-label="Left">◀</button><button data-move="b" aria-label="Back">▼</button><button data-move="r" aria-label="Right">▶</button>
+      </div>
+      <div class="pad-col"><button data-move="u" aria-label="Up">⤒</button><button data-move="d" aria-label="Down">⤓</button></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ------------------------------------------------------------------
+   Materials: procedural cardboard
+------------------------------------------------------------------ */
+function makeCardboardTexture(seed = 1, base = [196, 154, 108]) {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const i = (y * S + x) * 4;
+      const n = (rnd() - 0.5) * 18;
+      const corr = Math.sin(x / S * Math.PI * 2 * 48) * 3.2;   // corrugation ribs
+      const blot = Math.sin(x * 0.013 + y * 0.009) * Math.cos(y * 0.017 - x * 0.004) * 6;
+      img.data[i]   = base[0] + n + corr + blot;
+      img.data[i+1] = base[1] + n * 0.9 + corr + blot;
+      img.data[i+2] = base[2] + n * 0.75 + corr * 0.8 + blot * 0.8;
+      img.data[i+3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // fibers
+  for (let k = 0; k < 220; k++) {
+    g.strokeStyle = `rgba(${rnd() > .5 ? '90,62,35' : '235,205,165'},${0.08 + rnd() * 0.12})`;
+    g.lineWidth = 0.6 + rnd();
+    const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI, l = 4 + rnd() * 14;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  // edge darkening (torn/folded card edges)
+  const grd = g.createLinearGradient(0, 0, 0, S);
+  grd.addColorStop(0, 'rgba(80,55,30,.35)'); grd.addColorStop(.05, 'rgba(80,55,30,0)');
+  grd.addColorStop(.95, 'rgba(80,55,30,0)'); grd.addColorStop(1, 'rgba(80,55,30,.35)');
+  g.fillStyle = grd; g.fillRect(0, 0, S, S);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+let showSockets = true, animateJoints = true, pencilOn = true;
+
+// Textures are generated once per look and shared by every model —
+// regenerating 512² canvases per material was slow and memory-hungry on phones.
+const TEX_CACHE = new Map();
+function cachedTexture(kind, maker, seed, base) {
+  const key = `${kind}:${seed}:${base}`;
+  if (!TEX_CACHE.has(key)) { const t = maker(seed, base); t.userData.shared = true; TEX_CACHE.set(key, t); }
+  return TEX_CACHE.get(key);
+}
+function cardboardTexture(seed, base) { return cachedTexture('card', makeCardboardTexture, seed, base); }
+
+const OFFSET = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+const MAT = {
+  cardboard: () => new THREE.MeshStandardMaterial({ name: 'Cardboard', map: cardboardTexture(3), roughness: 0.92, metalness: 0, flatShading: true, ...OFFSET }),
+  cardboardLid: () => new THREE.MeshStandardMaterial({ name: 'CardboardLid', map: cardboardTexture(7, [204, 163, 117]), roughness: 0.9, metalness: 0, flatShading: true, ...OFFSET }),
+  rubber: () => new THREE.MeshStandardMaterial({ name: 'DarkTape', color: 0x4a4440, roughness: 0.85, metalness: 0, flatShading: true, ...OFFSET }),
+};
+
+/* ------------------------------------------------------------------
+   Edge styling – viewer only, stripped from exports
+   • Pencil (default): every hard edge redrawn as 2–3 graphite strokes,
+     never running past the corners, like a sketch.
+   • Seams: the plain thin fold lines (shown when Pencil is off).
+------------------------------------------------------------------ */
+const PENCIL = {
+  heavy: new LineMaterial({ color: 0x2a2623, linewidth: 2.6, transparent: true, opacity: 0.92, depthWrite: false }),
+  light: new LineMaterial({ color: 0x3a342f, linewidth: 1.6, transparent: true, opacity: 0.6, depthWrite: false }),
+};
+Object.values(PENCIL).forEach(m => { m.userData.shared = true; m.userData.baseWidth = m.linewidth; });
+function setPencilResolution(w, h, widthScale = 1) {
+  Object.values(PENCIL).forEach(m => { m.resolution.set(w, h); m.linewidth = m.userData.baseWidth * widthScale; });
+}
+
+let pencilSeed = 1337;
+const prand = () => ((pencilSeed = (pencilSeed * 16807) % 2147483647) / 2147483647);
+
+function makePencil(edges, k = 1) {
+  const src = edges.attributes.position.array;
+  const heavy = [], light = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), j = new THREE.Vector3();
+  const jitter = amt => j.set(prand() - 0.5, prand() - 0.5, prand() - 0.5).multiplyScalar(amt * 2);
+  // Strokes never extend past the edge's endpoints: they start/stop at the
+  // corner or a little short of it (inset), so nothing pokes out of the model.
+  const stroke = (out, wobble, inset) => {
+    const len = d.subVectors(b, a).length();
+    d.normalize();
+    const maxIn = Math.min(inset, len * 0.2);
+    const p = a.clone().addScaledVector(d, prand() * maxIn).add(jitter(wobble));
+    const q = b.clone().addScaledVector(d, -prand() * maxIn).add(jitter(wobble));
+    out.push(p.x, p.y, p.z, q.x, q.y, q.z);
+  };
+  for (let i = 0; i < src.length; i += 6) {
+    a.fromArray(src, i); b.fromArray(src, i + 3);
+    stroke(heavy, 0.0015 * k, 0);                      // firm line, corner to corner
+    stroke(light, 0.003 * k, 0.05 * k);                // looser pass, stops short
+    if (prand() < 0.45) stroke(light, 0.004 * k, 0.09 * k); // occasional extra pass
+  }
+  const g = new THREE.Group();
+  g.userData.helper = true; g.userData.pencil = true;
+  g.visible = pencilOn;
+  [[heavy, PENCIL.heavy], [light, PENCIL.light]].forEach(([arr, mat]) => {
+    const geo = new LineSegmentsGeometry(); geo.setPositions(arr);
+    const l = new LineSegments2(geo, mat);
+    l.userData.helper = true;
+    l.renderOrder = 2;
+    g.add(l);
+  });
+  return g;
+}
+
+function addSeams(mesh, color = 0x6e5234, opacity = 0.55, threshold = 25, k = 1) {
+  const edges = new THREE.EdgesGeometry(mesh.geometry, threshold);
+  const e = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+  e.userData.helper = true; e.userData.seam = true;
+  e.visible = false;                                  // Plain design = no lines at all
+  mesh.add(e);
+  mesh.add(makePencil(edges, k));
+  return mesh;
+}
+
+// Bounding box of the solid geometry only (ignores strokes, markers)
+function solidBox(obj) {
+  const box = new THREE.Box3(), tmp = new THREE.Box3();
+  obj.updateWorldMatrix(true, true);                 // include parents (stage lift / hover)
+  obj.traverse(o => {
+    if (!o.isMesh || o.userData.helper) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+    box.union(tmp);
+  });
+  return box;
+}
+
+/* ------------------------------------------------------------------
+   Sockets & assembly
+   A socket is an empty node named "socket_<name>". It is exported in
+   the GLB so the game can find it and parent the next part to it.
+------------------------------------------------------------------ */
+function makeSocket(name, x, y, z, size = 0.07) {
+  const s = new THREE.Object3D();
+  s.name = `socket_${name}`;
+  s.userData.socket = name;
+  s.position.set(x, y, z);
+  const marker = new THREE.Mesh(
+    new THREE.OctahedronGeometry(size),
+    new THREE.MeshBasicMaterial({ color: 0xff9a3c, wireframe: true, depthTest: false, transparent: true })
+  );
+  marker.renderOrder = 10;
+  marker.userData.helper = true;
+  marker.userData.socketMarker = true;
+  marker.visible = showSockets;
+  s.add(marker);
+  return s;
+}
+
+function finishPart(root) {
+  root.traverse(o => { if (o.isMesh && !o.userData.helper) { o.castShadow = true; o.receiveShadow = true; } });
+}
+
+function findSocket(obj, name) {
+  let found = null;
+  obj.traverse(o => { if (!found && o.userData.socket === name) found = o; });
+  return found;
+}
+
+// Builds parts in order; each one after the first plugs into the named socket
+function buildAssembly(parts, level) {
+  let root = null;
+  for (const p of parts) {
+    const part = MODELS.find(m => m.id === p.model).build(level);
+    if (!root) { root = part; continue; }
+    const socket = findSocket(root, p.socket);
+    if (!socket) { console.warn('Missing socket', p.socket); continue; }
+    if (/_\d+$/.test(p.socket) || root.getObjectByName(part.name)) {           // e.g. 6× Rocket → Rocket_0…5
+      const m = /(\d+)$/.exec(p.socket); part.name += '_' + (m ? m[1] : root.id);
+    }
+    socket.add(part);
+    socket.children.filter(c => c.userData.socketMarker).forEach(m => m.userData.occupied = true);
+  }
+  root.traverse(o => { if (o.userData.occupied) o.visible = false; });
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Plane skins — Cardboard (default), Grey paper, Paper
+------------------------------------------------------------------ */
+function makePaperTexture(seed = 5, base = [236, 231, 220]) {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 7919 + 104729;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    const n = (rnd() - 0.5) * 9;
+    const cloud = Math.sin(x * 0.021 + y * 0.013) * Math.cos(y * 0.019 - x * 0.007) * 4;
+    img.data[i] = base[0] + n + cloud; img.data[i + 1] = base[1] + n + cloud; img.data[i + 2] = base[2] + n * 0.9 + cloud;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  for (let k = 0; k < 260; k++) {                     // short paper fibres
+    g.strokeStyle = `rgba(${rnd() > .5 ? '110,104,96' : '255,255,250'},${0.05 + rnd() * 0.08})`;
+    g.lineWidth = 0.5 + rnd() * 0.6;
+    const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI, l = 3 + rnd() * 9;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+const paperTex = (seed, base) => cachedTexture('paper', makePaperTexture, seed, base);
+
+/* ------------------------------------------------------------------
+   ENVIRONMENT SCALE
+   GAME scale, set by the planes and buildings: 1 cm of the real room
+   = 0.6 u. A desk top (65 × 50 cm) is 39 × 30 u — a whole base that
+   holds a 13 u runway, 3–5 u buildings and 4 u planes. The room keeps
+   real proportions; only this one number sets its size.
+------------------------------------------------------------------ */
+const CM = 0.6;                       // units per real centimetre
+const ENV_PENCIL = 20 * CM;           // stroke wobble/inset multiplier at this scale
+
+/* Extra procedural textures for the environment ------------------- */
+function makeWoodTexture(seed = 11, base = [214, 178, 128]) {
+  const S = 512, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 7331 + 17;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    const warp = Math.sin(x * 0.006 + y * 0.004) * 9 + Math.sin(x * 0.021) * 2;
+    const ring = Math.sin((y + warp) * 0.19) * 0.5 + 0.5;       // grain runs along U (x)
+    const fine = Math.sin((y + warp * 0.5) * 1.3 + x * 0.002) * 2;
+    const n = (rnd() - 0.5) * 8;
+    const k = ring * 13 + fine + n;
+    img.data[i] = base[0] - k; img.data[i + 1] = base[1] - k * 0.95; img.data[i + 2] = base[2] - k * 0.8;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  for (let k = 0; k < 40; k++) {                     // a few darker grain streaks
+    g.strokeStyle = `rgba(120,80,40,${0.05 + rnd() * 0.08})`;
+    g.lineWidth = 0.6 + rnd() * 1.2;
+    const y = rnd() * S;
+    g.beginPath(); g.moveTo(0, y);
+    for (let x = 0; x <= S; x += 32) g.lineTo(x, y + Math.sin(x * 0.01 + k) * 4);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+
+// 4 × 4 linoleum tiles per texture repeat (one tile = 6 u = 30 cm)
+function makeTileTexture(seed = 3, base = [184, 190, 184]) {
+  const S = 512, T = S / 4, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let s = seed * 4211 + 71;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    const alt = ((Math.floor(x / T) + Math.floor(y / T)) % 2) ? 9 : 0;
+    const fleck = rnd() < 0.015 ? (rnd() - 0.5) * 50 : 0;
+    const n = (rnd() - 0.5) * 6 + fleck;
+    img.data[i] = base[0] - alt + n; img.data[i + 1] = base[1] - alt + n; img.data[i + 2] = base[2] - alt * 0.6 + n;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  g.strokeStyle = 'rgba(70,72,70,.35)'; g.lineWidth = 2;
+  for (let k = 0; k <= 4; k++) {
+    g.beginPath(); g.moveTo(k * T, 0); g.lineTo(k * T, S); g.stroke();
+    g.beginPath(); g.moveTo(0, k * T); g.lineTo(S, k * T); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+}
+const woodTex = (seed, base) => cachedTexture('wood', makeWoodTexture, seed, base);
+const tileTex = (seed, base) => cachedTexture('tile', makeTileTexture, seed, base);
+
+/* World-scale UVs (non-indexed geometry): the texture keeps the same
+   size on a 0.6 u leg and a 180 u floor, nothing gets stretched. */
+function envUV(g, s = 1 / 16) {
+  const p = g.attributes.position.array, uv = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < p.length; i += 9) {
+    a.fromArray(p, i); b.fromArray(p, i + 3); c.fromArray(p, i + 6);
+    n.subVectors(b, a).cross(c.clone().sub(a));
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    for (let k = 0; k < 9; k += 3) {
+      const x = p[i + k], y = p[i + k + 1], z = p[i + k + 2];
+      if (ay >= ax && ay >= az) uv.push(x * s, z * s);
+      else if (ax >= az) uv.push(z * s, y * s);
+      else uv.push(x * s, y * s);
+    }
+  }
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return g;
+}
+
+/* Box helper: size + centre, ready for merging */
+function bx(w, h, d, x, y, z) {
+  const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
+  g.translate(x, y, z);
+  return g;
+}
+function mergedMesh(name, geos, mat, uvScale = 1 / 16) {
+  const g = BufferGeometryUtils.mergeGeometries(geos.map(x => { x.deleteAttribute('uv'); x.clearGroups(); return x; }));
+  envUV(g, uvScale);
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat);
+  m.name = name; m.userData.node = true;
+  return m;
+}
+
+/* ------------------------------------------------------------------
+   Variant axes shared by every environment model
+   • Design:  Plain (clean low-poly) | With pencil (sketched edges)
+   • Texture: Painted (real colours) | Cardboard | Paper
+------------------------------------------------------------------ */
+const DESIGNS = [{ id: 'pencil', label: 'With pencil' }, { id: 'plain', label: 'Plain' }];
+const TEXTURES = [{ id: 'painted', label: 'Painted' }, { id: 'cardboard', label: 'Cardboard' }, { id: 'paper', label: 'Paper' }];
+const ENV_AXES = [
+  { key: 'design', label: 'Design', options: DESIGNS },
+  { key: 'tex', label: 'Texture', options: TEXTURES },
+];
+const BAG_AXES = [...ENV_AXES, { key: 'state', label: 'State', options: [{ id: 'closed', label: 'Closed' }, { id: 'open', label: 'Open' }] }];
+
+// One material per (texture, role), shared by every copy of every model
+const ENV_MAT_CACHE = new Map();
+function std(name, opts) {
+  const m = new THREE.MeshStandardMaterial({ name, roughness: 0.9, metalness: 0, flatShading: true, ...OFFSET, ...opts });
+  m.userData.shared = true;
+  return m;
+}
+const ENV_LOOKS = {
+  painted: {
+    top:    () => std('Desk_Laminate', { map: woodTex(11) }),
+    edge:   () => std('Desk_EdgeBand', { color: 0x8c5e34, roughness: 0.7 }),
+    metal:  () => std('Steel_Blue', { color: 0x4f7091, roughness: 0.5, metalness: 0.25 }),
+    tray:   () => std('Plastic_Grey', { color: 0x6b737a, roughness: 0.75 }),
+    rubber: () => std('Rubber', { color: 0x2c2a28, roughness: 0.95 }),
+    floor:  () => std('Floor_Lino', { map: tileTex(3), roughness: 0.8 }),
+    paper:  () => std('Paper_White', { map: paperTex(5), side: THREE.DoubleSide }),
+    seam: 0x2a2623,
+  },
+  cardboard: {
+    top:    () => std('Card_Top', { map: cardboardTexture(7, [204, 163, 117]) }),
+    edge:   () => std('Card_Edge', { map: cardboardTexture(4, [160, 120, 80]) }),
+    metal:  () => std('Card_Frame', { map: cardboardTexture(9, [150, 112, 76]) }),
+    tray:   () => std('Card_Tray', { map: cardboardTexture(3) }),
+    rubber: () => std('DarkTape', { color: 0x4a4440 }),
+    floor:  () => std('Card_Floor', { map: cardboardTexture(13, [176, 140, 100]) }),
+    paper:  () => std('Paper_White', { map: paperTex(5), side: THREE.DoubleSide }),
+    seam: 0x6e5234,
+  },
+  paper: {
+    top:    () => std('Paper_Top', { map: paperTex(5) }),
+    edge:   () => std('Paper_Edge', { map: paperTex(9, [196, 193, 186]) }),
+    metal:  () => std('Paper_Frame', { map: paperTex(9, [150, 150, 152]) }),
+    tray:   () => std('Paper_Tray', { map: paperTex(4, [214, 211, 204]) }),
+    rubber: () => std('Paper_Dark', { color: 0x55524e }),
+    floor:  () => std('Paper_Floor', { map: paperTex(21, [224, 220, 210]) }),
+    paper:  () => std('Paper_Sheet', { map: paperTex(5, [246, 244, 238]), side: THREE.DoubleSide }),
+    seam: 0x3c3e42,
+  },
+};
+function envMat(tex, role) {
+  const key = tex + ':' + role;
+  if (!ENV_MAT_CACHE.has(key)) ENV_MAT_CACHE.set(key, ENV_LOOKS[tex][role]());
+  return ENV_MAT_CACHE.get(key);
+}
+function envFinish(mesh, tex) {
+  mesh.castShadow = mesh.receiveShadow = true;
+  addSeams(mesh, ENV_LOOKS[tex].seam, 0.55, 25, ENV_PENCIL);
+  return mesh;
+}
+
+/* ------------------------------------------------------------------
+   Model: School Desk (single student desk)
+   Real proportions (65 × 50 cm top, 72 cm high) at GAME scale:
+   1 cm = 0.6 u, so the top is 39 × 30 u, a whole base. It fits a
+   level-3 runway (13 u), the Model Lab buildings (≈ 3–5 u) and the
+   4 u planes with room to spare.
+   Origin on the floor under the centre of the top. The student sits
+   on +Z (open side of the book tray); the board is towards −Z.
+------------------------------------------------------------------ */
+const c = cm => cm * CM;
+const DESK = { W: c(65), D: c(50), H: c(72), T: c(2.5), leg: c(3) };
+const DESK_UV = 1 / c(80);
+
+function buildDesk(v = {}) {
+  const tex = v.tex || 'painted';
+  const { W, D, H, T, leg } = DESK;
+  const root = new THREE.Group();
+  root.name = 'SchoolDesk';
+  root.userData.part = true;
+
+  // Top: laminate on the upper face, darker edge band all round
+  const topGeo = new THREE.BoxGeometry(W, T, D).toNonIndexed();
+  topGeo.translate(0, H - T / 2, 0);
+  envUV(topGeo, DESK_UV);
+  const top = new THREE.Mesh(topGeo, [envMat(tex, 'edge'), envMat(tex, 'edge'), envMat(tex, 'top'), envMat(tex, 'edge'), envMat(tex, 'edge'), envMat(tex, 'edge')]);
+  top.name = 'Desk_Top'; top.userData.node = true;
+  root.add(envFinish(top, tex));
+
+  // Raised pencil lip along the back edge of the top
+  root.add(envFinish(mergedMesh('Desk_Groove', [bx(c(50), c(0.3), c(2.75), 0, H + c(0.15), -D / 2 + c(4.5))], envMat(tex, 'edge'), DESK_UV), tex));
+
+  // Steel frame: 4 legs, side aprons, foot rails, back bar, bag hook
+  const lx = W / 2 - c(4.5), lz = D / 2 - c(4.5), legTop = H - T, foot = c(1.5);
+  const f = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) f.push(bx(leg, legTop - foot, leg, sx * lx, foot + (legTop - foot) / 2, sz * lz));
+  for (const sx of [-1, 1]) {
+    f.push(bx(c(2), c(6), 2 * lz + leg, sx * lx, legTop - c(3), 0));       // apron under the top
+    f.push(bx(leg * 0.8, leg * 0.8, 2 * lz, sx * lx, c(9), 0));            // foot rail
+  }
+  f.push(bx(2 * lx, leg * 0.8, leg * 0.8, 0, c(26), -lz));                 // back bar
+  f.push(bx(c(1.25), c(4.5), c(1.25), lx + c(1.6), legTop - c(7), c(4.5)));     // bag hook: stem…
+  f.push(bx(c(3), c(1.25), c(1.25), lx + c(2.75), legTop - c(9.25), c(4.5)));   // …and lip
+  root.add(envFinish(mergedMesh('Desk_Frame', f, envMat(tex, 'metal'), DESK_UV), tex));
+
+  // Book tray under the top, open towards the student (+Z)
+  const tw = 2 * (lx - c(2.25)), tz0 = -lz + c(1.75), tz1 = lz - c(6), th = c(14), ty = legTop - c(1) - th, p = c(1.25);
+  const tray = [
+    bx(tw, p, tz1 - tz0, 0, ty, (tz0 + tz1) / 2),
+    bx(tw, th, p, 0, ty + th / 2, tz0),
+    bx(p, th, tz1 - tz0, -tw / 2, ty + th / 2, (tz0 + tz1) / 2),
+    bx(p, th, tz1 - tz0, tw / 2, ty + th / 2, (tz0 + tz1) / 2),
+  ];
+  root.add(envFinish(mergedMesh('Desk_Tray', tray, envMat(tex, 'tray'), DESK_UV), tex));
+
+  // Rubber feet
+  const feet = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) feet.push(bx(leg + c(1.25), foot, leg + c(1.25), sx * lx, foot / 2, sz * lz));
+  root.add(envFinish(mergedMesh('Desk_Feet', feet, envMat(tex, 'rubber'), DESK_UV), tex));
+
+  // Sockets for modular props
+  root.add(makeSocket('top', 0, H, 0, c(3)));                // the base / props sit here
+  root.add(makeSocket('chair', 0, 0, c(47), c(3)));         // where a chair goes
+  root.add(makeSocket('bag', lx + c(3.5), legTop - c(9.25), c(4.5), c(2)));
+  root.userData.footprint = [W, D];
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Model: School Chair (matches the desk)
+   Real size: seat 40 × 38 cm at 43 cm, backrest top at 80 cm, at the
+   same game scale (1 cm = 0.6 u). Origin on the floor under the seat
+   centre. The sitter faces −Z (towards the desk and the board); the
+   backrest is on +Z.
+------------------------------------------------------------------ */
+const CHAIR = { W: c(41), D: c(40), SH: c(43), BH: c(84), tube: c(1.1) };
+
+/* Bent plate: a flat outline (x, y) given thickness along +Z, then bent
+   by f(x, y) → z offset. Used for the moulded seat and backrest shells. */
+function bentPlate(outline, thick, bend) {
+  if (THREE.ShapeUtils.isClockWise(outline.map(([x, y]) => new THREE.Vector2(x, y)))) outline = outline.slice().reverse();
+  const tris = THREE.ShapeUtils.triangulateShape(outline.map(([x, y]) => new THREE.Vector2(x, y)), []).map(([a, b, d]) => {
+    const [ax, ay] = outline[a], [bx_, by] = outline[b], [dx_, dy] = outline[d];
+    return (bx_ - ax) * (dy - ay) - (by - ay) * (dx_ - ax) < 0 ? [a, d, b] : [a, b, d];   // force CCW
+  });
+  const P = [], fr = ([x, y]) => [x, y, bend(x, y)], bk = ([x, y]) => [x, y, bend(x, y) + thick];
+  for (const [a, b, d] of tris) {
+    P.push(...fr(outline[a]), ...fr(outline[d]), ...fr(outline[b]));   // front face (towards −Z)
+    P.push(...bk(outline[a]), ...bk(outline[b]), ...bk(outline[d]));   // back face
+  }
+  const n = outline.length;
+  for (let i = 0; i < n; i++) {
+    const p = outline[i], q = outline[(i + 1) % n];
+    P.push(...fr(p), ...fr(q), ...bk(q), ...fr(p), ...bk(q), ...bk(p));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.computeVertexNormals();
+  return g;
+}
+// Rounded trapezoid outline (wBottom at y=0, wTop at y=h), corner radius r
+function roundTrap(wB, wT, h, rB, rT, seg = 3) {
+  const pts = [];
+  const corner = (cx, cy, r, a0) => { for (let k = 0; k <= seg; k++) { const a = a0 + (k / seg) * Math.PI / 2; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } };
+  corner(wB / 2 - rB, rB, rB, -Math.PI / 2);
+  corner(wT / 2 - rT, h - rT, rT, 0);
+  corner(-wT / 2 + rT, h - rT, rT, Math.PI / 2);
+  corner(-wB / 2 + rB, rB, rB, Math.PI);
+  return pts;
+}
+// Tube between two points (6-sided, low-poly chrome rod)
+function tubeGeo(a, b, r) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A);
+  const g = new THREE.CylinderGeometry(r, r, d.length(), 6, 1).toNonIndexed();
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()));
+  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+  return g;
+}
+function polyTube(pts, r) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) out.push(tubeGeo(pts[i], pts[i + 1], r));
+  for (let i = 1; i < pts.length - 1; i++) { const s = new THREE.SphereGeometry(r, 6, 3).toNonIndexed(); s.translate(...pts[i]); out.push(s); }  // bend knuckles
+  return out;
+}
+
+/* ------------------------------------------------------------------
+   Model: School Chair (moulded shell, chrome frame)
+   After the reference photo: a moulded black seat with a rolled front
+   edge and a curved backrest on two chrome posts; four splayed chrome
+   legs, each side one bent tube (front leg → under-seat rail → rear
+   leg), with grey glides. Real: seat 41 × 40 cm at 43 cm, back top at
+   84 cm. Origin on the floor under the seat; the sitter faces −Z.
+------------------------------------------------------------------ */
+function buildChair(v = {}) {
+  const tex = v.tex || 'painted';
+  const root = new THREE.Group(); root.name = 'SchoolChair'; root.userData.part = true;
+  const r = c(1.1), SH = CHAIR.SH;
+
+  // Seat shell: outline in (x, y=front→back), bent (dished, rolled front), laid flat
+  const seatOut = roundTrap(c(42), c(37), c(40), c(6), c(8)).map(([x, y]) => [x, c(20) - y]);  // front (wide) at y = +20
+  const seat = bentPlate(seatOut, c(1.8), (x, y) => {
+    const dish = (x / c(21)) ** 2 * c(1.6);                 // sides rise a little
+    const roll = y > c(12) ? -(((y - c(12)) / c(8)) ** 2) * c(3.5) : 0;   // waterfall front edge
+    const back = y < -c(14) ? ((-c(14) - y) / c(6)) * c(1.2) : 0;       // back lip rises
+    return dish + roll + back;
+  });
+  seat.rotateX(-Math.PI / 2);                               // outline y → −Z (front), bend → +Y (up)
+  seat.rotateX(0.06);                                       // tilt back slightly (front edge higher)
+  seat.translate(0, SH - c(1.8), 0);
+  envUV(seat, DESK_UV);
+  const seatM = new THREE.Mesh(seat, envMat(tex, 'shell')); seatM.name = 'Chair_Seat'; seatM.userData.node = true;
+  root.add(envFinish(seatM, tex));
+
+  // Backrest: wider at the top, curved around the sitter, leaning back ~12°
+  const backOut = roundTrap(c(33), c(41), c(22), c(3), c(8));
+  const back = bentPlate(backOut, c(1.6), (x) => -((x / c(20)) ** 2) * c(3.2));   // edges wrap forward
+  back.translate(0, -c(11), 0);
+  back.rotateX(0.21);
+  back.translate(0, c(74), c(21));
+  envUV(back, DESK_UV);
+  const backM = new THREE.Mesh(back, envMat(tex, 'shell')); backM.name = 'Chair_Back'; backM.userData.node = true;
+  root.add(envFinish(backM, tex));
+
+  // Chrome frame
+  const f = [], y = SH - c(3.2);
+  for (const s of [-1, 1]) {
+    f.push(...polyTube([[s * c(22), c(1.5), -c(24)], [s * c(17.5), y, -c(15)], [s * c(17.5), y, c(13)], [s * c(22.5), c(1.5), c(23)]], r));  // front leg → rail → rear leg
+    f.push(...polyTube([[s * c(15), y, c(9)], [s * c(15), y + c(0.5), c(21.5)], [s * c(14.5), c(70), c(19.8)], [s * c(14.5), c(78), c(21.4)]], r));  // back post, behind the seat
+  }
+  f.push(tubeGeo([-c(17.5), y, -c(14)], [c(17.5), y, -c(14)], r * 0.9));    // front cross brace
+  f.push(tubeGeo([-c(15), y, c(9)], [c(15), y, c(9)], r * 0.9));            // rear cross brace
+  root.add(envFinish(mergedMesh('Chair_Frame', f, envMat(tex, 'chrome'), DESK_UV), tex));
+
+  const glides = [];
+  for (const [x, z] of [[-22, -24], [22, -24], [-22.5, 23], [22.5, 23]]) {
+    const g = new THREE.CylinderGeometry(c(1.5), c(1.7), c(1.5), 6).toNonIndexed(); g.translate(c(x), c(0.75), c(z)); glides.push(g);
+  }
+  root.add(envFinish(mergedMesh('Chair_Glides', glides, envMat(tex, 'glide'), DESK_UV), tex));
+  root.add(makeSocket('seat', 0, SH, 0, c(3)));
+  return root;
+}
+
+// Chair placement behind a desk: tucked-in distance + realistic mess
+const CHAIR_BEHIND = c(47);                            // desk centre → chair centre, neatly placed
+function chairPlacement(i, rnd) {
+  let dx = rnd() * c(14), dz = c(-2) + rnd() * c(14), rot = rnd() * 0.3;   // ±7 cm, ±8.5°
+  // a few chairs left properly askew: swung out, pushed back, turned to talk to a neighbour
+  const odd = { 2: [c(10), c(14), 0.45], 7: [-c(8), c(20), -0.38], 10: [c(4), c(9), 0.62], 13: [-c(12), c(16), -0.5] }[i];
+  if (odd) { dx = odd[0]; dz = odd[1]; rot = odd[2]; }
+  return { dx, dz: CHAIR_BEHIND + Math.max(c(-3), dz), rot };
+}
+
+/* ------------------------------------------------------------------
+   Room shell materials (added per look)
+------------------------------------------------------------------ */
+Object.assign(ENV_LOOKS.painted, {
+  wall:     () => std('Wall_Paint', { color: 0xe8e0cc, roughness: 0.95 }),
+  wainscot: () => std('Wall_Wainscot', { color: 0x86a09a, roughness: 0.9 }),
+  trim:     () => std('Trim_White', { color: 0xf1eee6, roughness: 0.7 }),
+  door:     () => std('Door_Wood', { map: woodTex(17, [178, 124, 80]) }),
+  body:     () => std('Desk_Body', { color: 0xb5afa3, roughness: 0.8 }),
+  frameAl:  () => std('Aluminium', { color: 0xbfc3c6, roughness: 0.45, metalness: 0.4 }),
+  glass:    () => std('Glass', { color: 0x2f3e48, roughness: 0.25, metalness: 0.1 }),
+  shell:    () => std('Plastic_Black', { color: 0x232427, roughness: 0.45 }),
+  chrome:   () => std('Chrome', { color: 0xd9dde1, roughness: 0.22, metalness: 0.55 }),
+  glide:    () => std('Glide_Grey', { color: 0x8d9094, roughness: 0.7 }),
+});
+Object.assign(ENV_LOOKS.cardboard, {
+  wall:     () => std('Card_Wall', { map: cardboardTexture(15, [214, 182, 140]) }),
+  wainscot: () => std('Card_Wainscot', { map: cardboardTexture(16, [168, 126, 86]) }),
+  trim:     () => std('Card_Trim', { map: cardboardTexture(7, [204, 163, 117]) }),
+  door:     () => std('Card_Door', { map: cardboardTexture(9, [150, 112, 76]) }),
+  body:     () => std('Card_Body', { map: cardboardTexture(3) }),
+  frameAl:  () => std('Card_Dark', { map: cardboardTexture(4, [140, 104, 70]) }),
+  glass:    () => std('DarkTape', { color: 0x4a4440 }),
+  shell:    () => std('Card_Shell', { map: cardboardTexture(4, [120, 90, 62]) }),
+  chrome:   () => std('Card_Light', { map: cardboardTexture(7, [214, 180, 138]) }),
+  glide:    () => std('DarkTape', { color: 0x4a4440 }),
+});
+Object.assign(ENV_LOOKS.paper, {
+  wall:     () => std('Paper_Wall', { map: paperTex(31, [238, 234, 224]) }),
+  wainscot: () => std('Paper_Wainscot', { map: paperTex(32, [176, 180, 184]) }),
+  trim:     () => std('Paper_Trim', { map: paperTex(5, [246, 244, 238]) }),
+  door:     () => std('Paper_Door', { map: paperTex(9, [150, 150, 152]) }),
+  body:     () => std('Paper_Body', { map: paperTex(4, [214, 211, 204]) }),
+  frameAl:  () => std('Paper_Frame', { map: paperTex(9, [130, 130, 134]) }),
+  glass:    () => std('Paper_Dark', { color: 0x55524e }),
+  shell:    () => std('Paper_Shell', { map: paperTex(9, [92, 94, 98]) }),
+  chrome:   () => std('Paper_Light', { map: paperTex(5, [228, 228, 230]) }),
+  glide:    () => std('Paper_Dark', { color: 0x55524e }),
+});
+// Board face: the chalk drawing image shipped with the artifact (blackboard.jpg), stretched to the 4 × 1.2 m slate
+let BOARD_TEX = null;
+const boardTex = () => {
+  if (!BOARD_TEX) {
+    BOARD_TEX = new THREE.TextureLoader().load('blackboard.jpg', undefined, undefined, () => toast('Blackboard image failed to load'));
+    BOARD_TEX.colorSpace = THREE.SRGBColorSpace; BOARD_TEX.anisotropy = 8; BOARD_TEX.userData.shared = true;
+  }
+  return BOARD_TEX;
+};
+const boardMat = () => { const k = 'board:image'; if (!ENV_MAT_CACHE.has(k)) ENV_MAT_CACHE.set(k, std('Blackboard', { map: boardTex(), roughness: 0.92 })); return ENV_MAT_CACHE.get(k); };
+
+/* ------------------------------------------------------------------
+   Model: Wall (modular panel, any length, optional door)
+   Built along local X, inside face at z = 0 facing +Z, thickness out
+   to −Z, floor at y = 0. Real: 3 m high, 12 cm thick, sage wainscot
+   to 1 m with a chair rail, cream paint above, dark skirting.
+   Door: 1 m opening (90 cm leaf, 2.05 m), hinged on the −X side.
+------------------------------------------------------------------ */
+const WALL = { H: c(300), T: c(12), WS: c(100) };
+// Door: 95 × 210 cm leaf in a 3 cm lining; the wall hole is sized from the leaf
+const DOOR = { leafW: c(95), leafH: c(210), leafT: c(4.5), gap: c(0.4), lining: c(3), arch: c(8) };
+DOOR.W = DOOR.leafW + 2 * (DOOR.gap + DOOR.lining);
+DOOR.H = DOOR.leafH + DOOR.gap + DOOR.lining;
+// Window: 160 × 140 cm, sill at 105 cm (just above the chair rail)
+const WIN = { W: c(160), H: c(140), Y: c(105) };
+
+function buildWall(v = {}, { len = c(400), door = null, windows = [], name = 'Wall' } = {}) {
+  const tex = v.tex || 'painted';
+  const { H, T, WS } = WALL;
+  const root = new THREE.Group(); root.name = name; root.userData.part = true;
+  const UV = 1 / c(80);
+  const holes = [];
+  if (door) holes.push({ x: door.x, w: DOOR.W, y0: 0, y1: DOOR.H, pad: DOOR.arch });
+  windows.forEach(wx => holes.push({ x: wx, w: WIN.W, y0: WIN.Y, y1: WIN.Y + WIN.H, pad: c(4) }));
+
+  // Pieces of a horizontal band [b0, b1] with every hole cut out (padPad widens holes, for trim)
+  const band = (b0, b1, padded = false) => {
+    const xs = new Set([-len / 2, len / 2]);
+    holes.forEach(h => { const p = padded ? h.pad : 0; xs.add(h.x - h.w / 2 - p); xs.add(h.x + h.w / 2 + p); });
+    const X = [...xs].filter(x => x >= -len / 2 && x <= len / 2).sort((a, b) => a - b), out = [];
+    for (let i = 0; i < X.length - 1; i++) {
+      const x0 = X[i], x1 = X[i + 1], mid = (x0 + x1) / 2;
+      const h = holes.find(h => { const p = padded ? h.pad : 0; return mid > h.x - h.w / 2 - p && mid < h.x + h.w / 2 + p; });
+      if (!h) { out.push([x0, x1, b0, b1]); continue; }
+      const lo = padded ? h.y0 - (h.y0 > 0 ? h.pad : 0) : h.y0, hi = padded ? h.y1 + h.pad : h.y1;
+      if (lo > b0) out.push([x0, x1, b0, Math.min(b1, lo)]);
+      if (hi < b1) out.push([x0, x1, Math.max(b0, hi), b1]);
+    }
+    return out;
+  };
+  const slab = (sp, depth, z) => sp.filter(([x0, x1, y0, y1]) => x1 - x0 > 0.01 && y1 - y0 > 0.01)
+    .map(([x0, x1, y0, y1]) => bx(x1 - x0, y1 - y0, depth, (x0 + x1) / 2, (y0 + y1) / 2, z));
+
+  root.add(envFinish(mergedMesh(`${name}_Wainscot`, slab(band(0, WS), T, -T / 2), envMat(tex, 'wainscot'), UV), tex));
+  root.add(envFinish(mergedMesh(`${name}_Upper`, slab(band(WS, H), T, -T / 2), envMat(tex, 'wall'), UV), tex));
+  root.add(envFinish(mergedMesh(`${name}_Skirting`, slab(band(0, c(10), true), c(1.5), c(0.75)), envMat(tex, 'edge'), UV), tex));
+  root.add(envFinish(mergedMesh(`${name}_ChairRail`, slab(band(WS - c(2), WS + c(2), true), c(2), c(1)), envMat(tex, 'trim'), UV), tex));
+
+  windows.forEach((wx, i) => root.add(buildWindow(tex, wx, `${name}_Window${windows.length > 1 ? '_' + (i + 1) : ''}`)));
+  if (door) root.add(buildDoor(tex, door.x, name));
+  root.userData.wallLength = len;
+  return root;
+}
+
+/* Door: lining + stops, double architrave on both faces, threshold, and a
+   hinged leaf with stiles/rails, a raised lower panel, a glazed upper
+   panel with beads, 3 hinges, lever handles on roses, key escutcheons
+   and a kick plate. Hinge on the −X side; swings into the room. */
+function buildDoor(tex, dx, name) {
+  const { T } = WALL, { leafW: L, leafH: LH, leafT: LT, gap, lining, arch, W, H } = DOOR;
+  const UV = 1 / c(80), grp = new THREE.Group(); grp.name = `${name}_Door`; grp.userData.node = true;
+  const hw = W / 2, trim = [];
+  // lining through the wall + door stop strip on the corridor side of the leaf
+  trim.push(bx(lining, H, T, dx - hw + lining / 2, H / 2, -T / 2), bx(lining, H, T, dx + hw - lining / 2, H / 2, -T / 2), bx(W, lining, T, dx, H - lining / 2, -T / 2));
+  const stopZ = -T / 2 - LT / 2 - c(0.8);
+  trim.push(bx(c(1.5), H - lining, c(1.6), dx - hw + lining + c(0.75), (H - lining) / 2, stopZ), bx(c(1.5), H - lining, c(1.6), dx + hw - lining - c(0.75), (H - lining) / 2, stopZ), bx(W - 2 * lining, c(1.5), c(1.6), dx, H - lining - c(0.75), stopZ));
+  // architraves both faces: flat board + a thin raised bead on its inner edge
+  for (const [z, s] of [[c(1), 1], [-T - c(1), -1]]) {
+    trim.push(bx(arch, H + arch, c(2), dx - hw - arch / 2 + c(0.5), (H + arch) / 2, z), bx(arch, H + arch, c(2), dx + hw + arch / 2 - c(0.5), (H + arch) / 2, z), bx(W + 2 * arch - c(1), arch, c(2), dx, H + arch / 2, z));
+    const bz = z + s * c(1.4);
+    trim.push(bx(c(1.5), H, c(0.8), dx - hw - c(0.25), H / 2, bz), bx(c(1.5), H, c(0.8), dx + hw + c(0.25), H / 2, bz), bx(W + c(2), c(1.5), c(0.8), dx, H + c(0.25), bz));
+  }
+  grp.add(envFinish(mergedMesh(`${name}_DoorFrame`, trim, envMat(tex, 'trim'), UV), tex));
+  grp.add(envFinish(mergedMesh(`${name}_Threshold`, [bx(W - 2 * lining, c(1.2), T + c(4), dx, c(0.6), -T / 2)], envMat(tex, 'frameAl'), UV), tex));
+
+  // leaf, on its hinge
+  const pivot = new THREE.Group(); pivot.name = 'Door_Pivot'; pivot.userData.node = true; pivot.userData.doorPivot = true;
+  pivot.position.set(dx - hw + lining + gap, c(1.2), -T / 2);
+  const st = c(13), rTop = c(14), rLock = c(18), rBot = c(26), y0 = 0, lh = LH - c(1.2);
+  const lockY = c(95), winY0 = lockY + rLock, winY1 = lh - rTop;
+  const leaf = [
+    bx(st, lh, LT, st / 2, lh / 2, 0), bx(st, lh, LT, L - st / 2, lh / 2, 0),               // stiles
+    bx(L - 2 * st, rBot, LT, L / 2, rBot / 2, 0),                                       // bottom rail
+    bx(L - 2 * st, rLock, LT, L / 2, lockY + rLock / 2, 0),                             // lock rail
+    bx(L - 2 * st, rTop, LT, L / 2, lh - rTop / 2, 0),                                  // top rail
+  ];
+  const pw = L - 2 * st, ph = lockY - rBot;
+  leaf.push(bx(pw, ph, LT * 0.45, L / 2, rBot + ph / 2, 0));                           // recessed panel…
+  leaf.push(bx(pw - c(10), ph - c(10), LT * 0.75, L / 2, rBot + ph / 2, 0));           // …with a raised field
+  pivot.add(envFinish(mergedMesh('Door_Leaf', leaf, envMat(tex, 'door'), UV), tex));
+  // glazing + beads
+  const gw = pw, gh = winY1 - winY0, gy = winY0 + gh / 2;
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(gw, gh, c(0.8)).toNonIndexed(), glassMat());
+  glass.position.set(L / 2, gy, 0); glass.name = 'Door_Glass'; glass.castShadow = false;
+  pivot.add(glass);
+  const bead = [];
+  for (const s of [1, -1]) {
+    const z = s * c(1.1);
+    bead.push(bx(gw, c(1.6), c(1.4), L / 2, winY0 + c(0.8), z), bx(gw, c(1.6), c(1.4), L / 2, winY1 - c(0.8), z), bx(c(1.6), gh, c(1.4), st + c(0.8), gy, z), bx(c(1.6), gh, c(1.4), L - st - c(0.8), gy, z));
+  }
+  pivot.add(envFinish(mergedMesh('Door_Beads', bead, envMat(tex, 'door'), UV), tex));
+  // hardware: hinges, roses + levers, escutcheons, kick plate
+  const hx = [], hy = c(104), ex = L - c(7);
+  for (const yy of [c(22), c(105), c(185)]) hx.push(bx(c(1.6), c(11), c(2.4), -c(0.4), yy, LT / 2 - c(0.6)), tubeGeo([-c(0.6), yy - c(6), LT / 2 + c(0.4)], [-c(0.6), yy + c(6), LT / 2 + c(0.4)], c(0.8)));
+  for (const s of [1, -1]) {
+    const fz = s * (LT / 2), out = s;
+    hx.push(bx(c(5.5), c(5.5), c(1), ex, hy, fz + out * c(0.5)));                       // rose
+    hx.push(bx(c(2), c(2), c(5), ex, hy, fz + out * c(3)));                             // lever neck
+    hx.push(bx(c(14), c(2.2), c(2.2), ex - c(6.5), hy, fz + out * c(5.5)));             // lever
+    hx.push(bx(c(3.5), c(7), c(0.6), ex, c(88), fz + out * c(0.3)));                    // key escutcheon
+  }
+  hx.push(bx(L - c(4), c(25), c(0.5), L / 2, c(13.5), LT / 2 + c(0.25)));              // kick plate (room side)
+  pivot.add(envFinish(mergedMesh('Door_Hardware', hx, envMat(tex, 'frameAl'), UV), tex));
+  grp.add(pivot);
+  grp.add(makeSocket('door', dx, 0, c(70), c(3)));
+  return grp;
+}
+
+/* Window: plaster reveals, white frame centred in the wall, a mullion and
+   a transom (two side-hung casements + a fanlight), glass, and a deep
+   window board on the room side. */
+function buildWindow(tex, wx, name) {
+  const { T } = WALL, { W, H, Y } = WIN, UV = 1 / c(80);
+  const grp = new THREE.Group(); grp.name = name; grp.userData.node = true;
+  grp.add(envFinish(mergedMesh(`${name}_Reveal`, [
+    bx(c(1), H, T, wx - W / 2 + c(0.5), Y + H / 2, -T / 2), bx(c(1), H, T, wx + W / 2 - c(0.5), Y + H / 2, -T / 2), bx(W, c(1), T, wx, Y + H - c(0.5), -T / 2),
+  ], envMat(tex, 'wall'), UV), tex));
+  const fz = -T / 2, fd = c(7), f = c(6), sash = c(5), tY = Y + H - c(38);
+  const fr = [
+    bx(W, f, fd, wx, Y + f / 2, fz), bx(W, f, fd, wx, Y + H - f / 2, fz),               // outer frame
+    bx(f, H, fd, wx - W / 2 + f / 2, Y + H / 2, fz), bx(f, H, fd, wx + W / 2 - f / 2, Y + H / 2, fz),
+    bx(c(7), tY - Y - f, fd, wx, (Y + f + tY) / 2, fz),                                 // mullion
+    bx(W - 2 * f, c(6), fd, wx, tY, fz),                                                // transom
+  ];
+  // casement sashes, slightly proud of the frame on the room side
+  const cw = (W - 2 * f - c(7)) / 2, ch = tY - c(3) - (Y + f);
+  for (const s of [-1, 1]) {
+    const cx = wx + s * (c(3.5) + cw / 2), cy = Y + f + ch / 2, z = fz + c(1);
+    fr.push(bx(cw, sash, c(6), cx, Y + f + sash / 2, z), bx(cw, sash, c(6), cx, Y + f + ch - sash / 2, z), bx(sash, ch, c(6), cx - cw / 2 + sash / 2, cy, z), bx(sash, ch, c(6), cx + cw / 2 - sash / 2, cy, z));
+    fr.push(bx(c(1.6), c(9), c(1.6), cx - s * (cw / 2 - sash - c(2)), cy, z + c(3.8)));   // handle
+  }
+  grp.add(envFinish(mergedMesh(`${name}_Frame`, fr, envMat(tex, 'trim'), UV), tex));
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(W - 2 * f, H - 2 * f, c(0.6)).toNonIndexed(), glassMat());
+  glass.position.set(wx, Y + H / 2, fz); glass.name = `${name}_Glass`; glass.castShadow = false;
+  grp.add(glass);
+  grp.add(envFinish(mergedMesh(`${name}_Board`, [bx(W + c(10), c(2.5), c(20), wx, Y - c(1.25), c(4))], envMat(tex, 'trim'), UV), tex));
+  return grp;
+}
+function glassMat() {
+  const k = 'glass:pane';
+  if (!ENV_MAT_CACHE.has(k)) {
+    const m = new THREE.MeshStandardMaterial({ name: 'Glass_Pane', color: 0xa9cbdc, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
+    m.userData.shared = true; ENV_MAT_CACHE.set(k, m);
+  }
+  return ENV_MAT_CACHE.get(k);
+}
+
+/* ------------------------------------------------------------------
+   Model: Blackboard (wall-mounted)
+   Real 4 m × 1.2 m slate in an aluminium frame, bottom edge at 90 cm,
+   with a chalk tray. Back at z = 0, faces +Z. Origin on the floor
+   below the board's centre, so it drops straight onto a wall.
+------------------------------------------------------------------ */
+const BOARD = { W: c(400), H: c(120), Y: c(90), F: c(4), T: c(3) };
+function buildBlackboard(v = {}) {
+  const tex = v.tex || 'painted';
+  const { W, H, Y, F, T } = BOARD;
+  const root = new THREE.Group(); root.name = 'Blackboard'; root.userData.part = true;
+  const UV = 1 / c(80);
+  const face = new THREE.BoxGeometry(W, H, T).toNonIndexed(); face.translate(0, Y + H / 2, T / 2);
+  const al = envMat(tex, 'frameAl');
+  const surf = new THREE.Mesh(face, [al, al, al, al, boardMat(), al]);
+  surf.name = 'Board_Surface'; surf.userData.node = true;
+  root.add(envFinish(surf, tex));
+  const fr = [
+    bx(W + 2 * F, F, T + c(1.5), 0, Y + H + F / 2, (T + c(1.5)) / 2),
+    bx(W + 2 * F, F, T + c(1.5), 0, Y - F / 2, (T + c(1.5)) / 2),
+    bx(F, H, T + c(1.5), -W / 2 - F / 2, Y + H / 2, (T + c(1.5)) / 2),
+    bx(F, H, T + c(1.5), W / 2 + F / 2, Y + H / 2, (T + c(1.5)) / 2),
+    bx(W, c(1.2), c(8), 0, Y - F - c(0.6), c(5)),               // chalk tray
+    bx(W, c(2.5), c(1), 0, Y - F + c(0.6), c(8.5)),             // tray lip
+  ];
+  root.add(envFinish(mergedMesh('Board_Frame', fr, al, UV), tex));
+  const chalk = std('Chalk', { color: 0xf3f0e6 }), sponge = std('Sponge', { color: 0xd8b04a });
+  [[-c(120), 0.1], [-c(108), -0.3], [c(60), 0.5]].forEach(([x, r], i) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(c(8), c(1), c(1)), chalk);
+    m.position.set(x, Y - F + c(0.5), c(5)); m.rotation.y = r; m.name = `Chalk_${i + 1}`; m.castShadow = true;
+    root.add(m);
+  });
+  const sp = new THREE.Mesh(new THREE.BoxGeometry(c(12), c(4), c(6)).toNonIndexed(), sponge);
+  sp.position.set(c(150), Y - F + c(2), c(5)); sp.rotation.y = -0.15; sp.name = 'Sponge';
+  root.add(envFinish(sp, tex));
+  root.add(makeSocket('tray', 0, Y - F, c(5), c(3)));
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Model: Teacher's Desk (empty)
+   Real 140 × 70 cm, 76 cm high: laminate top, grey body with a closed
+   modesty panel facing the class (+Z), a 3-drawer pedestal on the +X
+   side and an open knee space on the teacher's side (−Z).
+------------------------------------------------------------------ */
+const TDESK = { W: c(140), D: c(70), H: c(76), T: c(3) };
+function buildTeacherDesk(v = {}) {
+  const tex = v.tex || 'painted';
+  const { W, D, H, T } = TDESK;
+  const root = new THREE.Group(); root.name = 'TeacherDesk'; root.userData.part = true;
+  const topGeo = new THREE.BoxGeometry(W, T, D).toNonIndexed();
+  topGeo.translate(0, H - T / 2, 0); envUV(topGeo, DESK_UV);
+  const e = envMat(tex, 'edge');
+  const top = new THREE.Mesh(topGeo, [e, e, envMat(tex, 'top'), e, e, e]);
+  top.name = 'TDesk_Top'; top.userData.node = true;
+  root.add(envFinish(top, tex));
+
+  const bodyH = H - T, glide = c(1.2), pw = c(42), px = W / 2 - c(2) - pw / 2, side = c(2.5);
+  const body = [
+    bx(side, bodyH - glide, D - c(4), -W / 2 + c(2) + side / 2, glide + (bodyH - glide) / 2, 0),   // left side panel
+    bx(pw, bodyH - glide, D - c(4), px, glide + (bodyH - glide) / 2, 0),                          // drawer pedestal
+    bx(W - c(4) - pw - side, c(52), c(2), (-W / 2 + c(2) + side + px - pw / 2) / 2, bodyH - c(26), D / 2 - c(5)), // modesty panel
+  ];
+  root.add(envFinish(mergedMesh('TDesk_Body', body, envMat(tex, 'body'), DESK_UV), tex));
+
+  const fronts = [], handles = [], n = 3, fh = (bodyH - glide - c(4)) / n;
+  for (let i = 0; i < n; i++) {
+    const y = glide + c(2) + fh * (i + 0.5);
+    fronts.push(bx(pw - c(3), fh - c(1.2), c(1.5), px, y, -D / 2 + c(2) - c(0.75)));
+    handles.push(bx(c(12), c(1.5), c(1.5), px, y + fh * 0.22, -D / 2 + c(2) - c(2.2)));
+  }
+  root.add(envFinish(mergedMesh('TDesk_Drawers', fronts, envMat(tex, 'top'), DESK_UV), tex));
+  root.add(envFinish(mergedMesh('TDesk_Handles', handles, envMat(tex, 'frameAl'), DESK_UV), tex));
+  const feet = [];
+  for (const x of [-W / 2 + c(2) + side / 2, px - pw / 2 + c(2), px + pw / 2 - c(2)]) for (const sz of [-1, 1]) feet.push(bx(c(3), glide, c(3), x, glide / 2, sz * (D / 2 - c(4))));
+  root.add(envFinish(mergedMesh('TDesk_Feet', feet, envMat(tex, 'rubber'), DESK_UV), tex));
+  root.add(makeSocket('top', 0, H, 0, c(3)));
+  root.add(makeSocket('chair', -c(10), 0, -D / 2 - c(35), c(3)));
+  return root;
+}
+
+/* Cutaway: hide every wall whose inside face looks away from the camera */
+const _cp = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cn = new THREE.Vector3();
+function applyCutaway(root, camPos, on) {
+  root?.traverse(o => {
+    if (!o.userData.cut) return;
+    if (!on) { o.visible = true; return; }
+    o.getWorldPosition(_cp); o.getWorldQuaternion(_cq);
+    _cn.set(0, 0, 1).applyQuaternion(_cq);
+    o.visible = _cp.sub(camPos).negate().dot(_cn) > 0;
+  });
+}
+
+/* ------------------------------------------------------------------
+   BACKPACKS — 4 designs × Closed / Open, any colourway.
+   Built in real centimetres, scaled by CM at the end. Back panel (the
+   strap side) at z = 0 facing −Z, front pockets towards +Z, origin at
+   the bottom centre of the back panel.
+   Open: the main zip is undone and the front half of the bag (above
+   the front pocket) falls forward on a hinge, showing the dark lining
+   and books sticking out.
+------------------------------------------------------------------ */
+function makeFabricTexture() {
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), img = g.createImageData(S, S);
+  let s = 31; const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4, weave = ((x >> 1) + (y >> 1)) % 2 ? 7 : -7, n = (rnd() - 0.5) * 10;
+    const v = 226 + weave + n; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+function makeMeshTexture() {
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#e4e4e4'; g.fillRect(0, 0, S, S);
+  g.fillStyle = 'rgba(0,0,0,.55)';
+  for (let y = 0; y < S; y += 8) for (let x = 0; x < S; x += 8) { g.beginPath(); g.arc(x + ((y / 8) % 2) * 4 + 2, y + 4, 2.4, 0, 6.3); g.fill(); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+const fabricTex = () => cachedTexture('fabric', makeFabricTexture, 1, 0);
+const meshTex = () => cachedTexture('meshfab', makeMeshTexture, 1, 0);
+const tint = (hex, k) => { const c0 = new THREE.Color(hex); return c0.lerp(new THREE.Color(0xffffff), k); };
+
+function bagMat(tex, hex, kind = 'fabric') {
+  const key = `bag:${tex}:${kind}:${hex}`;
+  if (ENV_MAT_CACHE.has(key)) return ENV_MAT_CACHE.get(key);
+  const name = `Bag_${kind}_${hex.toString(16).padStart(6, '0')}`;
+  let m;
+  if (tex === 'painted') {
+    if (kind === 'fabric') m = std(name, { color: hex, map: fabricTex(), roughness: 0.92 });
+    else if (kind === 'mesh') m = std(name, { color: hex, map: meshTex(), roughness: 0.9 });
+    else if (kind === 'metal') m = std(name, { color: hex, roughness: 0.3, metalness: 0.5 });
+    else m = std(name, { color: hex, roughness: 0.5 });
+  } else if (tex === 'cardboard') m = std(name, { map: cardboardTexture(3), color: tint(hex, 0.35) });
+  else m = std(name, { map: paperTex(5), color: tint(hex, 0.3) });
+  ENV_MAT_CACHE.set(key, m);
+  return m;
+}
+
+/* geometry helpers (cm) */
+const extG = (outline, z0, z1) => {
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y))), { depth: z1 - z0, bevelEnabled: false, curveSegments: 1 });
+  const n = g.index ? g.toNonIndexed() : g; n.translate(0, 0, z0); return n;
+};
+const extShape = (shape, z0, z1) => {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false, curveSegments: 10 });
+  const n = g.index ? g.toNonIndexed() : g; n.translate(0, 0, z0); return n;
+};
+function clipY(poly, a, b) {
+  const clip = (P, inside, inter) => {
+    const out = [];
+    for (let i = 0; i < P.length; i++) {
+      const cur = P[i], prev = P[(i + P.length - 1) % P.length], ci = inside(cur), pi = inside(prev);
+      if (ci) { if (!pi) out.push(inter(prev, cur)); out.push(cur); } else if (pi) out.push(inter(prev, cur));
+    }
+    return out;
+  };
+  const at = y0 => (p, q) => [p[0] + (q[0] - p[0]) * (y0 - p[1]) / (q[1] - p[1]), y0];
+  const r = clip(clip(poly, p => p[1] >= a, at(a)), p => p[1] <= b, at(b));
+  return r.filter((p, i) => { const q = r[(i + 1) % r.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.01; });
+}
+const rrectAt = (w, h, r, x0, y0, seg = 3) => roundTrap(w, w, h, r, r, seg).map(([x, y]) => [x + x0, y + y0]);
+const bxr = (w, h, d, x, y, z, rz) => { const g = new THREE.BoxGeometry(w, h, d).toNonIndexed(); g.rotateZ(rz); g.translate(x, y, z); return g; };
+const cyl = (r, h, x, y, z, seg = 8, axis = 'y') => {
+  const g = new THREE.CylinderGeometry(r, r, h, seg).toNonIndexed();
+  if (axis === 'z') g.rotateX(Math.PI / 2); if (axis === 'x') g.rotateZ(Math.PI / 2);
+  g.translate(x, y, z); return g;
+};
+// Flat strap (webbing) through points; `across` sets which way its width faces
+function ribbon(pts, across, w, t) {
+  const out = [], A = new THREE.Vector3(...across);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = new THREE.Vector3(...pts[i]), q = new THREE.Vector3(...pts[i + 1]);
+    const d = q.clone().sub(p), L = d.length(); if (L < 1e-3) continue; d.normalize();
+    const a = A.clone().sub(d.clone().multiplyScalar(A.dot(d))).normalize(), n = new THREE.Vector3().crossVectors(a, d);
+    const g = new THREE.BoxGeometry(w, L + t * 0.8, t).toNonIndexed();
+    g.applyMatrix4(new THREE.Matrix4().makeBasis(a, d, n));
+    g.translate((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
+    out.push(g);
+  }
+  return out;
+}
+function tubesAlong(pts, z, r, keep = () => true) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i], q = pts[i + 1];
+    if (!keep(p, q)) continue;
+    out.push(tubeGeo([p[0], p[1], z], [q[0], q[1], z], r));
+  }
+  return out;
+}
+
+const BAG_DESIGNS = {
+  classic: { label: 'Classic', W: 30, H: 42, D: 14, rb: 4, rt: 13, hinge: 23.5,
+    pals: [[0x1f2f5c, 0x6f7378, 0x23262c], [0x6b1f2a, 0x7d8085, 0x2a1a1d], [0x2f4a35, 0xb59f78, 0x1f2a22], [0x3a3d42, 0xd8742c, 0x1d1e21]] },
+  slim: { label: 'Slim', W: 29, H: 42, D: 11, rb: 3, rt: 6, hinge: 21,
+    pals: [[0x4a4f38, 0x24261d], [0xb7a789, 0x5c5242], [0x3f5568, 0x1d2731], [0x2b2b2e, 0x141416]] },
+  kids: { label: 'Kids', W: 28, H: 37, D: 13, rb: 4, rt: 10, hinge: 24,
+    pals: [[0xd8262f, 0x13a39a, 0xf6f4ee, 0xf7d117], [0x6b3fa0, 0xf08cb6, 0xf6f4ee, 0xffd23f], [0x2c6fd6, 0xff8a3d, 0xf6f4ee, 0xffd23f], [0x3fa45a, 0xffd23f, 0xf6f4ee, 0xff6f61]] },
+  sport: { label: 'Sport', W: 33, H: 46, D: 17, rb: 5, rt: 11, hinge: 23,
+    pals: [[0x1d1e21, 0x1f6fe0, 0x9a9da2, 0x2b2c2f], [0x1d1e21, 0xd8342c, 0x9a9da2, 0x2b2c2f], [0x484b50, 0x9bd13a, 0xc5c8cc, 0x26272a], [0x1d2a44, 0xff7a1a, 0xa9adb2, 0x1a1c22]] },
+};
+const BOOK_COLORS = [0xc0392b, 0x2e86c1, 0xf1c40f, 0x27ae60, 0x8e44ad, 0xe67e22];
+
+function buildBag(id, o = {}) {
+  const B = BAG_DESIGNS[id], tex = o.tex || 'painted', open = o.state === 'open', P = o.pal || B.pals[0];
+  const { W, H, D, rb, rt, hinge: hy } = B, zs = D * 0.42;
+  const root = new THREE.Group(); root.name = `Backpack_${B.label}`; root.userData.part = true;
+  const flap = new THREE.Group(); flap.name = 'Bag_Flap'; flap.userData.node = true;
+  flap.position.set(0, c(hy), c(D)); if (open) flap.rotation.x = 1.25;
+  root.add(flap);
+
+  // merge buckets: one mesh per (group, material) keeps draw calls low
+  const buckets = new Map();
+  const put = (name, geos, mat, parent = root, uv = DESK_UV) => {
+    const key = parent.uuid + mat.uuid + uv;
+    if (!buckets.has(key)) buckets.set(key, { name, geos: [], mat, parent, uv });
+    buckets.get(key).geos.push(...geos);
+  };
+  const F = (hex, kind) => bagMat(tex, hex, kind);
+  const toFlap = g => g.translate(0, -hy, -D);
+  // a front part that spans the hinge is split: below stays, above rides the flap
+  const front = (name, outline, z0, z1, mat) => {
+    if (!open) return put(name, [extG(outline, z0, z1)], mat);
+    const lo = clipY(outline, -99, hy), hi = clipY(outline, hy, 999);
+    if (lo.length > 2) put(name, [extG(lo, z0, z1)], mat);
+    if (hi.length > 2) put(name, [toFlap(extG(hi, z0, z1))], mat, flap);
+  };
+  const frontGeo = (name, g, mat, yMid) => { if (open && yMid > hy) put(name, [toFlap(g)], mat, flap); else put(name, [g], mat); };
+
+  const prof = roundTrap(W, W, H, rb, rt, 5);
+  const main = F(P[0]), dark = F(0x1b1c1f, 'plain'), metal = F(0xb7bbc0, 'metal');
+
+  // body: back shell + front lower + front flap (split along the main zip)
+  put('Bag_Body', [extG(prof, 0, zs)], main);
+  front('Bag_Body', prof, zs, D, main);
+  // main zip coil + tape along the sides and top
+  const zipKeep = (p, q) => p[1] > 1.5 && q[1] > 1.5;
+  if (!open) put('Bag_Zip', tubesAlong([...prof, prof[0]], zs, 0.45, zipKeep), dark);
+  else {
+    put('Bag_Zip', tubesAlong([...prof, prof[0]], zs - 0.25, 0.4, zipKeep), dark);
+    put('Bag_Zip', tubesAlong([...prof, prof[0]], zs + 0.25, 0.4, (p, q) => zipKeep(p, q) && p[1] <= hy + 0.01 && q[1] <= hy + 0.01), dark);
+    put('Bag_Zip', tubesAlong([...prof, prof[0]], zs + 0.25, 0.4, (p, q) => p[1] >= hy && q[1] >= hy).map(toFlap), dark, flap);
+  }
+  // zip pulls: on top when closed, slid down to the hinge when open
+  const pulls = [];
+  if (!open) for (const s of [-1, 1]) pulls.push(bx(1.3, 0.5, 4.6, s * 1.6, H + 0.25, zs + 2.4), bx(1.1, 0.8, 1.6, s * 1.6, H + 0.3, zs + 0.5));
+  else for (const s of [-1, 1]) pulls.push(bx(0.5, 4.6, 1.3, s * (W / 2 + 0.35), hy - 1.8, zs), bx(0.8, 1.6, 1.1, s * (W / 2 + 0.35), hy + 0.6, zs));
+  put('Bag_Pulls', pulls.filter((_, i) => i % 2 === 0), id === 'slim' ? main : (id === 'kids' ? F(P[3], 'plain') : dark));
+  put('Bag_PullHeads', pulls.filter((_, i) => i % 2 === 1), metal);
+
+  // grab handle on top (on the back shell)
+  const hz = zs * 0.45, hw = id === 'sport' ? 3.4 : 2.6;
+  put('Bag_Handle', ribbon([[-4.2, H - 0.8, hz], [-3.6, H + 3.6, hz], [3.6, H + 3.6, hz], [4.2, H - 0.8, hz]], [0, 0, 1], hw, id === 'sport' ? 1.2 : 0.5),
+    id === 'kids' ? F(P[3]) : (id === 'sport' ? F(P[0]) : main));
+
+  // back padding
+  put('Bag_BackPad', [extG(rrectAt(W - 9, H * 0.5, 4, 0, H * 0.32), -1.2, 0)], id === 'kids' ? F(P[1], 'mesh') : (id === 'slim' ? F(P[1]) : F(id === 'classic' ? P[1] : P[0], 'mesh')));
+
+  // shoulder straps (worn shape) — 'none' when the level hangs the bag by its straps
+  const strapMat = id === 'kids' ? main : (id === 'sport' ? F(P[0]) : main);
+  const sides = o.straps === 'none' ? [] : o.straps === 'left' ? [-1] : o.straps === 'right' ? [1] : [-1, 1];
+  for (const s of sides) {
+    const pts = [[s * 7, H - 2.5, -0.2], [s * 7.6, H - 0.8, -3.4], [s * 8.6, H * 0.66, -5.6], [s * 10, H * 0.3, -4.6], [s * 11, 6, -1.8], [s * 11.6, 2.6, -0.3]];
+    put('Bag_Straps', ribbon(pts.slice(0, 4), [1, 0, 0], 6.4, 1.9), strapMat);
+    put('Bag_Webbing', ribbon(pts.slice(3), [1, 0, 0], 2.6, 0.5), dark);
+    put('Bag_Buckles', [bx(3.2, 1.4, 1.2, s * 10, H * 0.3, -4.6)], id === 'kids' ? F(P[3], 'plain') : dark);
+  }
+
+  /* ---------- design details ---------- */
+  if (id === 'classic') {
+    const grey = F(P[1]);
+    put('Bag_Base', [extG(clipY(prof, 0, 6).map(([x, y]) => [x * (W / 2 + 0.4) / (W / 2), y < 0.01 ? -0.4 : y]), -0.4, D + 0.4)], grey);
+    const pk = rrectAt(24, 17, 3.5, 0, 6.5);
+    front('Bag_Pocket', clipY(pk, 0, 18.5), D, D + 4.5, main);
+    front('Bag_PocketTop', clipY(pk, 18.5, 99), D, D + 4.5, grey);
+    put('Bag_PocketZip', [bx(20.5, 0.45, 0.5, 0, 18.4, D + 4.5)], dark);
+    put('Bag_Pulls', [bx(1.2, 4.6, 0.5, -9.6, 15.6, D + 4.8)], dark); put('Bag_PullHeads', [bx(1, 1.6, 0.7, -9.6, 18.2, D + 4.9)], metal);
+    for (const s of [-1, 1]) {
+      put('Bag_SidePockets', [bx(3, 14, D - 3, s * (W / 2 + 1.5), 9.5, D / 2)], grey);
+      put('Bag_SideElastic', [bx(3.4, 1.6, D - 2.6, s * (W / 2 + 1.6), 16.6, D / 2)], F(P[1] === 0x6f7378 ? 0x5b5f64 : P[2]));
+    }
+    put('Bag_Piping', tubesAlong([...prof, prof[0]], zs - 1.0, 0.35, zipKeep), grey);
+  }
+  if (id === 'slim') {
+    front('Bag_Pocket', rrectAt(27, 18, 2.5, 0, 3), D, D + 1.6, main);
+    put('Bag_PocketZip', [bx(23, 0.45, 0.4, 0, 20.4, D + 1.6)], F(P[1], 'plain'));
+    put('Bag_Pulls', [bx(1.3, 5, 0.6, -10.8, 17.4, D + 1.9)], main); put('Bag_PullHeads', [bx(1, 1.5, 0.7, -10.8, 20.2, D + 2)], F(P[1], 'plain'));
+    put('Bag_Seam', [bx(W - 1, 0.3, 0.3, 0, 21.6, D + 0.1)], F(P[1], 'plain'));
+  }
+  if (id === 'kids') {
+    const sec = F(P[1]), wht = F(P[2]), yel = F(P[3]);
+    put('Bag_Base', [extG(clipY(prof, 0, 5).map(([x, y]) => [x * (W / 2 + 0.4) / (W / 2), y < 0.01 ? -0.4 : y]), -0.4, D + 0.4)], sec);
+    const panel = rrectAt(24, 27, 6, 0, 4);
+    front('Bag_Panel', panel, D, D + 2.6, sec);
+    const pk = rrectAt(20, 18, 4, 0, 6);
+    front('Bag_Pocket', pk, D + 2.6, D + 5.4, wht);
+    // yellow piping around the panel, red around the white pocket
+    const keepUp = (p, q) => p[1] > 5 && q[1] > 5;
+    const pipe = (pts, z, mat) => { for (const g of tubesAlong([...pts, pts[0]], z, 0.38, keepUp)) { const pos = g.attributes.position; let ym = 0; for (let i = 0; i < pos.count; i++) ym += pos.getY(i); frontGeo('Bag_Piping', g, mat, ym / pos.count); } };
+    pipe(panel, D + 2.6, yel); pipe(pk, D + 5.4, main);
+    // rainbow + clouds
+    const arc = (r0, r1) => { const s = new THREE.Shape(); s.moveTo(r1, 0); s.absarc(0, 0, r1, 0, Math.PI, false); s.lineTo(-r0, 0); s.absarc(0, 0, r0, Math.PI, 0, true); return s; };
+    [[6.4, 5.1, P[3]], [5.1, 3.9, P[1]], [3.9, 2.7, P[0]]].forEach(([r1, r0, col]) => { const g = extShape(arc(r0, r1), D + 5.4, D + 5.75); g.translate(0, 15.6, 0); put('Bag_Rainbow', [g], F(col, 'plain')); });
+    put('Bag_Clouds', [-6.2, -4, 4, 6.2, -1.6, 1.6].map((x, i) => cyl(i > 3 ? 1.5 : 1.8, 0.5, x, 15.6 + (i > 3 ? 0.8 : 0), D + 5.75, 10, 'z')), F(0xffffff, 'plain'));
+    // pen pocket + pens
+    put('Bag_PenPocket', [extG(rrectAt(16, 7, 1.2, 0, 7), D + 5.4, D + 6.8)], yel);
+    [[-5.5, P[1]], [-3.4, P[0]], [-1.3, 0xffffff]].forEach(([x, col]) => put('Bag_Pens', [cyl(0.55, 7.5, x, 13, D + 6.1, 6), cyl(0.65, 1.6, x, 16.6, D + 6.1, 6)], F(col, 'plain')));
+    // mesh side pockets + bottle
+    for (const s of [-1, 1]) {
+      put('Bag_SideMesh', [bx(3.2, 13, D - 3, s * (W / 2 + 1.6), 9, D / 2)], F(P[1], 'mesh'), root, 1 / c(12));
+      put('Bag_SideBand', [bx(3.6, 1.6, D - 2.6, s * (W / 2 + 1.7), 15.6, D / 2)], yel);
+    }
+    put('Bag_Bottle', [cyl(3, 14, -(W / 2 + 2.6), 10.5, D / 2, 10)], F(0xf4f4f2, 'plain'));
+    put('Bag_BottleCap', [cyl(2.3, 3, -(W / 2 + 2.6), 19, D / 2, 10), bx(0.9, 2.4, 3.2, -(W / 2 + 2.6), 21.4, D / 2)], yel);
+  }
+  if (id === 'sport') {
+    const acc = F(P[1]), refl = F(P[2], 'metal'), rub = F(P[3], 'plain');
+    put('Bag_Base', [extG(clipY(prof, 0, 5).map(([x, y]) => [x * (W / 2 + 0.6) / (W / 2), y < 0.01 ? -0.6 : y]), -0.6, D + 0.6)], rub);
+    put('Bag_BaseRibs', [-8, 0, 8].map(x => bx(5, 0.6, 1, x, 2.2, D + 0.8)), rub);
+    const slab = rrectAt(29, 36, 7, 0, 4);
+    front('Bag_Compartment', slab, D, D + 3, main);
+    const keepUp = (p, q) => p[1] > 5 && q[1] > 5;
+    for (const g of tubesAlong([...slab, slab[0]], D + 3, 0.4, keepUp)) { const pos = g.attributes.position; let ym = 0; for (let i = 0; i < pos.count; i++) ym += pos.getY(i); frontGeo('Bag_Piping', g, acc, ym / pos.count); }
+    front('Bag_UpperPocket', rrectAt(25, 11, 3, 0, 25), D + 3, D + 5, main);
+    for (const s of [-1, 1]) front('Bag_Wedge', [[s * 12.5, 24.5], [s * 7.5, 24.5], [s * 12.5, 33]], D + 3, D + 5.3, acc);
+    frontGeo('Bag_UpperZip', bx(19, 0.45, 0.4, 1, 33, D + 5), dark, 33);
+    const lp = rrectAt(25, 18, 4, 0, 5);
+    front('Bag_LowerPocket', lp, D + 3, D + 7, main);
+    put('Bag_LowerPiping', tubesAlong([...lp, lp[0]], D + 7, 0.38, (p, q) => p[1] > 15 && q[1] > 15), acc);
+    for (const s of [-1, 1]) {
+      put('Bag_Reflect', [bxr(0.7, 15, 0.3, s * 7, 13.5, D + 7.1, s * 0.16)], refl);
+      put('Bag_Chevrons', [0, 1, 2].map(k => bxr(3.4, 0.9, 0.3, s * 10, 8.5 + k * 2, D + 7.1, -s * 0.6)), acc);
+      put('Bag_SideMesh', [bx(3.4, 15, D - 4, s * (W / 2 + 1.7), 10.5, D / 2)], F(P[0], 'mesh'), root, 1 / c(12));
+      put('Bag_SideBand', [bx(3.8, 1.6, D - 3.6, s * (W / 2 + 1.8), 18.2, D / 2)], acc);
+      put('Bag_Compression', ribbon([[s * (W / 2 + 0.3), 30, 2], [s * (W / 2 + 0.3), 30, D - 1.5]], [0, 1, 0], 2.4, 0.5), dark);
+      put('Bag_Buckles', [bx(0.9, 3, 4, s * (W / 2 + 0.7), 30, D / 2 + 1)], dark);
+    }
+  }
+
+  // open: lining, interior floor and books
+  if (open) {
+    const lin = F(0x26272b, 'plain');
+    put('Bag_Lining', [extG(clipY(prof, hy - 1, H - 0.8).map(([x, y]) => [x * (W / 2 - 1) / (W / 2), y]), zs, zs + 0.3)], lin);
+    put('Bag_Lining', [bx(W - 2.5, 0.3, D - zs - 1, 0, hy + 0.15, (zs + D) / 2)], lin);
+    put('Bag_Lining', [toFlap(extG(clipY(prof, hy, H - 0.8).map(([x, y]) => [x * (W / 2 - 1) / (W / 2), y]), zs - 0.3, zs))], lin, flap);
+    let z = zs + 0.6, k = (o.seed || 0);
+    const books = id === 'kids' ? [[18, 23, 1.6], [16, 21, 2.2]] : id === 'slim' ? [[21, 28, 0.9], [19, 25, 1.6]] : [[20, 27, 2], [17, 24, 2.6], [21, 29, 0.9]];
+    for (const [bw, bh, bt] of books) {
+      if (z + bt > D - 0.5) break;
+      const col = BOOK_COLORS[(k++) % BOOK_COLORS.length];
+      const g = new THREE.BoxGeometry(bw, bh, bt).toNonIndexed(); g.rotateX(-0.07); g.rotateZ((k % 2 ? 1 : -1) * 0.05);
+      const by = Math.max(0.5, H - bh - 4 + (k % 3) * 1.0);   // sunk inside; tops sit just below the rim, a little peeking
+      g.translate((k % 3 - 1) * 1.2, by + bh / 2, z + bt / 2);
+      put('Bag_Books', [g], F(col, 'plain'));
+      const pg = new THREE.BoxGeometry(bw - 0.8, 0.4, bt * 0.8).toNonIndexed(); pg.rotateX(-0.07); pg.translate((k % 3 - 1) * 1.2, by + bh + 0.05, z + bt / 2 - 0.9);
+      put('Bag_Pages', [pg], F(0xf4f1e8, 'plain'));
+      z += bt + 0.35;
+    }
+  }
+
+  for (const b of buckets.values()) {
+    b.geos.forEach(g => g.scale(CM, CM, CM));
+    b.parent.add(envFinish(mergedMesh(b.name, b.geos, b.mat, b.uv), tex));
+  }
+  root.userData.bag = { id, H: c(H), W: c(W), D: c(D) };
+  return root;
+}
+
+/* ------------------------------------------------------------------
+   Backpacks in the classroom: one per chair.
+   10 hang over the chair back by both straps, 2 hang off one corner
+   by a single strap, 4 sit on the floor next to the chair.
+------------------------------------------------------------------ */
+const BAG_PLAN = (() => {
+  const mode = ['back', 'back', 'floor-stand', 'back', 'back', 'floor-lean', 'back', 'one-strap', 'back', 'one-strap', 'back', 'back', 'floor-stand', 'back', 'back', 'floor-lean'];
+  const design = ['classic', 'slim', 'kids', 'sport', 'slim', 'sport', 'classic', 'kids', 'kids', 'classic', 'sport', 'slim', 'sport', 'kids', 'slim', 'classic'];
+  const open = new Set([1, 4, 6, 10, 13, 15]);
+  const seen = {};
+  return mode.map((m, i) => { const d = design[i]; seen[d] = (seen[d] || 0); const pal = seen[d]++; return { mode: m, design: d, state: open.has(i) ? 'open' : 'closed', pal, side: i % 2 ? 1 : -1 }; });
+})();
+
+// Builds a bag (+ any straps draped over the chair) in the chair's local space
+function placeBagOnChair(chair, plan, v, idx) {
+  const B = BAG_DESIGNS[plan.design], pal = B.pals[plan.pal], tex = v.tex || 'painted';
+  const base = { tex, state: plan.state, pal, seed: idx * 2 };
+  const strapMat = bagMat(tex, pal[0]);
+  const out = new THREE.Group(); out.name = `Bag_${String(idx + 1).padStart(2, '0')}`; out.userData.node = true;
+  const strapMesh = (name, pts, across, w, t) => {
+    const g = ribbon(pts, across, w, t); g.forEach(x => x.scale(CM, CM, CM));
+    return envFinish(mergedMesh(name, g, strapMat, DESK_UV), tex);
+  };
+  if (plan.mode === 'back') {
+    const bag = buildBag(plan.design, { ...base, straps: 'none' });
+    const top = 82, zb = 25.8;
+    bag.position.set(0, c(top - B.H), c(zb));
+    out.add(bag);
+    for (const s of [-1, 1]) {
+      const x = s * 7.5, bot = top - B.H;
+      // strap path keeps ~1 cm clear of the leaning, curved backrest: up behind it, over the top,
+      // down in front of it, under its bottom edge and back to the bag's lower corners
+      out.add(strapMesh('Bag_Straps', [[x, top - 2, 24.2], [x, 87.6, 24.6], [x, 87.4, 21.2], [x, 84, 20.9], [x, 64.5, 16.3], [x * 1.05, 60.8, 19.0], [x * 1.25, 55, 24.6], [x * 1.5, bot + 2.6, 25.0]], [1, 0, 0], 6.2, 1.6));
+    }
+  } else if (plan.mode === 'one-strap') {
+    // hangs behind the backrest from one strap looped over its top corner, tilted under the hook
+    const s = plan.side, bag = buildBag(plan.design, { ...base, straps: s > 0 ? 'left' : 'right' });
+    const anchorL = new THREE.Vector3(c(s * 7), c(B.H - 2.5), 0);
+    bag.rotation.set(0, 0, s * 0.3);
+    const X = s * 15, target = new THREE.Vector3(c(X), c(76), c(25.8));
+    bag.position.copy(target).sub(anchorL.clone().applyEuler(bag.rotation));
+    out.add(bag);
+    // the hooked strap wraps the backrest: up behind it, over the top corner, down in front
+    // (clear of the curved edge), under the bottom, out past the back post, back to the bag's lower corner
+    const corner = new THREE.Vector3(c(s * 11.6), c(2.6), c(-0.3)).applyEuler(bag.rotation).add(bag.position).divideScalar(CM);
+    out.add(strapMesh('Bag_HookStrap', [[X, 76, 25.0], [X, 86.8, 23.8], [X, 87.2, 20.0], [X, 83.5, 19.2], [s * 14, 64.5, 15.0], [s * 15.5, 60.5, 16.5], [s * 18.5, 56.5, 18.0], [corner.x, corner.y + 1.5, corner.z]], [1, 0, 0], 5.8, 1.6));
+  } else {
+    const bag = buildBag(plan.design, { ...base, straps: 'both' });
+    const s = plan.side;
+    if (plan.mode === 'floor-stand') { bag.position.set(c(s * 36), 0, c(4)); bag.rotation.y = s * 0.55 + (idx % 3 - 1) * 0.25; }
+    else { bag.position.set(c(s * 34), 0, c(-6)); bag.rotation.set(-0.2, s * 1.35, 0, 'YXZ'); bag.position.y = c(0.6); }
+    out.add(bag);
+  }
+  return out;
+}
+
+/* A 4 u dart paper plane — same length as the Aircraft Lab planes */
+function dartMesh(tex) {
+  const P = [
+    [0, 0, 2], [-1.25, 0.25, -2], [0, 0, -2],
+    [0, 0, 2], [0, 0, -2], [1.25, 0.25, -2],
+    [0, 0, 2], [0, -0.55, -2], [0, 0, -2],
+  ].flat();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  envUV(g, 1 / 6); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, envMat(tex, 'paper'));
+  m.castShadow = true; m.userData.helper = true;
+  addSeams(m, ENV_LOOKS[tex].seam, 0.55, 1, 1);
+  return m;
+}
+function buildPaperPlane(tex) {
+  const m = dartMesh(tex); m.name = 'PaperPlane_Ref';
+  const grp = new THREE.Group(); grp.name = 'ScaleRef'; grp.userData.scaleRef = true; grp.userData.helper = true;
+  grp.add(m);
+  return grp;
+}
+
+/* Base mock-up: Model Lab footprints at their real sizes, to check fit.
+   Viewer only (stripped from exports). */
+function mockMat(key, opts) {
+  const k = 'mock:' + key;
+  if (!ENV_MAT_CACHE.has(k)) ENV_MAT_CACHE.set(k, std('Mock_' + key, opts));
+  return ENV_MAT_CACHE.get(k);
+}
+function buildBaseMock() {
+  const card = mockMat('card', { map: cardboardTexture(3) }), lid = mockMat('lid', { map: cardboardTexture(7, [204, 163, 117]) });
+  const dark = mockMat('dark', { color: 0x4a4440 }), asphalt = mockMat('asphalt', { color: 0x54575b }), white = mockMat('white', { color: 0xeeeae2 });
+  const g = new THREE.Group(); g.name = 'BaseMockup'; g.userData.helper = true; g.userData.baseMock = true;
+  const box = (w, h, d, x, z, mat, y = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d).toNonIndexed(), mat);
+    m.position.set(x, y + h / 2, z); m.castShadow = m.receiveShadow = true; m.userData.helper = true;
+    addSeams(m, 0x2a2623, 0.55, 25, 1); g.add(m); return m;
+  };
+  const hx = DESK.W / 2, hz = DESK.D / 2;
+  // Runway L3 (13 × 2.4) down the middle, with a dashed centreline
+  box(2.4, 0.08, 13, 0, -0.5, asphalt);
+  for (let i = 0; i < 6; i++) box(0.14, 0.02, 0.9, 0, -6 + i * 2.2, white, 0.08);
+  for (const z of [-6.7, 5.7]) for (let i = 0; i < 4; i++) box(0.2, 0.02, 0.6, -0.8 + i * 0.53, z, white, 0.08);
+  const plane = dartMesh('paper'); plane.position.set(0, 0.7, 3.2); plane.rotation.y = Math.PI; g.add(plane);
+  // Command Center L3 (4.0 × 2.1, tower 2.6 tall)
+  box(4.0, 1.15, 2.1, -hx + 6, -hz + 5, card); box(0.86, 2.6, 0.86, -hx + 7.6, -hz + 4.3, lid);
+  // Workshop L3 (4.4 × 2.4) with a dark roof
+  box(4.4, 1.3, 2.4, -hx + 6, 2, card); box(4.4, 0.35, 2.4, -hx + 6, 2, dark, 1.3);
+  // Storage L3 (4.8 × 3.4)
+  box(4.8, 1.6, 3.4, hx - 6.5, -hz + 5.5, card);
+  // Helipad (2 × 2)
+  box(2, 0.1, 2, hx - 6, 3, dark); box(0.25, 0.02, 1.0, hx - 6.3, 3, white, 0.1); box(0.25, 0.02, 1.0, hx - 5.7, 3, white, 0.1); box(0.6, 0.02, 0.22, hx - 6, 3, white, 0.1);
+  // Four towers in the corners
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 1.1, 6).toNonIndexed(), lid);
+    t.position.set(sx * (hx - 2.5), 0.55, sz * (hz - 2.5)); t.castShadow = true; t.userData.helper = true;
+    addSeams(t, 0x2a2623, 0.55, 25, 1); g.add(t);
+    box(0.25, 0.25, 0.9, sx * (hx - 2.5), sz * (hz - 2.5) + 0.4, dark, 1.0);
+  }
+  g.position.y = DESK.H;
+  return g;
+}
+
+/* ------------------------------------------------------------------
+   Level: Classroom (demo)
+   7.2 × 8.2 m room, 3 m high. 16 desks in a 4 × 4 grid facing the
+   board wall (−Z): 1.6 m between desk centres side to side (95 cm
+   gaps), 1.6 m row to row. Each desk has a chair behind it, nudged
+   and turned a little; a few are pushed out or swung round. Teacher's
+   zone at the front (2 m), side aisles of 85 cm.
+------------------------------------------------------------------ */
+const M = c(100);                          // one metre in units
+const CLASSROOM = {
+  floor: [7.2 * M, 8.2 * M],
+  cols: [-2.4, -0.8, 0.8, 2.4].map(x => x * M),
+  rows: [-1.85, -0.25, 1.35, 2.95].map(z => z * M),
+};
+const ROOM_STATIC = () => [
+  { id: 'Wall_Front', model: 'wall', length: +(7.2 * M + 2 * WALL.T).toFixed(2), position: [0, 0, -4.1 * M], rotationY: 0, note: 'blackboard wall' },
+  { id: 'Wall_Back', model: 'wall', length: +(7.2 * M + 2 * WALL.T).toFixed(2), position: [0, 0, 4.1 * M], rotationY: +Math.PI.toFixed(4) },
+  { id: 'Wall_Left', model: 'wall-window', length: 8.2 * M, windows: [-2.4 * M, 0, 2.4 * M], position: [-3.6 * M, 0, 0], rotationY: +(Math.PI / 2).toFixed(4), note: '3 windows' },
+  { id: 'Wall_Right', model: 'wall-door', length: 8.2 * M, door: { x: -3.2 * M }, position: [3.6 * M, 0, 0], rotationY: +(-Math.PI / 2).toFixed(4), note: 'door at the front' },
+  { id: 'Blackboard', model: 'blackboard', parent: 'Wall_Front', position: [0, 0, 0], rotationY: 0 },
+  { id: 'TeacherDesk', model: 'teacherdesk', position: [+(-2.4 * M).toFixed(2), 0, +(-3.0 * M).toFixed(2)], rotationY: 0.05 },
+];
+function classroomLayout() {
+  const items = [...ROOM_STATIC()];
+  let seed = 9001;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
+  CLASSROOM.rows.forEach((z, ri) => CLASSROOM.cols.forEach((x, ci) => {
+    const n = ri * CLASSROOM.cols.length + ci;
+    const ch = chairPlacement(n, rnd);
+    const bp = BAG_PLAN[n];
+    items.push({
+      id: `Bag_${String(n + 1).padStart(2, '0')}`,
+      model: `backpack-${bp.design}`,
+      chair: `Chair_${String(n + 1).padStart(2, '0')}`,
+      state: bp.state, mode: bp.mode, pal: bp.pal, side: bp.side, design: bp.design,
+      colors: BAG_DESIGNS[bp.design].pals[bp.pal].map(h => '#' + h.toString(16).padStart(6, '0')),
+    });
+    items.push({
+      id: `Chair_${String(n + 1).padStart(2, '0')}`,
+      model: 'chair',
+      row: ri + 1,
+      position: [+(x + ch.dx).toFixed(2), 0, +(z + ch.dz).toFixed(2)],
+      rotationY: +ch.rot.toFixed(3),
+    });
+    items.push({
+      id: `Desk_${String(n + 1).padStart(2, '0')}`,
+      model: 'desk',
+      row: ri + 1,
+      position: [+x.toFixed(2), 0, +z.toFixed(2)],
+      rotationY: 0,
+    });
+  }));
+  return items;
+}
+
+function buildClassroom(v = {}) {
+  const tex = v.tex || 'painted';
+  const root = new THREE.Group(); root.name = 'Classroom';
+  root.userData.part = true;
+
+  const [FW, FD] = CLASSROOM.floor;
+  const floor = mergedMesh('Floor', [bx(FW, 2, FD, 0, -1, 0)], envMat(tex, 'floor'), tex === 'painted' ? 1 / (1.2 * M) : 1 / (1.5 * M));
+  floor.userData.placeholder = true;
+  floor.receiveShadow = true;
+  addSeams(floor, ENV_LOOKS[tex].seam, 0.55, 25, ENV_PENCIL);
+  root.add(floor);
+
+  const walls = new THREE.Group(); walls.name = 'Walls'; walls.userData.node = true;
+  const byId = {};
+  const desks = new THREE.Group(); desks.name = 'Desks'; desks.userData.node = true;
+  const chairs = new THREE.Group(); chairs.name = 'Chairs'; chairs.userData.node = true;
+  const chairById = {}, pendingBags = [];
+  for (const it of classroomLayout()) {
+    if (it.model.startsWith('wall')) {
+      const w = buildWall(v, { len: it.length, door: it.door, windows: it.windows, name: it.id });
+      w.position.fromArray(it.position); w.rotation.y = it.rotationY; w.userData.cut = true;
+      w.traverse(o => { if (o.userData.socketMarker) o.visible = false; });
+      w.traverse(o => { if (o.isMesh) o.castShadow = false; });       // indoor light: walls don't throw sun shadows
+      walls.add(w); byId[it.id] = w; continue;
+    }
+    if (it.model === 'blackboard' || it.model === 'teacherdesk') {
+      const m = it.model === 'blackboard' ? buildBlackboard(v) : buildTeacherDesk(v);
+      m.name = it.id; m.position.fromArray(it.position); m.rotation.y = it.rotationY;
+      m.traverse(o => { if (o.userData.socketMarker) o.visible = false; });
+      (it.parent ? byId[it.parent] : root).add(m);                     // the board hides with its wall
+      continue;
+    }
+    if (it.model.startsWith('backpack')) { pendingBags.push(it); continue; }
+    if (it.model === 'chair') {
+      const ch = buildChair(v);
+      ch.name = it.id; ch.userData.collapse = 'SchoolChair';
+      ch.position.fromArray(it.position); ch.rotation.y = it.rotationY;
+      ch.traverse(o => { if (o.userData.socketMarker) o.visible = false; });
+      chairs.add(ch); chairById[it.id] = ch;
+      continue;
+    }
+    const d = buildDesk(v);
+    d.name = it.id; d.userData.collapse = 'SchoolDesk';
+    d.position.fromArray(it.position); d.rotation.y = it.rotationY;
+    d.traverse(o => { if (o.userData.socketMarker) o.visible = false; });   // 16 × 3 markers is noise
+    if (it.id === 'Desk_06' || it.id === 'Desk_07') d.add(buildBaseMock());  // two example bases
+    desks.add(d);
+  }
+  pendingBags.forEach((it, i) => { const ch = chairById[it.chair]; if (ch) ch.add(placeBagOnChair(ch, it, v, i)); });
+  root.add(walls);
+  root.add(desks);
+  root.add(chairs);
+
+  const ref = buildPaperPlane(tex);
+  ref.position.set(-0.8 * M, DESK.H + 9, CLASSROOM.rows[1] + DESK.D * 0.75); ref.rotation.set(0.08, 0.6, -0.15);
+  root.add(ref);
+  return root;
+}
+
+/* Simple prop controller: toggles named groups, gently floats the plane */
+function envController(root) {
+  const ref = root.getObjectByName('ScaleRef');
+  const mocks = [], doors = [];
+  root.traverse(o => { if (o.userData.baseMock) mocks.push(o); if (o.userData.doorPivot) doors.push(o); });
+  let cut = true, doorOpen = false;
+  const baseY = ref?.position.y ?? 0;
+  let t = 0;
+  return {
+    state: '',
+    setProp(key, on) {
+      if (key === 'scaleRef' && ref) ref.visible = on;
+      if (key === 'baseMock') mocks.forEach(m => m.visible = on);
+      if (key === 'cutaway') { cut = on; applyCutaway(root, camera.position, cut); }
+      if (key === 'doorOpen') doorOpen = on;
+    },
+    update(dt) {
+      applyCutaway(root, camera.position, cut);
+      doors.forEach(d => { const goal = doorOpen ? -1.15 : 0; d.rotation.y += (goal - d.rotation.y) * Math.min(1, dt * 4); });
+      t += dt; if (ref) { ref.position.y = baseY + Math.sin(t * 1.4) * 0.6; ref.rotation.z = -0.15 + Math.sin(t * 0.9) * 0.08; } },
+    reset() { t = 0; if (ref) ref.position.y = baseY; doors.forEach(d => d.rotation.y = 0); },
+  };
+}
+
+function buildDeskWithRef(v) {
+  const d = buildDesk(v);
+  d.add(buildBaseMock());
+  const ref = buildPaperPlane(v.tex || 'painted');
+  ref.position.set(c(14), DESK.H + 7, c(14)); ref.rotation.set(0.05, 0.7, -0.12);
+  d.add(ref);
+  return d;
+}
+
+/* ------------------------------------------------------------------
+   Roster. Ones with a model are selectable; the rest are "soon".
+------------------------------------------------------------------ */
+const ROSTER = [
+  ['Structure', [
+    ['wall', 'Wall', 'Modular panel'],
+    ['walldoor', 'Wall + Door', 'Door module'],
+    ['wallwindow', 'Wall + Window', 'Window module'],
+  ]],
+  ['Furniture', [
+    ['desk', 'School Desk', 'Single student desk'],
+    ['chair', 'School Chair', 'Matches the desk'],
+    ['teacherdesk', 'Teacher’s Desk', 'Empty'],
+    ['board', 'Blackboard', 'Wall-mounted'],
+    ['shelf', 'Bookshelf', 'soon'],
+  ]],
+  ['Backpacks', [
+    ['bag-classic', 'Classic Backpack', 'Navy & grey'],
+    ['bag-slim', 'Slim Backpack', 'Minimal'],
+    ['bag-kids', 'Kids Backpack', 'Rainbow pocket'],
+    ['bag-sport', 'Sport Backpack', 'Multi-pocket'],
+  ]],
+  ['Levels', [
+    ['classroom', 'Classroom', 'Demo · 16 desks, chairs, bags'],
+    ['hallway', 'Hallway', 'soon'],
+    ['bedroom', 'Bedroom', 'soon'],
+    ['kitchen', 'Kitchen', 'soon'],
+  ]],
+];
+
+const ENV_GUIDE_COMMON = [
+  'Scale: game units, shared with Aircraft Lab and Model Lab. <b>1 real cm = 0.6 u</b>, so a desk top is 39 × 30 u: a whole base for a 13 u runway, 3–5 u buildings and 4 u planes. Synty props (1 u = 1 m) need a scale of <code>60</code> to match this room.',
+  'Y up. Origin on the floor. The front of furniture (where you sit) faces <b>+Z</b>; the board wall is towards <b>−Z</b>.',
+  'Design and Texture are switches, not separate models: the geometry is identical, so you can swap looks per level. Pencil strokes are viewer-only and stripped from the GLB; the game re-creates them with an outline shader.',
+];
+
+const MODELS = [
+  {
+    id: 'desk',
+    name: 'School Desk',
+    kicker: 'Furniture · Classroom',
+    description: 'Single student desk at real size: a 65 × 50 cm beech-laminate top with a dark edge band and pencil groove, a blue steel frame with foot rails and a back bar, a grey book tray open towards the student, rubber feet and a bag hook on the right.',
+    build: (v) => buildDeskWithRef(v),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '65 × 50 × 72 cm', Size: '39 × 30 × 43 u', 'Base area': '39 × 30 u' },
+    properties: { baseMock: { label: 'Base mock-up', default: true }, scaleRef: { label: 'Floating plane', default: true } },
+    nodes: [
+      ['Desk_Top', 'Laminate top + edge band (2 materials)'],
+      ['Desk_Groove', 'Pencil groove along the back edge'],
+      ['Desk_Frame', 'Legs, aprons, foot rails, back bar, bag hook'],
+      ['Desk_Tray', 'Book tray, open towards +Z'],
+      ['Desk_Feet', 'Rubber feet'],
+      ['socket_top', 'Centre of the top surface (y = 43.2) — the base sits here'],
+      ['BaseMockup', 'Viewer only: Model Lab footprints at true size (L3 runway, Command Center, Workshop, Storage, Helipad, 4 towers, a 4 u plane)'],
+      ['socket_chair', 'Floor point 28 u behind the desk centre — a neatly placed chair goes here'],
+      ['socket_bag', 'Bag hook — hang a backpack here'],
+    ],
+  },
+  {
+    id: 'chair',
+    name: 'School Chair',
+    kicker: 'Furniture · Classroom',
+    description: 'Classic stacking school chair (after your reference photo): a moulded black seat with a rolled front edge, a curved backrest that wraps around the sitter on two chrome posts, and a splayed chrome frame where each side is one bent tube (front leg, rail under the seat, rear leg), with grey glides.',
+    build: (v) => { const ch = buildChair(v); const ref = buildPaperPlane(v.tex || 'painted'); ref.position.set(c(6), CHAIR.SH + 8, c(-4)); ref.rotation.set(0.05, 0.7, -0.12); ch.add(ref); return ch; },
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '41 × 40 cm seat · 43 cm high · 84 cm back', Size: '25 × 24 u seat · 50 u tall' },
+    properties: { scaleRef: { label: 'Floating plane', default: true } },
+    nodes: [
+      ['Chair_Seat', 'Moulded seat shell (dished, rolled front edge)'],
+      ['Chair_Back', 'Curved backrest shell, leaning back ~12°'],
+      ['Chair_Frame', 'Chrome tubes: legs, rails, braces, back posts'],
+      ['Chair_Glides', 'Floor glides'],
+      ['socket_seat', 'Top of the seat (y = 26.7)'],
+    ],
+  },
+  {
+    id: 'wall',
+    name: 'Wall',
+    kicker: 'Structure · Modular',
+    description: 'Modular classroom wall, shown as a 4 m panel (any length works). 3 m high and 12 cm thick: sage-green wainscot up to 1 m with a white chair rail, cream paint above and a dark skirting board. Inside face points +Z.',
+    build: (v) => buildWall(v, { len: c(400) }),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '4 m × 3 m × 12 cm', Size: '240 × 180 × 7.2 u', Length: 'any (per placement)' },
+    properties: {},
+    nodes: [
+      ['Wall_Wainscot', 'Lower band, 0–1 m'], ['Wall_Upper', 'Painted upper wall, 1–3 m'],
+      ['Wall_Skirting', '10 cm skirting board'], ['Wall_ChairRail', 'Rail at 1 m'],
+    ],
+  },
+  {
+    id: 'walldoor',
+    name: 'Wall + Door',
+    kicker: 'Structure · Door module',
+    description: 'A 3 m wall panel with a classroom door. A 95 × 210 cm wooden leaf fills the opening with 4 mm gaps, inside a lining with door stops and a two-part white architrave on both faces. The leaf has stiles and rails, a raised lower panel, a glazed upper panel with beads, three hinges, lever handles on roses, key escutcheons and a kick plate. It swings into the room on its own hinge node.',
+    build: (v) => buildWall(v, { len: c(300), door: { x: 0 } }),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '3 m wall · 95 × 210 cm door', Size: '180 × 180 u', Opening: '61 × 128 u' },
+    properties: { doorOpen: { label: 'Door open', default: false } },
+    nodes: [
+      ['Wall_DoorFrame', 'Lining, stops, architraves (both faces)'],
+      ['Wall_Threshold', 'Metal threshold strip'],
+      ['Door_Pivot', 'Hinge node — rotation.y 0 (closed) … −1.15 (open into the room)'],
+      ['Door_Leaf / Door_Beads / Door_Glass', 'Stiles, rails, raised panel, glazing'],
+      ['Door_Hardware', 'Hinges, roses, levers, escutcheons, kick plate'],
+      ['socket_door', 'Standing spot just inside the door'],
+    ],
+  },
+  {
+    id: 'wallwindow',
+    name: 'Wall + Window',
+    kicker: 'Structure · Window module',
+    description: 'A 3 m wall panel with a 160 × 140 cm classroom window, sill at 105 cm just above the chair rail: plaster reveals, a white frame with a mullion and transom (two side-hung casements and a fanlight above), handles, glass, and a deep white window board on the room side.',
+    build: (v) => buildWall(v, { len: c(300), windows: [0] }),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '3 m wall · 160 × 140 cm window', Size: '180 × 180 u', Sill: '105 cm (63 u)' },
+    properties: {},
+    nodes: [
+      ['Wall_Window_Frame', 'Frame, mullion, transom, casements, handles'],
+      ['Wall_Window_Glass', 'Glass (transparent, no shadow)'],
+      ['Wall_Window_Board', 'Window board on the room side'],
+      ['Wall_Window_Reveal', 'Plaster reveals'],
+    ],
+  },
+  {
+    id: 'teacherdesk',
+
+    name: 'Teacher’s Desk',
+    kicker: 'Furniture · Classroom',
+    description: 'Empty teacher’s desk, 140 × 70 cm and 76 cm high: beech laminate top, grey body with a closed modesty panel facing the class, a three-drawer pedestal with metal handles and an open knee space on the teacher’s side.',
+    build: (v) => buildTeacherDesk(v),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '140 × 70 × 76 cm', Size: '84 × 42 × 45.6 u', Drawers: '3' },
+    properties: {},
+    nodes: [
+      ['TDesk_Top', 'Laminate top + edge band'], ['TDesk_Body', 'Side panel, pedestal, modesty panel (+Z)'],
+      ['TDesk_Drawers / TDesk_Handles', 'Drawer fronts on the teacher’s side (−Z)'],
+      ['socket_top', 'Desk top (y = 45.6)'], ['socket_chair', 'Teacher’s chair spot'],
+    ],
+  },
+  {
+    id: 'board',
+    name: 'Blackboard',
+    kicker: 'Furniture · Wall-mounted',
+    description: 'A 4 × 1.2 m blackboard in an aluminium frame, bottom edge at 90 cm, with a chalk-drawn history lesson on the slate (your image) and a chalk tray holding three pieces of chalk and a sponge.',
+    build: (v) => buildBlackboard(v),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Real: '4 × 1.2 m, at 90 cm', Size: '240 × 72 u', Mount: 'back at z = 0' },
+    properties: {},
+    nodes: [
+      ['Board_Surface', 'Slate with the history-lesson chalk image (blackboard.jpg)'], ['Board_Frame', 'Frame + chalk tray'],
+      ['Chalk_1…3 / Sponge', 'Loose props on the tray'], ['socket_tray', 'Chalk tray centre'],
+    ],
+  },
+  {
+    id: 'bag-classic',
+    name: 'Classic Backpack',
+    kicker: 'Backpack · Classic',
+    description: 'Everyday school backpack after your first reference: navy body with a rounded top, grey base, grey side pockets with elastic, a front pocket with a grey top band and its own zip, grey piping, padded straps with webbing and buckles, and a top grab handle.',
+    build: (v) => buildBag('classic', { tex: v.tex, state: v.state, straps: 'both' }),
+    controller: envController,
+    axes: BAG_AXES,
+    specs: { Real: '30 × 42 × 14 cm', Size: '18 × 25 × 8.4 u', Colourways: '4' },
+    properties: {},
+    nodes: [
+      ['Bag_Body', 'Back shell + front lower body (one mesh per material)'],
+      ['Bag_Flap', 'Front half above the pocket, on a hinge at the pocket top: rotation.x 0 (zipped) … 1.25 (fallen open)'],
+      ['Bag_Straps / Bag_Webbing / Bag_Buckles', 'Shoulder straps in the worn shape (the level drapes them over chairs instead)'],
+      ['Bag_Lining / Bag_Books', 'Open state only: lining, interior and books'],
+    ],
+  },
+  {
+    id: 'bag-slim',
+    name: 'Slim Backpack',
+    kicker: 'Backpack · Minimal',
+    description: 'Minimal one-colour backpack after the olive reference: a slim, squarer body, a flat front pocket across the lower half with a hidden zip, tonal zip pulls and a dark main zip.',
+    build: (v) => buildBag('slim', { tex: v.tex, state: v.state, straps: 'both' }),
+    controller: envController,
+    axes: BAG_AXES,
+    specs: { Real: '29 × 42 × 11 cm', Size: '17 × 25 × 6.6 u', Colourways: '4' },
+    properties: {},
+    nodes: [
+      ['Bag_Body', 'Back shell + front lower body (one mesh per material)'],
+      ['Bag_Flap', 'Front half above the pocket, on a hinge at the pocket top: rotation.x 0 (zipped) … 1.25 (fallen open)'],
+      ['Bag_Straps / Bag_Webbing / Bag_Buckles', 'Shoulder straps in the worn shape (the level drapes them over chairs instead)'],
+      ['Bag_Lining / Bag_Books', 'Open state only: lining, interior and books'],
+    ],
+  },
+  {
+    id: 'bag-kids',
+    name: 'Kids Backpack',
+    kicker: 'Backpack · Kids',
+    description: 'Bright kids backpack after the rainbow reference: red body, teal front compartment with yellow piping, a white pocket with a rainbow and clouds, a yellow pen pocket with three pens, teal mesh side pockets and a water bottle.',
+    build: (v) => buildBag('kids', { tex: v.tex, state: v.state, straps: 'both' }),
+    controller: envController,
+    axes: BAG_AXES,
+    specs: { Real: '28 × 37 × 13 cm', Size: '17 × 22 × 7.8 u', Colourways: '4' },
+    properties: {},
+    nodes: [
+      ['Bag_Body', 'Back shell + front lower body (one mesh per material)'],
+      ['Bag_Flap', 'Front half above the pocket, on a hinge at the pocket top: rotation.x 0 (zipped) … 1.25 (fallen open)'],
+      ['Bag_Straps / Bag_Webbing / Bag_Buckles', 'Shoulder straps in the worn shape (the level drapes them over chairs instead)'],
+      ['Bag_Lining / Bag_Books', 'Open state only: lining, interior and books'],
+    ],
+  },
+  {
+    id: 'bag-sport',
+    name: 'Sport Backpack',
+    kicker: 'Backpack · Sport',
+    description: 'Large sporty backpack after the black/blue reference: stacked compartments with coloured piping, an upper pocket with accent wedges, a lower pocket with reflective stripes and chevrons, a rubber base, side compression straps with buckles and mesh side pockets.',
+    build: (v) => buildBag('sport', { tex: v.tex, state: v.state, straps: 'both' }),
+    controller: envController,
+    axes: BAG_AXES,
+    specs: { Real: '33 × 46 × 17 cm', Size: '20 × 28 × 10 u', Colourways: '4' },
+    properties: {},
+    nodes: [
+      ['Bag_Body', 'Back shell + front lower body (one mesh per material)'],
+      ['Bag_Flap', 'Front half above the pocket, on a hinge at the pocket top: rotation.x 0 (zipped) … 1.25 (fallen open)'],
+      ['Bag_Straps / Bag_Webbing / Bag_Buckles', 'Shoulder straps in the worn shape (the level drapes them over chairs instead)'],
+      ['Bag_Lining / Bag_Books', 'Open state only: lining, interior and books'],
+    ],
+  },
+  {
+    id: 'classroom',
+    name: 'Classroom',
+    kicker: 'Level · Demo',
+    level: true,
+    description: 'First demo level: a 7.2 × 8.2 m classroom, 3 m high. 16 school desks in a 4 × 4 grid face the board wall, 95 cm apart side to side and 1.1 m row to row, each with a chair behind it, nudged and turned a little, with a few pushed out or swung round. Blackboard on the front wall, three windows on the left wall, a door at the front of the right wall and the empty teacher’s desk front-left. Every chair has a backpack: 10 hang over the chair back, 2 hang off one corner by a single strap and 4 sit on the floor next to the chair, in four designs and sixteen colourways, some zipped open. Walls between you and the room are cut away automatically.',
+    build: (v) => buildClassroom(v),
+    controller: envController,
+    axes: ENV_AXES,
+    specs: { Room: '7.2 × 8.2 × 3 m', Size: '432 × 492 × 180 u', Desks: '16 (4 × 4 grid)', Chairs: '16', Backpacks: '16 (4 designs)', Windows: '3', Spacing: '1.6 m · 1.6 m rows' },
+    properties: {
+      cutaway: { label: 'Cut away near walls', default: true },
+      doorOpen: { label: 'Door open', default: false },
+      baseMock: { label: 'Base mock-ups', default: true },
+      scaleRef: { label: 'Floating plane', default: true },
+    },
+    layout: () => classroomLayout(),
+  },
+];
+
+/* ------------------------------------------------------------------
+   Scene
+------------------------------------------------------------------ */
+const host = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const IS_MOBILE = matchMedia('(max-width: 820px), (pointer: coarse)').matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE ? 1.5 : 2));
+renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); toast('3D view paused — restoring…'); });
+renderer.domElement.addEventListener('webglcontextrestored', () => toast('3D view restored'));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 2000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 1.2;
+controls.maxPolarAngle = Math.PI * 0.49;          // never look from under the floor
+
+scene.add(new THREE.HemisphereLight(0xfff4e6, 0x6b6056, 1.2));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.castShadow = true;
+key.shadow.mapSize.set(IS_MOBILE ? 1024 : 2048, IS_MOBILE ? 1024 : 2048);
+key.shadow.radius = 4;
+scene.add(key); scene.add(key.target);
+const fill = new THREE.DirectionalLight(0xfff0e0, 0.55);
+fill.position.set(1, -4, 3);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffe2c0, 0.8);
+rim.position.set(-5, 3, -4);
+scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.32 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const stage = new THREE.Group(); stage.name = '__stage'; scene.add(stage);
+let controller = null;
+let current = null, currentDef = null, fit = { target: new THREE.Vector3(), dist: 30, radius: 10 };
+
+// Variant choice is global: pick "Cardboard + Plain" once and every model follows
+const VARIANT = { design: 'pencil', tex: 'painted', state: 'closed' };
+const PROP_STATE = {};
+try { Object.assign(VARIANT, JSON.parse(localStorage.getItem('envlab:variant') || '{}')); } catch {}
+
+function disposeObject(o) {
+  o.traverse(n => {
+    n.geometry?.dispose?.();
+    const m = n.material; if (!m) return;
+    (Array.isArray(m) ? m : [m]).forEach(mm => { if (mm.userData?.shared) return; if (!mm.map?.userData?.shared) mm.map?.dispose?.(); mm.dispose(); });
+  });
+}
+
+function computeFit(obj) {
+  const box = solidBox(obj);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const r = sphere.radius;
+  const dist = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  return { target: sphere.center.clone(), dist, radius: r, box };
+}
+
+// Lights, shadow box and camera range follow the model's size (a desk is 15 u, a room 240 u)
+function fitScene(f) {
+  const R = Math.max(f.radius, 1);
+  key.target.position.copy(f.target);
+  key.position.copy(f.target).add(new THREE.Vector3(0.45, 0.8, 0.55).normalize().multiplyScalar(R * 3));
+  Object.assign(key.shadow.camera, { left: -R * 1.15, right: R * 1.15, top: R * 1.15, bottom: -R * 1.15, near: R * 0.5, far: R * 6 });
+  key.shadow.camera.updateProjectionMatrix();
+  key.shadow.bias = -0.0004; key.shadow.normalBias = R * 0.0006;
+  ground.scale.setScalar(R * 10);
+  camera.near = Math.max(0.05, f.dist / 4000); camera.far = f.dist * 5; camera.updateProjectionMatrix();
+  controls.minDistance = Math.min(4, R * 0.25); controls.maxDistance = f.dist * 3;
+}
+
+function resetView() {
+  const el = THREE.MathUtils.degToRad(currentDef?.level ? 38 : 24), az = THREE.MathUtils.degToRad(35);
+  camera.position.set(
+    fit.target.x + fit.dist * Math.cos(el) * Math.sin(az),
+    fit.target.y + fit.dist * Math.sin(el),
+    fit.target.z + fit.dist * Math.cos(el) * Math.cos(az)
+  );
+  controls.target.copy(fit.target);
+  controls.update();
+}
+
+function countTris(obj) {
+  let t = 0;
+  obj.traverse(o => {
+    if (o.isMesh && !o.userData.helper) {
+      const g = o.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    }
+  });
+  return t;
+}
+
+function liftToGround(wrapper, obj) {
+  wrapper.position.y = 0; wrapper.updateMatrixWorld(true);
+  const box = solidBox(obj);
+  wrapper.position.y = box.min.y < 0 ? -box.min.y : 0;
+}
+
+function selectModel(id, patch) {
+  const def = MODELS.find(m => m.id === id) || MODELS[0];
+  const sameModel = currentDef === def;
+  if (patch) Object.assign(VARIANT, patch);
+  pencilOn = VARIANT.design === 'pencil';
+  controller?.dispose?.(); controller = null;
+  if (current) { stage.remove(current); disposeObject(current); }
+  current = def.build({ ...VARIANT });
+  currentDef = def;
+  stage.add(current);
+  liftToGround(stage, current);
+  controller = def.controller ? def.controller(current) : null;
+  renderProps(def);
+  renderGuide();
+  fit = computeFit(current);
+  fitScene(fit);
+  if (!sameModel) { if (window.__navReady) { setFly(false); cancelTween(); } resetView(); }                       // switching looks keeps your camera
+
+  document.getElementById('modelTitle').textContent = def.name;
+  document.getElementById('modelKicker').textContent = def.kicker || 'Model';
+  document.getElementById('modelDesc').textContent = def.description || '';
+  const specs = { ...def.specs, Triangles: countTris(current).toLocaleString() };
+  document.getElementById('modelSpecs').innerHTML =
+    Object.entries(specs).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  document.getElementById('variantsBox').textContent = (def.axes || [])
+    .map(a => `${a.label}: ${a.options.find(o => o.id === VARIANT[a.key])?.label}`).join(' · ') || 'None yet';
+  document.querySelectorAll('.model-item').forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === def.id)));
+  document.getElementById('guideAbout').innerHTML =
+    `<p style="margin:0">${esc(def.description || '')}</p><dl class="specs">${document.getElementById('modelSpecs').innerHTML}</dl>`;
+  const chip = document.querySelector(`.model-item[data-id="${def.id}"]`);
+  if (chip && !sameModel && matchMedia('(max-width:820px)').matches) chip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  try { localStorage.setItem('envlab:model', def.id); localStorage.setItem('envlab:variant', JSON.stringify(VARIANT)); } catch {}
+}
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = w + 'px';
+  renderer.domElement.style.height = h + 'px';
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  setPencilResolution(w, h);
+}
+new ResizeObserver(resize).observe(host);
+resize();
+
+const clock = new THREE.Clock();
+// Surface script errors on the page instead of a silent blank view
+addEventListener('error', e => toast('Error: ' + (e.message || 'script error')));
+addEventListener('unhandledrejection', e => toast('Error: ' + (e.reason?.message || e.reason)));
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  controller?.update?.(dt);
+  try { navUpdate(dt); } catch (e) { if (!window.__navErr) { window.__navErr = 1; console.error(e); } }
+  if (window.__navReady && NAV.mode === 'fly') {} else controls.update();
+  renderer.render(scene, camera);
+});
+
+/* ------------------------------------------------------------------
+   Offscreen rendering (thumbnails + 4-angle sheet)
+------------------------------------------------------------------ */
+let offscreen = null;
+function getOffscreen() {
+  if (!offscreen) {
+    offscreen = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    offscreen.setPixelRatio(1);
+    offscreen.outputColorSpace = THREE.SRGBColorSpace;
+    offscreen.shadowMap.enabled = true; offscreen.shadowMap.type = THREE.PCFSoftShadowMap;
+  }
+  return offscreen;
+}
+function renderAngles(obj, angles, size, bg, elevation = 18) {
+  const r = getOffscreen();
+  r.setSize(size, size, false);
+  setPencilResolution(size, size, Math.max(1, size / 600));
+  r.toneMapping = renderer.toneMapping; r.toneMappingExposure = renderer.toneMappingExposure;
+  const f = computeFit(obj);
+  const prevFit = fit; fitScene(f);
+  const dist = f.radius / Math.sin(THREE.MathUtils.degToRad(15)) * 1.04;
+  const cam = new THREE.PerspectiveCamera(30, 1, dist / 300, dist * 12);
+  const el = THREE.MathUtils.degToRad(elevation);
+  const prevBg = scene.background;
+  scene.background = bg ? new THREE.Color(bg) : null;
+  const shown = [], markers = [];
+  scene.traverse(o => { if (o.userData.socketMarker) { markers.push([o, o.visible]); o.visible = false; } });
+  if (!stage.getObjectById(obj.id) && obj !== stage) { shown.push([stage, stage.visible]); stage.visible = false; }
+  const out = angles.map(a => {
+    const az = THREE.MathUtils.degToRad(a);
+    cam.position.set(f.target.x + dist * Math.cos(el) * Math.sin(az), f.target.y + dist * Math.sin(el), f.target.z + dist * Math.cos(el) * Math.cos(az));
+    cam.lookAt(f.target);
+    applyCutaway(obj, cam.position, true);
+    r.render(scene, cam);
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    c.getContext('2d').drawImage(r.domElement, 0, 0);
+    return c;
+  });
+  shown.forEach(([c, v]) => c.visible = v);
+  markers.forEach(([o, v]) => o.visible = v);
+  applyCutaway(current, camera.position, PROP_STATE.cutaway !== false);
+  scene.background = prevBg;
+  fitScene(prevFit);
+  setPencilResolution(host.clientWidth, host.clientHeight);
+  return out;
+}
+
+async function screenshotSheet() {
+  const size = 900, labels = ['FRONT', 'RIGHT', 'BACK', 'LEFT'];
+  const frames = renderAngles(current, [0, 90, 180, 270], size, '#2a2928', currentDef.level ? 35 : 18);
+  const sheet = document.createElement('canvas');
+  sheet.width = size * 4; sheet.height = size;
+  const g = sheet.getContext('2d');
+  g.fillStyle = '#2a2928'; g.fillRect(0, 0, sheet.width, sheet.height);
+  frames.forEach((c, i) => {
+    g.drawImage(c, i * size, 0);
+    g.fillStyle = 'rgba(236,230,223,.45)';
+    g.font = '500 20px "JetBrains Mono", monospace';
+    g.textAlign = 'center';
+    g.fillText(labels[i], i * size + size / 2, size - 34);
+  });
+  return new Promise(res => sheet.toBlob(res, 'image/png'));
+}
+
+/* ------------------------------------------------------------------
+   GLB export (packed into a .zip — .glb isn't an allowed download type)
+------------------------------------------------------------------ */
+async function exportGLB(obj) {
+  const clone = obj.clone(true);
+  const strip = [];
+  clone.traverse(o => { if (o.userData.helper) strip.push(o); });
+  strip.forEach(o => o.parent.remove(o));
+  clone.position.set(0, 0, 0);
+  const exporter = new GLTFExporter();
+  return exporter.parseAsync(clone, { binary: true, onlyVisible: true });
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+function makeZip(files) { // [{name, data:Uint8Array}] – stored, no compression
+  const enc = new TextEncoder(), parts = [], central = [];
+  const d = new Date();
+  const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true);
+    ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + size;
+  }
+  const cdSize = central.reduce((s, p) => s + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+}
+
+/* ------------------------------------------------------------------
+   UI
+------------------------------------------------------------------ */
+const toastEl = document.getElementById('toast');
+let toastT;
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+const list = document.getElementById('modelList');
+ROSTER.forEach(([section, items]) => {
+  const h = document.createElement('div');
+  h.className = 'section-label'; h.textContent = section;
+  list.appendChild(h);
+  items.forEach(([id, name, role]) => {
+    const def = MODELS.find(m => m.id === id);
+    if (def) { addListItem(def, role); return; }
+    const b = document.createElement('button');
+    b.className = 'model-item soon'; b.disabled = true; b.setAttribute('aria-disabled', 'true');
+    b.innerHTML = `<span class="thumb">▢</span><span><div class="t"></div><div class="s"></div></span>`;
+    b.querySelector('.t').textContent = name;
+    b.querySelector('.s').textContent = role;
+    list.appendChild(b);
+  });
+});
+function addListItem(def, role) {
+  const b = document.createElement('button');
+  b.className = 'model-item'; b.dataset.id = def.id; b.setAttribute('role', 'option');
+  b.innerHTML = `<span class="thumb"></span><span><div class="t"></div><div class="s"></div></span>`;
+  b.querySelector('.t').textContent = def.name;
+  b.querySelector('.s').textContent = role || def.kicker || '';
+  b.addEventListener('click', () => selectModel(def.id));
+  list.appendChild(b);
+}
+
+let savedId = 'classroom';
+try { savedId = localStorage.getItem('envlab:model') || savedId; } catch {}
+selectModel(savedId);
+
+(function thumbs(i = 0) {
+  if (i >= MODELS.length) return;
+  setTimeout(() => {
+    const def = MODELS[i];
+    try {
+      const obj = def.build({ ...VARIANT });
+      obj.traverse(o => { if (o.userData.scaleRef) o.visible = false; });
+      const wrap = new THREE.Group(); wrap.add(obj); scene.add(wrap);
+      liftToGround(wrap, obj);
+      const [c] = renderAngles(wrap, [35], 120, '#1f1e1d', def.level ? 45 : 22);
+      scene.remove(wrap); disposeObject(obj);
+      const img = new Image(); img.src = c.toDataURL('image/png'); img.alt = '';
+      list.querySelector(`[data-id="${def.id}"] .thumb`).appendChild(img);
+    } catch (e) { console.warn('thumbnail failed', def.id, e); }
+    thumbs(i + 1);
+  }, i === 0 ? 500 : 60);
+})();
+
+const btnRotate = document.getElementById('btnRotate');
+function setRotate(on) { controls.autoRotate = on; btnRotate.setAttribute('aria-pressed', String(on)); }
+btnRotate.addEventListener('click', () => setRotate(!controls.autoRotate));
+document.getElementById('btnReset').addEventListener('click', () => viewPreset('overview'));
+addEventListener('keydown', e => {
+  if (e.target.closest?.('input,textarea')) return;
+  if (e.key === 'r' || e.key === 'R') setRotate(!controls.autoRotate);
+  if (e.key === 'f' || e.key === 'F') resetView();
+  if (e.key === 'g' || e.key === 'G') setGuide(guideEl.hidden);
+  if (e.key === 'p' || e.key === 'P') selectModel(currentDef.id, { design: VARIANT.design === 'pencil' ? 'plain' : 'pencil' });
+  if (e.key === 't' || e.key === 'T') {
+    const i = TEXTURES.findIndex(t => t.id === VARIANT.tex);
+    selectModel(currentDef.id, { tex: TEXTURES[(i + 1) % TEXTURES.length].id });
+  }
+  if (e.key === 'Escape') setGuide(false);
+});
+
+/* ------------------------------------------------------------------
+   Navigation
+   Orbit (default): left-drag orbit · right/shift-drag pan along the floor
+   · wheel/pinch zoom towards the cursor · WASD/arrows move · Q/E turn
+   · +/− zoom · double-click focuses a spot · Shift = faster.
+   Fly: first-person camera. Drag to look, WASD move, Space/C up/down,
+   wheel moves forward. On touch, an on-screen pad appears.
+------------------------------------------------------------------ */
+controls.screenSpacePanning = false;          // pan slides along the floor
+controls.zoomToCursor = true;
+controls.zoomSpeed = 1.1;
+controls.panSpeed = 1.0;
+controls.rotateSpeed = 0.8;
+controls.addEventListener('start', () => { if (controls.autoRotate) setRotate(false); cancelTween(); });
+
+const NAV = { keys: new Set(), mode: 'orbit', yaw: 0, pitch: 0, tween: null };
+const MOVE_KEYS = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r',
+  KeyQ: 'tl', KeyE: 'tr', Equal: 'in', NumpadAdd: 'in', Minus: 'out', NumpadSubtract: 'out', Space: 'u', KeyC: 'd' };
+
+function cancelTween() { NAV.tween = null; }
+function flyTo(pos, target, dur = 0.7) {
+  if (NAV.mode === 'fly') setFly(false);
+  setRotate(false);
+  NAV.tween = { t: 0, dur, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone() };
+}
+
+// View presets, scaled to whatever model is on stage
+function viewPreset(name) {
+  const T = fit.target.clone(), R = fit.radius, b = fit.box;
+  if (name === 'overview') { cancelTween(); const p = camera.position.clone(), q = controls.target.clone(); resetView(); const p1 = camera.position.clone(), q1 = controls.target.clone(); camera.position.copy(p); controls.target.copy(q); flyTo(p1, q1); return; }
+  if (name === 'top') return flyTo(new THREE.Vector3(T.x, b.max.y + R * 2.1, T.z + 0.01), new THREE.Vector3(T.x, b.min.y, T.z));
+  if (currentDef?.level) {
+    if (name === 'board') return flyTo(new THREE.Vector3(0, 2.1 * M, b.min.z + 0.3 * M), new THREE.Vector3(0, 0.4 * M, 0.9 * M));
+    if (name === 'eye') { const z = CLASSROOM.rows[1]; return flyTo(new THREE.Vector3(-0.8 * M + 6, DESK.H + 7, z + DESK.D / 2 + 10), new THREE.Vector3(-0.8 * M, DESK.H + 1, z - 4)); }
+  } else {
+    if (name === 'board') return flyTo(new THREE.Vector3(T.x, T.y + R * 0.9, T.z - R * 2.6), T);
+    if (name === 'eye') return flyTo(new THREE.Vector3(T.x + R * 0.9, b.max.y + 1.2, T.z + R * 1.3), new THREE.Vector3(T.x, b.max.y - 1, T.z));
+  }
+}
+
+// Double-click (or double-tap) a surface to orbit around that spot
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+renderer.domElement.addEventListener('dblclick', e => {
+  if (NAV.mode === 'fly') return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+  const hit = ray.intersectObject(stage, true).find(h => h.object.isMesh && !h.object.userData.helper && shown(h.object));
+  if (!hit) return;
+  const off = camera.position.clone().sub(controls.target);
+  off.setLength(Math.min(off.length(), Math.max(30, fit.radius * 0.2)));
+  flyTo(hit.point.clone().add(off), hit.point.clone());
+});
+
+// Fly mode
+const flyBtn = document.getElementById('btnFly');
+const pad = document.getElementById('flyPad');
+function setFly(on) {
+  if ((NAV.mode === 'fly') === on) return;
+  NAV.mode = on ? 'fly' : 'orbit';
+  flyBtn.setAttribute('aria-pressed', String(on));
+  pad.hidden = !(on && matchMedia('(pointer: coarse)').matches);
+  document.body.classList.toggle('flying', on);
+  if (on) {
+    cancelTween(); setRotate(false);
+    const dir = controls.target.clone().sub(camera.position).normalize();
+    NAV.yaw = Math.atan2(-dir.x, -dir.z);
+    NAV.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+    controls.enabled = false;
+    toast('Fly mode · drag to look · WASD move · Space / C up and down');
+  } else {
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    controls.target.copy(camera.position).addScaledVector(dir, Math.max(12, fit.radius * 0.3));
+    controls.enabled = true; controls.update();
+  }
+}
+flyBtn.addEventListener('click', () => setFly(NAV.mode !== 'fly'));
+
+let look = null;
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (NAV.mode !== 'fly') return;
+  look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!look || e.pointerId !== look.id) return;
+  NAV.yaw -= (e.clientX - look.x) * 0.0045;
+  NAV.pitch = THREE.MathUtils.clamp(NAV.pitch - (e.clientY - look.y) * 0.0045, -1.45, 1.45);
+  look.x = e.clientX; look.y = e.clientY;
+});
+const endLook = e => { if (look && e.pointerId === look.id) look = null; };
+renderer.domElement.addEventListener('pointerup', endLook);
+renderer.domElement.addEventListener('pointercancel', endLook);
+renderer.domElement.addEventListener('wheel', e => {
+  if (NAV.mode !== 'fly') return;
+  e.preventDefault();
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  camera.position.addScaledVector(dir, -e.deltaY * 0.04 * Math.max(1, fit.radius / 40));
+}, { passive: false });
+
+// On-screen pad (touch): hold a button to move
+pad.querySelectorAll('[data-move]').forEach(b => {
+  const k = 'pad:' + b.dataset.move;
+  const on = e => { e.preventDefault(); NAV.keys.add(k); }, off = () => NAV.keys.delete(k);
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
+  b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+});
+
+addEventListener('keydown', e => {
+  if (e.target.closest?.('input,textarea')) return;
+  const m = MOVE_KEYS[e.code];
+  if (m) { NAV.keys.add(m); if (controls.autoRotate) setRotate(false); cancelTween(); e.preventDefault(); }
+  if (e.key === 'v' || e.key === 'V') setFly(NAV.mode !== 'fly');
+  if (e.key === '1') viewPreset('overview');
+  if (e.key === '2') viewPreset('top');
+  if (e.key === '3') viewPreset('board');
+  if (e.key === '4') viewPreset('eye');
+  if (e.key === 'Escape' && NAV.mode === 'fly') setFly(false);
+});
+addEventListener('keyup', e => { const m = MOVE_KEYS[e.code]; if (m) NAV.keys.delete(m); });
+addEventListener('blur', () => NAV.keys.clear());
+
+const has = k => NAV.keys.has(k) || NAV.keys.has('pad:' + k);
+const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _m = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+
+function navUpdate(dt) {
+  // camera tween (presets, double-click focus)
+  if (NAV.tween) {
+    const w = NAV.tween; w.t += dt;
+    const u = Math.min(1, w.t / w.dur), k = u * u * (3 - 2 * u);
+    camera.position.lerpVectors(w.p0, w.p1, k);
+    controls.target.lerpVectors(w.q0, w.q1, k);
+    if (u >= 1) NAV.tween = null;
+  }
+  const fast = NAV.keys.has('ShiftLeft') || NAV.keys.has('ShiftRight') ? 3 : 1;
+
+  if (NAV.mode === 'fly') {
+    camera.quaternion.setFromEuler(new THREE.Euler(NAV.pitch, NAV.yaw, 0, 'YXZ'));
+    _f.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    _r.crossVectors(_f, UP).normalize();
+    _m.set(0, 0, 0);
+    if (has('f')) _m.add(_f); if (has('b')) _m.sub(_f);
+    if (has('r')) _m.add(_r); if (has('l')) _m.sub(_r);
+    if (has('u')) _m.y += 1; if (has('d')) _m.y -= 1;
+    if (has('tl')) NAV.yaw += dt * 1.6; if (has('tr')) NAV.yaw -= dt * 1.6;
+    const speed = Math.max(15, fit.radius * 0.2) * fast;
+    if (_m.lengthSq()) camera.position.addScaledVector(_m.normalize(), speed * dt);
+    clampToRoom(camera.position, 0.6);
+    return;
+  }
+
+  // orbit mode: move the camera and its target together along the floor
+  const off = camera.position.clone().sub(controls.target);
+  const dist = off.length();
+  _f.copy(off).setY(0).normalize().negate();
+  _r.crossVectors(_f, UP).normalize();
+  _m.set(0, 0, 0);
+  if (has('f')) _m.add(_f); if (has('b')) _m.sub(_f);
+  if (has('r')) _m.add(_r); if (has('l')) _m.sub(_r);
+  if (_m.lengthSq()) {
+    _m.normalize().multiplyScalar(dist * 0.7 * fast * dt);
+    camera.position.add(_m); controls.target.add(_m);
+  }
+  if (has('tl') || has('tr')) {
+    off.applyAxisAngle(UP, (has('tl') ? 1 : -1) * dt * 1.4 * fast);
+    camera.position.copy(controls.target).add(off);
+  }
+  if (has('in') || has('out')) {
+    const s = Math.exp((has('in') ? -1 : 1) * dt * 1.6 * fast);
+    off.multiplyScalar(s); off.setLength(THREE.MathUtils.clamp(off.length(), controls.minDistance, controls.maxDistance));
+    camera.position.copy(controls.target).add(off);
+  }
+  // keep the orbit point inside the model's area (with some margin)
+  const before = controls.target.clone();
+  clampToRoom(controls.target, 0, fit.radius * 0.25);
+  camera.position.add(controls.target.clone().sub(before));
+}
+
+function clampToRoom(p, minY = 0, margin = 0) {
+  const b = fit.box; if (!b) return;
+  const pad = margin + fit.radius * 0.6;
+  p.x = THREE.MathUtils.clamp(p.x, b.min.x - pad, b.max.x + pad);
+  p.z = THREE.MathUtils.clamp(p.z, b.min.z - pad, b.max.z + pad);
+  p.y = THREE.MathUtils.clamp(p.y, b.min.y + minY, b.max.y + fit.radius * 2.5);
+}
+addEventListener('keydown', e => { if (e.key === 'Shift') NAV.keys.add(e.code); });
+addEventListener('keyup', e => { if (e.key === 'Shift') NAV.keys.delete(e.code); });
+
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => viewPreset(b.dataset.view)));
+setTimeout(() => toast(IS_MOBILE ? 'Drag to orbit · pinch to zoom · two fingers to pan' : 'Drag orbit · right-drag pan · scroll zoom · WASD move · double-click focus'), 900);
+
+window.__navReady = true;
+
+/* ------------------------------------------------------------------
+   Guide (generated from the built hierarchy + model notes)
+------------------------------------------------------------------ */
+function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const guideEl = document.getElementById('guide');
+const btnGuide = document.getElementById('btnGuide');
+
+function hierarchyLines(obj) {
+  const lines = [];
+  const interesting = o => o.userData.part || o.userData.socket || o.userData.node || o.userData.collapse;
+  const label = o => {
+    let tag = '';
+    if (o.userData.socket) tag = '<span class="s">  socket</span>';
+    else if (o.userData.collapse) tag = `<span class="s">  ${esc(o.userData.collapse)} instance</span>`;
+    else if (o.userData.placeholder) tag = '<span class="j">  placeholder</span>';
+    else if (o.userData.part) tag = '<span class="s">  root</span>';
+    return esc(o.name) + tag;
+  };
+  const walk = (o, prefix, isLast, isRoot) => {
+    lines.push(isRoot ? label(o) : prefix + (isLast ? '└─ ' : '├─ ') + label(o));
+    prefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ');
+    if (o.userData.collapse) return;
+    const kids = [];
+    const collect = c => { if (c.userData.helper) return; if (interesting(c)) kids.push(c); else c.children.forEach(collect); };
+    o.children.forEach(collect);
+    // a long run of identical instances collapses to first, …, last
+    const shown = kids.length > 6 && kids.every(k => k.userData.collapse) ? [kids[0], kids[1], { gap: kids.length - 3 }, kids[kids.length - 1]] : kids;
+    shown.forEach((k, i) => {
+      if (k.gap) { lines.push(prefix + '│  ' + `<span class="s">… ${k.gap} more</span>`); return; }
+      walk(k, prefix, i === shown.length - 1, false);
+    });
+  };
+  walk(obj, '', true, true);
+  return lines.join('\n');
+}
+
+function renderGuide() {
+  const def = currentDef;
+  document.getElementById('guideTitle').textContent = def.name;
+  let html = `<h4>Hierarchy</h4><pre>${hierarchyLines(current)}</pre>`;
+  if (def.nodes) html += `<h4>Nodes</h4><table><tbody>${def.nodes.map(([n, d]) => `<tr><td><code>${esc(n)}</code></td><td class="note">${esc(d)}</td></tr>`).join('')}</tbody></table>`;
+  if (def.layout) {
+    const items = def.layout();
+    html += `<h4>Layout</h4><ol>
+      <li>Every placed module is a record <code>{ id, model, position, rotationY, side, row }</code>. The level download includes it as <code>${esc(def.id)}-layout.json</code> next to the baked GLB.</li>
+      <li>For the game, load one copy of each module GLB and place instances from the JSON (16 desks and 16 chairs = 2 mesh sets, each drawn 16 times). The baked GLB is for quick previews.</li>
+      <li>Chairs: each sits 47 cm (28 u) behind its desk centre, nudged up to ±7 cm and turned up to ±8.5°; chairs 3, 8, 11 and 14 are pushed out or swung round further.</li><li>Backpacks are records too: <code>model</code> (design), <code>state</code> (open / closed), <code>mode</code> (back · one-strap · floor-stand · floor-lean), <code>colors</code> and the <code>chair</code> they belong to. Straps draped over a chair are built in the chair's space.</li><li>Walls are placed by id with their length and openings (door / window positions along the wall), so the same wall module builds any room.</li></ol>`;
+  }
+  html += `<h4>Moving around</h4><table><tbody>
+    <tr><td><b>Orbit</b></td><td class="note">Left-drag (one finger) to orbit. Right-drag or Shift-drag (two fingers) to pan along the floor. Scroll or pinch zooms towards the cursor.</td></tr>
+    <tr><td><b>Keys</b></td><td class="note">WASD / arrows move · Q/E turn · + / − zoom · hold Shift for faster.</td></tr>
+    <tr><td><b>Focus</b></td><td class="note">Double-click any desk or spot on the floor to fly there and orbit around it.</td></tr>
+    <tr><td><b>Views</b></td><td class="note">1 Overview · 2 Top · 3 Board (teacher's view) · 4 Plane eye (desk height).</td></tr>
+    <tr><td><b>Fly (V)</b></td><td class="note">First person: drag to look, WASD to move, Space / C up and down, scroll to move forward, Esc to leave. Phones get on-screen buttons.</td></tr></tbody></table>`;
+  html += `<h4>Scale &amp; conventions</h4><ol>${ENV_GUIDE_COMMON.map(x => `<li>${x}</li>`).join('')}</ol>`;
+  html += `<h4>Looks</h4><table><tbody>
+    <tr><td><b>Design</b></td><td class="note">With pencil: hand-drawn graphite strokes on every hard edge (same as the planes). Plain: clean low-poly.</td></tr>
+    <tr><td><b>Texture</b></td><td class="note">Painted: real colours (beech laminate, blue steel, lino). Cardboard and Paper match the plane and building sets.</td></tr>
+    <tr><td><b>Keys</b></td><td class="note">P switches Design, T cycles Texture.</td></tr></tbody></table>`;
+  document.getElementById('guideBody').innerHTML = html;
+}
+
+function setGuide(open) {
+  guideEl.hidden = !open;
+  btnGuide.setAttribute('aria-expanded', String(open));
+}
+btnGuide.addEventListener('click', () => setGuide(guideEl.hidden));
+document.getElementById('btnGuideClose').addEventListener('click', () => setGuide(false));
+
+/* ------------------------------------------------------------------
+   Variant axes + properties card
+------------------------------------------------------------------ */
+function fileBase() {
+  const st = (currentDef.axes || []).some(a => a.key === 'state') ? `-${VARIANT.state}` : '';
+  return `${currentDef.id}${st}-${VARIANT.tex}${VARIANT.design === 'pencil' ? '-with-pencil' : ''}`;
+}
+function renderProps(def) {
+  const card = document.getElementById('propsCard'), listEl = document.getElementById('propsList');
+  const entries = Object.entries(def.properties || {});
+  const axes = def.axes || [];
+  card.hidden = !entries.length && !axes.length;
+  card.querySelector('.k').textContent = 'Look';
+  listEl.innerHTML = '';
+  axes.forEach(ax => {
+    const lab = document.createElement('div'); lab.className = 'axis-label'; lab.textContent = ax.label;
+    listEl.appendChild(lab);
+    const seg = document.createElement('div');
+    seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', ax.label);
+    ax.options.forEach(v => {
+      const b = document.createElement('button');
+      b.textContent = v.label; b.title = `${ax.label}: ${v.label}`;
+      b.setAttribute('aria-pressed', String(v.id === VARIANT[ax.key]));
+      b.addEventListener('click', () => { if (v.id !== VARIANT[ax.key]) selectModel(def.id, { [ax.key]: v.id }); });
+      seg.appendChild(b);
+    });
+    listEl.appendChild(seg);
+  });
+  if (entries.length) { const lab = document.createElement('div'); lab.className = 'axis-label'; lab.textContent = 'Show'; listEl.appendChild(lab); }
+  entries.forEach(([k, p]) => {
+    if (!(k in PROP_STATE)) PROP_STATE[k] = !!p.default;
+    let on = PROP_STATE[k];
+    controller?.setProp?.(k, on);
+    const b = document.createElement('button');
+    b.className = 'btn toggle'; b.setAttribute('aria-pressed', String(on));
+    b.innerHTML = '<span class="lbl"></span><span class="pill"></span>';
+    b.querySelector('.lbl').textContent = p.label;
+    b.addEventListener('click', () => {
+      on = PROP_STATE[k] = !on; b.setAttribute('aria-pressed', String(on));
+      controller?.setProp?.(k, on);
+    });
+    listEl.appendChild(b);
+  });
+}
+
+// Downloads via the artifact runtime
+const btnGlb = document.getElementById('btnGlb');
+const btnShots = document.getElementById('btnShots');
+let downloads = null;
+
+async function save(filename, data) {
+  if (!downloads) { toast('Downloads aren’t available in this view'); return; }
+  try {
+    const r = await downloads.save({ filename, data });
+    if (r?.status === 'saved') toast(`Saved ${filename}`);
+  } catch (err) {
+    if (err?.code === 'declined') toast('Download cancelled');
+    else if (err?.code === 'rate_limited') toast('A download prompt is already open');
+    else toast('Couldn’t save the file');
+  }
+}
+
+btnGlb.addEventListener('click', async () => {
+  btnGlb.disabled = true;
+  try {
+    controller?.reset?.();
+    const glb = new Uint8Array(await exportGLB(current));
+    const files = [{ name: `${fileBase()}.glb`, data: glb }];
+    if (currentDef.layout) {
+      const json = JSON.stringify({ level: currentDef.id, units: '1 real cm = 0.6 u (game units)', floor: CLASSROOM.floor, items: currentDef.layout() }, null, 2);
+      files.push({ name: `${currentDef.id}-layout.json`, data: new TextEncoder().encode(json) });
+    }
+    await save(`${fileBase()}-glb.zip`, makeZip(files));
+  } catch (e) { console.error(e); toast('Export failed'); }
+  btnGlb.disabled = !downloads;
+});
+
+btnShots.addEventListener('click', async () => {
+  btnShots.disabled = true;
+  try { await save(`${fileBase()}-4-angles.png`, await screenshotSheet()); }
+  catch (e) { console.error(e); toast('Screenshot failed'); }
+  btnShots.disabled = !downloads;
+});
+
+(async () => {
+  for (let i = 0; i < 50 && !window.claude?.use; i++) await new Promise(r => setTimeout(r, 200));
+  try { downloads = window.claude?.use ? await window.claude.use('downloads') : null; } catch { downloads = null; }
+  btnGlb.disabled = btnShots.disabled = !downloads;
+  if (!downloads) { btnGlb.title = btnShots.title = 'Downloads aren’t available in this view'; }
+})();
+
+window.__envLab = { get current() { return current; }, camera, controls, MODELS, selectModel, exportGLB, VARIANT };
+</script>
+</body>
+</html>

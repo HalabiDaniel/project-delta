@@ -30,9 +30,9 @@ export const OUTLINE_INTENSITIES: readonly number[] = [0.6, 1, 1.4];
 type PresetValues = Omit<GraphicsSettings, 'preset' | 'outlineIntensity'>;
 
 export const PRESETS: Record<GraphicsPreset, PresetValues> = {
-  low: { outlines: true, outlineQuality: 'low', shadows: 'off', detail: 1, resolution: 1 },
-  medium: { outlines: true, outlineQuality: 'medium', shadows: 'low', detail: 2, resolution: 1.5 },
-  high: { outlines: true, outlineQuality: 'high', shadows: 'high', detail: 3, resolution: 2 },
+  low: { outlines: false, outlineQuality: 'low', shadows: 'off', detail: 1, resolution: 1 },
+  medium: { outlines: false, outlineQuality: 'medium', shadows: 'low', detail: 2, resolution: 1.5 },
+  high: { outlines: false, outlineQuality: 'high', shadows: 'high', detail: 3, resolution: 2 },
 };
 
 /** Shadow map size per level (0 = no shadows). */
@@ -85,7 +85,11 @@ export function normalizeGraphics(raw: unknown): GraphicsSettings {
   };
 }
 
-const KEY = 'paperwars.graphics';
+/**
+ * Since v0.0.11 the models are clean low-poly without pencil strokes, so outlines default to off;
+ * the key changed so settings saved before that don't switch them back on.
+ */
+const KEY = 'paperwars.graphics.v2';
 
 /** Reads the settings; missing or blocked storage gives the defaults. */
 export function loadGraphics(storage: Pick<Storage, 'getItem'> | null): GraphicsSettings {

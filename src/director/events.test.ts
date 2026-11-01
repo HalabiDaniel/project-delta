@@ -3,7 +3,7 @@ import type { AiOrders } from '../ai/AiAircraft';
 import type { Raid } from '../ai/AirTraffic';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
-import { EVENTS, RAIDS } from '../config';
+import { EVENTS, RAIDS, WORLD } from '../config';
 import { layoutDefenses } from '../defenses/Layout';
 import type { MissionContext } from '../missions/MissionGenerator';
 import { seededRng } from '../systems/Random';
@@ -134,7 +134,7 @@ describe('WorldEvents: kinds', () => {
     // It comes in over unprotected ground next to home.
     const origin = territories.find((t) => t.id === e.territoryId)!;
     expect(origin.threat).toBe(0);
-    expect(Math.hypot(origin.x - home.x, origin.z - home.z)).toBeLessThan(80);
+    expect(Math.hypot(origin.x - home.x, origin.z - home.z)).toBeLessThan((WORLD.territorySize + WORLD.gap) * 1.1);
     for (let t = 0; t < 30; t++) events.update(1, 1);
     expect(spawned.length).toBeGreaterThan(1);
     expect(spawned.slice(1).every((o) => o.side === 'enemy' && o.prey === spawned[0].id)).toBe(true);

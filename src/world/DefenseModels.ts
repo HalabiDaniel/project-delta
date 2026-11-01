@@ -7,6 +7,8 @@ import { materials } from '../render/materials/MaterialLibrary';
 import { outline } from '../render/outline/OutlineRenderer';
 import { MATERIALS } from '../render/style';
 import { paperStore } from './props/buildings';
+import { BuildingRig } from './BuildingRig';
+import type { BuildingModelId, ModelStore } from '../assets/CustomModels';
 
 type Color3 = readonly [number, number, number];
 
@@ -55,6 +57,25 @@ interface View {
   fallZ: number;
   /** 0 → 1 while a new building folds up into place (1 for everything else). */
   assemble: number;
+  /** The Model Lab model, when loaded (v0.0.11); null for the code-built stand-in. */
+  rig: BuildingRig | null;
+  level: number;
+}
+
+/** Which Model Lab model draws each kind: the paper store is the command centre, enemy depots are ink depots. */
+function modelFor(kind: string, friendly: boolean): BuildingModelId | null {
+  switch (kind) {
+    case 'turret':
+    case 'launcher':
+    case 'radar':
+    case 'workshop':
+    case 'storage':
+      return kind;
+    case 'supply':
+      return friendly ? 'command' : 'ink';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -104,13 +125,17 @@ export class DefenseModels {
 
   /** Per territory: its walls, flag and threat trim (hidden when a player claims it in multiplayer). */
   private readonly statics = new Map<string, pc.Entity>();
+  /** Threat per territory: an AI installation's model level (1–3). */
+  private readonly threats = new Map<string, number>();
 
   constructor(
     private readonly app: pc.AppBase,
     layout: DefenseLayout,
     private readonly network: DefenseNetwork,
     world: Pick<World, 'territories'> & { home?: { x: number; z: number } },
+    private readonly models: ModelStore | null = null,
   ) {
+    for (const t of world.territories) this.threats.set(t.id, t.threat);
     const root = new pc.Entity('defenses');
     this.root = root;
     app.root.addChild(root);
@@ -177,6 +202,10 @@ export class DefenseModels {
         v.assemble = Math.min(1, v.assemble + dt / BASE.assembleTime);
         this.poseAssemble(v);
       }
+      if (v.rig) {
+        if (v.rig.show(v.level, i.durability.fraction, i.alive)) this.rigParts(v);
+        v.rig.update(dt, { yaw: (i.spec.kind === 'radar' ? i.spin : i.yaw) - v.bodyYaw, pitch: i.pitch, sinceShot: i.alive ? i.sinceShot : 99, alive: i.alive });
+      }
       if (v.wrecked) {
         if (v.collapse < 1) {
           v.collapse = Math.min(1, v.collapse + dt / COLLAPSE);
@@ -197,9 +226,12 @@ export class DefenseModels {
       if (health < v.shownHealth) v.shudder = SHUDDER;
       if (health !== v.shownHealth) {
         v.shownHealth = health;
-        const k = 0.55 + 0.45 * health;
-        v.paint.diffuse.set(v.paintColor[0] * k, v.paintColor[1] * k, v.paintColor[2] * k);
-        v.paint.update();
+        // The models show damage in their own states; the stand-ins darken.
+        if (!v.rig) {
+          const k = 0.55 + 0.45 * health;
+          v.paint.diffuse.set(v.paintColor[0] * k, v.paintColor[1] * k, v.paintColor[2] * k);
+          v.paint.update();
+        }
       }
       const shake = v.shudder > 0 ? Math.sin(v.shudder * 80) * 5 * (v.shudder / SHUDDER) : 0;
       v.shudder = Math.max(0, v.shudder - dt);
@@ -258,9 +290,10 @@ export class DefenseModels {
     const view = this.build(new Installation(spec));
     const ghost = valid ? this.mat.ghostOk : this.mat.ghostNo;
     for (const { render } of view.parts) {
-      render.material = ghost;
       render.castShadows = false;
+      for (const mi of render.meshInstances) mi.material = ghost;
     }
+    view.root.findComponents('particlesystem').forEach((p) => ((p as pc.ParticleSystemComponent).enabled = false));
     if (view.flash) view.flash.enabled = false;
     view.root.setLocalScale(1.02, 1.02, 1.02);
     this.root.addChild(view.root);
@@ -301,6 +334,8 @@ export class DefenseModels {
   /** Where an installation's label floats, and where effects for it go. */
   labelPoint(id: string, out: pc.Vec3): pc.Vec3 {
     const i = this.network.get(id)!;
+    const rig = this.byId.get(id)?.rig;
+    if (rig) return out.set(i.spec.x, i.spec.ground + rig.top + 0.5, i.spec.z);
     const top = i.spec.kind === 'radar' ? i.spec.pivot + 2.2 : i.spec.kind === 'supply' ? 3.6 : i.spec.kind === 'workshop' ? 4.2 : i.spec.kind === 'storage' ? 3.2 : i.spec.pivot + 2;
     return out.set(i.spec.x, i.spec.ground + top, i.spec.z);
   }
@@ -323,6 +358,8 @@ export class DefenseModels {
    * part that elevates, and each rocket (they come and go as the launcher reloads).
    */
   private outlineView(v: View): void {
+    // The Model Lab models are clean low-poly: no pencil strokes.
+    if (v.rig) return;
     const moving = [v.turn, v.elevate, v.flash, ...v.rockets].filter((e): e is pc.Entity => e !== null);
     outline(v.body, 'structure', { merge: true, exclude: moving });
     if (v.turn) outline(v.turn, 'structure', { merge: true, exclude: moving.filter((e) => e !== v.turn) });
@@ -342,7 +379,7 @@ export class DefenseModels {
     v.collapse = 0;
     v.shudder = 0;
     v.shownHealth = -1;
-    for (const { render, material } of v.parts) render.material = material;
+    if (!v.rig) for (const { render, material } of v.parts) render.material = material;
     v.body.setLocalPosition(0, 0, 0);
     v.body.setLocalScale(1, 1, 1);
     v.body.setLocalEulerAngles(0, v.bodyYaw * RAD_TO_DEG, 0);
@@ -368,6 +405,7 @@ export class DefenseModels {
     v.fallX = Math.cos(a);
     v.fallZ = Math.sin(a);
     if (v.flash) v.flash.enabled = false;
+    if (v.rig) return;
     for (const { render, material } of v.parts) {
       if (render.entity === v.flash) continue;
       render.material = material === this.mat.dark || material === this.mat.barrel || material === this.mat.cardboardDark ? this.mat.wreckDark : this.mat.wreck;
@@ -376,7 +414,9 @@ export class DefenseModels {
 
   /** Tips and squashes the body, with a little bounce at the end. */
   private poseCollapse(v: View): void {
-    const f = FALL[v.inst.spec.kind];
+    const fall = FALL[v.inst.spec.kind];
+    // A model already shows its wreck (critical damage); it only slumps a little further.
+    const f = v.rig ? { tilt: Math.min(10, fall.tilt * 0.25), squash: 0.85 + fall.squash * 0.15, sink: fall.sink * 0.4 } : fall;
     const t = v.collapse;
     const ease = t < 0.75 ? (t / 0.75) ** 2 : 1 - 0.08 * Math.sin(((t - 0.75) / 0.25) * Math.PI);
     const tilt = f.tilt * ease;
@@ -407,8 +447,16 @@ export class DefenseModels {
     let flash: pc.Entity | null = null;
     const rockets: pc.Entity[] = [];
     let bodyYaw = 0;
+    const level = s.level ?? Math.max(1, Math.min(3, this.threats.get(s.territoryId) ?? 1));
+    const modelId = modelFor(s.kind, friendly);
+    const rig = this.models && modelId && BuildingRig.available(this.models, modelId) ? new BuildingRig(this.models, modelId) : null;
+    if (rig) {
+      rig.show(s.kind === 'supply' && friendly ? 1 : level, 1, true);
+      body.addChild(rig.root);
+      bodyYaw = s.facing;
+    }
 
-    switch (s.kind) {
+    switch (rig ? 'model' : s.kind) {
       case 'turret': {
         body.addChild(part('cylinder', this.mat.dark, 0, 0.35, 0, 2.4, 0.7, 2.4));
         body.addChild(part('cylinder', paint, 0, 1.05, 0, 1.6, 0.8, 1.6));
@@ -529,8 +577,8 @@ export class DefenseModels {
         break;
       }
     }
-    // Upgraded player buildings wear a pencil-yellow band per level above the first.
-    for (let n = 1; n < (s.level ?? 1); n++) body.addChild(part('cylinder', this.mat.level, 0, 0.12 + n * 0.16, 0, 3, 0.1, 3));
+    // Upgraded stand-ins wear a pencil-yellow band per level above the first (the models show their level).
+    if (!rig) for (let n = 1; n < (s.level ?? 1); n++) body.addChild(part('cylinder', this.mat.level, 0, 0.12 + n * 0.16, 0, 3, 0.1, 3));
     body.setLocalEulerAngles(0, bodyYaw * RAD_TO_DEG, 0);
 
     let ring: View['ring'] = null;
@@ -552,10 +600,31 @@ export class DefenseModels {
 
     const parts: View['parts'] = [];
     for (const r of root.findComponents('render') as pc.RenderComponent[]) parts.push({ render: r, material: r.material });
-    return {
+    const view: View = {
       inst, root, body, turn, elevate, flash, rockets, ring, paint, paintColor, parts, bodyYaw,
       shownHealth: -1, shudder: 0, collapse: 0, wrecked: false, fallX: 0, fallZ: 0, assemble: 1,
+      rig, level: s.kind === 'supply' && friendly ? 1 : level,
     };
+    if (rig) this.rigParts(view);
+    return view;
+  }
+
+  /** After the rig swapped its model: the muzzle flash, the rockets on the pod, the meshes. */
+  private rigParts(v: View): void {
+    const rig = v.rig!;
+    const friendly = v.inst.spec.side === 'player';
+    v.flash?.destroy();
+    v.flash = null;
+    const muzzle = rig.nodes(/^muzzle_point$/)[0];
+    if (muzzle && v.inst.spec.kind === 'turret') {
+      // The muzzle point faces +Z in the model; the flash stretches along it.
+      v.flash = part('sphere', friendly ? this.mat.blueFlash : this.mat.flash, 0, 0, 0.25, 0.5, 0.5, 0.7);
+      v.flash.enabled = false;
+      muzzle.addChild(v.flash);
+    }
+    v.rockets = rig.nodes(/^Rocket_\d+$/);
+    v.parts.length = 0;
+    for (const r of v.root.findComponents('render') as pc.RenderComponent[]) v.parts.push({ render: r, material: r.material });
   }
 
   /** Strips of threat colour along a defended platform's edges. */

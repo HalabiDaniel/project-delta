@@ -44,13 +44,19 @@ describe('graphics settings', () => {
     expect(withPreset(bold, 'low').outlineIntensity).toBe(1.4);
   });
 
-  it('turns outlines off and on without losing the rest of the preset', () => {
-    const off = withOutlines(withPreset(DEFAULT_GRAPHICS, 'medium'), 'off');
-    expect(outlineChoice(off)).toBe('off');
-    expect(off.shadows).toBe('low');
-    expect(matchesPreset(off)).toBe(false);
-    const back = withOutlines(off, 'medium');
+  it('turns outlines on and off without losing the rest of the preset', () => {
+    const medium = withPreset(DEFAULT_GRAPHICS, 'medium');
+    expect(outlineChoice(medium)).toBe('off');
+    const on = withOutlines(medium, 'medium');
+    expect(outlineChoice(on)).toBe('medium');
+    expect(on.shadows).toBe('low');
+    expect(matchesPreset(on)).toBe(false);
+    const back = withOutlines(on, 'off');
     expect(matchesPreset(back)).toBe(true);
+  });
+
+  it('starts without pencil outlines (the v0.0.11 models are clean low-poly)', () => {
+    expect(DEFAULT_GRAPHICS.outlines).toBe(false);
   });
 
   it('snaps intensity to the offered steps', () => {
@@ -71,7 +77,7 @@ describe('graphics settings', () => {
     const s = withIntensity(withPreset(DEFAULT_GRAPHICS, 'medium'), 0.6);
     saveGraphics(store, s);
     expect(loadGraphics(store)).toEqual(s);
-    store.setItem('paperwars.graphics', '{not json');
+    store.setItem('paperwars.graphics.v2', '{not json');
     expect(loadGraphics(store)).toEqual(DEFAULT_GRAPHICS);
     expect(loadGraphics(null)).toEqual(DEFAULT_GRAPHICS);
     const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('full'); } };

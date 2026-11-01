@@ -1,0 +1,8529 @@
+{
+ "aircraft": {
+  "swift": {
+   "file": "models/custom/aircraft/swift.glb",
+   "tris": 668,
+   "min": [
+    -1.53,
+    -0.39,
+    -1.974
+   ],
+   "max": [
+    1.53,
+    0.9,
+    1.88
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0,
+     -2.05
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": 0,
+      "y": 0,
+      "z": -1.975,
+      "r": 0.13,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.49,
+       -0.02,
+       -1.32
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.49,
+       -0.02,
+       -1.32
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Swift",
+   "kicker": "F-16 inspired · Basic fighter",
+   "specs": {
+    "Engines": "1",
+    "Fins": "1 + 2 ventral",
+    "Length": "≈ 3.9 u",
+    "Span": "≈ 3.0 u"
+   }
+  },
+  "lightning": {
+   "file": "models/custom/aircraft/lightning.glb",
+   "tris": 516,
+   "min": [
+    -1.46,
+    -0.24,
+    -1.88
+   ],
+   "max": [
+    1.46,
+    0.763,
+    1.7
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0,
+     -1.85
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": 0,
+      "y": 0,
+      "z": -1.755,
+      "r": 0.16,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.47,
+       -0.03,
+       -0.96
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.47,
+       -0.03,
+       -0.96
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Lightning",
+   "kicker": "F-35 inspired · Stealth multirole",
+   "specs": {
+    "Engines": "1",
+    "Fins": "2, canted 24°",
+    "Length": "≈ 3.4 u",
+    "Span": "≈ 2.9 u"
+   }
+  },
+  "raptor": {
+   "file": "models/custom/aircraft/raptor.glb",
+   "tris": 476,
+   "min": [
+    -1.4,
+    -0.22,
+    -2.04
+   ],
+   "max": [
+    1.4,
+    0.802,
+    1.82
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0,
+     -2
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.22,
+      "y": 0,
+      "z": -1.92,
+      "r": 0.085,
+      "host": null
+     },
+     {
+      "x": 0.22,
+      "y": 0,
+      "z": -1.92,
+      "r": 0.085,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.4,
+       -0.03,
+       -1.06
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.4,
+       -0.03,
+       -1.06
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Raptor",
+   "kicker": "F-22 inspired · Air superiority",
+   "specs": {
+    "Engines": "2",
+    "Fins": "2, canted 27°",
+    "Length": "≈ 3.9 u",
+    "Span": "≈ 2.8 u"
+   }
+  },
+  "falcon": {
+   "file": "models/custom/aircraft/falcon.glb",
+   "tris": 730,
+   "min": [
+    -1.42,
+    -0.25,
+    -2
+   ],
+   "max": [
+    1.42,
+    0.52,
+    1.9
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0,
+     -1.95
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.4,
+      "y": -0.11,
+      "z": -1.855,
+      "r": 0.10400000000000001,
+      "host": null
+     },
+     {
+      "x": 0.4,
+      "y": -0.11,
+      "z": -1.855,
+      "r": 0.10400000000000001,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.42,
+       0,
+       -1
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.42,
+       0,
+       -1
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Falcon",
+   "kicker": "Su-57 inspired · Agile stealth fighter",
+   "specs": {
+    "Engines": "2, in pods",
+    "Fins": "2, canted 29°",
+    "Length": "≈ 3.9 u",
+    "Span": "≈ 2.8 u"
+   }
+  },
+  "thug": {
+   "file": "models/custom/aircraft/thug.glb",
+   "tris": 1064,
+   "min": [
+    -1.85,
+    -0.284,
+    -1.78
+   ],
+   "max": [
+    1.85,
+    0.623,
+    2.08
+   ],
+   "joints": [
+    {
+     "node": "Gun_Spin",
+     "type": "rotate",
+     "axis": "z",
+     "label": "Gun spin",
+     "note": "Spin while firing: rotation.z += ~8 rad/s."
+    },
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "muzzle_point": [
+     0,
+     -0.09,
+     2.14
+    ],
+    "exhaust_point": [
+     0,
+     0.42,
+     -1.15
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.36,
+      "y": 0.42,
+      "z": -1.115,
+      "r": 0.136,
+      "host": null
+     },
+     {
+      "x": 0.36,
+      "y": 0.42,
+      "z": -1.115,
+      "r": 0.136,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.85,
+       -0.13,
+       -0.24
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.85,
+       -0.13,
+       -0.24
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Thug",
+   "kicker": "A-10 inspired · Ground attack",
+   "specs": {
+    "Engines": "2, rear-mounted",
+    "Fins": "2, on the tailplane tips",
+    "Length": "≈ 3.9 u",
+    "Span": "≈ 3.7 u"
+   }
+  },
+  "dart": {
+   "file": "models/custom/aircraft/dart.glb",
+   "tris": 640,
+   "min": [
+    -1.18,
+    -0.162,
+    -2.2
+   ],
+   "max": [
+    1.18,
+    0.694,
+    2.62
+   ],
+   "joints": [],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0,
+     -1.75
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.66,
+      "y": 0,
+      "z": -1.7049999999999998,
+      "r": 0.11200000000000002,
+      "host": null
+     },
+     {
+      "x": 0.66,
+      "y": 0,
+      "z": -1.7049999999999998,
+      "r": 0.11200000000000002,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.18,
+       0,
+       -1.4
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.18,
+       0,
+       -1.4
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Dart",
+   "kicker": "SR-71 inspired · High-speed recon",
+   "specs": {
+    "Engines": "2, in mid-wing pods",
+    "Fins": "2, canted inward",
+    "Length": "≈ 4.8 u",
+    "Span": "≈ 2.4 u"
+   }
+  },
+  "widewing": {
+   "file": "models/custom/aircraft/widewing.glb",
+   "tris": 1616,
+   "min": [
+    -2.65,
+    -0.24,
+    -2.45
+   ],
+   "max": [
+    2.65,
+    1.14,
+    2.4
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     -0.05,
+     -0.5
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.938,
+      "y": -0.05,
+      "z": 0.0305102040816327,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": -0.762,
+      "y": -0.05,
+      "z": 0.0305102040816327,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": -1.838,
+      "y": -0.05,
+      "z": -0.5572448979591836,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": -1.662,
+      "y": -0.05,
+      "z": -0.5572448979591836,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": 0.762,
+      "y": -0.05,
+      "z": 0.0305102040816327,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": 0.938,
+      "y": -0.05,
+      "z": 0.0305102040816327,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": 1.662,
+      "y": -0.05,
+      "z": -0.5572448979591836,
+      "r": 0.049600000000000005,
+      "host": null
+     },
+     {
+      "x": 1.838,
+      "y": -0.05,
+      "z": -0.5572448979591836,
+      "r": 0.049600000000000005,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       2.65,
+       0.14,
+       -1
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -2.65,
+       0.14,
+       -1
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Widewing",
+   "kicker": "B-52 inspired · Heavy bomber",
+   "specs": {
+    "Engines": "8, in 4 pods",
+    "Fins": "1",
+    "Length": "≈ 4.9 u",
+    "Span": "≈ 5.3 u"
+   }
+  },
+  "jumper": {
+   "file": "models/custom/aircraft/jumper.glb",
+   "tris": 638,
+   "min": [
+    -1.243,
+    -0.24,
+    -2
+   ],
+   "max": [
+    1.243,
+    0.8,
+    1.92
+   ],
+   "joints": [
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Nozzle_RL",
+     "type": "rotate",
+     "axis": "x",
+     "min": -1.45,
+     "max": 0,
+     "label": "Thrust vector",
+     "note": "0 = pointing aft (cruise), −1.45 = pointing down (hover)."
+    },
+    {
+     "node": "Nozzle_RR",
+     "type": "rotate",
+     "axis": "x",
+     "min": -1.45,
+     "max": 0,
+     "label": "Thrust vector",
+     "note": "0 = pointing aft (cruise), −1.45 = pointing down (hover)."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {},
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [
+    "Nozzle_RL",
+    "Nozzle_RR"
+   ],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": 0,
+      "y": 0,
+      "z": -0.195,
+      "r": 0.06,
+      "host": "Nozzle_RL"
+     },
+     {
+      "x": 0,
+      "y": 0,
+      "z": -0.195,
+      "r": 0.06,
+      "host": "Nozzle_RR"
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       1.25,
+       -0.04,
+       -0.75
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -1.25,
+       -0.04,
+       -0.75
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Jumper",
+   "kicker": "AV-8B inspired · VTOL fighter",
+   "specs": {
+    "Engines": "1, two swivel nozzles",
+    "Fins": "1",
+    "Length": "≈ 3.9 u",
+    "Span": "≈ 2.5 u"
+   }
+  },
+  "ghost": {
+   "file": "models/custom/aircraft/ghost.glb",
+   "tris": 324,
+   "min": [
+    -2.5,
+    -0.06,
+    -0.95
+   ],
+   "max": [
+    2.5,
+    0.22,
+    1
+   ],
+   "joints": [],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0.08,
+     -0.62
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [],
+    "tips": [
+     {
+      "at": [
+       2.5,
+       0,
+       -0.95
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -2.5,
+       0,
+       -0.95
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Ghost",
+   "kicker": "B-2 inspired · Stealth bomber",
+   "specs": {
+    "Engines": "4, in 2 humps",
+    "Fins": "none",
+    "Length": "≈ 1.9 u",
+    "Span": "≈ 5.0 u"
+   }
+  },
+  "specter": {
+   "file": "models/custom/aircraft/specter.glb",
+   "tris": 422,
+   "min": [
+    -2.898,
+    -0.18,
+    -1.45
+   ],
+   "max": [
+    2.898,
+    0.466,
+    1.58
+   ],
+   "joints": [],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     0.27,
+     -1.3
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [],
+    "tips": [
+     {
+      "at": [
+       2.9,
+       0.18,
+       -0.1
+      ],
+      "host": null
+     },
+     {
+      "at": [
+       -2.9,
+       0.18,
+       -0.1
+      ],
+      "host": null
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Specter",
+   "kicker": "RQ-4 inspired · Surveillance drone",
+   "specs": {
+    "Engines": "1, top pod",
+    "Fins": "V-tail",
+    "Length": "≈ 3.0 u",
+    "Span": "≈ 5.8 u"
+   }
+  },
+  "lancer": {
+   "file": "models/custom/aircraft/lancer.glb",
+   "tris": 978,
+   "min": [
+    -2.44,
+    -0.27,
+    -2.32
+   ],
+   "max": [
+    2.44,
+    1.04,
+    2.42
+   ],
+   "joints": [
+    {
+     "node": "WingSweep_L",
+     "type": "rotate",
+     "axis": "y",
+     "min": -1,
+     "max": 0,
+     "label": "Wing sweep",
+     "note": "0 = spread (take-off, cruise), ±1.0 = swept back (high speed). Both wings together, mirrored."
+    },
+    {
+     "node": "WingSweep_R",
+     "type": "rotate",
+     "axis": "y",
+     "min": 0,
+     "max": 1,
+     "label": "Wing sweep",
+     "note": "0 = spread (take-off, cruise), ±1.0 = swept back (high speed). Both wings together, mirrored."
+    },
+    {
+     "node": "Stabiliser_L",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    },
+    {
+     "node": "Stabiliser_R",
+     "type": "rotate",
+     "axis": "x",
+     "min": -0.4,
+     "max": 0.4,
+     "label": "Elevator",
+     "note": "Same direction = pitch, opposite = roll. + tilts the leading edge down."
+    }
+   ],
+   "smoke": [],
+   "damageSmoke": [],
+   "sockets": [],
+   "inkLevels": [],
+   "points": {
+    "exhaust_point": [
+     0,
+     -0.17,
+     -1.6
+    ]
+   },
+   "glass": null,
+   "interior": null,
+   "beacons": [],
+   "vtol": [],
+   "sweep": [
+    {
+     "node": "WingSweep_L",
+     "sign": -1
+    },
+    {
+     "node": "WingSweep_R",
+     "sign": 1
+    }
+   ],
+   "burner": "Afterburner",
+   "fx": {
+    "nozzles": [
+     {
+      "x": -0.36,
+      "y": -0.17,
+      "z": -1.535,
+      "r": 0.064,
+      "host": null
+     },
+     {
+      "x": -0.56,
+      "y": -0.17,
+      "z": -1.535,
+      "r": 0.064,
+      "host": null
+     },
+     {
+      "x": 0.36,
+      "y": -0.17,
+      "z": -1.535,
+      "r": 0.064,
+      "host": null
+     },
+     {
+      "x": 0.56,
+      "y": -0.17,
+      "z": -1.535,
+      "r": 0.064,
+      "host": null
+     }
+    ],
+    "tips": [
+     {
+      "at": [
+       -1.7,
+       0,
+       -0.33
+      ],
+      "host": "WingSweep_L"
+     },
+     {
+      "at": [
+       1.7,
+       0,
+       -0.33
+      ],
+      "host": "WingSweep_R"
+     }
+    ],
+    "streaks": []
+   },
+   "name": "Lancer",
+   "kicker": "B-1B inspired · Supersonic bomber",
+   "specs": {
+    "Engines": "4, in 2 pairs",
+    "Fins": "1",
+    "Length": "≈ 4.7 u",
+    "Span": "≈ 4.9 u spread"
+   }
+  }
+ },
+ "buildings": {
+  "turret": {
+   "file": "models/custom/buildings/turret.glb",
+   "lab": "turret-assembly",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 400,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 470,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 526,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 709,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      3.027,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 556,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D1": {
+     "tris": 626,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D2": {
+     "tris": 682,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D3": {
+     "tris": 865,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D0": {
+     "tris": 668,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun_0",
+      "socket_gun_1"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0.19,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D1": {
+     "tris": 738,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.781
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun_0",
+      "socket_gun_1"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0.19,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D2": {
+     "tris": 794,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.985,
+      1.785
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun_0",
+      "socket_gun_1"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0.19,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D3": {
+     "tris": 977,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      2.985,
+      1.786
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Housing_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.5,
+       "max": 0.25,
+       "label": "Pitch",
+       "note": "negative = aim up"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      },
+      {
+       "node": "Gun_Recoil",
+       "type": "translate",
+       "axis": "z",
+       "min": -0.22,
+       "max": 0,
+       "label": "Recoil",
+       "note": "kick back, ease forward"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_gun_0",
+      "socket_gun_1"
+     ],
+     "inkLevels": [],
+     "points": {
+      "muzzle_point": [
+       0.19,
+       2.335,
+       1.79
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    }
+   },
+   "name": "Turret",
+   "properties": []
+  },
+  "launcher": {
+   "file": "models/custom/buildings/launcher.glb",
+   "lab": "rocket-launcher",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 980,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.707,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 1050,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.707,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 1106,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.707,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 1289,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      2.707,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 1172,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D1": {
+     "tris": 1242,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D2": {
+     "tris": 1298,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D3": {
+     "tris": 1481,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      2.78,
+      1.67
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.36,
+       2.115,
+       0.81
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D0": {
+     "tris": 1416,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.82
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5",
+      "socket_rocket_6",
+      "socket_rocket_7"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.54,
+       2.115,
+       0.96
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D1": {
+     "tris": 1486,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.82
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5",
+      "socket_rocket_6",
+      "socket_rocket_7"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.54,
+       2.115,
+       0.96
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D2": {
+     "tris": 1542,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      2.78,
+      1.82
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5",
+      "socket_rocket_6",
+      "socket_rocket_7"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.54,
+       2.115,
+       0.96
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D3": {
+     "tris": 1725,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      2.78,
+      1.82
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "Trunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.55,
+       "max": 0.05,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_pod",
+      "socket_rocket_0",
+      "socket_rocket_1",
+      "socket_rocket_2",
+      "socket_rocket_3",
+      "socket_rocket_4",
+      "socket_rocket_5",
+      "socket_rocket_6",
+      "socket_rocket_7"
+     ],
+     "inkLevels": [],
+     "points": {
+      "exhaust_point": [
+       0.54,
+       2.115,
+       0.96
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    }
+   },
+   "name": "Rocket Launcher",
+   "properties": []
+  },
+  "radar": {
+   "file": "models/custom/buildings/radar.glb",
+   "lab": "radar",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 604,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.48
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 674,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.48
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 730,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.48
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 937,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      4.134,
+      1.48
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 668,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.49
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D1": {
+     "tris": 738,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.49
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D2": {
+     "tris": 794,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      3.625,
+      1.49
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D3": {
+     "tris": 1001,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.902,
+      4.134,
+      1.49
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.375,
+       1.5
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D0": {
+     "tris": 848,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      4.15,
+      1.623
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.545,
+       1.633
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D1": {
+     "tris": 918,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      4.15,
+      1.623
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.545,
+       1.633
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D2": {
+     "tris": 974,
+     "min": [
+      -1.487,
+      0,
+      -1.717
+     ],
+     "max": [
+      1.487,
+      4.15,
+      1.623
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.545,
+       1.633
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    },
+    "L3_D3": {
+     "tris": 1181,
+     "min": [
+      -1.487,
+      -0.291,
+      -1.717
+     ],
+     "max": [
+      1.972,
+      4.553,
+      1.623
+     ],
+     "joints": [
+      {
+       "node": "Swivel",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Yaw",
+       "note": "free 360°"
+      },
+      {
+       "node": "MiniTrunnion_Pitch",
+       "type": "rotate",
+       "axis": "x",
+       "min": -0.9,
+       "max": 0,
+       "label": "Pitch",
+       "note": "negative = elevate"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_base",
+      "damage_smoke_0"
+     ],
+     "sockets": [
+      "socket_swivel",
+      "socket_mount",
+      "socket_dish"
+     ],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       0,
+       2.545,
+       1.633
+      ]
+     },
+     "glass": null,
+     "interior": null,
+     "beacons": []
+    }
+   },
+   "name": "Radar",
+   "properties": []
+  },
+  "workshop": {
+   "file": "models/custom/buildings/workshop.glb",
+   "lab": "workshop",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 558,
+     "min": [
+      -1.47,
+      0,
+      -1.195
+     ],
+     "max": [
+      1.47,
+      3.03,
+      1.195
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "smoke_point": [
+       0.62,
+       3.05,
+       -0.42
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 700,
+     "min": [
+      -1.47,
+      0,
+      -1.195
+     ],
+     "max": [
+      1.47,
+      3.03,
+      1.195
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "smoke_point": [
+       0.62,
+       3.05,
+       -0.42
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 872,
+     "min": [
+      -1.47,
+      -0.035,
+      -1.271
+     ],
+     "max": [
+      1.47,
+      3.03,
+      1.511
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "smoke_point": [
+       0.62,
+       3.05,
+       -0.42
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 1044,
+     "min": [
+      -1.47,
+      -0.065,
+      -1.78
+     ],
+     "max": [
+      1.924,
+      2.313,
+      1.511
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_breach"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "smoke_point": [
+       0.62,
+       2.285,
+       -0.42
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 700,
+     "min": [
+      -1.92,
+      0,
+      -1.295
+     ],
+     "max": [
+      1.92,
+      3.095,
+      1.295
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D1": {
+     "tris": 842,
+     "min": [
+      -1.92,
+      0,
+      -1.295
+     ],
+     "max": [
+      1.92,
+      3.095,
+      1.295
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D2": {
+     "tris": 1014,
+     "min": [
+      -1.92,
+      -0.035,
+      -1.295
+     ],
+     "max": [
+      1.92,
+      3.095,
+      1.611
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D3": {
+     "tris": 1186,
+     "min": [
+      -1.92,
+      -0.065,
+      -1.88
+     ],
+     "max": [
+      2.374,
+      3.095,
+      1.611
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_breach"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D0": {
+     "tris": 870,
+     "min": [
+      -2.37,
+      0,
+      -1.395
+     ],
+     "max": [
+      2.37,
+      3.16,
+      1.395
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1",
+      "smoke_point_2"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D1": {
+     "tris": 1012,
+     "min": [
+      -2.37,
+      0,
+      -1.395
+     ],
+     "max": [
+      2.37,
+      3.16,
+      1.395
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1",
+      "smoke_point_2"
+     ],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D2": {
+     "tris": 1220,
+     "min": [
+      -2.37,
+      -0.035,
+      -1.395
+     ],
+     "max": [
+      2.37,
+      3.16,
+      1.711
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1",
+      "smoke_point_2"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D3": {
+     "tris": 1392,
+     "min": [
+      -2.394,
+      -0.065,
+      -1.98
+     ],
+     "max": [
+      2.824,
+      3.16,
+      1.711
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [
+      "smoke_point_0",
+      "smoke_point_1",
+      "smoke_point_2"
+     ],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_breach"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    }
+   },
+   "name": "Workshop",
+   "properties": [
+    "smoke",
+    "lights",
+    "door"
+   ]
+  },
+  "storage": {
+   "file": "models/custom/buildings/storage.glb",
+   "lab": "storage",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 674,
+     "min": [
+      -1.388,
+      0,
+      -1.7
+     ],
+     "max": [
+      1.597,
+      2.01,
+      1.918
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 780,
+     "min": [
+      -1.388,
+      0,
+      -1.7
+     ],
+     "max": [
+      1.597,
+      2.017,
+      1.918
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 884,
+     "min": [
+      -1.388,
+      -0.125,
+      -1.7
+     ],
+     "max": [
+      2.496,
+      2.017,
+      1.918
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 1092,
+     "min": [
+      -2.548,
+      -0.221,
+      -1.705
+     ],
+     "max": [
+      2.496,
+      2.023,
+      2.195
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 836,
+     "min": [
+      -1.987,
+      0,
+      -1.8
+     ],
+     "max": [
+      2.197,
+      2.154,
+      2.018
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D1": {
+     "tris": 942,
+     "min": [
+      -1.987,
+      0,
+      -1.8
+     ],
+     "max": [
+      2.197,
+      2.165,
+      2.018
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D2": {
+     "tris": 1046,
+     "min": [
+      -1.987,
+      -0.186,
+      -1.8
+     ],
+     "max": [
+      3.383,
+      2.165,
+      2.018
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D3": {
+     "tris": 1254,
+     "min": [
+      -3.418,
+      -0.312,
+      -1.8
+     ],
+     "max": [
+      3.383,
+      2.305,
+      2.295
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D0": {
+     "tris": 1194,
+     "min": [
+      -2.979,
+      0,
+      -1.9
+     ],
+     "max": [
+      2.815,
+      2.298,
+      2.139
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D1": {
+     "tris": 1300,
+     "min": [
+      -2.979,
+      0,
+      -1.9
+     ],
+     "max": [
+      2.815,
+      2.311,
+      2.139
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D2": {
+     "tris": 1404,
+     "min": [
+      -2.979,
+      -0.246,
+      -1.9
+     ],
+     "max": [
+      4.273,
+      2.311,
+      2.139
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L3_D3": {
+     "tris": 1612,
+     "min": [
+      -4.29,
+      -0.404,
+      -1.9
+     ],
+     "max": [
+      4.273,
+      2.601,
+      2.395
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      },
+      {
+       "node": "Door_Roll_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    }
+   },
+   "name": "Storage",
+   "properties": [
+    "lights",
+    "door"
+   ]
+  },
+  "command": {
+   "file": "models/custom/buildings/command.glb",
+   "lab": "command-center",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 878,
+     "min": [
+      -1.4,
+      0,
+      -1.17
+     ],
+     "max": [
+      1.727,
+      3.02,
+      1.21
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D1": {
+     "tris": 1020,
+     "min": [
+      -1.4,
+      0,
+      -1.17
+     ],
+     "max": [
+      1.727,
+      3.02,
+      1.21
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D2": {
+     "tris": 1228,
+     "min": [
+      -1.4,
+      0,
+      -1.17
+     ],
+     "max": [
+      1.727,
+      3.02,
+      1.21
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D3": {
+     "tris": 1392,
+     "min": [
+      -1.4,
+      0,
+      -1.163
+     ],
+     "max": [
+      1.71,
+      2.7,
+      1.21
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_tower"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D0": {
+     "tris": 1364,
+     "min": [
+      -2.75,
+      0,
+      -1.27
+     ],
+     "max": [
+      2.077,
+      3.02,
+      1.31
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.3,
+       1.198,
+       -0.157
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D1": {
+     "tris": 1506,
+     "min": [
+      -2.75,
+      0,
+      -1.27
+     ],
+     "max": [
+      2.077,
+      3.02,
+      1.31
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.3,
+       1.198,
+       -0.157
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D2": {
+     "tris": 1714,
+     "min": [
+      -2.75,
+      0,
+      -1.27
+     ],
+     "max": [
+      2.077,
+      3.02,
+      1.31
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.3,
+       1.198,
+       -0.157
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D3": {
+     "tris": 1878,
+     "min": [
+      -2.75,
+      0,
+      -1.263
+     ],
+     "max": [
+      2.06,
+      2.7,
+      1.31
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously",
+       "prop": "jammed"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_tower"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.082,
+       1.079,
+       -0.093
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D0": {
+     "tris": 1416,
+     "min": [
+      -3.05,
+      0,
+      -1.424
+     ],
+     "max": [
+      2.414,
+      3.778,
+      1.41
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.6,
+       1.198,
+       -0.257
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D1": {
+     "tris": 1558,
+     "min": [
+      -3.05,
+      0,
+      -1.424
+     ],
+     "max": [
+      2.414,
+      3.778,
+      1.41
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.6,
+       1.198,
+       -0.257
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D2": {
+     "tris": 1766,
+     "min": [
+      -3.05,
+      0,
+      -1.424
+     ],
+     "max": [
+      2.414,
+      3.778,
+      1.41
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.6,
+       1.198,
+       -0.257
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D3": {
+     "tris": 1930,
+     "min": [
+      -3.05,
+      0,
+      -1.415
+     ],
+     "max": [
+      2.394,
+      3.417,
+      1.41
+     ],
+     "joints": [
+      {
+       "node": "Door_L",
+       "type": "translate",
+       "axis": "x",
+       "min": -0.29,
+       "max": 0,
+       "label": "Door",
+       "note": "slides left into the wall"
+      },
+      {
+       "node": "Door_R",
+       "type": "translate",
+       "axis": "x",
+       "min": 0,
+       "max": 0.29,
+       "label": "Door",
+       "note": "slides right into the wall"
+      },
+      {
+       "node": "RadarHut_Spin",
+       "type": "rotate",
+       "axis": "y",
+       "label": "Spin",
+       "speed": 0.9,
+       "note": "spins continuously",
+       "prop": "jammed"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_tower"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {
+      "beam_point": [
+       -2.382,
+       1.079,
+       -0.193
+      ]
+     },
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.1,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      },
+      {
+       "material": "BeaconRedTower",
+       "period": 1.6,
+       "phase": 0.5,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    }
+   },
+   "name": "Command Center",
+   "properties": [
+    "lights",
+    "beacons",
+    "door"
+   ]
+  },
+  "hangar": {
+   "file": "models/custom/buildings/hangar.glb",
+   "lab": "hangar",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 636,
+     "min": [
+      -1.575,
+      0,
+      -1.7
+     ],
+     "max": [
+      1.575,
+      2.175,
+      1.71
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 778,
+     "min": [
+      -1.575,
+      0,
+      -1.7
+     ],
+     "max": [
+      1.575,
+      2.175,
+      1.71
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 926,
+     "min": [
+      -1.575,
+      0,
+      -1.7
+     ],
+     "max": [
+      1.575,
+      2.405,
+      1.71
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 1122,
+     "min": [
+      -1.575,
+      -0.064,
+      -2.234
+     ],
+     "max": [
+      2.379,
+      2.405,
+      1.715
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_roofbig"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 830,
+     "min": [
+      -1.975,
+      0,
+      -2.12
+     ],
+     "max": [
+      2.91,
+      2.69,
+      2.12
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D1": {
+     "tris": 972,
+     "min": [
+      -1.975,
+      0,
+      -2.12
+     ],
+     "max": [
+      2.91,
+      2.69,
+      2.12
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D2": {
+     "tris": 1120,
+     "min": [
+      -1.975,
+      0,
+      -2.12
+     ],
+     "max": [
+      2.91,
+      2.761,
+      2.12
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D3": {
+     "tris": 1324,
+     "min": [
+      -1.975,
+      -0.081,
+      -2.634
+     ],
+     "max": [
+      2.91,
+      2.761,
+      2.12
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_roofbig"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D0": {
+     "tris": 1092,
+     "min": [
+      -3.31,
+      0,
+      -2.52
+     ],
+     "max": [
+      3.31,
+      3.09,
+      4.46
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D1": {
+     "tris": 1198,
+     "min": [
+      -3.31,
+      0,
+      -2.52
+     ],
+     "max": [
+      3.31,
+      3.09,
+      4.46
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D2": {
+     "tris": 1310,
+     "min": [
+      -3.31,
+      0,
+      -2.52
+     ],
+     "max": [
+      3.31,
+      3.117,
+      4.46
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D3": {
+     "tris": 1514,
+     "min": [
+      -3.31,
+      -0.099,
+      -3.034
+     ],
+     "max": [
+      3.31,
+      3.174,
+      4.46
+     ],
+     "joints": [
+      {
+       "node": "Door_Roll",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.04,
+       "max": 1,
+       "label": "Door",
+       "note": "1 = closed, 0.04 = rolled up"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_roof",
+      "damage_smoke_roofbig"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": "Interior",
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.3,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    }
+   },
+   "name": "Aircraft Hangar",
+   "properties": [
+    "lights",
+    "beacons",
+    "door"
+   ]
+  },
+  "runway": {
+   "file": "models/custom/buildings/runway.glb",
+   "lab": "runway",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 632,
+     "min": [
+      -3.495,
+      0,
+      -0.8
+     ],
+     "max": [
+      3.495,
+      0.137,
+      0.8
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D1": {
+     "tris": 758,
+     "min": [
+      -3.495,
+      0,
+      -0.8
+     ],
+     "max": [
+      3.495,
+      0.204,
+      0.8
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D2": {
+     "tris": 980,
+     "min": [
+      -3.495,
+      0,
+      -0.8
+     ],
+     "max": [
+      3.495,
+      0.204,
+      0.8
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D3": {
+     "tris": 1163,
+     "min": [
+      -3.495,
+      0,
+      -1.372
+     ],
+     "max": [
+      3.495,
+      0.404,
+      0.8
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater",
+      "damage_smoke_bigcrater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D0": {
+     "tris": 844,
+     "min": [
+      -4.995,
+      0,
+      -1
+     ],
+     "max": [
+      4.995,
+      0.137,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D1": {
+     "tris": 970,
+     "min": [
+      -4.995,
+      0,
+      -1
+     ],
+     "max": [
+      4.995,
+      0.204,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D2": {
+     "tris": 1192,
+     "min": [
+      -4.995,
+      0,
+      -1
+     ],
+     "max": [
+      4.995,
+      0.204,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D3": {
+     "tris": 1375,
+     "min": [
+      -4.995,
+      0,
+      -1.352
+     ],
+     "max": [
+      4.995,
+      0.404,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater",
+      "damage_smoke_bigcrater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D0": {
+     "tris": 1092,
+     "min": [
+      -6.495,
+      0,
+      -1.2
+     ],
+     "max": [
+      6.495,
+      0.137,
+      1.2
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.65,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 1.54,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 1.43,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 1.32,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 1.21,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_11",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_12",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_13",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_14",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_15",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D1": {
+     "tris": 1218,
+     "min": [
+      -6.495,
+      0,
+      -1.2
+     ],
+     "max": [
+      6.495,
+      0.204,
+      1.2
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.65,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 1.54,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 1.43,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 1.32,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 1.21,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_11",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_12",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_13",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_14",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_15",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D2": {
+     "tris": 1440,
+     "min": [
+      -6.495,
+      0,
+      -1.2
+     ],
+     "max": [
+      6.495,
+      0.204,
+      1.2
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.65,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 1.54,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 1.43,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 1.32,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 1.21,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_11",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_12",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_13",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_14",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_15",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D3": {
+     "tris": 1623,
+     "min": [
+      -6.495,
+      0,
+      -1.332
+     ],
+     "max": [
+      6.495,
+      0.404,
+      1.2
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater",
+      "damage_smoke_bigcrater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "CentreLight_0",
+       "period": 1.4,
+       "phase": 1.65,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_1",
+       "period": 1.4,
+       "phase": 1.54,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_2",
+       "period": 1.4,
+       "phase": 1.43,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_3",
+       "period": 1.4,
+       "phase": 1.32,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_4",
+       "period": 1.4,
+       "phase": 1.21,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_5",
+       "period": 1.4,
+       "phase": 1.1,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_6",
+       "period": 1.4,
+       "phase": 0.99,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_7",
+       "period": 1.4,
+       "phase": 0.88,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_8",
+       "period": 1.4,
+       "phase": 0.77,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_9",
+       "period": 1.4,
+       "phase": 0.66,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_10",
+       "period": 1.4,
+       "phase": 0.55,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_11",
+       "period": 1.4,
+       "phase": 0.44,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_12",
+       "period": 1.4,
+       "phase": 0.33,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_13",
+       "period": 1.4,
+       "phase": 0.22,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_14",
+       "period": 1.4,
+       "phase": 0.11,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "CentreLight_15",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.09,
+       "peak": 3.5,
+       "idle": 0.25,
+       "prop": "centre"
+      },
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    }
+   },
+   "name": "Runway",
+   "properties": [
+    "beacons",
+    "centre"
+   ]
+  },
+  "helipad": {
+   "file": "models/custom/buildings/helipad.glb",
+   "lab": "helipad",
+   "levels": [
+    1
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 352,
+     "min": [
+      -1,
+      0,
+      -1
+     ],
+     "max": [
+      1,
+      0.39,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D1": {
+     "tris": 415,
+     "min": [
+      -1,
+      0,
+      -1
+     ],
+     "max": [
+      1,
+      0.39,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D2": {
+     "tris": 526,
+     "min": [
+      -1,
+      0,
+      -1.034
+     ],
+     "max": [
+      1.034,
+      0.398,
+      1
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L1_D3": {
+     "tris": 637,
+     "min": [
+      -1.107,
+      -0.347,
+      -1.034
+     ],
+     "max": [
+      1.087,
+      0.467,
+      1.066
+     ],
+     "joints": [],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_crater",
+      "damage_smoke_bigcrater"
+     ],
+     "sockets": [],
+     "inkLevels": [],
+     "points": {},
+     "glass": null,
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.2,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    }
+   },
+   "name": "Helipad",
+   "properties": [
+    "beacons"
+   ]
+  },
+  "ink": {
+   "file": "models/custom/buildings/ink.glb",
+   "lab": "ink-depot",
+   "levels": [
+    1,
+    2,
+    3
+   ],
+   "variants": {
+    "L1_D0": {
+     "tris": 678,
+     "min": [
+      -1.33,
+      0,
+      -1.08
+     ],
+     "max": [
+      1.33,
+      1.57,
+      1.08
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D1": {
+     "tris": 784,
+     "min": [
+      -1.33,
+      0,
+      -1.08
+     ],
+     "max": [
+      1.33,
+      1.575,
+      1.08
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D2": {
+     "tris": 860,
+     "min": [
+      -1.415,
+      -0.004,
+      -1.08
+     ],
+     "max": [
+      1.33,
+      1.5,
+      1.08
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": []
+    },
+    "L1_D3": {
+     "tris": 1024,
+     "min": [
+      -1.49,
+      -0.084,
+      -1.08
+     ],
+     "max": [
+      1.33,
+      1.5,
+      1.08
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "jammed",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump",
+      "damage_smoke_tank"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": []
+    },
+    "L2_D0": {
+     "tris": 1038,
+     "min": [
+      -1.83,
+      0,
+      -1.23
+     ],
+     "max": [
+      1.83,
+      1.535,
+      1.23
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D1": {
+     "tris": 1144,
+     "min": [
+      -1.83,
+      0,
+      -1.23
+     ],
+     "max": [
+      1.83,
+      1.535,
+      1.23
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D2": {
+     "tris": 1220,
+     "min": [
+      -1.965,
+      -0.004,
+      -1.23
+     ],
+     "max": [
+      1.83,
+      1.535,
+      1.23
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L2_D3": {
+     "tris": 1384,
+     "min": [
+      -2.058,
+      -0.084,
+      -1.23
+     ],
+     "max": [
+      1.83,
+      1.535,
+      1.23
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "jammed",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump",
+      "damage_smoke_tank"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D0": {
+     "tris": 1630,
+     "min": [
+      -2.43,
+      0,
+      -1.43
+     ],
+     "max": [
+      2.43,
+      1.995,
+      1.485
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "InkLevel_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 2"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1",
+      "InkLevel_2"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D1": {
+     "tris": 1736,
+     "min": [
+      -2.43,
+      0,
+      -1.43
+     ],
+     "max": [
+      2.43,
+      1.995,
+      1.485
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "InkLevel_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 2"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1",
+      "InkLevel_2"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D2": {
+     "tris": 1812,
+     "min": [
+      -2.635,
+      -0.004,
+      -1.43
+     ],
+     "max": [
+      2.43,
+      1.995,
+      1.485
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "InkLevel_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 2"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "filling",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1",
+      "InkLevel_2"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    },
+    "L3_D3": {
+     "tris": 1952,
+     "min": [
+      -2.738,
+      -0.084,
+      -1.43
+     ],
+     "max": [
+      2.43,
+      1.995,
+      1.447
+     ],
+     "joints": [
+      {
+       "node": "InkLevel_0",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 0"
+      },
+      {
+       "node": "InkLevel_1",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 1"
+      },
+      {
+       "node": "InkLevel_2",
+       "type": "scale",
+       "axis": "y",
+       "min": 0.05,
+       "max": 1,
+       "label": "Ink",
+       "note": "fill level of tank 2"
+      },
+      {
+       "node": "Pump_Spin",
+       "type": "rotate",
+       "axis": "z",
+       "label": "Spin",
+       "speed": 3.2,
+       "prop": "jammed",
+       "note": "spins while filling"
+      }
+     ],
+     "smoke": [],
+     "damageSmoke": [
+      "damage_smoke_0",
+      "damage_smoke_pump",
+      "damage_smoke_tank"
+     ],
+     "sockets": [],
+     "inkLevels": [
+      "InkLevel_0",
+      "InkLevel_1",
+      "InkLevel_2"
+     ],
+     "points": {},
+     "glass": "WindowGlass",
+     "interior": null,
+     "beacons": [
+      {
+       "material": "BeaconRed",
+       "period": 1.4,
+       "phase": 0,
+       "width": 0.12,
+       "peak": 3,
+       "idle": 0.15,
+       "prop": "beacons"
+      }
+     ]
+    }
+   },
+   "name": "Ink Depot",
+   "properties": [
+    "filling",
+    "lights",
+    "beacons"
+   ]
+  }
+ },
+ "classroom": {
+  "layout": {
+   "unitsPerCm": 0.6,
+   "floor": [
+    432,
+    491.99999999999994
+   ],
+   "wallHeight": 180,
+   "deskTop": 43.199999999999996,
+   "desk": {
+    "w": 39,
+    "d": 30
+   },
+   "desks": [
+    {
+     "id": "Desk_01",
+     "position": [
+      -144,
+      0,
+      -111
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_02",
+     "position": [
+      -48,
+      0,
+      -111
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_03",
+     "position": [
+      48,
+      0,
+      -111
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_04",
+     "position": [
+      144,
+      0,
+      -111
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_05",
+     "position": [
+      -144,
+      0,
+      -15
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_06",
+     "position": [
+      -48,
+      0,
+      -15
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_07",
+     "position": [
+      48,
+      0,
+      -15
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_08",
+     "position": [
+      144,
+      0,
+      -15
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_09",
+     "position": [
+      -144,
+      0,
+      81
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_10",
+     "position": [
+      -48,
+      0,
+      81
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_11",
+     "position": [
+      48,
+      0,
+      81
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_12",
+     "position": [
+      144,
+      0,
+      81
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_13",
+     "position": [
+      -144,
+      0,
+      177
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_14",
+     "position": [
+      -48,
+      0,
+      177
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_15",
+     "position": [
+      48,
+      0,
+      177
+     ],
+     "rotationY": 0
+    },
+    {
+     "id": "Desk_16",
+     "position": [
+      144,
+      0,
+      177
+     ],
+     "rotationY": 0
+    }
+   ],
+   "chairs": [
+    {
+     "id": "Chair_01",
+     "position": [
+      -147.61,
+      0,
+      -80.04
+     ],
+     "rotationY": -0.089
+    },
+    {
+     "id": "Chair_02",
+     "position": [
+      -49.6,
+      0,
+      -84.52
+     ],
+     "rotationY": 0.105
+    },
+    {
+     "id": "Chair_03",
+     "position": [
+      54,
+      0,
+      -74.4
+     ],
+     "rotationY": 0.45
+    },
+    {
+     "id": "Chair_04",
+     "position": [
+      141.23,
+      0,
+      -80.62
+     ],
+     "rotationY": -0.07
+    },
+    {
+     "id": "Chair_05",
+     "position": [
+      -143.84,
+      0,
+      11.4
+     ],
+     "rotationY": -0.088
+    },
+    {
+     "id": "Chair_06",
+     "position": [
+      -45.22,
+      0,
+      11.4
+     ],
+     "rotationY": -0.063
+    },
+    {
+     "id": "Chair_07",
+     "position": [
+      44.84,
+      0,
+      13.23
+     ],
+     "rotationY": 0.087
+    },
+    {
+     "id": "Chair_08",
+     "position": [
+      139.2,
+      0,
+      25.2
+     ],
+     "rotationY": -0.38
+    },
+    {
+     "id": "Chair_09",
+     "position": [
+      -145.28,
+      0,
+      111.24
+     ],
+     "rotationY": 0.083
+    },
+    {
+     "id": "Chair_10",
+     "position": [
+      -44.43,
+      0,
+      107.4
+     ],
+     "rotationY": -0.025
+    },
+    {
+     "id": "Chair_11",
+     "position": [
+      50.4,
+      0,
+      114.6
+     ],
+     "rotationY": 0.62
+    },
+    {
+     "id": "Chair_12",
+     "position": [
+      141.72,
+      0,
+      107.77
+     ],
+     "rotationY": -0.019
+    },
+    {
+     "id": "Chair_13",
+     "position": [
+      -145.01,
+      0,
+      203.59
+     ],
+     "rotationY": -0.052
+    },
+    {
+     "id": "Chair_14",
+     "position": [
+      -55.2,
+      0,
+      214.8
+     ],
+     "rotationY": -0.5
+    },
+    {
+     "id": "Chair_15",
+     "position": [
+      49.4,
+      0,
+      207.83
+     ],
+     "rotationY": -0.054
+    },
+    {
+     "id": "Chair_16",
+     "position": [
+      141.86,
+      0,
+      203.4
+     ],
+     "rotationY": -0.075
+    }
+   ],
+   "doors": [
+    "Door_Pivot"
+   ],
+   "cols": [
+    -144,
+    -48,
+    48,
+    144
+   ],
+   "rows": [
+    -111,
+    -15,
+    81,
+    177
+   ]
+  },
+  "parts": {
+   "room": {
+    "file": "models/custom/classroom/room.glb",
+    "tris": 2292,
+    "min": [
+     -223.201,
+     0,
+     -253.2
+    ],
+    "max": [
+     224.911,
+     180,
+     253.202
+    ],
+    "joints": [],
+    "smoke": [],
+    "damageSmoke": [],
+    "sockets": [
+     "socket_tray",
+     "socket_door",
+     "socket_top",
+     "socket_chair"
+    ],
+    "inkLevels": [],
+    "points": {},
+    "glass": null,
+    "interior": null,
+    "beacons": []
+   },
+   "floor": {
+    "file": "models/custom/classroom/floor.glb",
+    "tris": 12,
+    "min": [
+     -216,
+     -2,
+     -246
+    ],
+    "max": [
+     216,
+     0,
+     246
+    ],
+    "joints": [],
+    "smoke": [],
+    "damageSmoke": [],
+    "sockets": [],
+    "inkLevels": [],
+    "points": {},
+    "glass": null,
+    "interior": null,
+    "beacons": []
+   },
+   "desk": {
+    "file": "models/custom/classroom/desk.glb",
+    "tris": 252,
+    "min": [
+     -19.5,
+     0,
+     -15
+    ],
+    "max": [
+     19.5,
+     43.38,
+     15
+    ],
+    "joints": [],
+    "smoke": [],
+    "damageSmoke": [],
+    "sockets": [
+     "socket_top",
+     "socket_chair",
+     "socket_bag"
+    ],
+    "inkLevels": [],
+    "points": {},
+    "glass": null,
+    "interior": null,
+    "beacons": []
+   },
+   "chair": {
+    "file": "models/custom/classroom/chair.glb",
+    "tris": 744,
+    "min": [
+     -14.383,
+     0,
+     -15.42
+    ],
+    "max": [
+     14.383,
+     51.011,
+     14.82
+    ],
+    "joints": [],
+    "smoke": [],
+    "damageSmoke": [],
+    "sockets": [
+     "socket_seat"
+    ],
+    "inkLevels": [],
+    "points": {},
+    "glass": null,
+    "interior": null,
+    "beacons": []
+   },
+   "seats": {
+    "file": "models/custom/classroom/seats.glb",
+    "tris": 43352,
+    "min": [
+     -185.695,
+     -0.438,
+     -101.363
+    ],
+    "max": [
+     179.502,
+     53.062,
+     245.753
+    ],
+    "joints": [],
+    "smoke": [],
+    "damageSmoke": [],
+    "sockets": [
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat",
+     "socket_seat"
+    ],
+    "inkLevels": [],
+    "points": {},
+    "glass": null,
+    "interior": null,
+    "beacons": []
+   }
+  }
+ }
+}

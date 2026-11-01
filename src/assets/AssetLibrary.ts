@@ -1,6 +1,8 @@
 import * as pc from 'playcanvas';
 import { materials } from '../render/materials/MaterialLibrary';
 import { outline } from '../render/outline/OutlineRenderer';
+import { CATALOG, IN_GAME_BUILDINGS, ModelStore } from './CustomModels';
+import { classroomFiles } from '../world/Classroom';
 import { assetPaths, PROPS, resolveProp, type PropBuild, type PropId, type PropSource } from './manifest';
 
 /**
@@ -35,8 +37,11 @@ export class AssetLibrary {
   private readonly urls = new Map<string, string>();
   private readonly containers = new Map<string, pc.ContainerResource>();
   private readonly errors = new Map<string, string>();
+  /** The game's own models from the asset labs: classroom, aircraft, buildings. */
+  readonly models: ModelStore;
 
   constructor(private readonly app: pc.AppBase, urls: Record<string, string> = MODEL_URLS) {
+    this.models = new ModelStore(app);
     const keys = Object.keys(urls);
     assetPaths(keys).forEach((path, i) => this.urls.set(path, urls[keys[i]]));
   }
@@ -52,7 +57,8 @@ export class AssetLibrary {
       const source = resolveProp(def, this.available);
       if (source.kind === 'licensed' || source.kind === 'model') wanted.add(source.file);
     }
-    await Promise.all([...wanted].map((file) => this.load(file, timeoutMs)));
+    const custom = [...classroomFiles(), ...Object.values(CATALOG.aircraft).map((a) => a.file), ...IN_GAME_BUILDINGS.map((id) => CATALOG.buildings[id].file)];
+    await Promise.all([...[...wanted].map((file) => this.load(file, timeoutMs)), ...custom.map((file) => this.models.load(file, timeoutMs * 2))]);
   }
 
   /** A prop to place. Imported ones come as a fresh entity each time. */

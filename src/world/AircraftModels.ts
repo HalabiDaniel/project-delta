@@ -1,7 +1,8 @@
 import * as pc from 'playcanvas';
 import { Ribbon, trailMaterial } from '../aircraft/FlightTrails';
-import { FoldablePlane, inkBlotMaterial, planeMaterials, type PlaneMaterials } from '../aircraft/PlaneModel';
-import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
+import { inkBlotMaterial } from '../aircraft/PlaneModel';
+import { createPlaneModel, type JetPaint, type PlaneModelView } from '../aircraft/JetModel';
+import type { ModelStore } from '../assets/CustomModels';
 import type { FlightModel } from '../aircraft/FlightModel';
 import { DAMAGE, PALETTE, type AircraftId, type Side } from '../config';
 
@@ -25,7 +26,7 @@ const RAD_TO_DEG = 180 / Math.PI;
 
 interface View {
   aircraft: ShownAircraft;
-  model: FoldablePlane;
+  model: PlaneModelView;
   left: Ribbon;
   right: Ribbon;
   smudge: Ribbon;
@@ -40,7 +41,7 @@ interface View {
  */
 export class AircraftModels {
   private readonly views = new Map<string, View>();
-  private readonly materials = new Map<string, PlaneMaterials>();
+  private readonly paints = new Map<string, JetPaint>();
   private readonly blots = inkBlotMaterial();
   private readonly trail = trailMaterial();
   private readonly rotation = new pc.Quat();
@@ -60,19 +61,19 @@ export class AircraftModels {
   constructor(
     private readonly app: pc.AppBase,
     private readonly paint: Paint = () => null,
+    private readonly models: ModelStore | null = null,
   ) {
-    this.materials.set('enemy', planeMaterials(PALETTE.enemyPaper, PALETTE.enemyAccent));
-    this.materials.set('player', planeMaterials(PALETTE.paper, PALETTE.friendlyAccent));
+    this.paints.set('enemy', { paper: PALETTE.enemyPaper, accent: PALETTE.enemyAccent });
+    this.paints.set('player', { paper: PALETTE.paper, accent: PALETTE.friendlyAccent });
   }
 
-  private materialsFor(side: Side): PlaneMaterials {
-    let m = this.materials.get(side);
-    if (!m) {
-      const p = this.paint(side);
-      m = p ? planeMaterials(p.paper, p.accent) : this.materials.get('player')!;
-      this.materials.set(side, m);
+  private paintFor(side: Side): JetPaint {
+    let p = this.paints.get(side);
+    if (!p) {
+      p = this.paint(side) ?? this.paints.get('player')!;
+      this.paints.set(side, p);
     }
-    return m;
+    return p;
   }
 
   /** Keeps one model per aircraft in the air, posed as its flight model says. */
@@ -113,7 +114,7 @@ export class AircraftModels {
   }
 
   private create(a: ShownAircraft): View {
-    const model = new FoldablePlane(this.app.graphicsDevice, PLANE_SHAPES[a.spec.id], this.materialsFor(a.side), 0, this.blots);
+    const model = createPlaneModel(this.app.graphicsDevice, this.models, a.spec.id, this.paintFor(a.side), { blots: this.blots });
     this.app.root.addChild(model.entity);
     return {
       aircraft: a,
@@ -133,6 +134,7 @@ export class AircraftModels {
     this.rotation.mul2(this.qYaw, this.qPitch).mul(this.qRoll);
     v.model.entity.setPosition(m.position);
     v.model.entity.setRotation(this.rotation);
+    v.model.animate?.(dt, m);
     const health = v.aircraft.durability.fraction;
     if (health !== v.shownHealth) {
       v.shownHealth = health;

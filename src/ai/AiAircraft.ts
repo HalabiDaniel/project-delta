@@ -1,3 +1,4 @@
+import { boundaryDistance } from '../systems/Boundary';
 import { Vec3 } from 'playcanvas';
 import { predictImpact } from '../aircraft/Bomb';
 import { FlightModel, wrapAngle, type Collision, type FlightControls } from '../aircraft/FlightModel';
@@ -811,7 +812,7 @@ export class AiAircraft {
     }
     // Back into the world, unless leaving it.
     const r = Math.hypot(p.x, p.z);
-    if (this.state !== 'leave' && r > WORLD.boundaryRadius - 10 && this.age > 6) {
+    if (this.state !== 'leave' && boundaryDistance(p.x, p.z) > WORLD.boundaryRadius - 10 && this.age > 6) {
       dir = { x: dir.x - (p.x / r) * 1.2, y: dir.y, z: dir.z - (p.z / r) * 1.2 };
     }
     const len = Math.hypot(dir.x, dir.y, dir.z) || 1;

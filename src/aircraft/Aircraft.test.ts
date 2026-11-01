@@ -7,7 +7,7 @@ import type { MissionType } from '../missions/Mission';
 import { generateMission, MISSION_TYPES, type MissionContext } from '../missions/MissionGenerator';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
-import { aircraftRatings, assessSuitability, bombLoad, RATING_KEYS } from './Aircraft';
+import { aircraftRatings, assessSuitability, bombLoad, bombTargets, RATING_KEYS } from './Aircraft';
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
@@ -20,9 +20,14 @@ const mission = (type: MissionType, difficulty: Difficulty = 'medium') => genera
 const level = (id: AircraftId, type: MissionType, difficulty: Difficulty = 'medium') => assessSuitability(AIRCRAFT[id], mission(type, difficulty)).level;
 
 describe('aircraft catalog', () => {
-  it('has four distinct designs, cheapest first', () => {
-    expect(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].cost)).toEqual([10, 25, 30, 40]);
+  it('has eleven distinct designs, every one in the garage, covering all four roles', () => {
+    expect(AIRCRAFT_ORDER).toHaveLength(11);
+    expect(new Set(AIRCRAFT_ORDER)).toEqual(new Set(Object.keys(AIRCRAFT)));
+    expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].name)).size).toBe(11);
     expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].role)).size).toBe(4);
+    // The original four keep their prices; the Dart is still the cheapest.
+    expect(['dart', 'falcon', 'swift', 'widewing'].map((id) => AIRCRAFT[id as AircraftId].cost)).toEqual([10, 25, 30, 40]);
+    for (const id of AIRCRAFT_ORDER) expect(AIRCRAFT[id].cost).toBeGreaterThanOrEqual(AIRCRAFT.dart.cost);
   });
 
   it('every design can slow down enough to land, and refits cost less than a new plane', () => {
@@ -104,9 +109,16 @@ describe('assessSuitability', () => {
     // Unconventional but possible: a bomber on a ring course, a Dart on a bombing run.
     expect(level('widewing', 'rings')).toBe('possible');
     expect(level('dart', 'bombing')).toBe('possible');
+    // Planes without a bomb bay (Raptor, Specter) can't take bombing work at all.
+    const bombless = AIRCRAFT_ORDER.filter((id) => AIRCRAFT[id].bombs.capacity === 0);
+    expect(bombless.sort()).toEqual(['raptor', 'specter']);
     for (const type of MISSION_TYPES) {
       if (type === 'multi-bomb') continue;
-      for (const id of AIRCRAFT_ORDER) expect(level(id, type)).not.toBe('unsuitable');
+      for (const id of AIRCRAFT_ORDER) {
+        const needsBombs = bombTargets(mission(type)) > 0;
+        if (bombless.includes(id) && needsBombs) expect(level(id, type)).toBe('unsuitable');
+        else expect(level(id, type)).not.toBe('unsuitable');
+      }
     }
   });
 

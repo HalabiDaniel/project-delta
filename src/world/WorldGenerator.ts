@@ -2,12 +2,12 @@ import * as pc from 'playcanvas';
 import { PALETTE, WORLD } from '../config';
 import { yawFromDirection } from '../aircraft/PlaneController';
 import type { Territory } from './Territory';
-import { generateTerritories } from './Grid';
+import { generateTerritories, homeHeading } from './Grid';
 import { setUpLighting } from '../render/lighting';
-import { outline } from '../render/outline/OutlineRenderer';
 import type { AssetLibrary } from '../assets/AssetLibrary';
 import { Dressing } from './territories/Dressing';
 import { HOME_DESK, type Detail } from './territories/themes';
+import { buildClassroom } from './Classroom';
 
 export interface World {
   territories: Territory[];
@@ -36,6 +36,7 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
   const home = territories.find((t) => t.isHome)!;
 
   const sun = setUpLighting(app);
+  buildClassroom(app, assets.models);
 
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
@@ -46,14 +47,10 @@ export function buildWorld(app: pc.AppBase, assets: AssetLibrary, detail: Detail
     platforms.set(territory.id, platform);
     // Home's look comes from its dressing; the box stays for code that looks platforms up.
     if (territory.isHome) platform.render!.enabled = false;
-    else outline(platform, 'structure');
   }
 
   // The runway runs through the centre of the home platform, pointing at the centre of the world.
-  const dx = -home.x;
-  const dz = -home.z;
-  const len = Math.hypot(dx, dz) || 1;
-  const dir = { x: dx / len, z: dz / len };
+  const dir = homeHeading(home);
   const launchYaw = yawFromDirection(dir.x, dir.z);
   const startOffset = WORLD.runwayLength / 2 - 6;
   const launchPosition = new pc.Vec3(home.x - dir.x * startOffset, 0, home.z - dir.z * startOffset);
@@ -72,8 +69,9 @@ export interface SharedScene {
  * Builds the platforms and lighting for the shared world. Nobody's home is dressed yet: the
  * multiplayer game dresses each territory as a desk when a player claims it.
  */
-export function buildSharedScene(app: pc.AppBase, territories: readonly Territory[]): SharedScene {
+export function buildSharedScene(app: pc.AppBase, territories: readonly Territory[], assets?: AssetLibrary): SharedScene {
   const sun = setUpLighting(app);
+  if (assets) buildClassroom(app, assets.models);
   const platforms = new Map<string, pc.Entity>();
   for (const territory of territories) {
     const platform = box(`territory-${territory.id}`, flatMaterial(PALETTE.neutral));
@@ -81,7 +79,6 @@ export function buildSharedScene(app: pc.AppBase, territories: readonly Territor
     platform.setLocalScale(territory.size, territory.thickness, territory.size);
     app.root.addChild(platform);
     platforms.set(territory.id, platform);
-    outline(platform, 'structure');
   }
   return { platforms, sun };
 }

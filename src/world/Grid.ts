@@ -29,12 +29,21 @@ export function generateTerritories(
   return territories;
 }
 
-/** Where a sortie starts on `home`: the start of its runway, which points at the centre of the world. */
-export function launchPoint(home: Territory): { x: number; z: number; yaw: number; dir: { x: number; z: number } } {
+/**
+ * Which way a home's runway runs: towards the middle of the classroom, along the desk (the runway
+ * lies square on the desk top, so it can't point diagonally). Along z (the desk's depth, the
+ * territory's full 40) unless the middle is clearly more to the side.
+ */
+export function homeHeading(home: { x: number; z: number }): { x: number; z: number } {
   const dx = -home.x;
   const dz = -home.z;
-  const len = Math.hypot(dx, dz) || 1;
-  const dir = { x: dx / len, z: dz / len };
+  if (Math.abs(dz) >= Math.abs(dx) - 1e-6) return { x: 0, z: dz > 0 ? 1 : dz < 0 ? -1 : -1 };
+  return { x: dx > 0 ? 1 : -1, z: 0 };
+}
+
+/** Where a sortie starts on `home`: the start of its runway, which points towards the middle of the room. */
+export function launchPoint(home: Territory): { x: number; z: number; yaw: number; dir: { x: number; z: number } } {
+  const dir = homeHeading(home);
   const startOffset = WORLD.runwayLength / 2 - 6;
   return { x: home.x - dir.x * startOffset, z: home.z - dir.z * startOffset, yaw: Math.atan2(-dir.x, -dir.z), dir };
 }

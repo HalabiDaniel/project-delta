@@ -1,3 +1,4 @@
+import { boundaryDistance } from '../systems/Boundary';
 import { AI, WORLD } from '../config';
 import type { Point3 } from '../missions/Mission';
 import { randRange, type Rng } from '../systems/Random';
@@ -72,14 +73,15 @@ export function routeOver(territories: readonly Territory[], ids: readonly strin
  */
 export function edgePoint(dx: number, dz: number, altitude: number): Point3 {
   if (Math.hypot(dx, dz) < 1e-6) dx = dz = 1;
-  const len = Math.hypot(dx, dz);
+  // Out past the square boundary along the direction: scale until the larger coordinate reaches it.
+  const len = Math.max(Math.abs(dx), Math.abs(dz));
   const r = WORLD.boundaryRadius + AI.exitMargin;
   return { x: (dx / len) * r, y: altitude, z: (dz / len) * r };
 }
 
 /** Has (x, z) left the airspace far enough to be out of the world? */
 export function beyondEdge(x: number, z: number, margin = AI.exitMargin * 0.7): boolean {
-  return Math.hypot(x, z) > WORLD.boundaryRadius + margin;
+  return boundaryDistance(x, z) > WORLD.boundaryRadius + margin;
 }
 
 /** Neighbouring territories (sharing an edge of the grid) of `t`. */

@@ -84,10 +84,10 @@ export const LIGHTING = {
   /** Shadows are kept light: the bluish ambient shows through them. */
   shadowIntensity: 0.62,
   shadowDistance: 120,
-  /** Matches the camera's clear colour (PALETTE.sky) so distant haze blends into the sky. */
-  sky: [0.74, 0.86, 0.96] as Rgb,
-  fogStart: 220,
-  fogEnd: 560,
+  /** Matches the camera's clear colour (PALETTE.sky): a warm classroom haze, far enough to keep the walls readable. */
+  sky: [0.86, 0.85, 0.81] as Rgb,
+  fogStart: 420,
+  fogEnd: 1150,
 } as const;
 
 // ---- Materials -------------------------------------------------------------------------------

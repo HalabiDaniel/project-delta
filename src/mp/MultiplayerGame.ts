@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PVP, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -220,7 +220,7 @@ export class MultiplayerGame {
     device.maxPixelRatio = Math.min(window.devicePixelRatio, 2);
     const options = new pc.AppOptions();
     options.graphicsDevice = device;
-    options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem];
+    options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem, pc.LightComponentSystem, pc.ParticleSystemComponentSystem];
     options.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler];
     const app = new pc.AppBase(canvas);
     app.init(options);
@@ -236,7 +236,7 @@ export class MultiplayerGame {
     await assets.preload();
 
     const shared = sharedWorld();
-    const scene = buildSharedScene(app, shared.territories);
+    const scene = buildSharedScene(app, shared.territories, assets);
     const network = new DefenseNetwork(shared.layout.installations);
     const ground = (x: number, z: number) => (shared.territories.some((t) => t.containsXZ(x, z)) ? 0 : null);
 
@@ -303,11 +303,11 @@ export class MultiplayerGame {
       new ChaseCamera(app),
       new Effects(app, ground),
       new FlightTrails(app),
-      new PlaneController(app, 'falcon'),
+      new PlaneController(app, 'falcon', assets.models),
       new Bombs(app, 16),
       new OrdnanceView(app),
-      new AircraftModels(app, players),
-      new DefenseModels(app, shared.layout, network, { territories: shared.territories }),
+      new AircraftModels(app, players, assets.models),
+      new DefenseModels(app, shared.layout, network, { territories: shared.territories }, assets.models),
       new Sounds(),
       assets,
       network,
@@ -884,7 +884,7 @@ export class MultiplayerGame {
         const p = owner ? s?.players.get(owner) : undefined;
         return {
           id: t.id, name: territoryName(t.id), threat: st?.threat ?? t.threat, owner, ownerName: p?.name ?? null, colour: p?.colour ?? 0,
-          claimable: st?.claimable ?? t.id !== 'T5', mine: owner === this.me, connected: p?.connected ?? true,
+          claimable: st?.claimable ?? t.id !== PVP.centre, mine: owner === this.me, connected: p?.connected ?? true,
         };
       }),
       players: players.map(([id, p]) => ({ name: p.name, colour: p.colour, territory: p.territory || null, connected: p.connected, me: id === this.me })),
@@ -1191,6 +1191,7 @@ export class MultiplayerGame {
       if (phase === 'building') this.plane.setFold(st.buildKind === 'fold' ? st.buildProgress : st.buildKind === 'rollout' ? 1 : st.buildProgress < 0.35 ? 1 - (st.buildProgress / 0.35) * 0.5 : 0.5 + ((st.buildProgress - 0.35) / 0.65) * 0.5);
       else this.plane.setFold(1);
     }
+    this.plane.animate(dt);
 
     // The camera, as single-player's.
     const baseOpen = !!this.baseMode?.open;
