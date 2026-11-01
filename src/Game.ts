@@ -21,6 +21,7 @@ import { Projectiles, type ShotImpact } from './combat/Projectiles';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent } from './combat/Ordnance';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from './defenses/Installation';
 import { layoutDefenses, overHome, slotPoint, type DefenseLayout, type InstallationKind } from './defenses/Layout';
+import { decorFootprints } from './world/territories/decor';
 import { MissionDirector, SLOT_LABELS, type Situation } from './director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards, type Payout } from './director/Operations';
 import { skillBand } from './director/Performance';
@@ -256,7 +257,9 @@ export class Game {
     const targetSpecs = layoutTargetRange(world.territories);
     const range = new TargetRange(app, targetSpecs);
     const rangeFootprints = targetSpecs.flatMap((s) => s.shapes.map(footprint));
-    const layout = layoutDefenses(world.territories, rangeFootprints);
+    // Nothing is built into a landmark: the decoration's ground counts as taken.
+    const decorGround = decorFootprints(world.territories);
+    const layout = layoutDefenses(world.territories, [...rangeFootprints, ...decorGround]);
     const defenses = new DefenseNetwork(layout.installations);
     // The saved game, if there is one (IndexedDB, else local storage). A bad save never stops the game.
     const saves = new SaveManager(await openStore());
@@ -277,6 +280,7 @@ export class Game {
       dummies: targetSpecs.filter((s) => s.kind === 'dummy'),
       obstacles: [
         ...rangeFootprints,
+        ...decorGround,
         ...layout.installations.map((i) => ({ x: i.x, z: i.z, r: i.footprint })),
         ...layout.barriers.flatMap((b) => b.solids.map(footprint)),
       ],
@@ -663,7 +667,7 @@ export class Game {
     this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.world.sun, { enabled: shadows > 0, resolution: shadows });
-    this.world.homeDressing.setDetail(settings.detail);
+    for (const d of this.world.dressings.values()) d.setDetail(settings.detail);
     const device = this.app.graphicsDevice;
     const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
     if (device.maxPixelRatio !== ratio) {
@@ -1151,7 +1155,7 @@ export class Game {
 
   /** What anything flying can hit: props, standing installations and walls. */
   private solids(): Collider[] {
-    return [...this.range.solids, ...this.installationSolids(), ...this.barriers, ...this.world.homeDressing.colliders];
+    return [...this.range.solids, ...this.installationSolids(), ...this.barriers, ...this.world.decorColliders];
   }
 
   /** Enemy aircraft, for the player's ink: their spheres and this step's movement. */

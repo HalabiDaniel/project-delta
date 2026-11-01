@@ -43,8 +43,8 @@ import { launchPoint } from '../world/Grid';
 import { MissionMarkers } from '../world/MissionMarkers';
 import { OrdnanceView } from '../world/OrdnanceView';
 import type { Territory } from '../world/Territory';
-import { HOME_DESK } from '../world/territories/themes';
-import { Dressing } from '../world/territories/Dressing';
+import { territoryFacing, territoryLayout } from '../world/territories/decor';
+import { Dressing, type Ownership } from '../world/territories/Dressing';
 import { buildSharedScene, type SharedScene, type World } from '../world/WorldGenerator';
 import { AssetLibrary } from '../assets/AssetLibrary';
 import { installOutlines, type OutlineRenderer } from '../render/outline/OutlineRenderer';
@@ -53,7 +53,6 @@ import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
-import { PROPS } from '../assets/manifest';
 import { Lobby, type ClaimView } from './Lobby';
 import { MpHud, type MpHudView, type ScoreRow } from './MpHud';
 import { NetBase } from './NetBase';
@@ -860,28 +859,27 @@ export class MultiplayerGame {
     return buildingSpec(home, slot, kind as Parameters<typeof buildingSpec>[2], level, side);
   }
 
-  /** Territory owners: a desk on every claimed territory, in its owner's tape. */
+  /**
+   * Every desk dressed in its theme with its landmark (solid on the server too, from the same
+   * shapes); a claimed one also gets a runway and hangar, in its owner's colours.
+   */
   private syncTerritories(s: WorldState): void {
     s.territories.forEach((t, id) => {
       const owner = t.owner;
-      if ((this.owners.get(id) ?? '') === owner) return;
+      const dressed = this.dressings.get(id);
+      if (dressed && (this.owners.get(id) ?? '') === owner) return;
       if (owner) this.owners.set(id, owner);
       else this.owners.delete(id);
       const territory = this.territories.find((x) => x.id === id)!;
       territory.threat = t.threat as Territory['threat'];
-      this.dressings.get(id)?.root.destroy();
-      this.dressings.delete(id);
-      const platform = this.scene.platforms.get(id)!;
       this.defenseModels.setTerritoryStatics(id, !owner);
-      if (!owner) {
-        platform.render!.enabled = true;
+      const ownership: Ownership = owner ? (owner === this.me ? 'player' : 'rival') : territory.threat > 0 ? 'hostile' : 'neutral';
+      if (dressed && dressed.runway === !!owner) {
+        dressed.setOwnership(ownership);
         return;
       }
-      platform.render!.enabled = false;
-      const dir = launchPoint(territory).dir;
-      // Dressed as a desk with a runway; props that could be flown into are left out (the server doesn't know them).
-      const layout = { ...HOME_DESK, landmark: null, props: HOME_DESK.props.filter((p) => !PROPS[p.prop].colliders?.length) };
-      this.dressings.set(id, new Dressing(this.app, territory, layout, this.assets, this.graphics.detail, dir, true, owner === this.me ? 'tape/blue' : 'tape/masking'));
+      dressed?.root.destroy();
+      this.dressings.set(id, new Dressing(this.app, territory, territoryLayout(territory), this.assets, this.graphics.detail, territoryFacing(territory), !!owner, ownership));
     });
   }
 
@@ -1035,7 +1033,7 @@ export class MultiplayerGame {
   // ---- The frame ----------------------------------------------------------------------------------
 
   predictionWorld(): PredictionWorld {
-    const solids = this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }));
+    const solids = [...this.shared.decor, ...this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }))];
     for (const b of this.shared.layout.barriers) if (!this.owners.has(b.territoryId)) solids.push({ id: b.id, shapes: b.solids });
     return { home: this.home, territories: this.territories, solids };
   }

@@ -135,12 +135,16 @@ export const MATERIALS = {
   'paper/green': { color: [0.45, 0.78, 0.48], texture: 'paper', tiling: 0.3 },
   'paper/yellow': { color: [0.99, 0.84, 0.32], texture: 'paper', tiling: 0.3 },
   'paper/pink': { color: [0.98, 0.62, 0.72], texture: 'paper', tiling: 0.3 },
+  'paper/orange': { color: [0.98, 0.6, 0.28], texture: 'paper', tiling: 0.3 },
+  'paper/purple': { color: [0.62, 0.48, 0.86], texture: 'paper', tiling: 0.3 },
+  'paper/mint': { color: [0.7, 0.9, 0.8], texture: 'paper', tiling: 0.3 },
   'cardboard/side': { color: [0.8, 0.62, 0.42], texture: 'cardboard', tiling: 0.35 },
   'cardboard/edge': { color: [0.8, 0.62, 0.42], texture: 'corrugated', tiling: 1.6 },
   'cardboard/dark': { color: [0.64, 0.48, 0.31], texture: 'kraft', tiling: 0.35 },
   'tape/masking': { color: [0.96, 0.89, 0.68], texture: 'tape', tiling: 0.5 },
   'tape/blue': { color: [0.3, 0.52, 0.93], texture: 'tape', tiling: 0.5 },
   'tape/grey': { color: [0.68, 0.72, 0.78], texture: 'tape', tiling: 0.5 },
+  'tape/red': { color: [0.9, 0.33, 0.3], texture: 'tape', tiling: 0.5 },
   'ink/blue': { color: [0.16, 0.3, 0.72], texture: 'ink', tiling: 0.3, grain: false, gloss: 0.35 },
   'ink/black': { color: [0.12, 0.12, 0.16], texture: 'ink', tiling: 0.3, grain: false, gloss: 0.35 },
   'ink/red': { color: [0.78, 0.16, 0.18], texture: 'ink', tiling: 0.3, grain: false, gloss: 0.35 },
@@ -157,6 +161,10 @@ export const MATERIALS = {
   'plastic/red': { color: [0.88, 0.26, 0.24], gloss: 0.5, grain: false },
   'plastic/blue': { color: [0.26, 0.48, 0.88], gloss: 0.5, grain: false },
   'plastic/green': { color: [0.32, 0.7, 0.42], gloss: 0.5, grain: false },
+  'plastic/white': { color: [0.95, 0.95, 0.93], gloss: 0.45, grain: false },
+  'plastic/yellow': { color: [0.98, 0.8, 0.22], gloss: 0.5, grain: false },
+  'plastic/orange': { color: [0.98, 0.52, 0.18], gloss: 0.5, grain: false },
+  'plastic/black': { color: [0.14, 0.14, 0.18], gloss: 0.6, grain: false },
 } satisfies Record<string, MaterialDef>;
 
 export type MaterialId = keyof typeof MATERIALS;

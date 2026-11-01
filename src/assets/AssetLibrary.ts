@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { materials } from '../render/materials/MaterialLibrary';
 import { outline } from '../render/outline/OutlineRenderer';
-import { CATALOG, IN_GAME_BUILDINGS, ModelStore } from './CustomModels';
+import { CATALOG, IN_GAME_BUILDINGS, ModelStore, SCENERY_MODELS } from './CustomModels';
 import { classroomFiles } from '../world/Classroom';
 import { assetPaths, PROPS, resolveProp, type PropBuild, type PropId, type PropSource } from './manifest';
 
@@ -57,7 +57,7 @@ export class AssetLibrary {
       const source = resolveProp(def, this.available);
       if (source.kind === 'licensed' || source.kind === 'model') wanted.add(source.file);
     }
-    const custom = [...classroomFiles(), ...Object.values(CATALOG.aircraft).map((a) => a.file), ...IN_GAME_BUILDINGS.map((id) => CATALOG.buildings[id].file)];
+    const custom = [...classroomFiles(), ...Object.values(CATALOG.aircraft).map((a) => a.file), ...[...IN_GAME_BUILDINGS, ...SCENERY_MODELS].map((id) => CATALOG.buildings[id].file)];
     await Promise.all([...[...wanted].map((file) => this.load(file, timeoutMs)), ...custom.map((file) => this.models.load(file, timeoutMs * 2))]);
   }
 

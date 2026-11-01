@@ -2,7 +2,7 @@ import type { Shape } from '../combat/Collision';
 import type { MaterialId, OutlineTier } from '../render/style';
 import { MeshBuilder } from '../world/props/MeshBuilder';
 import { Model } from '../world/props/Model';
-import { bookStack, eraser, lyingPencil, paperBall, paperFlag, paperStack, ruler, stickyNote, tapeRoll } from '../world/props/stationery';
+import { bookStack, eraser, glueStick, lyingCrayon, lyingPencil, paperBall, paperClip, paperFlag, paperStack, protractor, ruler, shavings, stickyNote, tapeRoll } from '../world/props/stationery';
 
 /**
  * Every decorative prop the world can place, by logical id. A prop is either one of the game's own
@@ -25,6 +25,16 @@ export type PropId =
   | 'stickyNote.pink'
   | 'tapeRoll'
   | 'flag.player'
+  | 'flag.rival'
+  | 'crayon.red'
+  | 'crayon.blue'
+  | 'crayon.green'
+  | 'crayon.purple'
+  | 'protractor'
+  | 'paperClip'
+  | 'shavings'
+  | 'glueStick'
+  | 'stickyNote.green'
   | 'bookStack'
   | 'globe';
 
@@ -80,6 +90,23 @@ export const PROPS: Record<PropId, PropDef> = {
   'stickyNote.pink': { name: 'Pink sticky note', build: () => ({ model: stickyNote(1.8, 'paper/pink') }), tier: 'prop' },
   tapeRoll: { name: 'Tape roll', build: () => ({ model: tapeRoll() }), tier: 'prop' },
   'flag.player': { name: 'Player flag', build: () => ({ model: paperFlag('paper/blue', 5.5) }), tier: 'structure' },
+  'flag.rival': { name: 'Rival flag', build: () => ({ model: paperFlag('paper/red', 5.5) }), tier: 'structure' },
+  'crayon.red': { name: 'Red crayon', build: () => ({ model: lyingCrayon(2.6, 0.24, 'paper/red') }), tier: 'prop' },
+  'crayon.blue': { name: 'Blue crayon', build: () => ({ model: lyingCrayon(2.4, 0.24, 'paper/blue') }), tier: 'prop' },
+  'crayon.green': { name: 'Green crayon', build: () => ({ model: lyingCrayon(2.2, 0.24, 'paper/green') }), tier: 'prop' },
+  'crayon.purple': { name: 'Purple crayon', build: () => ({ model: lyingCrayon(2.5, 0.24, 'paper/purple') }), tier: 'prop' },
+  protractor: {
+    name: 'Protractor',
+    build: () => {
+      const p = protractor(1.8);
+      return { model: p.body, decals: p.marks };
+    },
+    tier: 'prop',
+  },
+  paperClip: { name: 'Paper clip', build: () => ({ model: paperClip(1.6) }), tier: 'prop' },
+  shavings: { name: 'Pencil shavings', build: () => ({ model: shavings(5) }), tier: 'prop' },
+  glueStick: { name: 'Glue stick', build: () => ({ model: glueStick() }), tier: 'prop' },
+  'stickyNote.green': { name: 'Green sticky note', build: () => ({ model: stickyNote(1.9, 'paper/mint') }), tier: 'prop' },
   // ---- Licensed slots (placeholders until the files are supplied) ----
   bookStack: {
     name: 'Stack of books',
