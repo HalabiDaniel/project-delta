@@ -1,6 +1,6 @@
 import { Mat4, Quat, Vec3 } from 'playcanvas';
 import { describe, expect, it } from 'vitest';
-import { AIRCRAFT, PLANE } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PLANE, type AircraftId } from '../config';
 import { generateTerritories } from '../world/WorldGenerator';
 import { FlightModel, wrapAngle, type FlightControls } from './FlightModel';
 
@@ -43,6 +43,30 @@ describe('FlightModel', () => {
       return wrapAngle(m.yaw);
     };
     expect(turned('falcon')).toBeGreaterThan(turned('widewing') + 0.4);
+  });
+
+  it('re-roled planes (v0.0.11) fly their roles: the Falcon out-turns every plane, the Dart outruns every plane', () => {
+    const turned = (id: AircraftId) => {
+      const m = new FlightModel(AIRCRAFT[id]);
+      m.spawn({ x: 0, y: 40, z: 0 }, 0);
+      for (let t = 0; t < 1.5; t += DT) m.fly(DT, { ...idle, aim: { yaw: m.yaw + 1, pitch: 0 } }, territories, []);
+      return wrapAngle(m.yaw);
+    };
+    const sprint = (id: AircraftId) => {
+      const m = new FlightModel(AIRCRAFT[id]);
+      m.spawn({ x: 0, y: 40, z: 0 }, 0);
+      for (let t = 0; t < 3; t += DT) m.fly(DT, { ...idle, throttle: 1, aim: { yaw: 0, pitch: 0 } }, territories, []);
+      for (let t = 0; t < 0.8; t += DT) m.fly(DT, { ...idle, throttle: 1, boost: true, aim: { yaw: 0, pitch: 0 } }, territories, []);
+      return m.speed;
+    };
+    const falcon = turned('falcon');
+    const dart = sprint('dart');
+    for (const id of AIRCRAFT_ORDER) {
+      if (id !== 'falcon') expect(turned(id)).toBeLessThan(falcon);
+      if (id !== 'dart') expect(sprint(id)).toBeLessThan(dart);
+    }
+    // The starter forgives: it keeps flying slower than the Falcon or the Dart before it stalls.
+    expect(AIRCRAFT.swift.flight.minSpeed).toBeLessThan(Math.min(AIRCRAFT.falcon.flight.minSpeed, AIRCRAFT.dart.flight.minSpeed));
   });
 
   it('throttle and boost change the speed within the design limits', () => {

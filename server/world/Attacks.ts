@@ -157,7 +157,7 @@ export function creditFor(log: readonly DamageEntry[], now: number): { killer: s
 }
 
 /**
- * Bounties for shooting down players: by what the plane cost, nothing for a free emergency Dart,
+ * Bounties for shooting down players: by what the plane cost, nothing for a free emergency plane,
  * and less each time the same player is shot down by the same hunter within PVP.killWindow.
  */
 export class KillBook {

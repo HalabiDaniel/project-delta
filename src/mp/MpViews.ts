@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { aircraftRatings, RATING_KEYS, RATING_LABELS } from '../aircraft/Aircraft';
 import { assessTouchdown } from '../aircraft/Landing';
 import { leadPoint } from '../ai/Gunnery';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, DEFENSES, DIRECTOR, PVP, THREAT, TIERS, WORLD, type AiRole } from '../config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, DEFENSES, DIRECTOR, PVP, STARTER_AIRCRAFT, THREAT, TIERS, WORLD, type AiRole } from '../config';
 import type { Installation } from '../defenses/Installation';
 import type { InstallationKind } from '../defenses/Layout';
 import type { Mission, Objective } from '../missions/Mission';
@@ -133,7 +133,7 @@ export class MpViews {
       } else if (phase === 'desk' && g.priv.garage?.emergency) {
         noteTone = 'bad';
         tag = 'Scrap';
-        note = `You can't afford any plane: a free emergency Dart has half the ink, no bomb, for one sortie.${mission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+        note = `You can't afford any plane: a free emergency Swift has half the ink, no bomb, for one sortie.${mission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
       } else if (phase === 'desk' && !g.resources.canAfford(buildCost)) {
         const wait = st.income.timeToAfford(g.resources.paper, buildCost);
         noteTone = 'bad';
@@ -375,7 +375,7 @@ export class MpViews {
     return {
       recovered: r.recovered,
       headline: r.recovered ? 'Plane recovered' : killedBy ? 'Shot down' : 'Plane destroyed',
-      aircraftName: s.emergency ? 'Emergency Dart' : spec.name,
+      aircraftName: s.emergency ? `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}` : spec.name,
       missionTitle: r.missionTitle,
       missionLine: succeeded ? `Complete · +${r.reward}` : failure[r.failure ?? 'abandoned'],
       missionTone: succeeded ? 'good' : 'bad',

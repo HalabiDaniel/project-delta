@@ -1,7 +1,7 @@
 import { assessSuitability, bombLoad, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, type AircraftId, type AircraftSpec, type AiRole } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole } from '../config';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
 import { HomeIncome } from './HomeIncome';
 import type { ResourceManager } from './ResourceManager';
@@ -19,6 +19,18 @@ export type GamePhase = 'desk' | 'building' | 'ready' | 'flying' | 'landed' | 'd
 
 /** fold – a new plane from a sheet. refit – re-crease and repair a recovered one. rollout – a stowed one, ready to go. */
 export type BuildKind = 'fold' | 'refit' | 'rollout';
+
+/**
+ * The fold pose while building. A new plane goes from a flat sheet to finished; a refit re-creases
+ * a recovered plane: wings up, then back down. A stowed plane just rolls out finished. Shared by
+ * the player's own plane, the server's view of every plane and remote planes in multiplayer.
+ */
+export function foldPose(progress: number, kind: BuildKind): number {
+  if (kind === 'fold') return progress;
+  if (kind === 'rollout') return 1;
+  return progress < 0.35 ? 1 - (progress / 0.35) * 0.5 : 0.5 + ((progress - 0.35) / 0.65) * 0.5;
+}
+
 
 export type CrashCause = 'void' | 'impact' | 'hard-landing' | 'shot-down';
 
@@ -66,28 +78,29 @@ export interface SortieLog {
   distanceFlown: number;
   /** Safe touchdowns on T1 during the sortie. */
   landings: number;
-  /** Flown in the free emergency Dart. */
+  /** Flown in the free emergency plane. */
   emergency: boolean;
   outcome: 'flying' | 'recovered' | 'lost';
 }
 
 /**
- * The free emergency Dart: folded from scrap when the player can afford no plane at all. Half the
- * ink, no bomb, a shorter range, and it falls apart after the sortie (it is never kept).
+ * The free emergency plane, folded from scrap when the player can afford no plane at all: the
+ * starter's pattern (the Swift since v0.0.11, the Dart before) with half the ink, no bomb, a
+ * shorter range, and it falls apart after the sortie (it is never kept).
  */
-export function emergencyDart(): AircraftSpec {
-  const dart = AIRCRAFT.dart;
+export function emergencyPlane(): AircraftSpec {
+  const base = AIRCRAFT[STARTER_AIRCRAFT];
   return {
-    ...dart,
-    name: 'Emergency Dart',
+    ...base,
+    name: `Emergency ${base.name}`,
     roleLabel: 'Emergency',
     cost: 0,
     refitCost: 0,
     tagline: 'Scrap paper, free, for one sortie: half the ink, no bomb, shorter range.',
     range: ECONOMY.emergency.range,
-    gun: { ...dart.gun, ammo: ECONOMY.emergency.ammo },
-    gunLabel: 'Light ink gun (half full)',
-    bombs: { capacity: 0, kind: dart.bombs.kind },
+    gun: { ...base.gun, ammo: ECONOMY.emergency.ammo },
+    gunLabel: `${base.gunLabel} (half full)`,
+    bombs: { capacity: 0, kind: base.bombs.kind },
   };
 }
 
@@ -166,7 +179,7 @@ export class GameState {
   /** The mission flown on the current (or just finished) sortie. */
   mission: Mission | null = null;
   /** The design chosen in the garage. It stays chosen from one sortie to the next. */
-  aircraft: AircraftId = 'falcon';
+  aircraft: AircraftId = STARTER_AIRCRAFT;
   readonly hangar = new Map<AircraftId, HangarPlane>();
   /** The plane on the pad, in the air or just landed; null at the desk. */
   plane: AircraftSpec | null = null;
@@ -185,7 +198,7 @@ export class GameState {
   rearmProgress: number | null = null;
   /** The current (or just finished) sortie, from the moment its plane was paid for. */
   sortie: SortieLog | null = null;
-  /** The plane on the pad or in the air is the free emergency Dart. */
+  /** The plane on the pad or in the air is the free emergency plane. */
   emergency = false;
 
   private buildDuration: number = PLANE.buildTime;
@@ -238,7 +251,7 @@ export class GameState {
   }
 
   /**
-   * The free emergency Dart is on offer: at the desk, with no plane in the hangar to roll out and
+   * The free emergency plane is on offer: at the desk, with no plane in the hangar to roll out and
    * not enough paper to fold or refit any design.
    */
   emergencyAvailable(): boolean {
@@ -246,10 +259,10 @@ export class GameState {
     return AIRCRAFT_ORDER.every((id) => !this.resources.canAfford(this.buildCostFor(id)));
   }
 
-  /** desk → building, with the free emergency Dart. Refused if the mission needs a bomb (it carries none). */
+  /** desk → building, with the free emergency plane. Refused if the mission needs a bomb (it carries none). */
   buildEmergency(): boolean {
     if (!this.emergencyAvailable()) return false;
-    const spec = emergencyDart();
+    const spec = emergencyPlane();
     const fit = assessSuitability(spec, this.selectedMission.spec);
     if (fit.level === 'unsuitable') {
       this.emit({ type: 'build-refused', cost: 0, reason: 'incompatible', detail: fit.reason });
@@ -317,7 +330,7 @@ export class GameState {
   stow(): boolean {
     if (this.phase !== 'ready' || !this.plane) return false;
     const id = this.plane.id;
-    // Scrap paper isn't worth keeping: an emergency Dart taken off the pad is simply gone.
+    // Scrap paper isn't worth keeping: an emergency plane taken off the pad is simply gone.
     if (!this.emergency) this.hangar.set(id, { condition: 'ready', health: this.durability?.health ?? this.plane.maxHealth, invested: this.sortie?.paperSpent ?? 0 });
     this.clearPlane();
     this.phase = 'desk';
@@ -588,7 +601,7 @@ export class GameState {
     const mission = this.mission;
     if (!mission) return;
     const approaches = mission.objectives.map((_, i) => mission.approachState(i));
-    for (const index of mission.updateFlight(prev, pos, dt)) this.objectiveComplete(index);
+    for (const index of mission.updateFlight(prev, pos, dt, this.plane?.traits?.reconRate ?? 1)) this.objectiveComplete(index);
     approaches.forEach((before, index) => {
       if (before !== 'blown' && mission.approachState(index) === 'blown' && mission.isActive) this.emit({ type: 'approach-blown', index });
     });

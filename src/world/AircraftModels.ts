@@ -1,10 +1,11 @@
 import * as pc from 'playcanvas';
 import { Ribbon, trailMaterial } from '../aircraft/FlightTrails';
-import { inkBlotMaterial } from '../aircraft/PlaneModel';
+import { buildPaperBallMesh, createPaperMaterial, inkBlotMaterial } from '../aircraft/PlaneModel';
+import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
 import { createPlaneModel, type JetPaint, type PlaneModelView } from '../aircraft/JetModel';
 import type { ModelStore } from '../assets/CustomModels';
 import type { FlightModel } from '../aircraft/FlightModel';
-import { DAMAGE, PALETTE, type AircraftId, type Side } from '../config';
+import { AIRCRAFT, BOMB, DAMAGE, PALETTE, PLANE, type AircraftId, type Side } from '../config';
 
 /**
  * Anything drawn as a paper plane flying by: an AI aircraft, or (multiplayer) another player's
@@ -17,6 +18,16 @@ export interface ShownAircraft {
   readonly spec: { readonly id: AircraftId };
   readonly durability: { readonly fraction: number };
   readonly model: FlightModel;
+  /**
+   * Bombs it carries now, shown as paper balls on its rack (multiplayer: other players' planes
+   * from the server's state; AI bombers their remaining load). Absent: no rack is drawn.
+   */
+  readonly bombs?: number;
+  /**
+   * Fold pose on the pad, 0 (flat sheet) to 1 (finished): another player's plane being folded.
+   * Absent: always finished.
+   */
+  readonly fold?: number;
 }
 
 /** Paper and trim colours for a side the defaults don't cover (multiplayer players). */
@@ -31,6 +42,10 @@ interface View {
   right: Ribbon;
   smudge: Ribbon;
   shownHealth: number;
+  /** Paper balls on the rack, one per bomb slot (none for planes without a bomb bay). */
+  rack: pc.Entity[];
+  shownBombs: number;
+  shownFold: number;
 }
 
 /**
@@ -57,6 +72,8 @@ export class AircraftModels {
   private readonly side = new pc.Vec3();
   private readonly flat = new pc.Vec3();
   private readonly fwd = new pc.Vec3();
+  private ballMesh: pc.Mesh | null = null;
+  private ballMaterial: pc.Material | null = null;
 
   constructor(
     private readonly app: pc.AppBase,
@@ -114,9 +131,14 @@ export class AircraftModels {
   }
 
   private create(a: ShownAircraft): View {
-    const model = createPlaneModel(this.app.graphicsDevice, this.models, a.spec.id, this.paintFor(a.side), { blots: this.blots });
+    // Planes that can sit folding on a pad rest lower while flat, as the pilot's own does.
+    const restDrop = a.fold !== undefined ? PLANE.parkedHeight - 0.07 : 0;
+    const model = createPlaneModel(this.app.graphicsDevice, this.models, a.spec.id, this.paintFor(a.side), { blots: this.blots, restDrop });
     this.app.root.addChild(model.entity);
     return {
+      rack: a.bombs !== undefined ? this.rack(a.spec.id, model.entity) : [],
+      shownBombs: -1,
+      shownFold: -1,
       aircraft: a,
       model,
       left: new Ribbon(this.app, this.trail),
@@ -126,8 +148,37 @@ export class AircraftModels {
     };
   }
 
+  /** The paper balls under a plane, one per slot its rack has, hidden until it carries bombs. */
+  private rack(id: AircraftId, parent: pc.Entity): pc.Entity[] {
+    const spec = AIRCRAFT[id];
+    if (!spec || spec.bombs.capacity <= 0) return [];
+    this.ballMesh ??= buildPaperBallMesh(this.app.graphicsDevice, BOMB.kinds.standard.radius);
+    this.ballMaterial ??= createPaperMaterial(new pc.Color(...PALETTE.paperBall));
+    const scale = BOMB.kinds[spec.bombs.kind].radius / BOMB.kinds.standard.radius;
+    return PLANE_SHAPES[id].bombSlots.slice(0, spec.bombs.capacity).map(([x, y, z]) => {
+      const ball = new pc.Entity('carried-bomb');
+      ball.addComponent('render', { meshInstances: [new pc.MeshInstance(this.ballMesh!, this.ballMaterial!)], castShadows: true });
+      ball.setLocalPosition(x, y, z);
+      ball.setLocalScale(scale, scale, scale);
+      ball.enabled = false;
+      parent.addChild(ball);
+      return ball;
+    });
+  }
+
   private pose(dt: number, v: View): void {
     const m = v.aircraft.model;
+    const fold = v.aircraft.fold ?? 1;
+    if (fold !== v.shownFold) {
+      v.shownFold = fold;
+      v.model.setFold(fold);
+    }
+    // No bombs on a sheet still being folded.
+    const bombs = fold < 1 ? 0 : (v.aircraft.bombs ?? 0);
+    if (bombs !== v.shownBombs) {
+      v.shownBombs = bombs;
+      v.rack.forEach((ball, i) => (ball.enabled = i < bombs));
+    }
     this.qYaw.setFromAxisAngle(pc.Vec3.UP, m.yaw * RAD_TO_DEG);
     this.qPitch.setFromAxisAngle(pc.Vec3.RIGHT, m.pitch * RAD_TO_DEG);
     this.qRoll.setFromAxisAngle(pc.Vec3.BACK, m.roll * RAD_TO_DEG);

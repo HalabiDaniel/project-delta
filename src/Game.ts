@@ -29,7 +29,7 @@ import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
-import { GameState, type BuildKind, type CrashCause } from './systems/GameState';
+import { foldPose, GameState, type CrashCause } from './systems/GameState';
 import { Input, MOUSE_LEFT } from './systems/Input';
 import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
@@ -477,7 +477,7 @@ export class Game {
     if (this.paused) return;
     const waiting = this.state.hangar.get(this.state.aircraft);
     this.refitFrom = waiting ? waiting.health / AIRCRAFT[this.state.aircraft].maxHealth : 1;
-    // With nothing affordable, F folds the free emergency Dart instead.
+    // With nothing affordable, F folds the free emergency Swift instead.
     const emergency = this.state.emergencyAvailable() && !this.state.resources.canAfford(this.state.buildCost);
     if (emergency) this.refitFrom = 1;
     if (!(emergency ? this.state.buildEmergency() : this.state.build())) return;
@@ -2135,7 +2135,7 @@ export class Game {
       const fit = state.suitability(state.aircraft);
       noteTone = 'bad';
       tag = 'Scrap';
-      note = `You can't afford any plane: a free emergency Dart has half the ink, no bomb, for one sortie.${fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+      note = `You can't afford any plane: a free emergency Swift has half the ink, no bomb, for one sortie.${fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
     } else if (state.phase === 'desk' && !resources.canAfford(buildCost)) {
       const wait = state.income.timeToAfford(resources.paper, buildCost);
       noteTone = 'bad';
@@ -3146,16 +3146,6 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
       return out.set(t.x, 0.5, t.z);
     }
   }
-}
-
-/**
- * The fold pose while building. A new plane goes from a flat sheet to finished; a refit re-creases
- * a recovered plane: wings up, then back down. A stowed plane just rolls out finished.
- */
-function foldPose(progress: number, kind: BuildKind): number {
-  if (kind === 'fold') return progress;
-  if (kind === 'rollout') return 1;
-  return progress < 0.35 ? 1 - (progress / 0.35) * 0.5 : 0.5 + ((progress - 0.35) / 0.65) * 0.5;
 }
 
 function css(color: readonly [number, number, number]): string {

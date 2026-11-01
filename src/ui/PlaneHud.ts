@@ -1,4 +1,4 @@
-import { LANDING } from '../config';
+import { AIRCRAFT, LANDING, STARTER_AIRCRAFT } from '../config';
 import { attr, bindButton, text, toggle, width } from './dom';
 import { clock, fmt, level, metres, pct } from './format';
 import { icon } from './icons';
@@ -147,7 +147,7 @@ export class PlaneHud {
       toggle(this.el.build, v.phase === 'desk');
       toggle(this.el.building, v.phase === 'building');
       toggle(this.el.launch, v.phase === 'ready');
-      text(this.el['build-label'], d.emergency ? 'Emergency Dart' : `${VERB[d.kind]} ${d.name}`);
+      text(this.el['build-label'], d.emergency ? `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}` : `${VERB[d.kind]} ${d.name}`);
       const costEl = this.el['build-cost'];
       const cKey = `${d.emergency}:${d.cost}`;
       if (costEl.dataset.key !== cKey) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { crossesRing, insideAirspace, Mission, type MissionSpec, type RingGate } from './Mission';
+import { AIRCRAFT } from '../config';
 
 const zone = { x: 0, z: 0, radius: 5, top: 0.3 };
 const airspace = { x: 70, z: 0, half: 20, ceiling: 20 };
@@ -74,6 +75,19 @@ describe('Mission', () => {
     expect(m.progress[0]).toBeCloseTo(0.5);
     expect(m.updateFlight(inside, inside, 1)).toEqual([0]);
     expect(m.allDone).toBe(true);
+  });
+
+  it("the Dart's recon bonus fills reconnaissance faster, and only reconnaissance", () => {
+    const rate = AIRCRAFT.dart.traits!.reconRate!;
+    const recon = mission({ type: 'recon', bombs: 0, objectives: [{ kind: 'recon', territoryId: 'T6', airspace, duration: 3 }] });
+    recon.start();
+    const inside = { x: 70, y: 10, z: 5 };
+    recon.updateFlight(inside, inside, 1, rate);
+    expect(recon.progress[0]).toBeCloseTo(rate / 3);
+    const survive = mission({ type: 'survival', bombs: 0, objectives: [{ kind: 'survive', territoryId: 'T6', airspace, duration: 3 }] });
+    survive.start();
+    survive.updateFlight(inside, inside, 1, rate);
+    expect(survive.progress[0]).toBeCloseTo(1 / 3);
   });
 
   it('reach completes on entering the airspace', () => {

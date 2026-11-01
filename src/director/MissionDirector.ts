@@ -1,8 +1,8 @@
 import { assessSuitability } from '../aircraft/Aircraft';
-import { AIRCRAFT, AIRCRAFT_ORDER, DIRECTOR, OPERATIONS, TIER_ORDER, TIERS, type AircraftId, type Tier } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, DIRECTOR, STARTER_AIRCRAFT, OPERATIONS, TIER_ORDER, TIERS, type AircraftId, type Tier } from '../config';
 import { Mission, type Escalation, type MissionSpec, type MissionType, type Situational } from '../missions/Mission';
 import { escalationsFor, EVENT_TYPES, generateMission, MISSION_TYPES, offLimits, supports, threatOf, type MissionContext } from '../missions/MissionGenerator';
-import { emergencyDart } from '../systems/GameState';
+import { emergencyPlane } from '../systems/GameState';
 import { seededRng, shuffled, type Rng } from '../systems/Random';
 import { abandon, finishStage, openStage, planOperation, skipStage, type Operation, type Payout, type StageRecipe, type StageResult } from './Operations';
 import { PerformanceTracker, type MissionRecord } from './Performance';
@@ -500,7 +500,7 @@ export class MissionDirector {
     const why: string[] = [];
     if (this.performance.struggling) why.push('several planes lost or missions failed lately');
     const affordable = AIRCRAFT_ORDER.filter((id) => sit.costs[id] <= sit.paper);
-    if (affordable.every((id) => id === 'dart')) why.push(affordable.length ? 'only a Dart is affordable' : 'no plane is affordable');
+    if (affordable.every((id) => id === STARTER_AIRCRAFT)) why.push(affordable.length ? `only the ${AIRCRAFT[STARTER_AIRCRAFT].name} is affordable` : 'no plane is affordable');
     return why;
   }
 
@@ -573,8 +573,8 @@ export function mainTarget(spec: Pick<MissionSpec, 'objectives'>): string | null
 /** Can the player get a plane onto the pad (with what they have) that can fly this mission? */
 export function flyable(spec: Pick<MissionSpec, 'type' | 'bombs' | 'objectives'>, sit: Pick<Situation, 'paper' | 'costs'>): boolean {
   const planes = AIRCRAFT_ORDER.filter((id) => sit.costs[id] <= sit.paper).map((id) => AIRCRAFT[id]);
-  // With nothing affordable, the free emergency Dart is what there is.
-  if (planes.length === 0) planes.push(emergencyDart());
+  // With nothing affordable, the free emergency plane is what there is.
+  if (planes.length === 0) planes.push(emergencyPlane());
   return planes.some((p) => assessSuitability(p, spec).level !== 'unsuitable');
 }
 

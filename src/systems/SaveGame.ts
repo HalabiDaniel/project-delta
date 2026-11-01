@@ -1,5 +1,5 @@
 import { emptyBaseStats, type BaseSave, type BaseStats } from '../base/Base';
-import { AIRCRAFT_ORDER, BASE, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BASE, STARTER_AIRCRAFT, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
 import type { DirectorState, HistoryEntry, HistoryKind, OfferSource, Recipe, Slot } from '../director/MissionDirector';
 import type { Operation, OperationStage, OperationTemplate, OptionalKind } from '../director/Operations';
 import type { MissionRecord } from '../director/Performance';
@@ -13,7 +13,7 @@ import type { EconomyTotals, Efficiency, Transaction } from './Ledger';
  * turns the previous version into the new one; saves from an unknown future version are kept
  * aside, never overwritten.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface HangarSave {
   id: AircraftId;
@@ -249,6 +249,10 @@ export class SaveManager {
  * Steps from each old version to the next.
  * 1 → 2 (v0.0.7): T1 became a base the player builds. Before, it had two ink turrets for free;
  * a save from then keeps them, as built turrets in the two defense slots.
+ * 2 → 3 (v0.0.11): the Swift replaced the Dart as the starter and the free emergency plane, and the
+ * Swift, Falcon and Dart were re-roled. Every aircraft id is kept (selection, hangar, mastery,
+ * records); only references to the emergency Dart move to the emergency Swift, and planes kept in
+ * the hangar or in the air keep no more health than their design now has.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {
   1: (raw) => ({
@@ -260,6 +264,23 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
       stats: emptyBaseStats(),
     },
   }),
+  2: (raw) => {
+    const capHealth = (id: unknown, health: unknown) => {
+      const spec = typeof id === 'string' ? AIRCRAFT[id as AircraftId] : undefined;
+      return spec && typeof health === 'number' ? Math.min(health, spec.maxHealth) : health;
+    };
+    const emergency = `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}`;
+    const ledger = isObject(raw.ledger) ? raw.ledger : null;
+    return {
+      ...raw,
+      version: 3,
+      hangar: Array.isArray(raw.hangar) ? raw.hangar.map((h) => (isObject(h) ? { ...h, health: capHealth(h.id, h.health) } : h)) : raw.hangar,
+      inFlight: isObject(raw.inFlight) ? { ...raw.inFlight, health: capHealth(raw.inFlight.aircraft, raw.inFlight.health) } : raw.inFlight,
+      ledger: ledger && Array.isArray(ledger.entries)
+        ? { ...ledger, entries: ledger.entries.map((e) => (isObject(e) && typeof e.label === 'string' ? { ...e, label: e.label.replace('Emergency Dart', emergency) } : e)) }
+        : raw.ledger,
+    };
+  },
 };
 
 export function migrate(raw: unknown, problems: string[]): unknown {
@@ -296,7 +317,7 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     version: SAVE_VERSION,
     savedAt: check.num(raw.savedAt, 'savedAt', 0, Number.MAX_SAFE_INTEGER, 0),
     paper: check.int(raw.paper, 'paper', 0, 1_000_000, ECONOMY.startingPaper),
-    aircraft: check.oneOf(raw.aircraft, 'aircraft', AIRCRAFT_ORDER, 'falcon'),
+    aircraft: check.oneOf(raw.aircraft, 'aircraft', AIRCRAFT_ORDER, STARTER_AIRCRAFT),
     hangar: check.list(raw.hangar, 'hangar', (h, i) => {
       if (!isObject(h)) return null;
       return {
