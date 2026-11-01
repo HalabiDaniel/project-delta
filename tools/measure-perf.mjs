@@ -64,18 +64,6 @@ try {
     await page.evaluate(() => window.paperwars.toggleBase(true));
     await sample('base');
     await page.evaluate(() => window.paperwars.toggleBase(false));
-    // In flight: fold the chosen plane, launch, and sample a few seconds after take-off.
-    const flying = await page
-      .evaluate(async () => {
-        const g = window.paperwars;
-        g.build();
-        const until = performance.now() + 30000;
-        while (g.state.phase !== 'ready' && performance.now() < until) await new Promise((r) => setTimeout(r, 200));
-        g.launch();
-        return g.state.phase === 'flying';
-      })
-      .catch(() => false);
-    if (flying) await sample('flight');
     const assets = await page.evaluate(() => window.paperwars.assets.report?.() ?? null);
     results.push({ preset, loadMs, views, assets });
     await page.close();
