@@ -1001,3 +1001,18 @@
 
 /* Performance readout (?perf). */
 .perf-overlay { position: fixed; left: 8px; bottom: 8px; z-index: 50; padding: 6px 8px; border-radius: 6px; background: rgba(20, 24, 40, 0.78); color: #e8eefc; font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; pointer-events: none; }
+
+/* ---- Controller (v0.0.11): the highlight, hints that follow the device, and hover info -------- */
+.pad-focus { outline: 3px solid #f59e0b !important; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.25) !important; position: relative; z-index: 2; }
+kbd.pad-hidden { display: none !important; }
+.pad-only { display: none !important; }
+body.pad-mode .controls.pad-only { display: grid !important; grid-template-columns: repeat(3, 1fr); }
+body.pad-mode .settings.pad-only { display: flex !important; }
+body.pad-mode .kbd-only { display: none !important; }
+body.pad-mode .econ .econ-safe { display: inline-flex; }
+.econ:focus-within .econ-safe { display: inline-flex; }
+.pad-key { display: inline-block; min-width: 42px; padding: 0 4px; border-radius: 9px; background: #1f2937; color: #fff; font-size: 10px; text-align: center; }
+.pad-tip {
+  position: fixed; z-index: 60; max-width: 260px; padding: 4px 8px; border-radius: 6px; pointer-events: none;
+  background: rgba(31, 41, 55, 0.92); color: #fff; font: 600 12px/1.35 system-ui, sans-serif;
+}

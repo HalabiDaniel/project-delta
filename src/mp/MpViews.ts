@@ -215,7 +215,7 @@ export class MpViews {
       landing,
       boundary: { state: flying ? g.predictor.flight.boundary.state : 'inside', countdown: g.predictor.flight.boundary.countdown },
       result: this.result(),
-      pointerLocked: g.input.pointerLocked,
+      pointerLocked: g.input.pointerLocked || g.controls.padFlying,
       nose,
       aim,
       target,

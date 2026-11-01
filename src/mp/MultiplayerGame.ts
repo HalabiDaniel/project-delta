@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PVP, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, PVP, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -31,7 +31,8 @@ import {
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
 import { emergencyDart, GameState, type GamePhase } from '../systems/GameState';
-import { Input, MOUSE_LEFT, MOUSE_RIGHT } from '../systems/Input';
+import { Input } from '../systems/Input';
+import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
 import { ResourceManager } from '../systems/ResourceManager';
 import { HUD } from '../ui/HUD';
 import type { IconName } from '../ui/icons';
@@ -216,6 +217,15 @@ export class MultiplayerGame {
     this.network = network;
     this.predictor = new Predictor(AIRCRAFT.dart);
     this.views = new MpViews(this);
+    this.controls = new Controls(input);
+  }
+
+  /** Keyboard, mouse and controller as named actions (src/input/). */
+  readonly controls: Controls;
+
+  private inputContext(): InputContext {
+    if (!this.room || this.lobby.open || this.paused || !this.state) return 'menu';
+    return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
   static async create(canvas: HTMLCanvasElement, hudRoot: HTMLElement): Promise<MultiplayerGame> {
@@ -452,13 +462,13 @@ export class MultiplayerGame {
     if (this.state?.phase !== 'ready') return;
     this.send({ a: 'launch' });
     this.input.consumeMouse();
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   takeOff(): void {
     if (this.state?.phase !== 'landed') return;
     this.send({ a: 'takeoff' });
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   baseAction(act: (m: BaseMode) => unknown): void {
@@ -496,7 +506,7 @@ export class MultiplayerGame {
     if (!this.paused) return;
     this.paused = false;
     this.input.consumeMouse();
-    if (this.state?.phase === 'flying') this.input.requestPointerLock();
+    if (this.state?.phase === 'flying' && !this.controls.padFlying) this.input.requestPointerLock();
   }
 
   toggleSound(): void {
@@ -521,57 +531,90 @@ export class MultiplayerGame {
 
   private bindInput(): void {
     const { input } = this;
-    input.onKeyDown((code) => {
+    this.controls.onAction((action, device) => this.onAction(action, device));
+    input.onCanvasClick(() => {
       this.sounds.unlock();
-      if (!this.room || this.lobby.open) return;
-      if (code === 'KeyM') return this.toggleSound();
-      if (code === 'Escape') {
-        if (this.baseMode?.open && !this.paused) return this.toggleBase(false);
-        if (this.paused) this.resume();
-        else this.pause();
-        return;
-      }
       if (this.paused || !this.state) return;
-      const phase = this.state.phase;
-      if (code === 'KeyB') return this.toggleBase();
-      if (code === 'KeyZ' || code === 'KeyC' || code === 'KeyV') {
-        this.net.emote(code === 'KeyZ' ? 'waggle' : code === 'KeyC' ? 'confetti' : 'heart');
+      if (this.state.phase === 'flying' && !input.pointerLocked && !this.controls.padFlying) input.requestPointerLock();
+    });
+    this.controls.onPad((e) => {
+      if (e.kind === 'connected') return this.hud.alert('plane', 'Controller connected', null, 'info', 2);
+      this.hud.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      // The plane flies on (the world doesn't stop for one player), but the controls go neutral.
+      if (this.state?.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
+    });
+  }
+
+  /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
+  private onAction(action: Action, device: Device): void {
+    this.sounds.unlock();
+    if (!this.room || this.lobby.open) return;
+    if (action === 'sound') return this.toggleSound();
+    if (action === 'back' || action === 'pause') {
+      if (action === 'back' && this.baseMode?.open && !this.paused) return this.toggleBase(false);
+      // The controller's B only backs out of things; pausing is its Menu button.
+      if (action === 'back' && device === 'gamepad' && !this.paused) return;
+      if (this.paused) this.resume();
+      else this.pause();
+      return;
+    }
+    if (this.paused || !this.state) return;
+    const phase = this.state.phase;
+    if (action === 'base') return this.toggleBase();
+    if (action === 'emote1' || action === 'emote2' || action === 'emote3') {
+      this.net.emote(action === 'emote1' ? 'waggle' : action === 'emote2' ? 'confetti' : 'heart');
+      return;
+    }
+    if (this.baseMode?.open) {
+      const slot = /^pick(\d)$/.exec(action)?.[1];
+      if (slot !== undefined) this.baseMode.selectSlot(slot === '0' ? 'store' : `s${slot}`);
+      else if (action === 'confirm') this.baseMode.build();
+      else if (action === 'upgrade') this.baseMode.upgrade();
+      else if (action === 'service') this.baseMode.repair();
+      else if (action === 'swap' || action === 'remove') this.baseMode.remove();
+      return;
+    }
+    const card = /^pick([1-7])$/.exec(action)?.[1];
+    if (card) return this.send({ a: 'select', i: Number(card) - 1 });
+    switch (action) {
+      case 'prevMission':
+      case 'nextMission': {
+        const n = this.offers.length;
+        if (n > 0 && phase !== 'flying') this.send({ a: 'select', i: (this.state.selected + (action === 'nextMission' ? 1 : -1) + n) % n });
         return;
       }
-      if (this.baseMode?.open) {
-        const slot = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
-        if (slot !== undefined) this.baseMode.selectSlot(slot === '0' ? 'store' : `s${slot}`);
-        else if (code === 'Enter' || code === 'NumpadEnter') this.baseMode.build();
-        else if (code === 'KeyU') this.baseMode.upgrade();
-        else if (code === 'KeyR') this.baseMode.repair();
-        else if (code === 'KeyX' || code === 'Delete') this.baseMode.remove();
-        return;
-      }
-      const card = /^(?:Digit|Numpad)([1-7])$/.exec(code)?.[1];
-      if (card) return this.send({ a: 'select', i: Number(card) - 1 });
-      if (code === 'KeyX') return this.send({ a: 'swap' });
-      if (code === 'KeyQ' || code === 'KeyE') {
+      case 'swap':
+        return this.send({ a: 'swap' });
+      case 'prevAircraft':
+      case 'nextAircraft': {
         const i = AIRCRAFT_ORDER.indexOf(this.state.aircraft);
-        const next = AIRCRAFT_ORDER[(i + (code === 'KeyE' ? 1 : -1) + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length];
+        const next = AIRCRAFT_ORDER[(i + (action === 'nextAircraft' ? 1 : -1) + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length];
         return this.send({ a: 'aircraft', id: next });
       }
-      if (code === 'KeyF') return this.send({ a: 'build' });
-      if (code === 'Space') {
+      case 'fold':
+        return this.send({ a: 'build' });
+      case 'launch':
         if (phase === 'ready') this.launchPlane();
         else if (phase === 'landed') this.takeOff();
         else if (phase === 'flying') this.bombQueued = true;
         return;
-      }
-      if (code === 'KeyR' && phase === 'landed') return this.send({ a: 'rearm' });
-      if ((code === 'Enter' || code === 'NumpadEnter') && phase === 'landed') return this.send({ a: 'end' });
-      if ((code === 'Enter' || code === 'NumpadEnter') && (phase === 'debrief' || phase === 'crashed')) return this.send({ a: 'continue' });
-    });
-    input.onCanvasClick((button) => {
-      this.sounds.unlock();
-      if (this.paused || !this.state) return;
-      if (this.state.phase === 'flying' && !input.pointerLocked) input.requestPointerLock();
-      else if (button === MOUSE_RIGHT && this.state.phase === 'flying') this.bombQueued = true;
-    });
+      case 'fireSecondary':
+        if (phase === 'flying') this.bombQueued = true;
+        return;
+      case 'service':
+        if (phase === 'landed') this.send({ a: 'rearm' });
+        else if (phase === 'flying') this.hud.alert('home', 'Rearm at home', null, 'info', 1.6);
+        return;
+      case 'confirm':
+        if (device === 'gamepad') {
+          // A with nothing highlighted: the next step of the sortie.
+          if (phase === 'desk') return this.send({ a: 'build' });
+          if (phase === 'ready') return this.launchPlane();
+          if (phase === 'landed') return this.takeOff();
+        } else if (phase === 'landed') return this.send({ a: 'end' });
+        if (phase === 'debrief' || phase === 'crashed') this.send({ a: 'continue' });
+        return;
+    }
   }
 
   // ---- Server messages ----------------------------------------------------------------------------
@@ -1042,6 +1085,9 @@ export class MultiplayerGame {
 
   private tick(rawDt: number): void {
     const dt = Math.min(rawDt, 0.1);
+    this.controls.context = this.inputContext();
+    this.controls.screen = `${this.state?.phase}|${!!this.baseMode?.open}|${this.paused}|${this.lobby.open}|${!!this.room}`;
+    this.controls.update(dt);
     const mouse = this.input.consumeMouse();
     if (!this.paused && this.input.pointerLocked) {
       this.mouseX += mouse.dx;
@@ -1069,6 +1115,14 @@ export class MultiplayerGame {
     this.mpHud.render(this.mpView());
   }
 
+  /** Other aircraft near the aim, for the controller's aim help. */
+  private assistTargets(): Array<{ x: number; y: number; z: number }> {
+    const out: Array<{ x: number; y: number; z: number }> = [];
+    for (const a of this.remotes.values()) if (a.alive) out.push(a.model.position);
+    for (const a of this.ais.values()) if (a.alive && a.side === 'enemy') out.push(a.model.position);
+    return out;
+  }
+
   /** Fixed steps of the pilot's own plane, each one a frame for the server. */
   private stepPrediction(dt: number): void {
     const st = this.state;
@@ -1076,23 +1130,25 @@ export class MultiplayerGame {
       this.acc = 0;
       return;
     }
-    const input = this.input;
+    const controls = this.controls;
     this.acc = Math.min(this.acc + dt, 1);
     while (this.acc >= STEP) {
       this.acc -= STEP;
       this.savePrev();
       const m = this.predictor.model;
       const flying = st.phase === 'flying' && m.status === 'flying';
-      const live = !this.paused && input.pointerLocked;
+      const live = !this.paused && (this.input.pointerLocked || controls.padFlying);
+      // The left stick steers as mouse movement would, so the server sees nothing new.
+      const stick = live && flying ? controls.stickMouse(m, PLANE, STEP, m.position, this.assistTargets()) : { dx: 0, dy: 0 };
       const frame: InputFrame = {
         seq: this.predictor.nextSeq(),
-        mx: live ? this.mouseX : 0,
-        my: live ? this.mouseY : 0,
-        throttle: this.paused ? 0 : (input.axis('KeyS', 'KeyW') as -1 | 0 | 1),
-        bank: this.paused ? 0 : (input.axis('KeyD', 'KeyA') as -1 | 0 | 1),
-        boost: !this.paused && (input.isHeld('ShiftLeft') || input.isHeld('ShiftRight')),
+        mx: live ? this.mouseX + stick.dx : 0,
+        my: live ? this.mouseY + stick.dy : 0,
+        throttle: this.paused ? 0 : controls.throttle(),
+        bank: this.paused ? 0 : controls.bank(),
+        boost: !this.paused && controls.held('boost'),
         autoLevel: !this.views.onApproach(),
-        fire: flying && live && input.isButtonHeld(MOUSE_LEFT),
+        fire: flying && live && controls.held('firePrimary'),
         bomb: flying && this.bombQueued,
       };
       this.mouseX = 0;
@@ -1221,6 +1277,7 @@ export class MultiplayerGame {
     } else if (phase === 'crashed') {
       this.camera.updateWatch(dt, this.crashPoint);
     } else {
+      this.camera.setLook(this.controls.look());
       this.camera.updateFollow(dt, this.plane, this.territories, null);
     }
 
@@ -1278,7 +1335,7 @@ export class MultiplayerGame {
     const s = this.room?.state;
     const now = performance.now() / 1000;
     const players = s ? [...s.players.entries()] : [];
-    const scoreboard = this.input.isHeld('Tab') && this.room
+    const scoreboard = this.controls.held('scoreboard') && this.room
       ? players
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,

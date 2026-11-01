@@ -4,6 +4,26 @@ import { icon, type IconName } from './icons';
 import { SAY } from './strings';
 import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
+import { getPadSettings, setPadSettings, type PadLevel } from '../input/Controls';
+
+/** The controller's mapping, shown in the menu while a controller is in use. */
+const PAD_CONTROLS: Array<[string, IconName, string]> = [
+  ['L stick', 'heading', 'Steer'],
+  ['R stick', 'distance', 'Look'],
+  ['RT', 'ink', 'Ink'],
+  ['LT', 'bombload', 'Bomb'],
+  ['RB', 'boost', 'Boost'],
+  ['LB + L', 'speed', 'Throttle / bank'],
+  ['A', 'ok', 'Confirm, launch'],
+  ['B', 'close', 'Back'],
+  ['X', 'rearm', 'Rearm, repair'],
+  ['Y', 'base', 'Base · hold: hints'],
+  ['LB / RB', 'plane', 'Aircraft (home)'],
+  ['LT / RT', 'reach', 'Mission (home)'],
+  ['D-pad', 'more', 'Menus · emotes'],
+  ['View', 'book', 'Logbook · scores'],
+  ['Menu', 'info', 'Pause'],
+];
 
 const CONTROLS: Array<[string, IconName, string]> = [
   ['Mouse', 'heading', 'Steer'],
@@ -74,7 +94,16 @@ export class Menus {
             <button data-v="0.6">Faint</button><button data-v="1">Normal</button><button data-v="1.4">Bold</button></span></div>
         </div>
         <div data-u="session"></div>
-        <div class="controls">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
+        <div class="settings pad-only">
+          <div class="setting" title="Controller: pull back to climb"><span>${icon('heading')}Invert Y</span><span class="seg" data-u="pad-invert">
+            <button data-v="off">Off</button><button data-v="on">On</button></span></div>
+          <div class="setting" title="Controller steering sensitivity"><span>${icon('plane')}Stick</span><span class="seg" data-u="pad-stick">
+            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
+          <div class="setting" title="Controller camera sensitivity"><span>${icon('distance')}Camera</span><span class="seg" data-u="pad-camera">
+            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
+        </div>
+        <div class="controls kbd-only">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
+        <div class="controls pad-only">${PAD_CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><b class="pad-key">${key}</b>${icon(i)}<span>${label}</span></div>`).join('')}</div>
         <div class="menu-transfer" data-u="transfer" hidden></div>
         <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost danger small" data-u="reset"></button></div>
       </div>`;
@@ -104,6 +133,9 @@ export class Menus {
     for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setGraphicsPreset(b.dataset.v as GraphicsPreset));
     for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlines(b.dataset.v as OutlineChoice));
     for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlineIntensity(Number(b.dataset.v)));
+    for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), invertY: b.dataset.v === 'on' }));
+    for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), stick: b.dataset.v as PadLevel }));
+    for (const b of this.el['pad-camera'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), camera: b.dataset.v as PadLevel }));
     text(this.el.version, `v${__APP_VERSION__}`);
   }
 
@@ -129,6 +161,10 @@ export class Menus {
       for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.outlines);
       for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === g.intensity);
       toggle(this.el.lines.parentElement!, g.outlines !== 'off');
+      const pad = getPadSettings();
+      for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', (b.dataset.v === 'on') === pad.invertY);
+      for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === pad.stick);
+      for (const b of this.el['pad-camera'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === pad.camera);
       text(this.el.reset, MULTIPLAYER ? 'Leave classroom' : v.menu.confirmingReset ? SAY.confirmReset : SAY.reset);
       this.el.reset.classList.toggle('confirm', v.menu.confirmingReset);
       this.el.reset.title = MULTIPLAYER ? 'Leave this classroom for good: your desk is freed' : 'Delete all progress (asks twice)';

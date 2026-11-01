@@ -30,7 +30,8 @@ import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
 import { GameState, type BuildKind, type CrashCause } from './systems/GameState';
-import { Input, MOUSE_LEFT, MOUSE_RIGHT } from './systems/Input';
+import { Input, MOUSE_LEFT } from './systems/Input';
+import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
 import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
@@ -112,7 +113,8 @@ const AIRCRAFT_EDGE_RANGE = 140;
 const HEARING = 120;
 /** The mini-map shows enemy aircraft this close to the plane, even beyond T1's radar. */
 const SIGHT_RANGE = 120;
-const KEY_TO_CARD: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
+const PICK_TO_CARD: Partial<Record<Action, number>> = { pick1: 0, pick2: 1, pick3: 2, pick4: 3 };
+const PICK_TO_SLOT: Partial<Record<Action, number>> = { pick0: 0, pick1: 1, pick2: 2, pick3: 3, pick4: 4, pick5: 5, pick6: 6, pick7: 7 };
 /** The report on the last sortie's medal, records and bonuses, kept until the next sortie. */
 interface SortieOutcome {
   progress: SortieProgress;
@@ -224,6 +226,16 @@ export class Game {
     this.logbook = new Logbook(hud.root, () => this.logbookView(), () => this.toggleLogbook(false));
     this.dev = new DevPanel(hud.root, this);
     this.baseMode = new BaseMode(base);
+    this.controls = new Controls(input);
+  }
+
+  /** Keyboard, mouse and controller as named actions (src/input/). */
+  readonly controls: Controls;
+
+  /** What the controller's buttons mean right now. */
+  private inputContext(): InputContext {
+    if (this.paused || this.logbook.open || this.welcome) return 'menu';
+    return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
   static async create(canvas: HTMLCanvasElement, hudRoot: HTMLElement): Promise<Game> {
@@ -480,7 +492,7 @@ export class Game {
     this.plane.launch();
     this.boundary.reset();
     this.input.consumeMouse(); // ignore mouse travel from before take-off
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   dropBomb(): void {
@@ -516,7 +528,7 @@ export class Game {
     this.rolledToStop = false;
     this.boundary.reset();
     this.input.consumeMouse();
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   /** After landing: the plane goes into the hangar and the report comes up. */
@@ -673,7 +685,7 @@ export class Game {
   }
 
   private get showHints(): boolean {
-    if (this.input.isHeld('KeyH')) return true;
+    if (this.controls.held('hints')) return true;
     return this.hints === 'on' || (this.hints === 'auto' && this.sortiesTotal < BASE.hintSorties);
   }
 
@@ -881,13 +893,16 @@ export class Game {
     if (!this.paused) return;
     this.paused = false;
     this.input.consumeMouse();
-    if (this.state.phase === 'flying') this.input.requestPointerLock();
+    if (this.state.phase === 'flying' && !this.controls.padFlying) this.input.requestPointerLock();
   }
 
   // ---- Frame loop -----------------------------------------------------------------------------
 
   private tick(rawDt: number): void {
     const dt = Math.min(rawDt, 0.05);
+    this.controls.context = this.inputContext();
+    this.controls.screen = `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.logbook.open}|${!!this.welcome}`;
+    this.controls.update(dt);
     const mouse = this.input.consumeMouse();
     if (!this.paused) this.simulate(dt, mouse);
     this.hud.render(this.view());
@@ -916,6 +931,11 @@ export class Game {
         }
         // Dragging on the canvas turns the preview.
         if (this.input.isButtonHeld(MOUSE_LEFT) && !this.input.pointerLocked && !this.baseMode.open) this.preview.drag(mouse.dx, mouse.dy);
+        else if (!this.baseMode.open) {
+          // The right stick turns the preview too.
+          const turn = this.controls.previewTurn();
+          if (turn.x !== 0 || turn.y !== 0) this.preview.drag(turn.x * 700 * dt, turn.y * 300 * dt);
+        }
         if (this.baseMode.open) camera.updateBase(dt, world.home, world.launchYaw);
         else camera.updateDesk(dt, world.launchPosition, world.launchYaw);
         break;
@@ -971,7 +991,7 @@ export class Game {
   }
 
   private fly(dt: number, mouse: { dx: number; dy: number }): void {
-    const { plane, world, input, state } = this;
+    const { plane, world, controls, state } = this;
     const before = this.boundary.state;
     const boundary = this.boundary.update(dt, plane.position.x, plane.position.z);
     // The warning panel covers the countdown and the autopilot; only the hand-back needs a banner.
@@ -981,14 +1001,17 @@ export class Game {
       boundary === 'autopilot'
         ? { yaw: yawFromDirection(world.home.x - p.x, world.home.z - p.z), pitch: clamp((AUTOPILOT_ALTITUDE - p.y) * 0.04, -0.35, 0.35) }
         : null;
+    // The left stick steers as mouse movement would, with a little help near enemy aircraft.
+    const stick = controls.stickMouse(plane.motion, PLANE, dt, plane.position, this.enemyAircraft());
+    this.camera.setLook(controls.look());
     const result = plane.fly(
       dt,
       {
-        mouseDX: mouse.dx,
-        mouseDY: mouse.dy,
-        throttle: input.axis('KeyS', 'KeyW'),
-        bank: input.axis('KeyD', 'KeyA'),
-        boost: input.isHeld('ShiftLeft') || input.isHeld('ShiftRight'),
+        mouseDX: mouse.dx + stick.dx,
+        mouseDY: mouse.dy + stick.dy,
+        throttle: controls.throttle(),
+        bank: controls.bank(),
+        boost: controls.held('boost'),
         autoLevel: !this.onApproach(),
         autopilot,
         gliding: state.outOfRange,
@@ -1003,7 +1026,7 @@ export class Game {
     switch (result.outcome) {
       case 'flying':
         state.updateFlight(plane.prevPosition, plane.position, dt);
-        if (input.isButtonHeld(MOUSE_LEFT) && !this.paused) this.fire();
+        if (controls.held('firePrimary') && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
       case 'touchdown':
@@ -1744,86 +1767,118 @@ export class Game {
 
   // ---- Wiring ---------------------------------------------------------------------------------
 
-  private bindEvents(): void {
-    const { input, hud, state } = this;
-
-    input.onKeyDown((code) => {
-      // Browsers only allow sound after a key press or click.
-      this.sounds.unlock();
-      if (this.welcome && code !== 'Backquote') {
-        this.dismissWelcome();
-        if (code === 'Enter' || code === 'NumpadEnter' || code === 'Escape') return;
-      }
-      if (code === 'KeyM') {
-        this.toggleSound();
-        return;
-      }
-      if (code === 'Backquote') {
+  /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
+  private onAction(action: Action, device: Device): void {
+    const { state } = this;
+    // Browsers only allow sound after a key press or click.
+    this.sounds.unlock();
+    if (this.welcome && action !== 'dev') {
+      this.dismissWelcome();
+      if (action === 'confirm' || action === 'back' || action === 'pause') return;
+    }
+    switch (action) {
+      case 'sound':
+        return this.toggleSound();
+      case 'dev':
         this.dev.toggle();
         this.requestSave();
         return;
-      }
-      if (code === 'KeyL') {
-        this.toggleLogbook();
-        return;
-      }
-      if (code === 'Escape') {
-        if (this.logbook.open) {
-          this.toggleLogbook(false);
-          return;
-        }
-        if (this.baseMode.open && !this.paused) {
-          this.toggleBase(false);
-          return;
-        }
-        if (performance.now() - this.lastAutoPause < ESC_AFTER_UNLOCK_MS) return;
+      case 'logbook':
+        return this.toggleLogbook();
+      case 'back':
+      case 'pause':
+        if (this.logbook.open) return this.toggleLogbook(false);
+        if (action === 'back' && this.baseMode.open && !this.paused) return this.toggleBase(false);
+        // The controller's B only backs out of things; pausing is its Menu button.
+        if (action === 'back' && device === 'gamepad' && !this.paused) return;
+        if (action === 'back' && performance.now() - this.lastAutoPause < ESC_AFTER_UNLOCK_MS) return;
         if (this.paused) this.resume();
         else this.pause();
         return;
-      }
-      if (this.paused) return;
-      if (this.logbook.open) return;
-      if (code === 'KeyB') {
-        this.toggleBase();
-        return;
-      }
-      if (this.baseMode.open) {
-        // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
-        const slot = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
-        if (slot !== undefined) {
-          const id = slot === '0' ? STORE : BASE.slots[Number(slot) - 1]?.id;
-          if (id) this.baseAction('select', id);
-        } else if (code === 'Enter' || code === 'NumpadEnter') this.baseAction('build');
-        else if (code === 'KeyU') this.baseAction('upgrade');
-        else if (code === 'KeyR') this.baseAction('repair');
-        else if (code === 'KeyX' || code === 'Delete') this.baseAction('remove');
-        else if (code === 'Space' && (state.phase === 'ready' || state.phase === 'landed')) {
-          this.toggleBase(false);
-          if (state.phase === 'landed') this.takeOff();
-          else this.launch();
-        }
-        return;
-      }
-      if (code in KEY_TO_CARD) this.select(KEY_TO_CARD[code]);
-      else if (code === 'KeyX') this.swapCard();
-      else if (code === 'KeyQ') this.cycleAircraft(-1);
-      else if (code === 'KeyE') this.cycleAircraft(1);
-      else if (code === 'KeyF') this.build();
-      else if (code === 'Space') {
+    }
+    if (this.paused || this.logbook.open) return;
+    if (action === 'base') return this.toggleBase();
+    if (this.baseMode.open) {
+      // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
+      const slot = PICK_TO_SLOT[action];
+      if (slot !== undefined) {
+        const id = slot === 0 ? STORE : BASE.slots[slot - 1]?.id;
+        if (id) this.baseAction('select', id);
+      } else if (action === 'confirm') this.baseAction('build');
+      else if (action === 'upgrade') this.baseAction('upgrade');
+      else if (action === 'service') this.baseAction('repair');
+      else if (action === 'swap' || action === 'remove') this.baseAction('remove');
+      else if (action === 'launch' && (state.phase === 'ready' || state.phase === 'landed')) {
+        this.toggleBase(false);
         if (state.phase === 'landed') this.takeOff();
         else this.launch();
-      } else if (code === 'KeyR') {
+      }
+      return;
+    }
+    const card = PICK_TO_CARD[action];
+    if (card !== undefined) return this.select(card);
+    switch (action) {
+      case 'prevMission':
+      case 'nextMission': {
+        const n = state.offers.length;
+        if (n > 0 && state.phase !== 'flying') this.select((state.selected + (action === 'nextMission' ? 1 : -1) + n) % n);
+        return;
+      }
+      case 'swap':
+        return this.swapCard();
+      case 'prevAircraft':
+        return this.cycleAircraft(-1);
+      case 'nextAircraft':
+        return this.cycleAircraft(1);
+      case 'fold':
+        return this.build();
+      case 'launch':
+        if (state.phase === 'landed') this.takeOff();
+        else this.launch();
+        return;
+      case 'service':
         if (state.phase === 'landed') this.rearm();
         else if (state.phase === 'flying') this.alert('home', 'Rearm at T1', null, 'info', 1.6);
-      } else if (code === 'Enter' || code === 'NumpadEnter') {
+        return;
+      case 'fireSecondary':
+        if (state.phase === 'flying') this.dropBomb();
+        return;
+      case 'confirm':
+        if (device === 'gamepad') return this.padConfirm();
         if (state.phase === 'landed') this.endSortie();
         else this.continueToDesk();
+        return;
+    }
+  }
+
+  /** The controller's A with nothing highlighted: the next step of the sortie. */
+  private padConfirm(): void {
+    switch (this.state.phase) {
+      case 'desk':
+        return this.build();
+      case 'ready':
+        return this.launch();
+      case 'landed':
+        return this.takeOff();
+      case 'debrief':
+      case 'crashed':
+        return this.continueToDesk();
+    }
+  }
+
+  private bindEvents(): void {
+    const { input, hud, state } = this;
+
+    this.controls.onAction((action, device) => this.onAction(action, device));
+    input.onCanvasClick(() => this.sounds.unlock());
+    this.controls.onPad((e) => {
+      if (e.kind === 'connected') {
+        this.alert('plane', 'Controller connected', null, 'info', 2);
+        return;
       }
-    });
-    input.onCanvasClick((button) => {
-      this.sounds.unlock();
-      if (state.phase !== 'flying' || this.paused) return;
-      if (button === MOUSE_RIGHT) this.dropBomb();
+      this.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      // Losing the controller mid-flight pauses, rather than leaving the plane unattended.
+      if (state.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
     });
     input.onPointerLockChange((locked) => {
       // Losing the lock mid-flight (Esc, alt-tab) pauses rather than leaving the plane unattended.
@@ -1889,7 +1944,13 @@ export class Game {
           this.airTraffic.startMission(mission.spec.aircraft ?? []);
           this.career.recordSortie(state.plane!.id);
           this.alert(MISSION_ICONS[mission.spec.type], 'Go', null, 'info', 1.4);
-          this.tip('flight', 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.', ['LMB', 'RMB', 'Shift']);
+          this.tip(
+            'flight',
+            this.controls.device === 'gamepad'
+              ? 'Left stick steers, right stick looks around. Hold RT for ink, LT drops a bomb, RB boosts.'
+              : 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.',
+            ['LMB', 'RMB', 'Shift'],
+          );
           this.requestSave();
           break;
         }
@@ -2158,7 +2219,7 @@ export class Game {
       landing,
       boundary: { state: this.boundary.state, countdown: this.boundary.countdown },
       result: this.result(),
-      pointerLocked: this.input.pointerLocked,
+      pointerLocked: this.input.pointerLocked || this.controls.padFlying,
       nose,
       aim,
       target,

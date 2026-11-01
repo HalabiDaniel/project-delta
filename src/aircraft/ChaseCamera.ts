@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { CAMERA, PALETTE } from '../config';
+import { STICK } from '../input/analog';
 import type { Territory } from '../world/Territory';
 import { forwardFromAngles, type PlaneController } from './PlaneController';
 
@@ -18,6 +19,9 @@ export class ChaseCamera {
   private readonly wantLook = new pc.Vec3();
   private readonly dir = new pc.Vec3();
   private roll = 0;
+  /** Camera look from the controller's right stick, -1..1 each way (0 = straight behind). */
+  private lookX = 0;
+  private lookY = 0;
 
   constructor(app: pc.AppBase) {
     this.entity = new pc.Entity('camera');
@@ -28,6 +32,12 @@ export class ChaseCamera {
       farClip: 1000,
     });
     app.root.addChild(this.entity);
+  }
+
+  /** Sets the look-around for the next follow update (the stick's eased, recentring value). */
+  setLook(look: { x: number; y: number }): void {
+    this.lookX = look.x;
+    this.lookY = look.y;
   }
 
   get camera(): pc.CameraComponent {
@@ -72,7 +82,9 @@ export class ChaseCamera {
     const size = Math.abs(plane.model.shape.wingtip[0]) * plane.model.shape.scale;
     const distance = (CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting) * (0.8 + 0.14 * size);
 
-    forwardFromAngles(plane.yaw, plane.pitch * 0.6, this.dir);
+    // Looking around swings the camera about the plane (right on the stick looks right).
+    const looking = Math.min(1, Math.hypot(this.lookX, this.lookY));
+    forwardFromAngles(plane.yaw - this.lookX * STICK.lookYaw, plane.pitch * 0.6 - this.lookY * STICK.lookPitch, this.dir);
     this.wantPos.set(
       p.x - this.dir.x * distance,
       p.y - this.dir.y * distance + CAMERA.height,
@@ -90,6 +102,8 @@ export class ChaseCamera {
       p.y + this.dir.y * CAMERA.lookAhead - CAMERA.lookDrop,
       p.z + this.dir.z * CAMERA.lookAhead,
     );
+    // While looking around, keep the plane itself in the middle of the view.
+    if (looking > 0.01) this.wantLook.lerp(this.wantLook, p, looking);
     if (focus) {
       this.wantLook.lerp(this.wantLook, focus, CAMERA.bombCamBlend);
       this.wantPos.y += CAMERA.bombCamRise;
