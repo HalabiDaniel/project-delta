@@ -7,3 +7,8 @@ dist/
 # them to the public repository. See assets/licensed/README.md.
 assets/licensed/*
 !assets/licensed/README.md
+
+# Local secrets (see .env.example).
+.env
+.env.*
+!.env.example

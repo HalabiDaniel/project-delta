@@ -1,6 +1,22 @@
-import { Room, type Client } from '@colyseus/core';
-import { EMOTES, NET, PROTOCOL_VERSION, cleanName, parseCommand, unpackFrames, type Emote, type NetEvent } from '../src/net/protocol';
+import { Room, type Client, type Deferred } from '@colyseus/core';
+import {
+  CLOSE_TAKEN_OVER,
+  EMOTES,
+  NET,
+  PROTOCOL_VERSION,
+  cleanName,
+  parseCommand,
+  unpackFrames,
+  type Emote,
+  type JoinOptions,
+  type NetEvent,
+  type TransferDTO,
+  type WelcomeDTO,
+} from '../src/net/protocol';
 import { AiState, InstallationState, PHASES, PLANE_STATUSES, PlaneState, PlayerState, TerritoryState, WorldState, INSTALLATION_STATES } from '../src/net/schema';
+import { refusal, type Authenticated } from './identity/Identity';
+import { services } from './services';
+import type { PlayerRecord } from './store/Store';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 
 export interface RoomOptions extends ServerWorldOptions {
@@ -8,10 +24,7 @@ export interface RoomOptions extends ServerWorldOptions {
   title?: string;
 }
 
-export interface JoinOptions {
-  name?: string;
-  v?: number;
-}
+export type { JoinOptions };
 
 /** What the room list shows about a session. */
 export interface RoomMetadata {
@@ -22,6 +35,10 @@ export interface RoomMetadata {
 
 /** The longest real time one simulation callback may catch up on (a stalled event loop doesn't snowball). */
 const MAX_CATCH_UP = 0.25;
+/** A player may ask for a transfer code this often (seconds). */
+const TRANSFER_COOLDOWN = 10;
+/** Connections beyond the player cap, so a returning player can take over their own seat in a full room. */
+const SPARE_SEATS = 4;
 
 /**
  * A classroom session over Colyseus: up to eight players in one shared world. The room is the
@@ -30,19 +47,44 @@ const MAX_CATCH_UP = 0.25;
  * before each patch (20 Hz), and sends each player their private state, their own plane's
  * authoritative flight and the events of the last patch.
  *
+ * Identity (v0.0.10): who a connection is comes from `onAuth`, which checks the browser's device
+ * token (or an invite or transfer code) with the identity service. In the world, players are known
+ * by their stable public id, never by the Colyseus session id, which only names one connection.
+ * One player has at most one connection: a newer one (another tab, a refresh that beat the old
+ * connection's timeout, another room on this server) takes over and the older one is closed with
+ * CLOSE_TAKEN_OVER.
+ *
  * Connections: a player whose connection drops keeps their place, territory and plane for
- * NET.reconnectGrace seconds (their plane flies on straight ahead); a browser refresh reconnects
- * with the stored token. A player who leaves (or doesn't come back in time) is removed: their base
- * comes down and the territory is free again.
+ * NET.reconnectGrace seconds (their plane flies on straight ahead); a browser refresh comes back
+ * with Colyseus's reconnection token, or with the device token as the same player. A player who
+ * leaves (or doesn't come back in time) is removed: their base comes down and the territory is
+ * free again (persistence of territories comes in the next phases of v0.0.10).
  */
 export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata }> {
-  maxClients = NET.maxPlayers;
+  /** Every player in a room on this server, and which room: one connection per player, process-wide. */
+  static readonly presence = new Map<string, WorldRoom>();
+
+  maxClients = NET.maxPlayers + SPARE_SEATS;
   /** Input frames come about 60 times a second; anything far beyond that is abuse. */
   maxMessagesPerSecond = 240;
   world!: ServerWorld;
   private accumulator = 0;
   private pingTimer = 0;
   private readonly pings = new Map<string, number>();
+  /** Connection (session id) → player (public id), for every connection, current or stale. */
+  private readonly sessions = new Map<string, string>();
+  /** Player (public id) → their current connection's session id. */
+  private readonly current = new Map<string, string>();
+  /** Dropped connections waiting to reconnect, by session id. */
+  private readonly waiting = new Map<string, Deferred<Client>>();
+  /** Player (public id) → their account. */
+  readonly accounts = new Map<string, PlayerRecord>();
+  private readonly transferAt = new Map<string, number>();
+  /**
+   * What the next welcome says, per connection: sent when the client says hello (messages sent
+   * during onJoin arrive before the client can listen for them).
+   */
+  private readonly greetings = new Map<string, { reconnected: boolean; token: string | null }>();
 
   onCreate(options: RoomOptions = {}): void {
     this.world = new ServerWorld(options);
@@ -57,10 +99,15 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     void this.setMetadata({ title: cleanName(options.title, 'Classroom'), claimed: 0, free: this.world.shared.claimable.length });
     this.setSimulationInterval((ms) => this.update(ms / 1000), 1000 / NET.tickRate);
 
-    this.onMessage('in', (client, data: unknown) => this.world.input(client.sessionId, unpackFrames(data)));
+    this.onMessage('in', (client, data: unknown) => {
+      const id = this.idOf(client);
+      if (id) this.world.input(id, unpackFrames(data));
+    });
     this.onMessage('claim', (client, data: unknown) => {
+      const id = this.idOf(client);
+      if (!id) return;
       const territory = typeof (data as { t?: unknown })?.t === 'string' ? (data as { t: string }).t : '';
-      const error = this.world.claim(client.sessionId, territory);
+      const error = this.world.claim(id, territory);
       client.send('claimed', { ok: error === null, territory, error });
       if (error === null) {
         this.sendPrivate(client, true);
@@ -68,61 +115,186 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       }
     });
     this.onMessage('cmd', (client, data: unknown) => {
+      const id = this.idOf(client);
+      if (!id) return;
       const cmd = parseCommand(data);
-      if (cmd) this.world.command(client.sessionId, cmd);
+      if (cmd) this.world.command(id, cmd);
       // Answer at once, so buttons feel immediate.
       this.sendPrivate(client, false);
     });
     this.onMessage('emote', (client, data: unknown) => {
+      const id = this.idOf(client);
       const e = (data as { e?: unknown })?.e;
-      if (EMOTES.includes(e as Emote)) this.world.emote(client.sessionId, e as Emote);
+      if (id && EMOTES.includes(e as Emote)) this.world.emote(id, e as Emote);
     });
     this.onMessage('pong', (client, data: unknown) => {
-      const sent = this.pings.get(client.sessionId);
-      if (sent === undefined || (data as { n?: unknown })?.n !== sent) return;
-      this.world.setRtt(client.sessionId, (performance.now() - sent) / 1000);
+      const id = this.idOf(client);
+      const sent = id ? this.pings.get(id) : undefined;
+      if (!id || sent === undefined || (data as { n?: unknown })?.n !== sent) return;
+      this.world.setRtt(id, (performance.now() - sent) / 1000);
     });
+    this.onMessage('hello', (client) => this.welcome(client));
+    this.onMessage('transfer', (client) => void this.sendTransferCode(client));
     this.onMessage('*', () => {
       // Unknown message types are ignored.
     });
   }
 
-  onAuth(_client: Client, options: JoinOptions): boolean {
-    if (options?.v !== PROTOCOL_VERSION) throw new Error(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
-    return true;
+  /** Who is connecting: their device token (or code) checked by the identity service. */
+  async onAuth(_client: Client, options: Partial<JoinOptions>): Promise<Authenticated> {
+    if (options?.v !== PROTOCOL_VERSION) throw refusal(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
+    const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
+    if (!this.world.pilots.has(auth.player.publicId) && this.world.pilots.size >= NET.maxPlayers) throw refusal(`This classroom is full (${NET.maxPlayers} players).`);
+    return auth;
   }
 
-  onJoin(client: Client, options: JoinOptions = {}): void {
-    const pilot = this.world.join(client.sessionId, cleanName(options.name));
-    const ps = new PlayerState();
-    ps.name = pilot.name;
-    ps.colour = pilot.colour;
-    this.state.players.set(client.sessionId, ps);
-    client.send('welcome', { id: client.sessionId, tick: NET.tickRate });
-    this.sendPrivate(client, true);
+  onJoin(client: Client, _options: Partial<JoinOptions>, auth: Authenticated): void {
+    const { player } = auth;
+    const id = player.publicId;
+    const returning = this.world.pilots.get(id);
+    // Checked again here: two new players may have passed onAuth at the same moment.
+    if (!returning && this.world.pilots.size >= NET.maxPlayers) throw refusal(`This classroom is full (${NET.maxPlayers} players).`);
+    // The same player in another room on this server leaves it; in this room, the older connection is closed.
+    const elsewhere = WorldRoom.presence.get(id);
+    if (elsewhere && elsewhere !== this) elsewhere.takeOver(id, true);
+    this.takeOver(id, false);
+    WorldRoom.presence.set(id, this);
+    this.sessions.set(client.sessionId, id);
+    this.current.set(id, client.sessionId);
+    this.accounts.set(id, player);
+    let ps = this.state.players.get(id);
+    if (returning) {
+      returning.name = player.name;
+      this.world.setConnected(id, true);
+    } else {
+      const pilot = this.world.join(id, player.name);
+      ps = new PlayerState();
+      ps.colour = pilot.colour;
+      this.state.players.set(id, ps);
+    }
+    if (ps) {
+      ps.name = player.name;
+      ps.connected = true;
+    }
+    this.greetings.set(client.sessionId, { reconnected: !!returning, token: auth.token });
+    console.log(`[room ${this.roomId}] ${player.name} (${id}) joined via ${auth.via}${returning ? ', back to their seat' : ''}`);
   }
 
   onDrop(client: Client): void {
-    this.world.setConnected(client.sessionId, false);
-    const ps = this.state.players.get(client.sessionId);
+    const id = this.idOf(client);
+    // A connection that was taken over gets no grace: its player is already elsewhere.
+    if (!id) return;
+    this.world.setConnected(id, false);
+    const ps = this.state.players.get(id);
     if (ps) ps.connected = false;
-    this.allowReconnection(client, NET.reconnectGrace);
+    const deferred = this.allowReconnection(client, NET.reconnectGrace);
+    this.waiting.set(client.sessionId, deferred);
+    deferred.catch(() => undefined);
   }
 
   onReconnect(client: Client): void {
-    this.world.setConnected(client.sessionId, true);
-    const ps = this.state.players.get(client.sessionId);
+    this.waiting.delete(client.sessionId);
+    const id = this.idOf(client);
+    if (!id) {
+      client.leave(CLOSE_TAKEN_OVER, 'Opened in another tab');
+      return;
+    }
+    this.world.setConnected(id, true);
+    const ps = this.state.players.get(id);
     if (ps) ps.connected = true;
-    client.send('welcome', { id: client.sessionId, tick: NET.tickRate, reconnected: true });
+    // The SDK's own reconnection keeps the client's listeners: it can be welcomed at once.
+    this.greetings.set(client.sessionId, { reconnected: true, token: null });
+    this.welcome(client);
+  }
+
+  /** Tells a client who it is (and hands over a newly issued device token, once). */
+  private welcome(client: Client): void {
+    const id = this.idOf(client);
+    if (!id) return;
+    const greeting = this.greetings.get(client.sessionId);
+    this.greetings.delete(client.sessionId);
+    const welcome: WelcomeDTO = { id, name: this.accounts.get(id)?.name ?? '', tick: NET.tickRate, reconnected: greeting?.reconnected ?? true };
+    if (greeting?.token) welcome.token = greeting.token;
+    client.send('welcome', welcome);
     this.sendPrivate(client, true);
   }
 
   onLeave(client: Client): void {
-    this.world.remove(client.sessionId);
-    this.state.players.delete(client.sessionId);
-    this.state.planes.delete(client.sessionId);
-    this.pings.delete(client.sessionId);
+    this.waiting.delete(client.sessionId);
+    this.greetings.delete(client.sessionId);
+    const id = this.idOf(client);
+    this.sessions.delete(client.sessionId);
+    // A stale connection (taken over) leaving changes nothing.
+    if (!id) return;
+    this.current.delete(id);
+    if (WorldRoom.presence.get(id) === this) WorldRoom.presence.delete(id);
+    this.removePlayer(id);
+  }
+
+  onDispose(): void {
+    for (const [id, room] of WorldRoom.presence) if (room === this) WorldRoom.presence.delete(id);
+  }
+
+  /** The player a connection speaks for, if it is still their current connection. */
+  idOf(client: Pick<Client, 'sessionId'>): string | null {
+    const id = this.sessions.get(client.sessionId);
+    return id !== undefined && this.current.get(id) === client.sessionId ? id : null;
+  }
+
+  /** The connection a player is on right now (null while they are away). */
+  clientOf(id: string): Client | null {
+    const sid = this.current.get(id);
+    return sid ? (this.clients.getById(sid) ?? null) : null;
+  }
+
+  /**
+   * A newer connection of player `id` replaces their current one here: the old connection is
+   * closed (or its wait for a reconnection cancelled). `moved`: they went to another room, so
+   * they leave this one entirely.
+   */
+  takeOver(id: string, moved: boolean): void {
+    const sid = this.current.get(id);
+    if (sid === undefined) return;
+    this.current.delete(id);
+    const waiting = this.waiting.get(sid);
+    if (waiting) {
+      this.waiting.delete(sid);
+      waiting.reject(new Error('taken over'));
+    } else {
+      this.clients.getById(sid)?.leave(CLOSE_TAKEN_OVER, moved ? 'You joined another classroom' : 'Opened in another tab');
+    }
+    if (moved) {
+      if (WorldRoom.presence.get(id) === this) WorldRoom.presence.delete(id);
+      this.removePlayer(id);
+    }
+  }
+
+  private removePlayer(id: string): void {
+    this.world.remove(id);
+    this.state.players.delete(id);
+    this.state.planes.delete(id);
+    this.pings.delete(id);
+    this.accounts.delete(id);
+    this.transferAt.delete(id);
     void this.refreshMetadata();
+  }
+
+  /** A one-time code for moving this player to another computer (the pause menu). */
+  private async sendTransferCode(client: Client): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    if (!id || !account) return;
+    const now = performance.now() / 1000;
+    if (now - (this.transferAt.get(id) ?? -Infinity) < TRANSFER_COOLDOWN) return;
+    this.transferAt.set(id, now);
+    try {
+      const { code, expiresAt } = await services().identity.transferCode(account.id, 'player');
+      const dto: TransferDTO = { code, expires: Math.round((expiresAt.getTime() - Date.now()) / 1000) };
+      client.send('transfer', dto);
+    } catch (error) {
+      console.error(`[room ${this.roomId}] transfer code for ${id} failed: ${(error as Error).message}`);
+      client.send('transfer', { code: '', expires: 0 } satisfies TransferDTO);
+    }
   }
 
   /** Real time passed: as many fixed steps as it holds. */
@@ -136,8 +308,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (this.pingTimer <= 0) {
       this.pingTimer = NET.pingInterval;
       for (const client of this.clients) {
+        const id = this.idOf(client);
+        if (!id) continue;
         const n = performance.now();
-        this.pings.set(client.sessionId, n);
+        this.pings.set(id, n);
         client.send('ping', { n });
       }
     }
@@ -148,7 +322,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.syncState();
     const events = this.world.drainEvents();
     for (const client of this.clients) {
-      const id = client.sessionId;
+      const id = this.idOf(client);
+      if (!id) continue;
       const own = this.world.ownFor(id);
       if (own) client.send('own', own);
       this.sendPrivate(client, false);
@@ -163,7 +338,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   }
 
   private sendPrivate(client: Client, full: boolean): void {
-    const me = this.world.privateFor(client.sessionId, full);
+    const id = this.idOf(client);
+    const me = id ? this.world.privateFor(id, full) : null;
     if (me) client.send('me', me);
   }
 

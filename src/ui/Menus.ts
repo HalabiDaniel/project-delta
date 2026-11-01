@@ -75,7 +75,8 @@ export class Menus {
         </div>
         <div data-u="session"></div>
         <div class="controls">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
-        <div class="menu-foot"><span class="save-note" data-u="save"></span><button class="btn ghost danger small" data-u="reset"></button></div>
+        <div class="menu-transfer" data-u="transfer" hidden></div>
+        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost danger small" data-u="reset"></button></div>
       </div>`;
     root.appendChild(this.overlay);
     this.welcome = document.createElement('div');
@@ -94,6 +95,7 @@ export class Menus {
     bindButton(this.el.logbook, actions.openLogbook);
     bindButton(this.el.sound, actions.toggleSound);
     bindButton(this.el.reset, actions.resetProgress);
+    if (this.el.move) bindButton(this.el.move, () => actions.moveDevice?.());
     bindButton(this.el['wc-go'], actions.dismissWelcome);
     this.welcome.addEventListener('click', () => actions.dismissWelcome());
     this.overlay.addEventListener('click', (e) => e.target === this.overlay && actions.resume());
@@ -131,6 +133,15 @@ export class Menus {
       this.el.reset.classList.toggle('confirm', v.menu.confirmingReset);
       this.el.reset.title = MULTIPLAYER ? 'Leave this classroom for good: your desk is freed' : 'Delete all progress (asks twice)';
       text(this.el.save, v.menu.saveNote);
+      const t = v.menu.transfer ?? null;
+      const tKey = t ? `${t.code}/${t.minutes}` : '';
+      if (this.el.transfer.dataset.key !== tKey) {
+        this.el.transfer.dataset.key = tKey;
+        this.el.transfer.innerHTML = t
+          ? `${icon('swap')}<span>On the other computer, open the multiplayer menu and enter</span><b class="transfer-code">${esc(t.code)}</b><small>Works once, for ${t.minutes} min</small>`
+          : '';
+      }
+      toggle(this.el.transfer, t !== null);
     }
     const w = v.welcome;
     toggle(this.welcome, w !== null);

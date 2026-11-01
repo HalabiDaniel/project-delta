@@ -253,6 +253,8 @@ export interface MenuView {
   session: SessionView;
   settings: SettingsView;
   saveNote: string;
+  /** Multiplayer: the transfer code to type on another computer, while it is valid. */
+  transfer?: { code: string; minutes: number } | null;
   confirmingReset: boolean;
 }
 
@@ -438,6 +440,8 @@ export interface HudActions {
   openLogbook(): void;
   openMenu(): void;
   resetProgress(): void;
+  /** Multiplayer: ask for a code that moves this player to another computer. */
+  moveDevice?(): void;
   dismissWelcome(): void;
   toggleSound(): void;
   setHints(mode: HintMode): void;

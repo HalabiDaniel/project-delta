@@ -8,6 +8,8 @@ export interface LobbyActions {
   join(name: string, roomId: string): void;
   refresh(): void;
   claim(territoryId: string): void;
+  /** An invite code (first join) or a transfer code (from another computer), for the next join. */
+  setCode(code: string | null): void;
   leave(): void;
   singlePlayer(): void;
 }
@@ -45,6 +47,7 @@ export class Lobby {
   private readonly status: HTMLElement;
   private readonly nameInput: HTMLInputElement;
   private readonly titleInput: HTMLInputElement;
+  private readonly codeInput: HTMLInputElement;
   private screen: 'rooms' | 'claim' | 'hidden' = 'rooms';
   private lastClaimKey = '';
 
@@ -55,6 +58,7 @@ export class Lobby {
       <div class="mp-card card" data-u="rooms">
         <div class="mp-head"><b class="brand">paperwars<span>.io</span></b><h2>Multiplayer</h2></div>
         <label class="mp-field"><span>${icon('pencil')}Your name</span><input data-u="name" maxlength="${NET.nameMax}" autocomplete="nickname" spellcheck="false" /></label>
+        <label class="mp-field" title="Only needed the first time on this computer: the invite you were sent, or a transfer code from your other computer"><span>${icon('swap')}Code</span><input data-u="code" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Invite or transfer code (first time only)" /></label>
         <div class="mp-row">
           <button class="btn primary" data-u="quick">${icon('plane')}<span>Quick join</span></button>
           <span class="mp-or">or</span>
@@ -74,6 +78,10 @@ export class Lobby {
     this.titleInput = el('title') as HTMLInputElement;
     this.nameInput.value = loadName();
     this.nameInput.addEventListener('change', () => saveName(this.name));
+    const codeInput = el('code') as HTMLInputElement;
+    codeInput.value = new URLSearchParams(window.location.search).get('invite') ?? '';
+    codeInput.addEventListener('input', () => this.actions.setCode(codeInput.value.trim() || null));
+    this.codeInput = codeInput;
     el('quick').addEventListener('click', () => this.actions.quick(this.name));
     el('create').addEventListener('click', () => this.actions.create(this.name, this.titleInput.value.trim() || `${this.name}'s classroom`));
     el('refresh').addEventListener('click', () => this.actions.refresh());
@@ -88,6 +96,11 @@ export class Lobby {
 
   get open(): boolean {
     return this.screen !== 'hidden';
+  }
+
+  /** Empties the code field once a join has used it. */
+  clearCode(): void {
+    this.codeInput.value = '';
   }
 
   showRooms(rooms: RoomListing[] | null, note: string | null, tone: 'info' | 'bad' = 'info'): void {
