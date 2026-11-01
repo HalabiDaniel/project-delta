@@ -235,3 +235,7 @@
 }
 .mp-terr small { color: var(--ink-3); }
 .mp-terr.alert { box-shadow: 0 0 0 2px var(--hostile), var(--shadow); }
+
+/* v0.0.11: the home dashboard sits under the connection line, and the kill feed under the dashboard. */
+.hud .dashboard { margin-top: 30px; }
+.mp-feed { top: max(330px, 46%); }

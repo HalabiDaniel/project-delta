@@ -119,6 +119,9 @@ export class Menus {
         <button class="btn primary" data-u="wc-go">${icon('home')}<span>${SAY.continue}</span><kbd>Enter</kbd></button>
       </div>`;
     root.appendChild(this.welcome);
+    // Hidden until the first render says otherwise (multiplayer doesn't render the HUD before a desk is claimed).
+    this.overlay.hidden = true;
+    this.welcome.hidden = true;
     for (const r of [this.overlay, this.welcome]) for (const n of r.querySelectorAll<HTMLElement>('[data-u]')) this.el[n.dataset.u!] = n;
     bindButton(this.el.resume, actions.resume);
     bindButton(this.el.logbook, actions.openLogbook);
