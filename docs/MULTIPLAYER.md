@@ -308,7 +308,7 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 
 ## Known limitations
 
-- **Single server process, in memory.** No persistence, accounts or campaign lifecycle (persistence in v0.0.10, accounts and the campaign lifecycle in v0.0.19).
+- **Single server process, in memory.** No persistence, accounts or campaign lifecycle (persistence in v0.0.10, accounts and the campaign lifecycle in v0.0.22).
   A server restart ends every session.
 - **Three-by-three classroom**: eight claimable desks. With eight players only the centre is left
   to the AI; more territory slots are future work (GDD §3.1 suggests 12–16).

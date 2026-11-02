@@ -234,22 +234,22 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Aircraft | Inspiration | Role | Arrives in |
 |---|---|---|---|
 | Swift | F-16 | Basic fighter; the starter and free emergency plane | 0.0.3 (remodelled in 0.0.11) |
-| Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.15) |
+| Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.18) |
 | Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
 | Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
-| Raptor | F-22 | Air superiority | 0.0.12 |
-| Lancer | B-1B Lancer | Supersonic bomber | 0.0.13 |
-| Lightning | F-35 | Stealth multirole | 0.0.15 |
-| Thug | A-10 Thunderbolt II | Ground attack | 0.0.15 |
-| Ghost | B-2 Spirit | Stealth bomber | 0.0.16 |
-| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.16 |
-| Jumper | AV-8B Harrier | VTOL fighter | 0.0.17 |
-| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.17 |
-| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.18 |
+| Raptor | F-22 | Air superiority | 0.0.15 |
+| Lancer | B-1B Lancer | Supersonic bomber | 0.0.16 |
+| Lightning | F-35 | Stealth multirole | 0.0.18 |
+| Thug | A-10 Thunderbolt II | Ground attack | 0.0.18 |
+| Ghost | B-2 Spirit | Stealth bomber | 0.0.19 |
+| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.19 |
+| Jumper | AV-8B Harrier | VTOL fighter | 0.0.20 |
+| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.20 |
+| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.21 |
 
-New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.15), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.17), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
+New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.18), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.20), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
 
-Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.19).
+Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.22).
 
 ### 5.4 Aircraft Costs
 
@@ -915,57 +915,73 @@ Built in reviewable phases with developer checkpoints: (1) visual vertical slice
 
 Up to eight players share a classroom on an authoritative Node + Colyseus server: they join an ongoing session, claim one of eight territories as their base (the centre stays the AI's), and fly together. The server runs single-player's rule classes for every player (economy, base, mission board, sortie) and decides every position, hit, kill, balance and reward; clients send input frames and commands, predict their own plane and interpolate everyone else's. Player-versus-player combat with kill and assist credit and bounties that can't be farmed; raid missions against eligible player bases with capped losses above the protected reserve, new-player protection, shields, cooldowns and decaying rewards; defenders warned, given an interception card and backed by their guns; rival missions (raid, scout, shoot down, intercept) alongside each player's own board; names, tags, a scoreboard, a kill feed and emotes (no chat); reconnection with a grace period. Sessions live in memory. Built in eight reviewable phases with bots and a load test; see [MULTIPLAYER.md](MULTIPLAYER.md).
 
-### Versions 0.0.10 to 0.0.20: towards the first public release
+### Versions 0.0.10 to 0.0.24: towards the first public release
 
-Each version has a detailed plan in [docs/roadmap/](roadmap/README.md). Version 0.0.9's multiplayer becomes a persistent private alpha first, so two real players test every version that follows.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows.
 
-### Version 0.0.10: Persistent Multiplayer and Private Alpha
+### Version 0.0.10: Player Identity and the Database (closed after phase 3)
 
-Lightweight secure player identity, PostgreSQL persistence for territories, buildings, resources, aircraft and progression, duplicate-proof server-authoritative transactions, defined rules for interrupted sorties, one persistent world that survives everyone leaving and a server restart, offline protection, a hardened server, and an externally reachable invite-only deployment (HTTPS, secure WebSockets) for the developer and one friend, with a feedback log and deployment and restore docs. See [v0.0.10](roadmap/v0.0.10.md).
+Secure player identity (server-issued device tokens stored only hashed, invite and transfer codes, one connection per player) and PostgreSQL with versioned migrations, the full schema and an idempotent transaction ledger. Its later phases were rewritten for the new design and moved to 0.0.12 to 0.0.14. See [v0.0.10](roadmap/v0.0.10.md).
 
 ### Version 0.0.11: Art Integration and Controller Support
 
-Synty environment models adapted to the sketchbook look, the four existing aircraft remodelled and re-roled for the new roster (Swift as the F-16-inspired starter fighter, Falcon, Dart as high-speed reconnaissance, Widewing), custom buildings with construction, damage and repair states, all nine territories completed (the remaining v0.0.8 phases), browser delivery and performance work, and full gamepad support through one input-action layer shared with keyboard and mouse. See [v0.0.11](roadmap/v0.0.11.md).
+The 16-desk classroom, eleven aircraft with the developer's own models, custom buildings with levels and damage states, every desk themed, controller support through one input-action layer, a tutorial and home dashboard, and performance work. See [v0.0.11](roadmap/v0.0.11.md).
 
-### Version 0.0.12: HUD and UI Revamp
+### Version 0.0.12: Persistent, Portable Bases
 
-A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. New aircraft: Raptor (air superiority). See [v0.0.12](roadmap/v0.0.12.md).
+A base belongs to the player and travels with them: buildings, levels, damage, hangar, planes and paper saved and placed on any desk. Every paper change through the ledger, production only while online, dearer planes and slower paper, saved missions and progress, fairness timers that survive restarts, usernames and "{username}'s desk". See [v0.0.12](roadmap/v0.0.12.md).
 
-### Version 0.0.13: Audio and Music Revamp
+### Version 0.0.13: Sessions
 
-Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. New aircraft: Lancer (supersonic bomber). See [v0.0.13](roadmap/v0.0.13.md).
+Timed sessions of up to 16 players (32 from 0.0.20), several at once; a random free desk on every join; the territory lifecycle (draining, empty, open, AI-held, with players replacing AI desks at once); raids that finish normally if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and structured logs. See [v0.0.13](roadmap/v0.0.13.md).
 
-### Version 0.0.14: Menus, Settings and Branding
+### Version 0.0.14: Going Live
 
-Logo and branding, main menu, lobby, full settings with rebinding, loading screens, transitions, a first-launch flow and clear error screens. See [v0.0.14](roadmap/v0.0.14.md).
+The whole multiplayer system on the internet (the game on Vercel, the server and database on Railway), invite-only access, a minimal admin endpoint, daily backups with a tested restore, logs and an uptime check, the F8 feedback log, tests at scale, the first online playtest, and a step-by-step setup guide for the developer. See [v0.0.14](roadmap/v0.0.14.md).
 
-### Version 0.0.15: Economy and Content Depth
+### Version 0.0.15: HUD and UI Revamp
 
-Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, multiplayer world events, server-side medals and achievements, and an economy simulator. New aircraft: Lightning (stealth multirole, with the radar signature and stealth system) and Thug (ground attack). See [v0.0.15](roadmap/v0.0.15.md).
+A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. Pencil outlines removed from the 3D world. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
 
-### Version 0.0.16: Advanced Multiplayer
+### Version 0.0.16: Audio and Music Revamp
 
-AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers between players, deeper raids, reputation, social features with mute and report (§12), and anti-farming rules. New aircraft: Ghost (stealth bomber) and Specter (surveillance drone). See [v0.0.16](roadmap/v0.0.16.md).
+Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. Lancer finalised. See [v0.0.16](roadmap/v0.0.16.md).
 
-### Version 0.0.17: World Scale and Environments
+### Version 0.0.17: Menus, Settings and Branding
 
-12 to 16 territories per world, new environments (bedroom, library, art room), interest-based network updates (§16.4), regional servers and level of detail. New aircraft: Jumper (VTOL fighter, with a hover flight mode) and Wasp (light attack helicopter). See [v0.0.17](roadmap/v0.0.17.md).
+Logo and branding, main menu, the session lobby, full settings with rebinding, loading screens, transitions, a first-launch flow and clear error screens. See [v0.0.17](roadmap/v0.0.17.md).
 
-### Version 0.0.18: Customization and Social
+### Version 0.0.18: Economy and Content Depth
 
-Cosmetic-only aircraft and territory customization (§5.6), earned cosmetics, an inventory, friends and small alliances. New aircraft: Hawk (heavy attack helicopter). See [v0.0.18](roadmap/v0.0.18.md).
+Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, world events in sessions, server-side medals, records, achievements and the logbook, the radar signature and stealth system, and an economy simulator. Lightning and Thug finalised. See [v0.0.18](roadmap/v0.0.18.md).
 
-### Version 0.0.19: Public Readiness
+### Version 0.0.19: Advanced Multiplayer
 
-Public accounts, matchmaking, the campaign lifecycle and resets (§3.3), inactivity rules (§3.4), moderation and abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.19](roadmap/v0.0.19.md).
+AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.19](roadmap/v0.0.19.md).
 
-### Version 0.0.20: Release Candidate
+### Version 0.0.20: World Scale and Environments
 
-LiveOps tools, cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests, a browser matrix, support channels and a feature freeze. See [v0.0.20](roadmap/v0.0.20.md).
+Sessions of up to 32 players on larger layouts, new environments (bedroom, library, art room), interest-based network updates (§16.4), regional servers, level of detail and a hover flight mode, with the Jumper's hover and the Wasp and Hawk helicopters completing the thirteen aircraft. See [v0.0.20](roadmap/v0.0.20.md).
+
+### Version 0.0.21: Customization and Social
+
+Cosmetic-only aircraft and desk customization (§5.6), earned cosmetics, an inventory, friends and optional persistent squads. See [v0.0.21](roadmap/v0.0.21.md).
+
+### Version 0.0.22: Public Readiness
+
+Accounts alongside guests, matchmaking across servers and regions, sessions at scale (timed sessions and portable bases replace the seven-day campaigns of §3.3), moderation as server APIs, abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.22](roadmap/v0.0.22.md).
+
+### Version 0.0.23: Admin Dashboard
+
+A secure admin web app with roles, two-factor sign-in and an audit log: live sessions and server health, player support with paper history, the moderation queue, feedback, the economy, LiveOps (events, news, patch notes, maintenance) and backups. See [v0.0.23](roadmap/v0.0.23.md).
+
+### Version 0.0.24: Release Candidate
+
+Cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests (and possibly a tutorial mode), a browser matrix, support channels and a feature freeze. See [v0.0.24](roadmap/v0.0.24.md).
 
 ### Version 0.1.0: First Public Release (Public Alpha)
 
-After 0.0.20, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
+After 0.0.24, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
 
 Version numbering from here: 0.1.x are small improvements, 0.x.0 are major versions, and 1.0.0 is the first full version. Cosmetic monetization (§14) is enabled in a later major version, only after the core gameplay and retention have been validated.
 
