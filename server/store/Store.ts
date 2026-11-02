@@ -127,6 +127,10 @@ export interface Store {
   setRevoked(playerId: string, revoked: boolean): Promise<boolean>;
   /** Revokes every device token of the player (a stolen or lost device); the player stays. */
   revokeTokens(playerId: string): Promise<number>;
+  /** The player's tutorial progress as last saved (a TutorialRecord), or null if never saved. */
+  tutorial(playerId: string): Promise<unknown>;
+  /** Saves the player's tutorial progress (already validated by the caller). */
+  setTutorial(playerId: string, record: Record<string, unknown>): Promise<void>;
 
   // ---- Transfer codes (moving to another computer, or a reissued token) -------------------------
 

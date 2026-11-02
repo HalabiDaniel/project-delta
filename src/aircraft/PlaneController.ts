@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import type { Collider } from '../combat/Collision';
-import { AIRCRAFT, BOMB, PALETTE, PLANE, type AircraftId, type AircraftSpec, type FlightProfile } from '../config';
+import { AIRCRAFT, BOMB, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type FlightProfile } from '../config';
 import type { Territory } from '../world/Territory';
 import type { Boost } from './Boost';
 import { FlightModel, type AircraftStatus, type FlightControls, type FlightResult } from './FlightModel';
@@ -40,7 +40,7 @@ export class PlaneController {
   private readonly qPitch = new pc.Quat();
   private readonly qRoll = new pc.Quat();
 
-  constructor(app: pc.AppBase, initial: AircraftId = 'falcon', models: ModelStore | null = null) {
+  constructor(app: pc.AppBase, initial: AircraftId = STARTER_AIRCRAFT, models: ModelStore | null = null) {
     this.root = new pc.Entity('plane');
     const blots = inkBlotMaterial();
     const ballMaterial = createPaperMaterial(new pc.Color(...PALETTE.paperBall));

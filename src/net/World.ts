@@ -2,6 +2,8 @@ import { PVP, THREAT, WORLD, type PlayerSide } from '../config';
 import { layoutDefenses, type DefenseLayout } from '../defenses/Layout';
 import { generateTerritories } from '../world/Grid';
 import type { Territory } from '../world/Territory';
+import type { Collider } from '../combat/Collision';
+import { allDecorColliders, decorFootprints } from '../world/territories/decor';
 
 /**
  * The shared classroom: the same 4 × 4 desks as single-player but with no home of its own,
@@ -15,12 +17,17 @@ export interface SharedWorld {
   layout: DefenseLayout;
   /** Territories players may claim: all but the centre. */
   claimable: string[];
+  /** Every desk's landmark and tall props, solid for everyone (the same shapes as single-player's). */
+  decor: Collider[];
+  /** The ground they stand on, for missions' precision spots. */
+  decorGround: Array<{ x: number; z: number; r: number }>;
 }
 
 export function sharedWorld(): SharedWorld {
   const territories = generateTerritories(WORLD.gridSize, WORLD.territorySize, WORLD.gap, THREAT.map, null);
-  const layout = layoutDefenses(territories, []);
-  return { territories, layout, claimable: territories.filter((t) => t.id !== PVP.centre).map((t) => t.id) };
+  const decorGround = decorFootprints(territories);
+  const layout = layoutDefenses(territories, decorGround);
+  return { territories, layout, claimable: territories.filter((t) => t.id !== PVP.centre).map((t) => t.id), decor: allDecorColliders(territories), decorGround };
 }
 
 /** A player's side: their plane, their base, their friendly AI. */

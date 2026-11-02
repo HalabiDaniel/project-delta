@@ -121,3 +121,54 @@ export function browserStorage(): Storage | null {
 function nearest(value: number, options: readonly number[]): number {
   return options.reduce((best, o) => (Math.abs(o - value) < Math.abs(best - value) ? o : best), options[0]);
 }
+
+// ---- Budgets (v0.0.11) ------------------------------------------------------------------------
+
+/**
+ * What a frame may cost on each preset, measured on the test computers in the desk view and in
+ * flight: draw calls (shadow passes included, as the engine counts them), triangles drawn, pencil
+ * strokes (edge quads) and texture memory. `?perf` shows the frame against its preset's budget,
+ * and `paperwars.assets.report()` / `paperwars.budget()` report it.
+ */
+export interface PerfBudget {
+  drawCalls: number;
+  triangles: number;
+  strokes: number;
+  textureMb: number;
+  /** Initial load on a typical home connection (seconds), for the record. */
+  loadSeconds: number;
+}
+
+export const BUDGETS: Record<GraphicsPreset, PerfBudget> = {
+  low: { drawCalls: 350, triangles: 250_000, strokes: 0, textureMb: 96, loadSeconds: 10 },
+  medium: { drawCalls: 550, triangles: 450_000, strokes: 40_000, textureMb: 160, loadSeconds: 10 },
+  high: { drawCalls: 800, triangles: 700_000, strokes: 80_000, textureMb: 256, loadSeconds: 10 },
+};
+
+/**
+ * Small repeated parts (aerials, crates' tape, door handles) further than this from the camera
+ * are not drawn: the level of detail that matters at this scale (metres; Infinity keeps all).
+ */
+export const DETAIL_DISTANCE: Record<GraphicsPreset, number> = { low: 160, medium: 260, high: Infinity };
+
+export interface BudgetCheck {
+  preset: GraphicsPreset;
+  budget: PerfBudget;
+  ok: boolean;
+  /** The measures over budget, e.g. `drawCalls 912/800`. */
+  over: string[];
+}
+
+/** Compares a measurement with its preset's budget. Missing measures are not judged. */
+export function checkBudget(
+  preset: GraphicsPreset,
+  measured: Partial<Pick<PerfBudget, 'drawCalls' | 'triangles' | 'strokes' | 'textureMb' | 'loadSeconds'>>,
+): BudgetCheck {
+  const budget = BUDGETS[preset];
+  const over: string[] = [];
+  for (const k of Object.keys(budget) as Array<keyof PerfBudget>) {
+    const v = measured[k];
+    if (typeof v === 'number' && Number.isFinite(v) && v > budget[k]) over.push(`${k} ${Math.round(v * 10) / 10}/${budget[k]}`);
+  }
+  return { preset, budget, ok: over.length === 0, over };
+}

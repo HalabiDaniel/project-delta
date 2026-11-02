@@ -45,6 +45,7 @@ export class MemoryStore implements Store {
   private readonly balances = new Map<string, number>();
   private readonly log: TransactionRecord[] = [];
   private readonly keys = new Set<string>();
+  private readonly tutorials = new Map<string, Record<string, unknown>>();
   /** Tests can make the store "newer" than the code to check refusals. */
   worldFormatOverride: number | null = null;
 
@@ -99,6 +100,15 @@ export class MemoryStore implements Store {
   async rename(playerId: string, name: string): Promise<void> {
     const p = this.players.get(playerId);
     if (p) p.name = name;
+  }
+
+  async tutorial(playerId: string): Promise<unknown> {
+    const t = this.tutorials.get(playerId);
+    return t ? { ...t } : null;
+  }
+
+  async setTutorial(playerId: string, record: Record<string, unknown>): Promise<void> {
+    if (this.players.has(playerId)) this.tutorials.set(playerId, { ...record });
   }
 
   async touch(playerId: string): Promise<void> {

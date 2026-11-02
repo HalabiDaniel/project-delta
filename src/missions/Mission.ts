@@ -322,9 +322,10 @@ export class Mission {
   /**
    * Advances the flying objectives for one step of flight from `prev` to `pos`: time spent in a
    * recon airspace, reaching a delivery airspace, flying through the next ring. Returns the
-   * indices of objectives completed by this step.
+   * indices of objectives completed by this step. `reconRate` speeds up reconnaissance dwell
+   * time (the Dart's recon bonus).
    */
-  updateFlight(prev: Point3, pos: Point3, dt: number): number[] {
+  updateFlight(prev: Point3, pos: Point3, dt: number, reconRate = 1): number[] {
     const completed: number[] = [];
     if (!this.isActive) return completed;
     this.objectives.forEach((objective, i) => {
@@ -334,7 +335,8 @@ export class Mission {
         case 'survive':
         case 'patrol':
           if (insideAirspace(objective.airspace, pos)) {
-            this.progress[i] = Math.min(1, this.progress[i] + dt / objective.duration);
+            const rate = objective.kind === 'recon' ? reconRate : 1;
+            this.progress[i] = Math.min(1, this.progress[i] + (dt * rate) / objective.duration);
           }
           break;
         case 'reach':

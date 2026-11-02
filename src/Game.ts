@@ -21,6 +21,7 @@ import { Projectiles, type ShotImpact } from './combat/Projectiles';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent } from './combat/Ordnance';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from './defenses/Installation';
 import { layoutDefenses, overHome, slotPoint, type DefenseLayout, type InstallationKind } from './defenses/Layout';
+import { decorFootprints } from './world/territories/decor';
 import { MissionDirector, SLOT_LABELS, type Situation } from './director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards, type Payout } from './director/Operations';
 import { skillBand } from './director/Performance';
@@ -29,19 +30,24 @@ import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
-import { GameState, type BuildKind, type CrashCause } from './systems/GameState';
-import { Input, MOUSE_LEFT, MOUSE_RIGHT } from './systems/Input';
+import { foldPose, GameState, type BuildKind, type CrashCause } from './systems/GameState';
+import { Input, MOUSE_LEFT } from './systems/Input';
+import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
 import { LocalStats } from './systems/LocalStats';
 import { ResourceManager } from './systems/ResourceManager';
 import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
+import { STEER_SECONDS, Tutorial, tutorialEventFor } from './progress/Tutorial';
+import { dashboardView } from './ui/dashboardView';
+import { failureText, nextStepText, paperBreakdown } from './ui/reportText';
 import { PerfMonitor, type PerfSnapshot } from './ui/PerfOverlay';
 import { Logbook, type LogbookView } from './ui/Logbook';
 import type { GarageView } from './ui/Garage';
 import {
   HUD,
   type AlertTone,
+  type DashboardView,
   type MissionCardView,
   type SessionView,
   type AircraftStatusView,
@@ -76,6 +82,7 @@ import { buildWorld, type World } from './world/WorldGenerator';
 import { installOutlines, type OutlineRenderer } from './render/outline/OutlineRenderer';
 import {
   browserStorage,
+  DETAIL_DISTANCE,
   loadGraphics,
   matchesPreset,
   outlineChoice,
@@ -84,9 +91,12 @@ import {
   withIntensity,
   withOutlines,
   withPreset,
+  type BudgetCheck,
   type GraphicsSettings,
 } from './render/GraphicsSettings';
 import { setShadowQuality } from './render/lighting';
+import { instanceScenery, type Instancer } from './render/Instancer';
+import { LoadingScreen } from './ui/LoadingScreen';
 import { AssetLibrary } from './assets/AssetLibrary';
 import { TextureBank } from './render/shading/textures';
 import { PaperShading } from './render/shading/PaperShading';
@@ -112,7 +122,8 @@ const AIRCRAFT_EDGE_RANGE = 140;
 const HEARING = 120;
 /** The mini-map shows enemy aircraft this close to the plane, even beyond T1's radar. */
 const SIGHT_RANGE = 120;
-const KEY_TO_CARD: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
+const PICK_TO_CARD: Partial<Record<Action, number>> = { pick1: 0, pick2: 1, pick3: 2, pick4: 3 };
+const PICK_TO_SLOT: Partial<Record<Action, number>> = { pick0: 0, pick1: 1, pick2: 2, pick3: 3, pick4: 4, pick5: 5, pick6: 6, pick7: 7 };
 /** The report on the last sortie's medal, records and bonuses, kept until the next sortie. */
 interface SortieOutcome {
   progress: SortieProgress;
@@ -185,6 +196,16 @@ export class Game {
   /** Licensed and own models in use, e.g. `paperwars.assets.report()` in the console. */
   assets: AssetLibrary | null = null;
   private perfMonitor: PerfMonitor | null = null;
+  /** The interactive tutorial (first visit), saved with the game. */
+  tutorial = new Tutorial();
+  /** Seconds flown with the controls in hand, for the tutorial's "fly" step. */
+  private steerTime = 0;
+  /** The plane lost last sortie, for the dashboard's quick rebuild (null once something else flies). */
+  private lostPlane: AircraftId | null = null;
+  /** Rearm and go: take off as soon as the ground crew is done. */
+  private rearmThenGo = false;
+  /** Repeated scenery drawn instanced (v0.0.11). */
+  instancer: Instancer | null = null;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -224,6 +245,16 @@ export class Game {
     this.logbook = new Logbook(hud.root, () => this.logbookView(), () => this.toggleLogbook(false));
     this.dev = new DevPanel(hud.root, this);
     this.baseMode = new BaseMode(base);
+    this.controls = new Controls(input);
+  }
+
+  /** Keyboard, mouse and controller as named actions (src/input/). */
+  readonly controls: Controls;
+
+  /** What the controller's buttons mean right now. */
+  private inputContext(): InputContext {
+    if (this.paused || this.logbook.open || this.welcome) return 'menu';
+    return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
   static async create(canvas: HTMLCanvasElement, hudRoot: HTMLElement): Promise<Game> {
@@ -250,13 +281,17 @@ export class Game {
     installMaterials(new MaterialLibrary(textures));
     const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
-    await assets.preload();
+    const loading = new LoadingScreen();
+    await assets.preload(undefined, (p) => loading.progress(p));
+    loading.done(assets.failures());
     const graphics = loadGraphics(browserStorage());
     const world = buildWorld(app, assets, graphics.detail);
     const targetSpecs = layoutTargetRange(world.territories);
     const range = new TargetRange(app, targetSpecs);
     const rangeFootprints = targetSpecs.flatMap((s) => s.shapes.map(footprint));
-    const layout = layoutDefenses(world.territories, rangeFootprints);
+    // Nothing is built into a landmark: the decoration's ground counts as taken.
+    const decorGround = decorFootprints(world.territories);
+    const layout = layoutDefenses(world.territories, [...rangeFootprints, ...decorGround]);
     const defenses = new DefenseNetwork(layout.installations);
     // The saved game, if there is one (IndexedDB, else local storage). A bad save never stops the game.
     const saves = new SaveManager(await openStore());
@@ -277,6 +312,7 @@ export class Game {
       dummies: targetSpecs.filter((s) => s.kind === 'dummy'),
       obstacles: [
         ...rangeFootprints,
+        ...decorGround,
         ...layout.installations.map((i) => ({ x: i.x, z: i.z, r: i.footprint })),
         ...layout.barriers.flatMap((b) => b.solids.map(footprint)),
       ],
@@ -359,6 +395,11 @@ export class Game {
       setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
       setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
+      skipTutorial: () => game?.tutorial.skip(),
+      restartTutorial: () => game?.tutorial.restart(),
+      quickRebuild: () => game?.quickRebuild(),
+      quickRepair: () => game?.quickRepair(),
+      rearmAndGo: () => game?.rearmAndGo(),
       base: {
         selectSlot: (id) => game?.baseAction('select', id),
         choose: (kind) => game?.baseAction('choose', kind),
@@ -417,11 +458,16 @@ export class Game {
       game.uiScale = saved.settings.uiScale;
       for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
+    game.tutorial = Tutorial.fromSave(saved?.tutorial ?? null, game.sortiesTotal > 0);
+    game.tutorial.onChange(() => game!.requestSave());
     game.hud.setScale(game.uiScale);
     game.outlines = outlines;
     game.assets = assets;
     game.setGraphics(graphics);
     game.perfMonitor = new PerfMonitor(app, () => outlines.stats(), new URLSearchParams(window.location.search).has('perf'));
+    game.perfMonitor.preset = () => game!.graphics.preset;
+    game.perfMonitor.instanced = () => game!.instancer?.stats ?? null;
+    assets.attachPerf(() => game!.perfMonitor?.budget() ?? null);
     if (new URLSearchParams(window.location.search).has('dev')) game.dev.toggle(true);
     // The session summary is kept for next time, and the game saved, whenever the page goes away.
     const leave = () => void game!.saveNow();
@@ -431,6 +477,9 @@ export class Game {
     game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
+    // After the game has moved everything: repeated scenery drawn instanced, then strokes and stats.
+    game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
+    game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
     app.on('update', () => {
       outlines.update();
       game!.perfMonitor?.frame();
@@ -465,7 +514,7 @@ export class Game {
     if (this.paused) return;
     const waiting = this.state.hangar.get(this.state.aircraft);
     this.refitFrom = waiting ? waiting.health / AIRCRAFT[this.state.aircraft].maxHealth : 1;
-    // With nothing affordable, F folds the free emergency Dart instead.
+    // With nothing affordable, F folds the free emergency Swift instead.
     const emergency = this.state.emergencyAvailable() && !this.state.resources.canAfford(this.state.buildCost);
     if (emergency) this.refitFrom = 1;
     if (!(emergency ? this.state.buildEmergency() : this.state.build())) return;
@@ -480,7 +529,7 @@ export class Game {
     this.plane.launch();
     this.boundary.reset();
     this.input.consumeMouse(); // ignore mouse travel from before take-off
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   dropBomb(): void {
@@ -516,7 +565,29 @@ export class Game {
     this.rolledToStop = false;
     this.boundary.reset();
     this.input.consumeMouse();
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
+  }
+
+  /** Landed at home: rearm, then take off as soon as the ground crew is done (at once if nothing is needed). */
+  rearmAndGo(): void {
+    if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
+    if (this.state.rearm() || this.state.rearmProgress !== null) this.rearmThenGo = true;
+    else this.takeOff();
+  }
+
+  /** At the desk: the plane lost last sortie, chosen again and folded in one go. */
+  quickRebuild(): void {
+    const id = this.lostPlane;
+    if (this.paused || !id || this.state.phase !== 'desk') return;
+    if (this.state.aircraft !== id) this.selectAircraft(id);
+    this.build();
+  }
+
+  /** At the desk: everything on the home desk repaired, without opening base management. */
+  quickRepair(): void {
+    if (this.paused || !this.atHome) return;
+    if (this.base.needsRepair.length === 0) return;
+    if (!this.base.repairAll()) this.alert('paper', 'Need paper', `−${Math.max(0, this.base.repairAllCost - this.resources.paper)}`, 'bad', 2);
   }
 
   /** After landing: the plane goes into the hangar and the report comes up. */
@@ -656,6 +727,11 @@ export class Game {
     return this.perfMonitor?.snapshot() ?? null;
   }
 
+  /** This frame against the graphics preset's budget (draw calls, triangles, strokes, textures). */
+  budget(): BudgetCheck | null {
+    return this.perfMonitor?.budget() ?? null;
+  }
+
   /** Applies and remembers graphics settings (outlines, shadows, decoration, resolution). */
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
@@ -663,7 +739,8 @@ export class Game {
     this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.world.sun, { enabled: shadows > 0, resolution: shadows });
-    this.world.homeDressing.setDetail(settings.detail);
+    for (const d of this.world.dressings.values()) d.setDetail(settings.detail);
+    if (this.instancer) this.instancer.detailDistance = DETAIL_DISTANCE[settings.preset];
     const device = this.app.graphicsDevice;
     const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
     if (device.maxPixelRatio !== ratio) {
@@ -673,7 +750,7 @@ export class Game {
   }
 
   private get showHints(): boolean {
-    if (this.input.isHeld('KeyH')) return true;
+    if (this.controls.held('hints')) return true;
     return this.hints === 'on' || (this.hints === 'auto' && this.sortiesTotal < BASE.hintSorties);
   }
 
@@ -692,6 +769,7 @@ export class Game {
     }
     if (open) {
       this.baseMode.enter();
+      this.tutorial.note('base-opened');
       this.dismissWelcome();
       this.input.exitPointerLock();
       this.tip('base', 'Click a slot, pick a building, build. Damage stays until you repair.', ['B']);
@@ -824,6 +902,7 @@ export class Game {
       settings: { muted: this.sounds.muted, dev: this.dev.open, hints: this.hints, uiScale: this.uiScale, tips: [...this.tipsSeen] },
       lastSession: this.progress.session.sorties > 0 ? this.progress.session : (this.welcome?.session ?? null),
       base: this.base.save(),
+      tutorial: this.tutorial.record(),
     };
   }
 
@@ -881,13 +960,16 @@ export class Game {
     if (!this.paused) return;
     this.paused = false;
     this.input.consumeMouse();
-    if (this.state.phase === 'flying') this.input.requestPointerLock();
+    if (this.state.phase === 'flying' && !this.controls.padFlying) this.input.requestPointerLock();
   }
 
   // ---- Frame loop -----------------------------------------------------------------------------
 
   private tick(rawDt: number): void {
     const dt = Math.min(rawDt, 0.05);
+    this.controls.context = this.inputContext();
+    this.controls.screen = `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.logbook.open}|${!!this.welcome}`;
+    this.controls.update(dt);
     const mouse = this.input.consumeMouse();
     if (!this.paused) this.simulate(dt, mouse);
     this.hud.render(this.view());
@@ -916,14 +998,25 @@ export class Game {
         }
         // Dragging on the canvas turns the preview.
         if (this.input.isButtonHeld(MOUSE_LEFT) && !this.input.pointerLocked && !this.baseMode.open) this.preview.drag(mouse.dx, mouse.dy);
+        else if (!this.baseMode.open) {
+          // The right stick turns the preview too.
+          const turn = this.controls.previewTurn();
+          if (turn.x !== 0 || turn.y !== 0) this.preview.drag(turn.x * 700 * dt, turn.y * 300 * dt);
+        }
         if (this.baseMode.open) camera.updateBase(dt, world.home, world.launchYaw);
         else camera.updateDesk(dt, world.launchPosition, world.launchYaw);
         break;
       case 'flying':
+        this.rearmThenGo = false;
         this.fly(dt, mouse);
         break;
       case 'landed':
       case 'debrief':
+        if (this.rearmThenGo && state.phase === 'landed' && state.rearmProgress === null && this.rolledToStop) {
+          this.rearmThenGo = false;
+          this.takeOff();
+          break;
+        }
         if (plane.rollout(dt, world.home) && !this.rolledToStop) {
           this.rolledToStop = true;
           this.input.exitPointerLock(); // free the cursor for the ground crew's buttons
@@ -971,7 +1064,7 @@ export class Game {
   }
 
   private fly(dt: number, mouse: { dx: number; dy: number }): void {
-    const { plane, world, input, state } = this;
+    const { plane, world, controls, state } = this;
     const before = this.boundary.state;
     const boundary = this.boundary.update(dt, plane.position.x, plane.position.z);
     // The warning panel covers the countdown and the autopilot; only the hand-back needs a banner.
@@ -981,14 +1074,17 @@ export class Game {
       boundary === 'autopilot'
         ? { yaw: yawFromDirection(world.home.x - p.x, world.home.z - p.z), pitch: clamp((AUTOPILOT_ALTITUDE - p.y) * 0.04, -0.35, 0.35) }
         : null;
+    // The left stick steers as mouse movement would, with a little help near enemy aircraft.
+    const stick = controls.stickMouse(plane.motion, PLANE, dt, plane.position, this.enemyAircraft());
+    this.camera.setLook(controls.look());
     const result = plane.fly(
       dt,
       {
-        mouseDX: mouse.dx,
-        mouseDY: mouse.dy,
-        throttle: input.axis('KeyS', 'KeyW'),
-        bank: input.axis('KeyD', 'KeyA'),
-        boost: input.isHeld('ShiftLeft') || input.isHeld('ShiftRight'),
+        mouseDX: mouse.dx + stick.dx,
+        mouseDY: mouse.dy + stick.dy,
+        throttle: controls.throttle(),
+        bank: controls.bank(),
+        boost: controls.held('boost'),
         autoLevel: !this.onApproach(),
         autopilot,
         gliding: state.outOfRange,
@@ -1002,8 +1098,12 @@ export class Game {
     }
     switch (result.outcome) {
       case 'flying':
+        if (this.tutorial.current === 'steer' && !autopilot) {
+          this.steerTime += dt;
+          if (this.steerTime >= STEER_SECONDS) this.tutorial.note('steered');
+        }
         state.updateFlight(plane.prevPosition, plane.position, dt);
-        if (input.isButtonHeld(MOUSE_LEFT) && !this.paused) this.fire();
+        if (controls.held('firePrimary') && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
       case 'touchdown':
@@ -1151,7 +1251,7 @@ export class Game {
 
   /** What anything flying can hit: props, standing installations and walls. */
   private solids(): Collider[] {
-    return [...this.range.solids, ...this.installationSolids(), ...this.barriers, ...this.world.homeDressing.colliders];
+    return [...this.range.solids, ...this.installationSolids(), ...this.barriers, ...this.world.decorColliders];
   }
 
   /** Enemy aircraft, for the player's ink: their spheres and this step's movement. */
@@ -1744,86 +1844,118 @@ export class Game {
 
   // ---- Wiring ---------------------------------------------------------------------------------
 
-  private bindEvents(): void {
-    const { input, hud, state } = this;
-
-    input.onKeyDown((code) => {
-      // Browsers only allow sound after a key press or click.
-      this.sounds.unlock();
-      if (this.welcome && code !== 'Backquote') {
-        this.dismissWelcome();
-        if (code === 'Enter' || code === 'NumpadEnter' || code === 'Escape') return;
-      }
-      if (code === 'KeyM') {
-        this.toggleSound();
-        return;
-      }
-      if (code === 'Backquote') {
+  /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
+  private onAction(action: Action, device: Device): void {
+    const { state } = this;
+    // Browsers only allow sound after a key press or click.
+    this.sounds.unlock();
+    if (this.welcome && action !== 'dev') {
+      this.dismissWelcome();
+      if (action === 'confirm' || action === 'back' || action === 'pause') return;
+    }
+    switch (action) {
+      case 'sound':
+        return this.toggleSound();
+      case 'dev':
         this.dev.toggle();
         this.requestSave();
         return;
-      }
-      if (code === 'KeyL') {
-        this.toggleLogbook();
-        return;
-      }
-      if (code === 'Escape') {
-        if (this.logbook.open) {
-          this.toggleLogbook(false);
-          return;
-        }
-        if (this.baseMode.open && !this.paused) {
-          this.toggleBase(false);
-          return;
-        }
-        if (performance.now() - this.lastAutoPause < ESC_AFTER_UNLOCK_MS) return;
+      case 'logbook':
+        return this.toggleLogbook();
+      case 'back':
+      case 'pause':
+        if (this.logbook.open) return this.toggleLogbook(false);
+        if (action === 'back' && this.baseMode.open && !this.paused) return this.toggleBase(false);
+        // The controller's B only backs out of things; pausing is its Menu button.
+        if (action === 'back' && device === 'gamepad' && !this.paused) return;
+        if (action === 'back' && performance.now() - this.lastAutoPause < ESC_AFTER_UNLOCK_MS) return;
         if (this.paused) this.resume();
         else this.pause();
         return;
-      }
-      if (this.paused) return;
-      if (this.logbook.open) return;
-      if (code === 'KeyB') {
-        this.toggleBase();
-        return;
-      }
-      if (this.baseMode.open) {
-        // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
-        const slot = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
-        if (slot !== undefined) {
-          const id = slot === '0' ? STORE : BASE.slots[Number(slot) - 1]?.id;
-          if (id) this.baseAction('select', id);
-        } else if (code === 'Enter' || code === 'NumpadEnter') this.baseAction('build');
-        else if (code === 'KeyU') this.baseAction('upgrade');
-        else if (code === 'KeyR') this.baseAction('repair');
-        else if (code === 'KeyX' || code === 'Delete') this.baseAction('remove');
-        else if (code === 'Space' && (state.phase === 'ready' || state.phase === 'landed')) {
-          this.toggleBase(false);
-          if (state.phase === 'landed') this.takeOff();
-          else this.launch();
-        }
-        return;
-      }
-      if (code in KEY_TO_CARD) this.select(KEY_TO_CARD[code]);
-      else if (code === 'KeyX') this.swapCard();
-      else if (code === 'KeyQ') this.cycleAircraft(-1);
-      else if (code === 'KeyE') this.cycleAircraft(1);
-      else if (code === 'KeyF') this.build();
-      else if (code === 'Space') {
+    }
+    if (this.paused || this.logbook.open) return;
+    if (action === 'base') return this.toggleBase();
+    if (this.baseMode.open) {
+      // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
+      const slot = PICK_TO_SLOT[action];
+      if (slot !== undefined) {
+        const id = slot === 0 ? STORE : BASE.slots[slot - 1]?.id;
+        if (id) this.baseAction('select', id);
+      } else if (action === 'confirm') this.baseAction('build');
+      else if (action === 'upgrade') this.baseAction('upgrade');
+      else if (action === 'service') this.baseAction('repair');
+      else if (action === 'swap' || action === 'remove') this.baseAction('remove');
+      else if (action === 'launch' && (state.phase === 'ready' || state.phase === 'landed')) {
+        this.toggleBase(false);
         if (state.phase === 'landed') this.takeOff();
         else this.launch();
-      } else if (code === 'KeyR') {
+      }
+      return;
+    }
+    const card = PICK_TO_CARD[action];
+    if (card !== undefined) return this.select(card);
+    switch (action) {
+      case 'prevMission':
+      case 'nextMission': {
+        const n = state.offers.length;
+        if (n > 0 && state.phase !== 'flying') this.select((state.selected + (action === 'nextMission' ? 1 : -1) + n) % n);
+        return;
+      }
+      case 'swap':
+        return this.swapCard();
+      case 'prevAircraft':
+        return this.cycleAircraft(-1);
+      case 'nextAircraft':
+        return this.cycleAircraft(1);
+      case 'fold':
+        return this.build();
+      case 'launch':
+        if (state.phase === 'landed') this.takeOff();
+        else this.launch();
+        return;
+      case 'service':
         if (state.phase === 'landed') this.rearm();
         else if (state.phase === 'flying') this.alert('home', 'Rearm at T1', null, 'info', 1.6);
-      } else if (code === 'Enter' || code === 'NumpadEnter') {
+        return;
+      case 'fireSecondary':
+        if (state.phase === 'flying') this.dropBomb();
+        return;
+      case 'confirm':
+        if (device === 'gamepad') return this.padConfirm();
         if (state.phase === 'landed') this.endSortie();
         else this.continueToDesk();
+        return;
+    }
+  }
+
+  /** The controller's A with nothing highlighted: the next step of the sortie. */
+  private padConfirm(): void {
+    switch (this.state.phase) {
+      case 'desk':
+        return this.build();
+      case 'ready':
+        return this.launch();
+      case 'landed':
+        return this.takeOff();
+      case 'debrief':
+      case 'crashed':
+        return this.continueToDesk();
+    }
+  }
+
+  private bindEvents(): void {
+    const { input, hud, state } = this;
+
+    this.controls.onAction((action, device) => this.onAction(action, device));
+    input.onCanvasClick(() => this.sounds.unlock());
+    this.controls.onPad((e) => {
+      if (e.kind === 'connected') {
+        this.alert('plane', 'Controller connected', null, 'info', 2);
+        return;
       }
-    });
-    input.onCanvasClick((button) => {
-      this.sounds.unlock();
-      if (state.phase !== 'flying' || this.paused) return;
-      if (button === MOUSE_RIGHT) this.dropBomb();
+      this.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      // Losing the controller mid-flight pauses, rather than leaving the plane unattended.
+      if (state.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
     });
     input.onPointerLockChange((locked) => {
       // Losing the lock mid-flight (Esc, alt-tab) pauses rather than leaving the plane unattended.
@@ -1849,6 +1981,10 @@ export class Game {
     });
     this.base.onEvent((e) => this.onBaseEvent(e));
     state.onEvent((event) => {
+      const step = tutorialEventFor(event.type);
+      if (step) this.tutorial.note(step);
+      if (event.type === 'built') this.lostPlane = null;
+      if (event.type === 'crashed' && state.plane && !state.emergency) this.lostPlane = state.plane.id;
       switch (event.type) {
         case 'aircraft-selected':
           this.career.rememberAircraft(event.aircraft);
@@ -1889,7 +2025,14 @@ export class Game {
           this.airTraffic.startMission(mission.spec.aircraft ?? []);
           this.career.recordSortie(state.plane!.id);
           this.alert(MISSION_ICONS[mission.spec.type], 'Go', null, 'info', 1.4);
-          this.tip('flight', 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.', ['LMB', 'RMB', 'Shift']);
+          if (this.tutorial.finished)
+            this.tip(
+            'flight',
+            this.controls.device === 'gamepad'
+              ? 'Left stick steers, right stick looks around. Hold RT for ink, LT drops a bomb, RB boosts.'
+              : 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.',
+            ['LMB', 'RMB', 'Shift'],
+          );
           this.requestSave();
           break;
         }
@@ -2074,7 +2217,7 @@ export class Game {
       const fit = state.suitability(state.aircraft);
       noteTone = 'bad';
       tag = 'Scrap';
-      note = `You can't afford any plane: a free emergency Dart has half the ink, no bomb, for one sortie.${fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+      note = `You can't afford any plane: a free emergency Swift has half the ink, no bomb, for one sortie.${fit.level === 'unsuitable' || state.selectedMission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
     } else if (state.phase === 'desk' && !resources.canAfford(buildCost)) {
       const wait = state.income.timeToAfford(resources.paper, buildCost);
       noteTone = 'bad';
@@ -2091,7 +2234,7 @@ export class Game {
       : null;
 
     // First-time tips: the desk, and each kind of objective the first time it comes up.
-    if (choosing && !this.welcome && !baseOpen && !this.paused) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
+    if (choosing && !this.welcome && !baseOpen && !this.paused && this.tutorial.finished) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
     if (flying && mission?.isActive && !this.paused) {
       const next = mission.objectives[mission.openObjectives()[0]];
       if (next && !this.tipsSeen.has(`obj-${next.kind}`)) {
@@ -2100,6 +2243,8 @@ export class Game {
       }
     }
 
+    const tutorialContext = { phase: state.phase, bombs: state.bombsLoaded > 0 || state.bombsFalling > 0, baseOpen };
+    this.tutorial.update(tutorialContext);
     const f = plane.flight;
     const income = state.income;
     return {
@@ -2158,7 +2303,7 @@ export class Game {
       landing,
       boundary: { state: this.boundary.state, countdown: this.boundary.countdown },
       result: this.result(),
-      pointerLocked: this.input.pointerLocked,
+      pointerLocked: this.input.pointerLocked || this.controls.padFlying,
       nose,
       aim,
       target,
@@ -2175,7 +2320,27 @@ export class Game {
             this.lastRaid,
           )
         : null,
+      tutorial: this.tutorial.view(tutorialContext),
+      dashboard: choosing && !baseOpen ? this.dashboardView(buildCost, kind) : null,
     };
+  }
+
+  /** The home dashboard at the desk. */
+  private dashboardView(buildCost: number, kind: BuildKind): DashboardView {
+    const { state, resources } = this;
+    const mission = state.selectedMission;
+    return dashboardView({
+      paper: resources.paper,
+      rate: state.income.ratePerMinute(resources.paper),
+      base: this.base,
+      hangar: state.hangar,
+      mission: mission ? { title: mission.title, reward: mission.reward, bombs: mission.spec.bombs } : null,
+      plane: { id: state.aircraft, fit: state.suitability(state.aircraft).level, cost: buildCost, kind, canBuild: state.canBuild() },
+      lostPlane: this.lostPlane,
+      onPad: state.phase !== 'desk',
+      raidInbound: this.airTraffic.raids.some((r) => r.stage !== 'over' && r.detected),
+      emergency: state.emergencyAvailable() && !resources.canAfford(buildCost),
+    });
   }
 
   /** One mission card: its slot, tier, modifiers, reward breakdown, operation or event. */
@@ -2942,6 +3107,17 @@ export class Game {
       achievements: this.outcome?.progress.achievements ?? [],
       streak: this.outcome?.progress.streak ?? 0,
       operation: this.outcome?.operation ?? null,
+      failure: succeeded ? null : failureText(mission.failure),
+      paper: paperBreakdown({
+        reward: succeeded ? mission.reward : 0,
+        missionTitle: mission.title,
+        bonuses: this.outcome?.payouts ?? [],
+        earned: sortie.paperEarned,
+        spent: sortie.paperSpent,
+        lost: sortie.paperLost,
+        overflow: sortie.paperOverflow,
+      }),
+      next: nextStepText({ succeeded, recovered, aircraftName: spec.name, refitCost: spec.refitCost, cost: spec.cost, repairs: this.base.needsRepair.length }),
     };
   }
 
@@ -3085,16 +3261,6 @@ function objectivePoint(o: Objective, world: World, out: pc.Vec3): pc.Vec3 {
       return out.set(t.x, 0.5, t.z);
     }
   }
-}
-
-/**
- * The fold pose while building. A new plane goes from a flat sheet to finished; a refit re-creases
- * a recovered plane: wings up, then back down. A stowed plane just rolls out finished.
- */
-function foldPose(progress: number, kind: BuildKind): number {
-  if (kind === 'fold') return progress;
-  if (kind === 'rollout') return 1;
-  return progress < 0.35 ? 1 - (progress / 0.35) * 0.5 : 0.5 + ((progress - 0.35) / 0.65) * 0.5;
 }
 
 function css(color: readonly [number, number, number]): string {

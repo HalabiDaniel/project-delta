@@ -25,10 +25,11 @@ export const ECONOMY = {
    */
   protectedPaper: 50,
   /**
-   * The free emergency Dart, offered only when the player can afford no plane at all: folded from
-   * scrap, with half the ink, no bomb and a shorter range, for one sortie (it is not kept afterwards).
+   * The free emergency Swift (STARTER_AIRCRAFT's pattern), offered only when the player can afford no
+   * plane at all: folded from scrap, with half the ink, no bomb and a shorter range, for one sortie
+   * (it is not kept afterwards). Before v0.0.11 it was an emergency Dart.
    */
-  emergency: { ammo: 20, range: 1800 },
+  emergency: { ammo: 35, range: 1800 },
   /** Transactions kept in the paper log. */
   ledgerSize: 60,
 } as const;
@@ -189,7 +190,22 @@ export interface AircraftSpec {
    * sit): one of the original four designs.
    */
   shape: BaseShapeId;
+  /** Special abilities beyond the numbers above. */
+  traits?: AircraftTraits;
 }
+
+export interface AircraftTraits {
+  /**
+   * Stealth: defined in the data since v0.0.11, but it has no effect until the stealth system
+   * arrives in v0.0.15 (until then only `signature` makes a plane hard to spot).
+   */
+  stealth?: boolean;
+  /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
+  reconRate?: number;
+}
+
+/** New players start with this design chosen; it is also the pattern of the free emergency plane. */
+export const STARTER_AIRCRAFT: AircraftId = 'swift';
 
 /**
  * The aircraft patterns the player can fold. Stats and costs are first balancing guesses. To add a
@@ -197,80 +213,84 @@ export interface AircraftSpec {
  * ratings and suitability all work from this data.
  */
 export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
+  // ---- v0.0.11: the original four re-roled. Swift is the starter, Falcon the agile fighter, Dart
+  // the fast recon plane, Widewing unchanged. Values are starting points for playtesting.
   dart: {
     id: 'dart',
     name: 'Dart',
     role: 'recon',
-    roleLabel: 'Recon',
-    cost: 10,
-    refitCost: 3,
-    tagline: 'Cheap, quick and far-flying, but fragile. Carries one mini bomb.',
+    roleLabel: 'Fast recon',
+    cost: 25,
+    refitCost: 6,
+    tagline: 'The fastest plane in the classroom, with the longest legs. A light gun, no bombs: it looks, it runs.',
     flight: {
-      minSpeed: 11, cruiseSpeed: 22, maxSpeed: 35,
-      throttleAccel: 20, speedResponse: 3.2, pitchSpeedEffect: 6,
+      minSpeed: 11, cruiseSpeed: 24, maxSpeed: 38,
+      throttleAccel: 22, speedResponse: 3.4, pitchSpeedEffect: 6,
       maxTurnRate: 1.45, maxPitchRate: 1.25, aimGain: 3.2, rollResponse: 7, pitchResponse: 6.5, maxBank: 55 * DEG,
-      boostSpeed: 16, boostResponse: 5.5, boostDuration: 1.4, boostCooldown: 3,
+      boostSpeed: 17, boostResponse: 5.5, boostDuration: 1.5, boostCooldown: 3,
       collisionRadius: 0.6,
     },
-    maxHealth: 45,
-    range: 2600,
-    gun: { barrels: 1, ammo: 40, interval: 0.18, damage: 5, speed: 62, range: 60 },
+    maxHealth: 50,
+    range: 2800,
+    gun: { barrels: 1, ammo: 40, interval: 0.18, damage: 4, speed: 62, range: 60 },
     gunLabel: 'Light ink gun',
-    bombs: { capacity: 1, kind: 'small' },
+    bombs: { capacity: 0, kind: 'small' },
     signature: 0.65,
     hitRadius: 0.9,
     accent: [0.08, 0.62, 0.56],
     inspiration: 'SR-71 Blackbird',
     shape: 'dart',
+    traits: { reconRate: 1.5 },
   },
   falcon: {
     id: 'falcon',
     name: 'Falcon',
     role: 'fighter',
-    roleLabel: 'Fighter',
-    cost: 25,
-    refitCost: 6,
-    tagline: 'Fast and agile with twin ink guns. Built to dogfight, not to bomb.',
+    roleLabel: 'Agile fighter',
+    cost: 30,
+    refitCost: 7,
+    tagline: 'Turns tighter than anything else, with twin ink guns. No bombs: built to dogfight.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 33,
       throttleAccel: 16, speedResponse: 2.4, pitchSpeedEffect: 9,
-      maxTurnRate: 1.75, maxPitchRate: 1.45, aimGain: 3.4, rollResponse: 8, pitchResponse: 7, maxBank: 62 * DEG,
+      maxTurnRate: 1.9, maxPitchRate: 1.5, aimGain: 3.5, rollResponse: 8.5, pitchResponse: 7.2, maxBank: 64 * DEG,
       boostSpeed: 14, boostResponse: 5, boostDuration: 1.2, boostCooldown: 3.2,
       collisionRadius: 0.8,
     },
     maxHealth: 100,
     range: 1600,
-    gun: { barrels: 2, ammo: 120, interval: 0.08, damage: 7, speed: 78, range: 85 },
+    gun: { barrels: 2, ammo: 130, interval: 0.08, damage: 7, speed: 78, range: 85 },
     gunLabel: 'Twin ink guns',
-    bombs: { capacity: 1, kind: 'standard' },
-    signature: 0.9,
+    bombs: { capacity: 0, kind: 'standard' },
+    signature: 0.85,
     hitRadius: 1.0,
     accent: [0.2, 0.45, 0.95],
     inspiration: 'Su-57',
     shape: 'falcon',
+    traits: { stealth: true },
   },
   swift: {
     id: 'swift',
     name: 'Swift',
     role: 'multirole',
-    roleLabel: 'Multipurpose',
-    cost: 30,
-    refitCost: 7,
-    tagline: 'Balanced in the air and in a fight. Two bombs and twin guns.',
+    roleLabel: 'Basic fighter',
+    cost: 10,
+    refitCost: 3,
+    tagline: 'The starter: cheap, forgiving and balanced. Twin guns and one small bomb.',
     flight: {
-      minSpeed: 10, cruiseSpeed: 20, maxSpeed: 30,
-      throttleAccel: 14, speedResponse: 2, pitchSpeedEffect: 8,
-      maxTurnRate: 1.5, maxPitchRate: 1.2, aimGain: 3, rollResponse: 6, pitchResponse: 6, maxBank: 55 * DEG,
+      minSpeed: 9, cruiseSpeed: 20, maxSpeed: 30,
+      throttleAccel: 15, speedResponse: 2.2, pitchSpeedEffect: 8,
+      maxTurnRate: 1.5, maxPitchRate: 1.2, aimGain: 3, rollResponse: 6.5, pitchResponse: 6, maxBank: 55 * DEG,
       boostSpeed: 13, boostResponse: 5, boostDuration: 1.2, boostCooldown: 3.5,
       collisionRadius: 0.8,
     },
-    maxHealth: 110,
-    range: 1900,
-    gun: { barrels: 2, ammo: 80, interval: 0.12, damage: 6, speed: 70, range: 75 },
+    maxHealth: 90,
+    range: 2000,
+    gun: { barrels: 2, ammo: 70, interval: 0.12, damage: 5, speed: 70, range: 75 },
     gunLabel: 'Twin ink guns',
-    bombs: { capacity: 2, kind: 'standard' },
+    bombs: { capacity: 1, kind: 'small' },
     signature: 1.0,
-    hitRadius: 1.05,
+    hitRadius: 1.0,
     accent: [0.95, 0.58, 0.1],
     inspiration: 'F-16',
     shape: 'swift',
@@ -486,8 +506,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
   },
 };
 
-/** Garage order, roughly cheapest first (fighters, then multirole, then bombers). */
-export const AIRCRAFT_ORDER: readonly AircraftId[] = ['dart', 'falcon', 'specter', 'swift', 'thug', 'jumper', 'raptor', 'lightning', 'widewing', 'lancer', 'ghost'];
+/** Garage order, roughly cheapest first: the starter Swift, then the rest up to the bombers. */
+export const AIRCRAFT_ORDER: readonly AircraftId[] = ['swift', 'dart', 'falcon', 'specter', 'thug', 'jumper', 'raptor', 'lightning', 'widewing', 'lancer', 'ghost'];
 
 /**
  * The garage's 1–5 ratings are worked out from the specs, mapped linearly over these ranges, so
@@ -997,7 +1017,7 @@ export const PVP = {
   defenseReward: 35,
   /**
    * Shooting down another player's plane pays `killBase` plus `killShare` of what the plane cost;
-   * nothing for an emergency Dart (free planes can't be farmed). The same victim again within
+   * nothing for an emergency Swift (free planes can't be farmed). The same victim again within
    * `killWindow` pays `killRepeat[n]` of it.
    */
   killBase: 6,

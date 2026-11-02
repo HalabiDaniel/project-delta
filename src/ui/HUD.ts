@@ -1,6 +1,8 @@
 import type { RaidReport } from '../base/Raids';
 import { AirHud } from './AirHud';
 import { Alerts, Tips, type AlertTone } from './Alerts';
+import { Dashboard } from './Dashboard';
+import { TutorialPanel } from './TutorialPanel';
 import { BaseHud, RaidHud } from './BaseHud';
 import { toggle, type ScreenPoint } from './dom';
 import { EconomyStrip } from './EconomyStrip';
@@ -45,6 +47,8 @@ export class HUD {
   private readonly garage: Garage;
   private readonly threats: ThreatHud;
   private readonly air: AirHud;
+  private readonly dashboard: Dashboard;
+  private readonly tutorial: TutorialPanel;
   private readonly zones: Record<'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br' | 'centre', HTMLElement>;
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
@@ -78,6 +82,8 @@ export class HUD {
     this.garage = new Garage(garageCards, inspector, actions.selectAircraft);
     this.plane = new PlaneHud({ bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
     this.report = new ReportCard(this.zones.centre, actions.continueToDesk);
+    this.dashboard = new Dashboard(this.zones.tl, { quickRebuild: actions.quickRebuild, quickRepair: actions.quickRepair, toggleBase: actions.toggleBase });
+    this.tutorial = new TutorialPanel(this.zones.tc, actions.skipTutorial);
     this.menus = new Menus(root, actions);
     // Zones grow with the window (on top of the HUD size setting), so 1080p isn't a sea of tiny panels.
     const fit = () => root.style.setProperty('--fit-scale', String(Math.min(1.4, Math.max(0.9, window.innerHeight / 740))));
@@ -113,6 +119,8 @@ export class HUD {
     this.threats.render(flying ? v.threat : null);
     this.air.render(v.paused ? null : v.air);
     this.minimap.render(v.minimap, dt);
+    this.dashboard.render(v.paused || v.baseMode || v.result !== null || v.welcome !== null ? null : v.dashboard);
+    this.tutorial.render(v.tutorial, v.paused || v.result !== null || v.welcome !== null);
     this.alerts.update();
     this.tips.update();
     toggle(this.lockHint, flying && !v.pointerLocked);

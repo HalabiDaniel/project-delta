@@ -17,8 +17,8 @@ interface TargetView {
   /** What shudders and leans: the plane on a stand, the crate stack, the board. */
   body: pc.Entity;
   plane: PlaneModelView | null;
-  /** Props darken as they take damage. */
-  material: pc.StandardMaterial | null;
+  /** Props darken as they take damage: the cardboard parts, which use the shared shade for it. */
+  cardboard: pc.Entity[];
   shudder: number;
   rebuild: number;
   shownDamage: number;
@@ -31,12 +31,16 @@ interface TargetView {
  */
 export class TargetRange {
   readonly targets: Destructible[];
+  /** Every target's entity hangs under this (so repeated parts can be drawn instanced). */
+  readonly root: pc.Entity;
   private readonly views = new Map<string, TargetView>();
   private colliderCache: Collider[] | null = null;
   private solidCache: Collider[] | null = null;
 
   constructor(app: pc.AppBase, specs: readonly TargetSpec[]) {
     this.targets = specs.map((spec) => new Destructible(spec));
+    this.root = new pc.Entity('targets');
+    app.root.addChild(this.root);
     const blots = inkBlotMaterial();
     const dummyPaint = { paper: PALETTE.dummyPaper, accent: PALETTE.dummyAccent };
     const mat = {
@@ -51,11 +55,16 @@ export class TargetRange {
     for (const target of this.targets) {
       const s = target.spec;
       const root = new pc.Entity(`target-${s.id}`);
+      this.root.addChild(root);
       root.setPosition(s.x, s.kind === 'dummy' ? 0 : s.y, s.z);
-      app.root.addChild(root);
       let body: pc.Entity;
       let plane: PlaneModelView | null = null;
-      let material: pc.StandardMaterial | null = null;
+      const cardboard: pc.Entity[] = [];
+      const card = (e: pc.Entity) => {
+        cardboard.push(e);
+        return e;
+      };
+      const material = cardboardShade(0);
       if (s.kind === 'dummy') {
         const height = s.y;
         // A pencil standing on its end, point up, holding the paper plane.
@@ -71,12 +80,11 @@ export class TargetRange {
         body.addChild(plane.entity);
         root.addChild(body);
       } else if (s.kind === 'crates') {
-        material = flatMaterial(PALETTE.cardboard);
         body = new pc.Entity('crates');
         body.setEulerAngles(0, (s.yaw * 180) / Math.PI, 0);
-        body.addChild(part('box', material, -1.15, 0.75, 0, 2.2, 1.5, 2.4));
-        body.addChild(part('box', material, 1.15, 0.75, 0.1, 2.2, 1.5, 2.2));
-        const top = part('box', material, -0.3, 2.25, 0, 2, 1.5, 2.2);
+        body.addChild(card(part('box', material, -1.15, 0.75, 0, 2.2, 1.5, 2.4)));
+        body.addChild(card(part('box', material, 1.15, 0.75, 0.1, 2.2, 1.5, 2.2)));
+        const top = card(part('box', material, -0.3, 2.25, 0, 2, 1.5, 2.2));
         top.setLocalEulerAngles(0, 14, 0);
         body.addChild(top);
         // Packing tape across the lids.
@@ -87,12 +95,11 @@ export class TargetRange {
         body.addChild(tape);
         root.addChild(body);
       } else {
-        material = flatMaterial(PALETTE.cardboard);
         body = new pc.Entity('board');
         body.setEulerAngles(0, (s.yaw * 180) / Math.PI, 0);
         body.addChild(part('box', mat.leg, -1.4, 0.75, 0.25, 0.25, 1.5, 0.25));
         body.addChild(part('box', mat.leg, 1.4, 0.75, 0.25, 0.25, 1.5, 0.25));
-        body.addChild(part('box', material, 0, 2.9, 0, 4, 3.2, 0.24));
+        body.addChild(card(part('box', material, 0, 2.9, 0, 4, 3.2, 0.24)));
         // A painted target on the front (-Z), facing incoming planes.
         [[1.35, mat.red], [0.92, mat.white], [0.5, mat.red]].forEach(([radius, m], i) => {
           const ring = part('cylinder', m as pc.StandardMaterial, 0, 2.9, -0.13 - i * 0.01, (radius as number) * 2, 0.02, (radius as number) * 2);
@@ -104,7 +111,7 @@ export class TargetRange {
       // Pencil strokes: the stand (the practice plane outlines itself), or the whole leaning body.
       if (plane) outline(root, 'structure', { merge: true, exclude: [body] });
       else outline(body, 'structure', { merge: true });
-      this.views.set(s.id, { target, root, body, plane, material, shudder: 0, rebuild: 0, shownDamage: 0 });
+      this.views.set(s.id, { target, root, body, plane, cardboard, shudder: 0, rebuild: 0, shownDamage: 0 });
     }
   }
 
@@ -158,11 +165,12 @@ export class TargetRange {
       if (damage !== view.shownDamage) {
         view.shownDamage = damage;
         if (view.plane) view.plane.setDamage(1 - damage);
-        if (view.material) {
-          const c = PALETTE.cardboard;
-          const k = 1 - damage * 0.45;
-          view.material.diffuse.set(c[0] * k, c[1] * k, c[2] * k * 0.95);
-          view.material.update();
+        if (view.cardboard.length) {
+          const shade = cardboardShade(damage);
+          for (const e of view.cardboard) {
+            const mi = e.render?.meshInstances[0];
+            if (mi && mi.material !== shade) mi.material = shade;
+          }
         }
       }
       let scale = 1;
@@ -203,6 +211,21 @@ export class TargetRange {
     if (view.plane) view.plane.setFold(0);
     this.colliderCache = this.solidCache = null;
   }
+}
+
+/** Steps of damage the cardboard shows; every target at the same step shares one material. */
+const SHADE_STEPS = 8;
+const shades: pc.StandardMaterial[] = [];
+
+/** The cardboard material for a share of damage (0 untouched … 1 wrecked), darkened in steps. */
+function cardboardShade(damage: number): pc.StandardMaterial {
+  const step = Math.max(0, Math.min(SHADE_STEPS, Math.round(damage * SHADE_STEPS)));
+  if (!shades[step]) {
+    const c = PALETTE.cardboard;
+    const k = 1 - (step / SHADE_STEPS) * 0.45;
+    shades[step] = flatMaterial([c[0] * k, c[1] * k, c[2] * k * 0.95]);
+  }
+  return shades[step];
 }
 
 function part(type: 'box' | 'cone' | 'cylinder', material: pc.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number): pc.Entity {

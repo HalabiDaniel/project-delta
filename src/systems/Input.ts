@@ -37,6 +37,7 @@ export class Input {
   private readonly keyHandlers: Array<(code: string) => void> = [];
   private readonly clickHandlers: Array<(button: number) => void> = [];
   private readonly lockHandlers: Array<(locked: boolean) => void> = [];
+  private readonly moveHandlers: Array<() => void> = [];
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
@@ -57,6 +58,8 @@ export class Input {
       if (performance.now() < this.ignoreMouseUntil) return;
       this.dx += clamp(e.movementX, -MAX_MOUSE_STEP, MAX_MOUSE_STEP);
       this.dy += clamp(e.movementY, -MAX_MOUSE_STEP, MAX_MOUSE_STEP);
+      // Real movement (not sensor jitter) means the mouse is the device in use.
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 3) for (const handler of this.moveHandlers) handler();
     });
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== MOUSE_LEFT && e.button !== MOUSE_RIGHT) return;
@@ -76,6 +79,11 @@ export class Input {
 
   onKeyDown(handler: (code: string) => void): void {
     this.keyHandlers.push(handler);
+  }
+
+  /** The mouse moved by more than a twitch. */
+  onMouseMove(handler: () => void): void {
+    this.moveHandlers.push(handler);
   }
 
   /** Left or right mouse button pressed on the game canvas. */

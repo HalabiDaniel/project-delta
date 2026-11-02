@@ -16,7 +16,7 @@ const height = () => t.quantized({ min: -60, max: 140, bits: 16 }).default(0);
 /** A player's aircraft as others see it. */
 export const PlaneState = schema(
   {
-    kind: t.string().default('dart'),
+    kind: t.string().default('swift'),
     /** Index into AircraftStatus ('hidden', 'parked', 'flying', 'rolling', 'stopped', 'crashed'). */
     status: t.uint8().default(0),
     x: position(),

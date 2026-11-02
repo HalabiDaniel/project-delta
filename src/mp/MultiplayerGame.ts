@@ -1,5 +1,6 @@
+import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PVP, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, PVP, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -30,8 +31,9 @@ import {
 } from '../net/protocol';
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
-import { emergencyDart, GameState, type GamePhase } from '../systems/GameState';
-import { Input, MOUSE_LEFT, MOUSE_RIGHT } from '../systems/Input';
+import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/GameState';
+import { Input } from '../systems/Input';
+import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
 import { ResourceManager } from '../systems/ResourceManager';
 import { HUD } from '../ui/HUD';
 import type { IconName } from '../ui/icons';
@@ -43,17 +45,18 @@ import { launchPoint } from '../world/Grid';
 import { MissionMarkers } from '../world/MissionMarkers';
 import { OrdnanceView } from '../world/OrdnanceView';
 import type { Territory } from '../world/Territory';
-import { HOME_DESK } from '../world/territories/themes';
-import { Dressing } from '../world/territories/Dressing';
+import { territoryFacing, territoryLayout } from '../world/territories/decor';
+import { Dressing, type Ownership } from '../world/territories/Dressing';
 import { buildSharedScene, type SharedScene, type World } from '../world/WorldGenerator';
 import { AssetLibrary } from '../assets/AssetLibrary';
 import { installOutlines, type OutlineRenderer } from '../render/outline/OutlineRenderer';
-import { browserStorage, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
+import { instanceScenery, type Instancer } from '../render/Instancer';
+import { LoadingScreen } from '../ui/LoadingScreen';
+import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
 import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
-import { PROPS } from '../assets/manifest';
 import { Lobby, type ClaimView } from './Lobby';
 import { MpHud, type MpHudView, type ScoreRow } from './MpHud';
 import { NetBase } from './NetBase';
@@ -90,7 +93,10 @@ export class RemoteAircraft implements ShownAircraft {
   emoteUntil = 0;
   status: AircraftStatus = 'flying';
   role = 'fighter';
-  bombs = 0;
+  /** Bombs on the rack (players' planes, from the server's state); undefined for the AI's, which draw no rack. */
+  bombs: number | undefined = undefined;
+  /** Fold pose on the pad, 0 (flat sheet) to 1 (finished), as the server reports it; undefined for the AI's. */
+  fold: number | undefined = undefined;
   target: string | null = null;
   attacking = false;
   leaving = false;
@@ -160,6 +166,8 @@ export class MultiplayerGame {
   readonly clock = new ServerClock();
   readonly predictor: Predictor;
   graphics: GraphicsSettings = loadGraphics(browserStorage());
+  /** Repeated scenery drawn instanced (v0.0.11). */
+  instancer: Instancer | null = null;
   markers: MissionMarkers | null = null;
   readonly views: MpViews;
   crashPoint = new pc.Vec3();
@@ -193,6 +201,15 @@ export class MultiplayerGame {
   private outlines: OutlineRenderer | null = null;
   private lastStateTime = -1;
   private resumed = false;
+  /** The interactive tutorial; its progress lives on the player's record on the server. */
+  readonly tutorial = new Tutorial();
+  /** The server has sent the player's tutorial progress (until then nothing is shown or saved). */
+  tutorialReady = false;
+  private tutorialTimer: ReturnType<typeof setTimeout> | null = null;
+  private steerTime = 0;
+  /** The plane lost last sortie, for the dashboard's quick rebuild. */
+  lostPlane: AircraftId | null = null;
+  private rearmThenGo = false;
 
   private constructor(
     readonly app: pc.AppBase,
@@ -214,8 +231,17 @@ export class MultiplayerGame {
     network: DefenseNetwork,
   ) {
     this.network = network;
-    this.predictor = new Predictor(AIRCRAFT.dart);
+    this.predictor = new Predictor(AIRCRAFT[STARTER_AIRCRAFT]);
     this.views = new MpViews(this);
+    this.controls = new Controls(input);
+  }
+
+  /** Keyboard, mouse and controller as named actions (src/input/). */
+  readonly controls: Controls;
+
+  private inputContext(): InputContext {
+    if (!this.room || this.lobby.open || this.paused || !this.state) return 'menu';
+    return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
   static async create(canvas: HTMLCanvasElement, hudRoot: HTMLElement): Promise<MultiplayerGame> {
@@ -236,7 +262,9 @@ export class MultiplayerGame {
     installMaterials(new MaterialLibrary(textures));
     const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
-    await assets.preload();
+    const loading = new LoadingScreen();
+    await assets.preload(undefined, (p) => loading.progress(p));
+    loading.done(assets.failures());
 
     const shared = sharedWorld();
     const scene = buildSharedScene(app, shared.territories, assets);
@@ -268,6 +296,11 @@ export class MultiplayerGame {
       setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
       setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
+      skipTutorial: () => game?.tutorial.skip(),
+      restartTutorial: () => game?.tutorial.restart(),
+      quickRebuild: () => game?.quickRebuild(),
+      quickRepair: () => game?.quickRepair(),
+      rearmAndGo: () => game?.rearmAndGo(),
       base: {
         selectSlot: (id) => game?.baseAction((m) => m.selectSlot(id)),
         choose: (kind) => game?.baseAction((m) => m.choose(kind)),
@@ -310,7 +343,7 @@ export class MultiplayerGame {
       new ChaseCamera(app),
       new Effects(app, ground),
       new FlightTrails(app),
-      new PlaneController(app, 'falcon', assets.models),
+      new PlaneController(app, STARTER_AIRCRAFT, assets.models),
       new Bombs(app, 16),
       new OrdnanceView(app),
       new AircraftModels(app, players, assets.models),
@@ -322,13 +355,31 @@ export class MultiplayerGame {
     game.outlines = outlines;
     game.setGraphics(game.graphics);
     game.bindInput();
+    game.tutorial.onChange(() => game!.saveTutorialSoon());
+    game.net.onTutorial((record) => {
+      // A new player (nothing saved) starts at the first step.
+      game!.tutorial.restore(parseTutorial(record) ?? { v: 1, step: 0, skipped: false });
+      game!.tutorialReady = true;
+    });
     game.camera.updateDesk(0, new pc.Vec3(0, 0, 0), 0, true);
     app.on('update', (dt: number) => game!.tick(dt));
+    // After the game has moved everything: repeated scenery drawn instanced (v0.0.11).
+    game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
+    game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
     app.on('update', () => outlines.update());
     app.start();
     // A refresh lands back in the session if the server still keeps our place.
     void game.start();
     return game;
+  }
+
+  /** Tutorial progress goes to the server at most once a second (it keeps it on the player's record). */
+  private saveTutorialSoon(): void {
+    if (!this.tutorialReady || this.tutorialTimer) return;
+    this.tutorialTimer = setTimeout(() => {
+      this.tutorialTimer = null;
+      this.net.saveTutorial(this.tutorial.record());
+    }, 1000);
   }
 
   get room() {
@@ -414,6 +465,9 @@ export class MultiplayerGame {
   /** Forget the session (left or lost). */
   private reset(): void {
     this.me = null;
+    this.tutorialReady = false;
+    this.lostPlane = null;
+    this.rearmThenGo = false;
     this.state = null;
     this.base = null;
     this.baseMode = null;
@@ -446,19 +500,56 @@ export class MultiplayerGame {
     if (this.paused || !this.state) return;
     this.sounds.unlock();
     this.net.command(cmd);
+    if (cmd.a === 'select') this.noteTutorial('card-selected');
+    else if (cmd.a === 'aircraft') this.noteTutorial('plane-selected');
+    else if (cmd.a === 'rearm' && this.state.phase === 'landed') this.noteTutorial('rearmed');
+  }
+
+  private noteTutorial(event: TutorialEvent): void {
+    if (this.tutorialReady) this.tutorial.note(event);
+  }
+
+  /** Where the player is, for the tutorial. */
+  tutorialContext(): TutorialContext {
+    const st = this.state;
+    return { phase: st?.phase ?? 'desk', bombs: !!st && (st.bombsLoaded > 0 || st.bombsFalling > 0), baseOpen: !!this.baseMode?.open };
+  }
+
+  /** At the desk: the plane lost last sortie, chosen again and folded in one go. */
+  quickRebuild(): void {
+    const id = this.lostPlane;
+    if (!id || this.state?.phase !== 'desk') return;
+    if (this.state.aircraft !== id) this.send({ a: 'aircraft', id });
+    this.send({ a: 'build' });
+  }
+
+  /** At home: everything on the desk repaired without opening base management. */
+  quickRepair(): void {
+    if (this.paused || !this.base || !this.atHome || this.base.needsRepair.length === 0) return;
+    if (!this.base.repairAll()) this.hud.alert('paper', 'Need paper', `−${Math.max(0, this.base.repairAllCost - this.resources.paper)}`, 'bad', 2);
+  }
+
+  /** Landed at home: rearm, then take off as soon as the ground crew is done. */
+  rearmAndGo(): void {
+    const st = this.state;
+    if (this.paused || st?.phase !== 'landed' || !this.priv.plane?.stopped) return;
+    if (st.canRearm()) {
+      this.send({ a: 'rearm' });
+      this.rearmThenGo = true;
+    } else this.takeOff();
   }
 
   launchPlane(): void {
     if (this.state?.phase !== 'ready') return;
     this.send({ a: 'launch' });
     this.input.consumeMouse();
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   takeOff(): void {
     if (this.state?.phase !== 'landed') return;
     this.send({ a: 'takeoff' });
-    this.input.requestPointerLock();
+    if (!this.controls.padFlying) this.input.requestPointerLock();
   }
 
   baseAction(act: (m: BaseMode) => unknown): void {
@@ -479,6 +570,7 @@ export class MultiplayerGame {
     }
     if (open) {
       this.baseMode.enter();
+      this.noteTutorial('base-opened');
       this.input.exitPointerLock();
     } else {
       this.baseMode.exit();
@@ -496,7 +588,7 @@ export class MultiplayerGame {
     if (!this.paused) return;
     this.paused = false;
     this.input.consumeMouse();
-    if (this.state?.phase === 'flying') this.input.requestPointerLock();
+    if (this.state?.phase === 'flying' && !this.controls.padFlying) this.input.requestPointerLock();
   }
 
   toggleSound(): void {
@@ -511,6 +603,7 @@ export class MultiplayerGame {
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.scene.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.dressings.values()) d.setDetail(settings.detail);
+    if (this.instancer) this.instancer.detailDistance = DETAIL_DISTANCE[settings.preset];
     const device = this.app.graphicsDevice;
     const ratio = Math.min(window.devicePixelRatio || 1, settings.resolution);
     if (device.maxPixelRatio !== ratio) {
@@ -521,57 +614,90 @@ export class MultiplayerGame {
 
   private bindInput(): void {
     const { input } = this;
-    input.onKeyDown((code) => {
+    this.controls.onAction((action, device) => this.onAction(action, device));
+    input.onCanvasClick(() => {
       this.sounds.unlock();
-      if (!this.room || this.lobby.open) return;
-      if (code === 'KeyM') return this.toggleSound();
-      if (code === 'Escape') {
-        if (this.baseMode?.open && !this.paused) return this.toggleBase(false);
-        if (this.paused) this.resume();
-        else this.pause();
-        return;
-      }
       if (this.paused || !this.state) return;
-      const phase = this.state.phase;
-      if (code === 'KeyB') return this.toggleBase();
-      if (code === 'KeyZ' || code === 'KeyC' || code === 'KeyV') {
-        this.net.emote(code === 'KeyZ' ? 'waggle' : code === 'KeyC' ? 'confetti' : 'heart');
+      if (this.state.phase === 'flying' && !input.pointerLocked && !this.controls.padFlying) input.requestPointerLock();
+    });
+    this.controls.onPad((e) => {
+      if (e.kind === 'connected') return this.hud.alert('plane', 'Controller connected', null, 'info', 2);
+      this.hud.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      // The plane flies on (the world doesn't stop for one player), but the controls go neutral.
+      if (this.state?.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
+    });
+  }
+
+  /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
+  private onAction(action: Action, device: Device): void {
+    this.sounds.unlock();
+    if (!this.room || this.lobby.open) return;
+    if (action === 'sound') return this.toggleSound();
+    if (action === 'back' || action === 'pause') {
+      if (action === 'back' && this.baseMode?.open && !this.paused) return this.toggleBase(false);
+      // The controller's B only backs out of things; pausing is its Menu button.
+      if (action === 'back' && device === 'gamepad' && !this.paused) return;
+      if (this.paused) this.resume();
+      else this.pause();
+      return;
+    }
+    if (this.paused || !this.state) return;
+    const phase = this.state.phase;
+    if (action === 'base') return this.toggleBase();
+    if (action === 'emote1' || action === 'emote2' || action === 'emote3') {
+      this.net.emote(action === 'emote1' ? 'waggle' : action === 'emote2' ? 'confetti' : 'heart');
+      return;
+    }
+    if (this.baseMode?.open) {
+      const slot = /^pick(\d)$/.exec(action)?.[1];
+      if (slot !== undefined) this.baseMode.selectSlot(slot === '0' ? 'store' : `s${slot}`);
+      else if (action === 'confirm') this.baseMode.build();
+      else if (action === 'upgrade') this.baseMode.upgrade();
+      else if (action === 'service') this.baseMode.repair();
+      else if (action === 'swap' || action === 'remove') this.baseMode.remove();
+      return;
+    }
+    const card = /^pick([1-7])$/.exec(action)?.[1];
+    if (card) return this.send({ a: 'select', i: Number(card) - 1 });
+    switch (action) {
+      case 'prevMission':
+      case 'nextMission': {
+        const n = this.offers.length;
+        if (n > 0 && phase !== 'flying') this.send({ a: 'select', i: (this.state.selected + (action === 'nextMission' ? 1 : -1) + n) % n });
         return;
       }
-      if (this.baseMode?.open) {
-        const slot = /^(?:Digit|Numpad)(\d)$/.exec(code)?.[1];
-        if (slot !== undefined) this.baseMode.selectSlot(slot === '0' ? 'store' : `s${slot}`);
-        else if (code === 'Enter' || code === 'NumpadEnter') this.baseMode.build();
-        else if (code === 'KeyU') this.baseMode.upgrade();
-        else if (code === 'KeyR') this.baseMode.repair();
-        else if (code === 'KeyX' || code === 'Delete') this.baseMode.remove();
-        return;
-      }
-      const card = /^(?:Digit|Numpad)([1-7])$/.exec(code)?.[1];
-      if (card) return this.send({ a: 'select', i: Number(card) - 1 });
-      if (code === 'KeyX') return this.send({ a: 'swap' });
-      if (code === 'KeyQ' || code === 'KeyE') {
+      case 'swap':
+        return this.send({ a: 'swap' });
+      case 'prevAircraft':
+      case 'nextAircraft': {
         const i = AIRCRAFT_ORDER.indexOf(this.state.aircraft);
-        const next = AIRCRAFT_ORDER[(i + (code === 'KeyE' ? 1 : -1) + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length];
+        const next = AIRCRAFT_ORDER[(i + (action === 'nextAircraft' ? 1 : -1) + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length];
         return this.send({ a: 'aircraft', id: next });
       }
-      if (code === 'KeyF') return this.send({ a: 'build' });
-      if (code === 'Space') {
+      case 'fold':
+        return this.send({ a: 'build' });
+      case 'launch':
         if (phase === 'ready') this.launchPlane();
         else if (phase === 'landed') this.takeOff();
         else if (phase === 'flying') this.bombQueued = true;
         return;
-      }
-      if (code === 'KeyR' && phase === 'landed') return this.send({ a: 'rearm' });
-      if ((code === 'Enter' || code === 'NumpadEnter') && phase === 'landed') return this.send({ a: 'end' });
-      if ((code === 'Enter' || code === 'NumpadEnter') && (phase === 'debrief' || phase === 'crashed')) return this.send({ a: 'continue' });
-    });
-    input.onCanvasClick((button) => {
-      this.sounds.unlock();
-      if (this.paused || !this.state) return;
-      if (this.state.phase === 'flying' && !input.pointerLocked) input.requestPointerLock();
-      else if (button === MOUSE_RIGHT && this.state.phase === 'flying') this.bombQueued = true;
-    });
+      case 'fireSecondary':
+        if (phase === 'flying') this.bombQueued = true;
+        return;
+      case 'service':
+        if (phase === 'landed') this.send({ a: 'rearm' });
+        else if (phase === 'flying') this.hud.alert('home', 'Rearm at home', null, 'info', 1.6);
+        return;
+      case 'confirm':
+        if (device === 'gamepad') {
+          // A with nothing highlighted: the next step of the sortie.
+          if (phase === 'desk') return this.send({ a: 'build' });
+          if (phase === 'ready') return this.launchPlane();
+          if (phase === 'landed') return this.takeOff();
+        } else if (phase === 'landed') return this.send({ a: 'end' });
+        if (phase === 'debrief' || phase === 'crashed') this.send({ a: 'continue' });
+        return;
+    }
   }
 
   // ---- Server messages ----------------------------------------------------------------------------
@@ -621,7 +747,7 @@ export class MultiplayerGame {
         st.durability = null;
         st.gun = null;
       } else {
-        const spec = d.emergency ? emergencyDart() : AIRCRAFT[d.id];
+        const spec = d.emergency ? emergencyPlane() : AIRCRAFT[d.id];
         if (st.plane?.id !== spec.id || st.emergency !== d.emergency) {
           st.plane = spec;
           st.durability = new Durability(spec.maxHealth);
@@ -689,6 +815,15 @@ export class MultiplayerGame {
     const before = this.lastPhase;
     this.lastPhase = phase;
     const st = this.state!;
+    if (phase === 'building' && before === 'desk') {
+      this.noteTutorial('folded');
+      this.lostPlane = null;
+    }
+    if (phase === 'flying' && (before === 'ready' || before === 'building')) this.noteTutorial('launched');
+    if (phase === 'landed') this.noteTutorial('landed');
+    if (phase === 'debrief' && before === 'landed') this.noteTutorial('sortie-ended');
+    if (phase === 'crashed' && st.plane && !this.priv.result?.sortie.emergency) this.lostPlane = st.plane.id;
+    if (phase !== 'landed') this.rearmThenGo = false;
     if (phase === 'building' || phase === 'ready') {
       const spec = st.plane ?? AIRCRAFT[st.aircraft];
       this.plane.setAircraft(spec.id);
@@ -782,6 +917,7 @@ export class MultiplayerGame {
       r.status = PLANE_STATUSES[p.status] ?? 'flying';
       r.durability.fraction = p.hp / 255;
       r.bombs = p.bombs;
+      r.fold = p.fold / 255;
       r.buffer.push(s.time, { x: p.x, y: p.y, z: p.z, yaw: signedAngle(p.yaw), pitch: signedAngle(p.pitch), roll: signedAngle(p.roll) });
     });
     for (const [id, r] of this.remotes) {
@@ -860,28 +996,27 @@ export class MultiplayerGame {
     return buildingSpec(home, slot, kind as Parameters<typeof buildingSpec>[2], level, side);
   }
 
-  /** Territory owners: a desk on every claimed territory, in its owner's tape. */
+  /**
+   * Every desk dressed in its theme with its landmark (solid on the server too, from the same
+   * shapes); a claimed one also gets a runway and hangar, in its owner's colours.
+   */
   private syncTerritories(s: WorldState): void {
     s.territories.forEach((t, id) => {
       const owner = t.owner;
-      if ((this.owners.get(id) ?? '') === owner) return;
+      const dressed = this.dressings.get(id);
+      if (dressed && (this.owners.get(id) ?? '') === owner) return;
       if (owner) this.owners.set(id, owner);
       else this.owners.delete(id);
       const territory = this.territories.find((x) => x.id === id)!;
       territory.threat = t.threat as Territory['threat'];
-      this.dressings.get(id)?.root.destroy();
-      this.dressings.delete(id);
-      const platform = this.scene.platforms.get(id)!;
       this.defenseModels.setTerritoryStatics(id, !owner);
-      if (!owner) {
-        platform.render!.enabled = true;
+      const ownership: Ownership = owner ? (owner === this.me ? 'player' : 'rival') : territory.threat > 0 ? 'hostile' : 'neutral';
+      if (dressed && dressed.runway === !!owner) {
+        dressed.setOwnership(ownership);
         return;
       }
-      platform.render!.enabled = false;
-      const dir = launchPoint(territory).dir;
-      // Dressed as a desk with a runway; props that could be flown into are left out (the server doesn't know them).
-      const layout = { ...HOME_DESK, landmark: null, props: HOME_DESK.props.filter((p) => !PROPS[p.prop].colliders?.length) };
-      this.dressings.set(id, new Dressing(this.app, territory, layout, this.assets, this.graphics.detail, dir, true, owner === this.me ? 'tape/blue' : 'tape/masking'));
+      dressed?.root.destroy();
+      this.dressings.set(id, new Dressing(this.app, territory, territoryLayout(territory), this.assets, this.graphics.detail, territoryFacing(territory), !!owner, ownership));
     });
   }
 
@@ -1035,13 +1170,21 @@ export class MultiplayerGame {
   // ---- The frame ----------------------------------------------------------------------------------
 
   predictionWorld(): PredictionWorld {
-    const solids = this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }));
+    const solids = [...this.shared.decor, ...this.network.installations.filter((i) => i.alive).map((i) => ({ id: i.id, shapes: i.spec.solids }))];
     for (const b of this.shared.layout.barriers) if (!this.owners.has(b.territoryId)) solids.push({ id: b.id, shapes: b.solids });
     return { home: this.home, territories: this.territories, solids };
   }
 
   private tick(rawDt: number): void {
     const dt = Math.min(rawDt, 0.1);
+    this.controls.context = this.inputContext();
+    this.controls.screen = `${this.state?.phase}|${!!this.baseMode?.open}|${this.paused}|${this.lobby.open}|${!!this.room}`;
+    this.controls.update(dt);
+    if (this.tutorialReady && this.state) this.tutorial.update(this.tutorialContext());
+    if (this.rearmThenGo && this.state?.phase === 'landed' && this.state.rearmProgress === null && !this.state.canRearm() && this.priv.plane?.stopped) {
+      this.rearmThenGo = false;
+      this.takeOff();
+    }
     const mouse = this.input.consumeMouse();
     if (!this.paused && this.input.pointerLocked) {
       this.mouseX += mouse.dx;
@@ -1069,6 +1212,14 @@ export class MultiplayerGame {
     this.mpHud.render(this.mpView());
   }
 
+  /** Other aircraft near the aim, for the controller's aim help. */
+  private assistTargets(): Array<{ x: number; y: number; z: number }> {
+    const out: Array<{ x: number; y: number; z: number }> = [];
+    for (const a of this.remotes.values()) if (a.alive) out.push(a.model.position);
+    for (const a of this.ais.values()) if (a.alive && a.side === 'enemy') out.push(a.model.position);
+    return out;
+  }
+
   /** Fixed steps of the pilot's own plane, each one a frame for the server. */
   private stepPrediction(dt: number): void {
     const st = this.state;
@@ -1076,23 +1227,25 @@ export class MultiplayerGame {
       this.acc = 0;
       return;
     }
-    const input = this.input;
+    const controls = this.controls;
     this.acc = Math.min(this.acc + dt, 1);
     while (this.acc >= STEP) {
       this.acc -= STEP;
       this.savePrev();
       const m = this.predictor.model;
       const flying = st.phase === 'flying' && m.status === 'flying';
-      const live = !this.paused && input.pointerLocked;
+      const live = !this.paused && (this.input.pointerLocked || controls.padFlying);
+      // The left stick steers as mouse movement would, so the server sees nothing new.
+      const stick = live && flying ? controls.stickMouse(m, PLANE, STEP, m.position, this.assistTargets()) : { dx: 0, dy: 0 };
       const frame: InputFrame = {
         seq: this.predictor.nextSeq(),
-        mx: live ? this.mouseX : 0,
-        my: live ? this.mouseY : 0,
-        throttle: this.paused ? 0 : (input.axis('KeyS', 'KeyW') as -1 | 0 | 1),
-        bank: this.paused ? 0 : (input.axis('KeyD', 'KeyA') as -1 | 0 | 1),
-        boost: !this.paused && (input.isHeld('ShiftLeft') || input.isHeld('ShiftRight')),
+        mx: live ? this.mouseX + stick.dx : 0,
+        my: live ? this.mouseY + stick.dy : 0,
+        throttle: this.paused ? 0 : controls.throttle(),
+        bank: this.paused ? 0 : controls.bank(),
+        boost: !this.paused && controls.held('boost'),
         autoLevel: !this.views.onApproach(),
-        fire: flying && live && input.isButtonHeld(MOUSE_LEFT),
+        fire: flying && live && controls.held('firePrimary'),
         bomb: flying && this.bombQueued,
       };
       this.mouseX = 0;
@@ -1102,8 +1255,18 @@ export class MultiplayerGame {
       const result = this.predictor.apply(frame, this.predictionWorld());
       if (result?.collisions.length) this.effects.burst(this.plane.position, 'thud');
       this.cosmeticCooldown = Math.max(0, this.cosmeticCooldown - STEP);
-      if (frame.fire) this.cosmeticFire();
-      if (frame.bomb) this.cosmeticBomb();
+      if (frame.fire) {
+        this.cosmeticFire();
+        this.noteTutorial('fired');
+      }
+      if (frame.bomb) {
+        this.cosmeticBomb();
+        this.noteTutorial('bomb-dropped');
+      }
+      if (flying && this.tutorial.current === 'steer') {
+        this.steerTime += STEP;
+        if (this.steerTime >= STEER_SECONDS) this.noteTutorial('steered');
+      }
     }
     this.offset.mulScalar(Math.exp(-dt * 9));
   }
@@ -1203,7 +1366,7 @@ export class MultiplayerGame {
       this.plane.setBombs(phase === 'flying' || phase === 'landed' ? st.bombsLoaded : 0);
       this.plane.pose(true);
     } else if (st && (phase === 'building' || phase === 'ready')) {
-      if (phase === 'building') this.plane.setFold(st.buildKind === 'fold' ? st.buildProgress : st.buildKind === 'rollout' ? 1 : st.buildProgress < 0.35 ? 1 - (st.buildProgress / 0.35) * 0.5 : 0.5 + ((st.buildProgress - 0.35) / 0.65) * 0.5);
+      if (phase === 'building') this.plane.setFold(foldPose(st.buildProgress, st.buildKind));
       else this.plane.setFold(1);
     }
     this.plane.animate(dt);
@@ -1221,6 +1384,7 @@ export class MultiplayerGame {
     } else if (phase === 'crashed') {
       this.camera.updateWatch(dt, this.crashPoint);
     } else {
+      this.camera.setLook(this.controls.look());
       this.camera.updateFollow(dt, this.plane, this.territories, null);
     }
 
@@ -1278,7 +1442,7 @@ export class MultiplayerGame {
     const s = this.room?.state;
     const now = performance.now() / 1000;
     const players = s ? [...s.players.entries()] : [];
-    const scoreboard = this.input.isHeld('Tab') && this.room
+    const scoreboard = this.controls.held('scoreboard') && this.room
       ? players
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,

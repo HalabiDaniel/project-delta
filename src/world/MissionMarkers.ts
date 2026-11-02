@@ -172,6 +172,7 @@ export class MissionMarkers {
             ring.addComponent('render', { meshInstances: [new pc.MeshInstance(this.torus(at.r ?? 2.1, 0.18), this.mat.practiceRing)], castShadows: false });
             ring.setPosition(at.x, t.top + 0.12, at.z);
             this.root.addChild(ring);
+            outline(ring, 'structure');
             marker.rings.set(id, ring);
           }
           break;
@@ -331,6 +332,8 @@ export class MissionMarkers {
     hoop.setLocalEulerAngles(90, 0, 0);
     root.addChild(hoop);
     this.root.addChild(root);
+    // Pencil strokes like every other object (shown when outlines are on; the stroke mesh is shared per ring size).
+    outline(root, 'structure');
     return root;
   }
 }

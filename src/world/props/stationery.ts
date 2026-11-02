@@ -152,6 +152,78 @@ export function star(radius = 0.6, color: MaterialId = 'paper/white', depth = 0.
   return m;
 }
 
+/** A wax crayon along +Y: paper wrapper, bare wax below the tip, a cone tip. */
+export function crayon(length = 2.4, radius = 0.2, color: MaterialId = 'paper/red'): Model {
+  const m = new Model();
+  const wrapper = length * 0.62;
+  m.part(color).cylinder(radius, length * 0.12, { sides: 8 });
+  m.part('paper/white').cylinder(radius * 1.04, wrapper - length * 0.12, { sides: 8 }, { at: [0, length * 0.12, 0] });
+  m.part(color).cylinder(radius * 1.06, 0.06, { sides: 8 }, { at: [0, wrapper * 0.45, 0] });
+  m.part(color).cylinder(radius, length * 0.2, { sides: 8 }, { at: [0, wrapper, 0] });
+  m.part(color).cylinder(radius, length * 0.18, { sides: 8, topRadius: radius * 0.25 }, { at: [0, wrapper + length * 0.2, 0] });
+  return m;
+}
+
+/** A crayon lying on the desk, pointing along +X. */
+export function lyingCrayon(length = 2.4, radius = 0.2, color: MaterialId = 'paper/red'): Model {
+  return new Model().add(crayon(length, radius, color), { rot: [0, 0, -90], at: [0, radius, 0] });
+}
+
+/** A clear plastic protractor lying flat, its markings as decals. */
+export function protractor(radius = 1.8): { body: Model; marks: Model } {
+  const body = new Model();
+  const outline: Array<[number, number]> = [];
+  for (let i = 0; i <= 12; i++) {
+    const a = (i / 12) * Math.PI;
+    outline.push([Math.cos(a) * radius, Math.sin(a) * radius]);
+  }
+  body.part('plastic/clear').extrude(outline, 0.06, { rot: [-90, 0, 0], at: [0, 0.03, 0] });
+  const marks = new Model();
+  for (let i = 1; i < 18; i++) {
+    const a = (i / 18) * Math.PI;
+    const long = i % 3 === 0;
+    const r = radius - (long ? 0.2 : 0.12);
+    marks.part('ink/black').box([0.03, 0.006, long ? 0.36 : 0.2], { at: [Math.cos(a) * r, 0.064, -Math.sin(a) * r], rot: [0, (a * 180) / Math.PI - 90, 0] });
+  }
+  return { body, marks };
+}
+
+/** A paper clip lying flat: two nested loops of wire. */
+export function paperClip(length = 1.6): Model {
+  const m = new Model();
+  const w = 0.025;
+  for (const [l, h, dx] of [[length, 0.5, 0], [length * 0.72, 0.3, 0.12]] as const) {
+    m.part('pencil/metal').box([l, w * 2, w * 2], { at: [dx, w, h / 2] });
+    m.part('pencil/metal').box([l, w * 2, w * 2], { at: [dx, w, -h / 2] });
+    m.part('pencil/metal').box([w * 2, w * 2, h], { at: [dx - l / 2, w, 0] });
+    m.part('pencil/metal').box([w * 2, w * 2, h], { at: [dx + l / 2, w, 0] });
+  }
+  return m;
+}
+
+/** A little heap of pencil shavings: frilled wooden cones with painted rims. */
+export function shavings(seed = 1): Model {
+  const m = new Model();
+  for (let i = 0; i < 5; i++) {
+    const a = rand(seed * 7 + i) * Math.PI * 2;
+    const d = 0.2 + rand(seed * 11 + i) * 0.6;
+    const at: Vec3 = [Math.cos(a) * d, 0.12, Math.sin(a) * d];
+    const rot: Vec3 = [80 + rand(seed + i) * 20, rand(seed * 3 + i) * 360, 0];
+    m.part('pencil/wood').cylinder(0.32, 0.22, { sides: 7, topRadius: 0.04 }, { at, rot });
+    m.part(i % 2 ? 'pencil/yellow' : 'paper/red').cylinder(0.34, 0.03, { sides: 7 }, { at, rot });
+  }
+  return m;
+}
+
+/** A glue stick lying down: white tube, orange cap. */
+export function glueStick(): Model {
+  const m = new Model();
+  m.part('plastic/white').cylinder(0.32, 1.5, { sides: 10 }, { rot: [0, 0, -90], at: [0, 0.32, 0] });
+  m.part('plastic/orange').cylinder(0.34, 0.6, { sides: 10 }, { rot: [0, 0, -90], at: [1.5, 0.32, 0] });
+  m.part('paper/orange').cylinder(0.33, 0.6, { sides: 10 }, { rot: [0, 0, -90], at: [0.4, 0.32, 0] });
+  return m;
+}
+
 /** Deterministic 0–1 noise for placing things. */
 export function rand(n: number): number {
   const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;

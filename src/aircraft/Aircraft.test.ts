@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AIRCRAFT, AIRCRAFT_ORDER, LANDING, PLANE, type AircraftId, type Difficulty } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, LANDING, PLANE, STARTER_AIRCRAFT, type AircraftId, type Difficulty } from '../config';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
 import { layoutDefenses } from '../defenses/Layout';
@@ -25,9 +25,11 @@ describe('aircraft catalog', () => {
     expect(new Set(AIRCRAFT_ORDER)).toEqual(new Set(Object.keys(AIRCRAFT)));
     expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].name)).size).toBe(11);
     expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].role)).size).toBe(4);
-    // The original four keep their prices; the Dart is still the cheapest.
-    expect(['dart', 'falcon', 'swift', 'widewing'].map((id) => AIRCRAFT[id as AircraftId].cost)).toEqual([10, 25, 30, 40]);
-    for (const id of AIRCRAFT_ORDER) expect(AIRCRAFT[id].cost).toBeGreaterThanOrEqual(AIRCRAFT.dart.cost);
+    // v0.0.11 re-roling: the Swift is the starter and the cheapest; the Dart costs more than before.
+    expect(['swift', 'dart', 'falcon', 'widewing'].map((id) => AIRCRAFT[id as AircraftId].cost)).toEqual([10, 25, 30, 40]);
+    expect(STARTER_AIRCRAFT).toBe('swift');
+    expect(AIRCRAFT_ORDER[0]).toBe(STARTER_AIRCRAFT);
+    for (const id of AIRCRAFT_ORDER) if (id !== 'swift') expect(AIRCRAFT[id].cost).toBeGreaterThan(AIRCRAFT.swift.cost);
   });
 
   it('every design can slow down enough to land, and refits cost less than a new plane', () => {
@@ -47,7 +49,28 @@ describe('aircraft catalog', () => {
     expect(dart.flight.speedResponse).toBeGreaterThan(widewing.flight.speedResponse);
     expect(widewing.flight.rollResponse).toBeLessThan(dart.flight.rollResponse);
     expect(widewing.bombs.capacity).toBe(4);
-    expect(dart.bombs).toEqual({ capacity: 1, kind: 'small' });
+  });
+
+  it('re-roles the original four (v0.0.11): starter Swift, agile Falcon, fast recon Dart, Widewing unchanged', () => {
+    const { swift, falcon, dart, widewing } = AIRCRAFT;
+    // Swift: cheap, forgiving (lowest stall speed of the four), balanced guns, one small bomb.
+    expect(swift.bombs).toEqual({ capacity: 1, kind: 'small' });
+    expect(swift.gun.barrels).toBe(2);
+    expect(swift.flight.minSpeed).toBeLessThanOrEqual(Math.min(dart.flight.minSpeed, falcon.flight.minSpeed));
+    // Falcon: the best turn rate in the game, strong guns, no bombs; stealth in the data, dormant.
+    for (const id of AIRCRAFT_ORDER) if (id !== 'falcon') expect(AIRCRAFT[id].flight.maxTurnRate).toBeLessThan(falcon.flight.maxTurnRate);
+    expect(falcon.bombs.capacity).toBe(0);
+    expect(falcon.traits?.stealth).toBe(true);
+    expect(aircraftRatings(falcon).firepower).toBe(5);
+    // Dart: the fastest plane, longest range of the four, weak guns, no bombs, a recon bonus.
+    const top = (id: AircraftId) => AIRCRAFT[id].flight.maxSpeed + AIRCRAFT[id].flight.boostSpeed;
+    for (const id of AIRCRAFT_ORDER) if (id !== 'dart') expect(top(id)).toBeLessThan(top('dart'));
+    expect(dart.range).toBeGreaterThan(Math.max(swift.range, falcon.range, widewing.range));
+    expect(dart.bombs.capacity).toBe(0);
+    expect(aircraftRatings(dart).firepower).toBe(1);
+    expect(dart.traits?.reconRate).toBeGreaterThan(1);
+    // Widewing: the heavy bomber it was.
+    expect(widewing).toMatchObject({ cost: 40, refitCost: 10, maxHealth: 150, bombs: { capacity: 4, kind: 'standard' }, signature: 1.25 });
   });
 });
 
@@ -74,8 +97,8 @@ describe('aircraftRatings', () => {
     expect(widewing.maneuverability).toBe(1);
     expect(dart.stealth).toBe(5);
     expect(widewing.stealth).toBe(1);
-    // The multipurpose plane sits in the middle of everything.
-    for (const key of RATING_KEYS) expect(swift[key]).toBe(3);
+    // The starter is middling: nothing at the extremes but its small bomb load.
+    for (const key of RATING_KEYS) if (key !== 'payload') expect(swift[key]).toBeGreaterThanOrEqual(2), expect(swift[key]).toBeLessThanOrEqual(4);
   });
 });
 
@@ -97,21 +120,21 @@ describe('assessSuitability', () => {
     expect(level('widewing', 'fortified')).toBe('recommended');
     expect(level('falcon', 'fortified')).toBe('good');
     expect(level('falcon', 'survival')).toBe('recommended');
-    // A multi-stage strike needs a bit of everything: the weakest stat decides, which favours the all-rounder.
-    expect(level('swift', 'multi-stage')).toBe('recommended');
-    for (const id of ['dart', 'falcon', 'widewing'] as const) expect(level(id, 'multi-stage')).toBe('possible');
+    // A multi-stage strike needs a bit of everything: the weakest stat decides, which favours an all-rounder
+    // with a real bomb load (the Lightning); none of the original four is more than possible.
+    expect(level('lightning', 'multi-stage')).not.toBe('possible');
+    for (const id of ['swift', 'dart', 'falcon', 'widewing'] as const) expect(level(id, 'multi-stage')).toBe('possible');
   });
 
   it('a rack too small for one bomb per target is the only thing that rules a plane out', () => {
-    expect(level('falcon', 'multi-bomb')).toBe('unsuitable');
-    expect(level('dart', 'multi-bomb')).toBe('unsuitable');
-    expect(level('swift', 'multi-bomb', 'hard')).not.toBe('unsuitable');
-    // Unconventional but possible: a bomber on a ring course, a Dart on a bombing run.
+    expect(level('swift', 'multi-bomb')).toBe('unsuitable');
+    expect(level('lightning', 'multi-bomb', 'hard')).not.toBe('unsuitable');
+    // Unconventional but possible: a bomber on a ring course, the starter on a bombing run.
     expect(level('widewing', 'rings')).toBe('possible');
-    expect(level('dart', 'bombing')).toBe('possible');
-    // Planes without a bomb bay (Raptor, Specter) can't take bombing work at all.
+    expect(level('swift', 'bombing')).toBe('possible');
+    // Planes without a bomb bay (Dart, Falcon, Raptor, Specter) can't take bombing work at all.
     const bombless = AIRCRAFT_ORDER.filter((id) => AIRCRAFT[id].bombs.capacity === 0);
-    expect(bombless.sort()).toEqual(['raptor', 'specter']);
+    expect(bombless.sort()).toEqual(['dart', 'falcon', 'raptor', 'specter']);
     for (const type of MISSION_TYPES) {
       if (type === 'multi-bomb') continue;
       for (const id of AIRCRAFT_ORDER) {
@@ -126,17 +149,19 @@ describe('assessSuitability', () => {
     const easy = mission('bombing', 'easy');
     expect(easy.bombs).toBe(3);
     expect(bombLoad(AIRCRAFT.widewing, easy)).toBe(3);
-    expect(bombLoad(AIRCRAFT.swift, easy)).toBe(2);
-    expect(bombLoad(AIRCRAFT.falcon, easy)).toBe(1);
+    expect(bombLoad(AIRCRAFT.lightning, easy)).toBe(2);
+    expect(bombLoad(AIRCRAFT.swift, easy)).toBe(1);
+    expect(bombLoad(AIRCRAFT.falcon, easy)).toBe(0);
     expect(assessSuitability(AIRCRAFT.widewing, easy).reason).toContain('All 3 bombs aboard');
-    expect(assessSuitability(AIRCRAFT.falcon, easy).reason).toContain('1 of 3 bombs, no spare');
-    expect(assessSuitability(AIRCRAFT.falcon, mission('multi-bomb')).reason).toBe('Carries 1 bomb; 2 targets need 2');
+    expect(assessSuitability(AIRCRAFT.swift, easy).reason).toContain('1 of 3 bombs, no spare');
+    expect(assessSuitability(AIRCRAFT.swift, mission('multi-bomb')).reason).toBe('Carries 1 bomb; 2 targets need 2');
+    expect(assessSuitability(AIRCRAFT.falcon, easy).reason).toBe('No bomb bay');
   });
 
   it('recommends the Falcon for fighting in the air, and the Swift for a combined attack', () => {
     for (const type of ['dogfight', 'bomber-intercept', 'scout-intercept', 'escort', 'patrol'] as const) expect(level('falcon', type)).toBe('recommended');
-    expect(['recommended', 'good']).toContain(level('swift', 'bomber-intercept'));
+    expect(['recommended', 'good']).toContain(level('swift', 'dogfight'));
     expect(level('widewing', 'dogfight')).toBe('possible');
-    expect(level('swift', 'combined')).toBe('recommended');
+    expect(level('lightning', 'combined')).not.toBe('possible');
   });
 });

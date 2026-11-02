@@ -1,8 +1,11 @@
+import { emergencyPlane } from '../systems/GameState';
+import { dashboardView } from '../ui/dashboardView';
+import { failureText, nextStepText, paperBreakdown } from '../ui/reportText';
 import * as pc from 'playcanvas';
 import { aircraftRatings, RATING_KEYS, RATING_LABELS } from '../aircraft/Aircraft';
 import { assessTouchdown } from '../aircraft/Landing';
 import { leadPoint } from '../ai/Gunnery';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, DEFENSES, DIRECTOR, PVP, THREAT, TIERS, WORLD, type AiRole } from '../config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BOMB, DEFENSES, DIRECTOR, PVP, STARTER_AIRCRAFT, THREAT, TIERS, WORLD, type AiRole } from '../config';
 import type { Installation } from '../defenses/Installation';
 import type { InstallationKind } from '../defenses/Layout';
 import type { Mission, Objective } from '../missions/Mission';
@@ -133,7 +136,7 @@ export class MpViews {
       } else if (phase === 'desk' && g.priv.garage?.emergency) {
         noteTone = 'bad';
         tag = 'Scrap';
-        note = `You can't afford any plane: a free emergency Dart has half the ink, no bomb, for one sortie.${mission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+        note = `You can't afford any plane: a free emergency Swift has half the ink, no bomb, for one sortie.${mission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
       } else if (phase === 'desk' && !g.resources.canAfford(buildCost)) {
         const wait = st.income.timeToAfford(g.resources.paper, buildCost);
         noteTone = 'bad';
@@ -215,7 +218,7 @@ export class MpViews {
       landing,
       boundary: { state: flying ? g.predictor.flight.boundary.state : 'inside', countdown: g.predictor.flight.boundary.countdown },
       result: this.result(),
-      pointerLocked: g.input.pointerLocked,
+      pointerLocked: g.input.pointerLocked || g.controls.padFlying,
       nose,
       aim,
       target,
@@ -226,6 +229,28 @@ export class MpViews {
       air: this.airView(flying, aim),
       raid: this.raidAlert(),
       base: baseOpen && g.baseMode && g.base ? g.baseMode.view((x, z) => this.project(this.v3.set(x, 1.2, z)), phase === 'ready' || phase === 'landed', g.priv.raid ?? null) : null,
+      tutorial: st && g.tutorialReady ? g.tutorial.view(g.tutorialContext()) : null,
+      dashboard:
+        st && g.base && choosing && !baseOpen
+          ? dashboardView({
+              paper: g.resources.paper,
+              rate: eco?.rate ?? 0,
+              base: g.base,
+              hangar: st.hangar,
+              mission: mission ? { title: mission.title, reward: mission.reward, bombs: mission.spec.bombs } : null,
+              plane: {
+                id: st.aircraft,
+                fit: mission ? st.suitability(st.aircraft, mission).level : 'possible',
+                cost: buildCost,
+                kind: phase === 'desk' ? st.buildKindFor(st.aircraft) : st.buildKind,
+                canBuild: !!mission && phase === 'desk' && g.resources.canAfford(buildCost) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
+              },
+              lostPlane: g.lostPlane,
+              onPad: phase !== 'desk',
+              raidInbound: this.raidAlert() !== null,
+              emergency: emergencyNow,
+            })
+          : null,
     };
   }
 
@@ -375,7 +400,7 @@ export class MpViews {
     return {
       recovered: r.recovered,
       headline: r.recovered ? 'Plane recovered' : killedBy ? 'Shot down' : 'Plane destroyed',
-      aircraftName: s.emergency ? 'Emergency Dart' : spec.name,
+      aircraftName: s.emergency ? `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}` : spec.name,
       missionTitle: r.missionTitle,
       missionLine: succeeded ? `Complete · +${r.reward}` : failure[r.failure ?? 'abandoned'],
       missionTone: succeeded ? 'good' : 'bad',
@@ -407,6 +432,9 @@ export class MpViews {
       records: [],
       achievements: [],
       streak: 0,
+      failure: succeeded ? null : failureText(r.failure ?? null),
+      paper: paperBreakdown({ reward: succeeded ? r.reward : 0, missionTitle: r.missionTitle, bonuses: [], earned: s.paperEarned, spent: s.paperSpent, lost: s.paperLost, overflow: s.paperOverflow }),
+      next: nextStepText({ succeeded, recovered: r.recovered, aircraftName: s.emergency ? emergencyPlane().name : spec.name, refitCost: spec.refitCost, cost: spec.cost, repairs: g.base?.needsRepair.length ?? 0 }),
       operation: report && report.role === 'attacker' ? `Raid on ${report.other}: ${report.outcome === 'bombed' ? `got through${report.paperLost > 0 ? `, they lost ${report.paperLost} paper` : ''}` : report.outcome === 'repelled' ? 'repelled' : 'called off'}` : null,
     };
   }

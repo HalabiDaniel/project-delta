@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
-import { AIRCRAFT, AIRCRAFT_ORDER, type AircraftId } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, STARTER_AIRCRAFT, type AircraftId } from '../config';
 import { layoutDefenses } from '../defenses/Layout';
 import { MissionDirector } from '../director/MissionDirector';
 import { planOperation } from '../director/Operations';
@@ -52,6 +52,7 @@ function sample(): SaveData {
       store: 100,
       stats: { ...emptyBaseStats(), raids: 2, repelled: 1, paperLost: 12 },
     },
+    tutorial: { v: 1, step: 4, skipped: false },
   };
 }
 
@@ -132,7 +133,7 @@ describe('validateSave', () => {
     const problems: string[] = [];
     const data = validateSave(raw, problems)!;
     expect(data.paper).toBe(0);
-    expect(data.aircraft).toBe('falcon');
+    expect(data.aircraft).toBe(STARTER_AIRCRAFT); // an unknown plane falls back to the starter
     expect(data.hangar).toEqual([{ id: 'falcon', condition: 'recovered', health: 64, invested: 0 }]);
     expect(data.director!.skill).toBeGreaterThan(0);
     expect(data.director!.offers[1].recipe).toBeNull();
@@ -179,6 +180,35 @@ describe('validateSave', () => {
     expect(data.settings).toEqual({ muted: false, dev: false, hints: 'auto', uiScale: 1, tips: [] });
   });
 
+  it('a v0.0.10 save (version 2) from before the re-roling loads: ids kept, the emergency Dart becomes the emergency Swift', async () => {
+    // As v0.0.10 wrote it: the Dart chosen and kept in the hangar, a Swift that had 110 health then
+    // (the Swift has 90 now) in the air, a Dart's mastery, and an emergency Dart in the paper log.
+    const old = JSON.parse(JSON.stringify(sample()));
+    old.version = 2;
+    old.aircraft = 'dart';
+    old.hangar = [{ id: 'dart', condition: 'ready', health: 45, invested: 10 }, { id: 'swift', condition: 'recovered', health: 110, invested: 0 }];
+    old.inFlight = { aircraft: 'swift', health: 105 };
+    old.progress.mastery.dart = { ...old.progress.mastery.falcon, flights: 7 };
+    old.ledger.entries.push({ at: 9, delta: 0, balance: 0, source: 'spend', label: 'Folded Emergency Dart', count: 1 });
+    old.ledger.byAircraft.push(['dart', { sorties: 4, successes: 2, lost: 1, spent: 40, earned: 90 }]);
+    const store = new MemoryStore();
+    await store.write('main', JSON.stringify(old));
+    const { data, problems } = await new SaveManager(store).load();
+    expect(problems).toEqual([]);
+    expect(data!.version).toBe(SAVE_VERSION);
+    // Every aircraft id survives: the selection, the hangar, mastery, the paper log by plane.
+    expect(data!.aircraft).toBe('dart');
+    expect(data!.hangar.map((h) => h.id)).toEqual(['dart', 'swift']);
+    expect(data!.hangar[0]).toEqual({ id: 'dart', condition: 'ready', health: 45, invested: 10 });
+    expect(data!.progress.mastery.dart?.flights).toBe(7);
+    expect(data!.ledger.byAircraft.find(([id]) => id === 'dart')?.[1].sorties).toBe(4);
+    // Health is held to what the re-roled design has now.
+    expect(data!.hangar[1].health).toBe(AIRCRAFT.swift.maxHealth);
+    expect(data!.inFlight).toEqual({ aircraft: 'swift', health: AIRCRAFT.swift.maxHealth });
+    // The emergency plane is the Swift now.
+    expect(data!.ledger.entries.at(-1)?.label).toBe('Folded Emergency Swift');
+  });
+
   it('a damaged base is repaired: unknown slots and kinds dropped, levels and health kept in range', () => {
     const problems: string[] = [];
     const raw = JSON.parse(JSON.stringify(sample()));
@@ -189,5 +219,14 @@ describe('validateSave', () => {
     expect(u1.level).toBe(3);
     expect(u1.health).toBe(130);
     expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the tutorial record, and a save from before the tutorial has none', () => {
+    expect(validateSave(JSON.parse(JSON.stringify(sample())))!.tutorial).toEqual({ v: 1, step: 4, skipped: false });
+    const old = JSON.parse(JSON.stringify(sample()));
+    delete old.tutorial;
+    expect(validateSave(old)!.tutorial).toBeNull();
+    expect(validateSave({ ...sample(), tutorial: { v: 1, step: 99, skipped: true } })!.tutorial).toEqual({ v: 1, step: 10, skipped: true });
+    expect(validateSave({ ...sample(), tutorial: 'junk' })!.tutorial).toBeNull();
   });
 });

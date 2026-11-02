@@ -50,6 +50,7 @@ export class NetClient {
   code: string | null = null;
   /** The last transfer code the server gave us, for the pause menu. */
   transfer: (TransferDTO & { at: number }) | null = null;
+  private readonly tutorialListeners: Array<(record: unknown) => void> = [];
 
   constructor(readonly endpoint: string = NetClient.defaultEndpoint()) {
     this.sdk = new Client(endpoint);
@@ -99,6 +100,19 @@ export class NetClient {
     if (given) return given;
     const secure = window.location.protocol === 'https:';
     return `${secure ? 'wss' : 'ws'}://${window.location.hostname || 'localhost'}:2567`;
+  }
+
+  /**
+   * The player's tutorial progress, which the server sends right after the welcome (listened for
+   * here, before the hello, so it can't arrive before anyone listens).
+   */
+  onTutorial(listener: (record: unknown) => void): void {
+    this.tutorialListeners.push(listener);
+  }
+
+  /** Keeps the player's tutorial progress on their record on the server. */
+  saveTutorial(record: unknown): void {
+    this.room?.send('tutorial', { t: record });
   }
 
   onStatus(listener: (s: ConnectionStatus) => void): void {
@@ -219,6 +233,9 @@ export class NetClient {
     // Who we are, and a new device token to keep when one was issued.
     room.onMessage('welcome', (m: WelcomeDTO) => {
       if (m.token) this.token = m.token;
+    });
+    room.onMessage('tutorial', (m: { t?: unknown }) => {
+      for (const l of this.tutorialListeners) l(m?.t ?? null);
     });
     room.onMessage('transfer', (m: TransferDTO) => {
       this.transfer = m.code ? { ...m, at: Date.now() } : null;

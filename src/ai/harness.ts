@@ -6,13 +6,14 @@ import { layoutDefenses } from '../defenses/Layout';
 import type { Point3 } from '../missions/Mission';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
+import { decorFootprints } from '../world/territories/decor';
 import type { Contact, Strike } from './AiAircraft';
 import { AirTraffic, type AirEvent } from './AirTraffic';
 
 /** Shared set-up for the AI tests: the real world, a scripted "player", and fire resolved by Ordnance. */
 export const territories = generateTerritories();
 export const home = territories.find((t) => t.isHome)!;
-const occupied = layoutTargetRange(territories).flatMap((s) => s.shapes.map(footprint));
+const occupied = [...layoutTargetRange(territories).flatMap((s) => s.shapes.map(footprint)), ...decorFootprints(territories)];
 export const layout = layoutDefenses(territories, occupied);
 const storeSpec = layout.installations.find((i) => i.id === 'T1-store')!;
 export const store: Strike = { territoryId: 'T1', x: storeSpec.x, y: 0, z: storeSpec.z, radius: RAIDS.hitRadius };

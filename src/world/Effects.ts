@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { buildPaperBallMesh, createPaperMaterial } from '../aircraft/PlaneModel';
 import { PALETTE } from '../config';
+import { outline } from '../render/outline/OutlineRenderer';
 
 interface Scrap {
   entity: pc.Entity;
@@ -121,6 +122,9 @@ export class Effects {
     const s = 0.55 * size;
     entity.setLocalScale(s, s, s);
     this.app.root.addChild(entity);
+    // The crumpled ball is drawn in pencil like the plane it was (when outlines are on); its
+    // strokes go with it when it is destroyed. Short-lived scraps and puffs stay unoutlined.
+    outline(entity, 'prop');
     this.wrecks.push({
       entity,
       velocity: new pc.Vec3().copy(velocity).mulScalar(0.45),

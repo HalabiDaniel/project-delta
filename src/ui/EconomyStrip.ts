@@ -31,7 +31,7 @@ export class EconomyStrip {
     buttons.innerHTML = /* html */ `
       <button class="icon-btn" data-e="base-btn" title="Base (B)">${icon('base')}<span class="badge" data-e="repairs" title="Need repairs"></span><kbd class="hint-key">B</kbd></button>
       <button class="icon-btn" data-e="book-btn" title="Logbook (L)">${icon('book')}<kbd class="hint-key">L</kbd></button>
-      <button class="icon-btn" data-e="menu-btn" title="Menu (Esc)">${icon('menu')}<kbd class="hint-key">Esc</kbd></button>`;
+      <button class="icon-btn" data-e="menu-btn" title="Menu (Esc)">${icon('menu')}<kbd class="hint-key" data-pad="menu">Esc</kbd></button>`;
     host.appendChild(buttons);
     for (const root of [card, buttons]) {
       for (const node of root.querySelectorAll<HTMLElement>('[data-e]')) this.el[node.dataset.e!] = node;

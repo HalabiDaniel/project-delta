@@ -103,7 +103,7 @@ export function assessSuitability(aircraft: AircraftSpec, spec: Pick<MissionSpec
     return {
       level: 'unsuitable',
       score,
-      reason: `Carries ${rack} bomb${rack === 1 ? '' : 's'}; ${targets} targets need ${targets}`,
+      reason: rack === 0 ? 'No bomb bay' : `Carries ${rack} bomb${rack === 1 ? '' : 's'}; ${targets} targets need ${targets}`,
       bombLoad: load,
     };
   }

@@ -34,6 +34,8 @@ export function esc(value: string): string {
 
 /** Buttons never take focus, so Space can't re-trigger them after a click. */
 export function bindButton(button: HTMLElement, action: () => void): void {
+  // Anything clickable can be reached with the controller's highlight (src/input/FocusNav.ts).
+  if (button.tagName !== 'BUTTON' && button.tagName !== 'A') button.dataset.nav = '';
   button.addEventListener('mousedown', (e) => e.preventDefault());
   button.addEventListener('click', (e) => {
     e.stopPropagation();
