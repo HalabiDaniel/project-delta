@@ -43,7 +43,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (!GAME_KEYS.has(e.code)) return;
       // Keys typed into a form control (the developer panel's) are not for the game.
-      if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scrolling, button activation or focus moves
       this.held.add(e.code);
       if (!e.repeat) for (const handler of this.keyHandlers) handler(e.code);

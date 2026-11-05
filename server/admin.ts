@@ -1,6 +1,7 @@
 import { ConfigError, serverConfig } from './config';
 import { Identity } from './identity/Identity';
 import { openStore } from './store/open';
+import { exportFeedback } from './feedbackExport';
 import type { PlayerRecord, Store } from './store/Store';
 
 /**
@@ -209,6 +210,14 @@ async function main(argv: string[]): Promise<number> {
       case 'base release': {
         const p = await onePlayer(store, rest.join(' '));
         console.log((await store.releaseBase(p.id)) ? `${p.name}'s base is off its desk; it goes on a free desk next time they join.` : `${p.name}'s base isn't on a desk.`);
+        return 0;
+      }
+      case 'feedback export': {
+        const format = (rest.includes('--format') ? rest[rest.indexOf('--format') + 1] : 'md') ?? 'md';
+        if (format !== 'csv' && format !== 'md') throw new Error('--format is csv or md');
+        const days = flag(rest.filter((a) => a !== '--format' && a !== format), '--days');
+        const since = days !== null ? new Date(Date.now() - days * 86_400_000) : undefined;
+        process.stdout.write(exportFeedback(await store.feedback(since), format));
         return 0;
       }
       case 'world list':

@@ -483,6 +483,8 @@ export interface HudActions {
   resetProgress(): void;
   /** Multiplayer: ask for a code that moves this player to another computer. */
   moveDevice?(): void;
+  /** Multiplayer: the playtest feedback form (F8, v0.0.14). */
+  openFeedback?(): void;
   dismissWelcome(): void;
   toggleSound(): void;
   setHints(mode: HintMode): void;

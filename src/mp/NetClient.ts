@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
+import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type FeedbackDTO, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
 
 /**
@@ -90,6 +90,13 @@ export class NetClient {
     if (token) options.token = token;
     if (this.code) options.code = this.code;
     return options;
+  }
+
+  /** A playtest feedback entry (F8, v0.0.14). False when not in a session. */
+  sendFeedback(entry: FeedbackDTO): boolean {
+    if (!this.room || this.status !== 'connected') return false;
+    this.room.send('feedback', entry);
+    return true;
   }
 
   /** Asks the server for a one-time code that lets another computer play as us. */

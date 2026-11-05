@@ -105,7 +105,7 @@ export class Menus {
         <div class="controls kbd-only">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
         <div class="controls pad-only">${PAD_CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><b class="pad-key">${key}</b>${icon(i)}<span>${label}</span></div>`).join('')}</div>
         <div class="menu-transfer" data-u="transfer" hidden></div>
-        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost small" data-u="tutorial" title="Show the step-by-step tutorial again">${icon('tip')}<span>Tutorial</span></button><button class="btn ghost danger small" data-u="reset"></button></div>
+        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="feedback" title="Tell the developer about a bug, a frustration or what you enjoyed (F8)">${icon('pencil')}<span>Feedback</span><kbd>F8</kbd></button><button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost small" data-u="tutorial" title="Show the step-by-step tutorial again">${icon('tip')}<span>Tutorial</span></button><button class="btn ghost danger small" data-u="reset"></button></div>
       </div>`;
     root.appendChild(this.overlay);
     this.welcome = document.createElement('div');
@@ -133,6 +133,7 @@ export class Menus {
       actions.resume();
     });
     if (this.el.move) bindButton(this.el.move, () => actions.moveDevice?.());
+    if (this.el.feedback) bindButton(this.el.feedback, () => actions.openFeedback?.());
     bindButton(this.el['wc-go'], actions.dismissWelcome);
     this.welcome.addEventListener('click', (e) => (e.target as HTMLElement).closest('[data-u="wc-mp"]') || actions.dismissWelcome());
     this.overlay.addEventListener('click', (e) => e.target === this.overlay && actions.resume());

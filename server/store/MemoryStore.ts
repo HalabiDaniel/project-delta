@@ -8,6 +8,9 @@ import {
   IncompatibleSaveError,
   SAVE_FORMAT,
   type AircraftRecord,
+  checkFeedback,
+  type FeedbackRecord,
+  type NewFeedback,
   type BaseRecord,
   type MissionOutcome,
   type ProgressRecord,
@@ -374,6 +377,18 @@ export class MemoryStore implements Store {
       .filter((r) => !statuses || statuses.includes(r.status))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map(copySession);
+  }
+
+  private readonly feedbackRows: FeedbackRecord[] = [];
+
+  async addFeedback(entry: NewFeedback): Promise<void> {
+    checkFeedback(entry);
+    const player = entry.playerId ? this.players.get(entry.playerId) : undefined;
+    this.feedbackRows.push({ ...entry, context: { ...entry.context }, id: this.feedbackRows.length + 1, playerName: player ? (player.username ?? player.name) : null, createdAt: new Date() });
+  }
+
+  async feedback(since?: Date): Promise<FeedbackRecord[]> {
+    return this.feedbackRows.filter((f) => !since || f.createdAt >= since).map((f) => ({ ...f, context: { ...f.context } }));
   }
 
   async ping(): Promise<boolean> {

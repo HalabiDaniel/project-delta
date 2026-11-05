@@ -128,3 +128,19 @@ describe('errors a person can read', () => {
     expect(explain('This session is full (16 players).', 'ws://x')).toBe('This session is full (16 players).');
   });
 });
+
+describe('repeated errors (v0.0.14)', () => {
+  it('are written once, then once more with how many there were', async () => {
+    const { flushRepeats, log, setRepeatWindow } = await import('./log');
+    setRepeatWindow(60_000);
+    const before = lines.length;
+    for (let i = 0; i < 5; i++) log('error', 'save.error', { player: `p${i}`, error: new Error('connection terminated') });
+    log('error', 'save.error', { error: new Error('something else') });
+    const written = lines.slice(before);
+    expect(written).toHaveLength(2);
+    expect(written[0]).toMatchObject({ event: 'save.error', error: 'connection terminated', player: 'p0' });
+    flushRepeats(true);
+    const summary = lines.slice(before).find((l) => l.repeated !== undefined);
+    expect(summary).toMatchObject({ event: 'save.error', error: 'connection terminated', repeated: 4, player: 'p4' });
+  });
+});

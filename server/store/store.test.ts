@@ -354,6 +354,18 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect((await store.base(p.id))?.placement).toBeNull();
     });
 
+    it('keeps playtest feedback with its context, and reads it back since a date (v0.0.14)', async () => {
+      const p = await store.createPlayer(player('Critic'), h('token-critic'), 'open');
+      const before = new Date(Date.now() - 1000);
+      await store.addFeedback({ worldId: null, playerId: p.id, category: 'balance', body: 'Bombers too slow', repro: null, rating: 4, context: { fps: 60, position: { x: 1, y: 2, z: 3 } } });
+      const mine = (await store.feedback(before)).filter((f) => f.playerId === p.id);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({ category: 'balance', body: 'Bombers too slow', repro: null, rating: 4, playerName: 'Critic', context: { fps: 60, position: { x: 1, y: 2, z: 3 } } });
+      expect(mine[0].createdAt).toBeInstanceOf(Date);
+      expect((await store.feedback(new Date(Date.now() + 60_000))).filter((f) => f.playerId === p.id)).toHaveLength(0);
+      await expect(store.addFeedback({ worldId: null, playerId: p.id, category: 'bogus' as never, body: 'x', repro: null, rating: null, context: {} })).rejects.toThrow();
+    });
+
     it('records sessions as they open, start and end, keeping the busiest moment', async () => {
       const id = `s-${randomUUID().slice(0, 8)}`;
       const created = new Date(Date.now() - 1000);

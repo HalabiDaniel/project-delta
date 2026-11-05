@@ -1,6 +1,9 @@
 import { Room, type Client, type Deferred } from '@colyseus/core';
 import {
   CLOSE_KICKED,
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_LIMITS,
+  type FeedbackReplyDTO,
   CLOSE_RESTARTING,
   CLOSE_SESSION_ENDED,
   CLOSE_TAKEN_OVER,
@@ -30,7 +33,8 @@ import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRe
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
 import { ECONOMY, PVP, SESSION } from '../src/config';
 import { log, type Level, type LogFields } from './log';
-import { LIMITS } from './RateLimit';
+import { LIMITS, RateLimit } from './RateLimit';
+import pkg from '../package.json' with { type: 'json' };
 import { SESSION_KEY, ensureSpare, mayClose, register, unregister, type SessionHandle } from './sessions/directory';
 import { SessionClock, spokenTime, type SessionSummary } from './sessions/rules';
 import { IncompatibleBaseError, type SessionRecord } from './store/Store';
@@ -114,6 +118,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** Joins and transfer codes per address, process-wide (v0.0.13). */
   private static readonly joins = LIMITS.joinsPerAddress();
   private static readonly transfers = LIMITS.transfersPerAddress();
+  /** Feedback entries per player (v0.0.14): a few in a row, then one every 20 s. */
+  private static readonly feedbacks = new RateLimit(1 / 20, 4);
   /** Players removed by the developer (account id → until when they can't join; v0.0.14). */
   static readonly kicked = new Map<string, number>();
 
@@ -261,6 +267,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.onMessage('tutorial', (client, data: unknown) => void this.saveTutorial(client, data));
     this.onMessage('tip', (client, data: unknown) => void this.saveTip(client, data));
     this.onMessage('username', (client, data: unknown) => void this.setUsername(client, data));
+    this.onMessage('feedback', (client, data: unknown) => void this.saveFeedback(client, data));
     this.onMessage('*', (client, type) => this.bad(client, typeof type === 'string' ? type.slice(0, 24) : '?'));
   }
 
@@ -979,6 +986,46 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     await this.setMetadata({ title: this.title, claimed, free: this.world.shared.claimable.length - claimed });
   }
 
+  // ---- Playtest feedback (v0.0.14) --------------------------------------------------------------
+
+  /**
+   * An entry from the F8 form: checked, rate limited, stored with what the server knows (version,
+   * session, desk, position and mode, ping) next to what the browser sent (frame rate, device).
+   */
+  private async saveFeedback(client: Client, data: unknown): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    const reply = (r: FeedbackReplyDTO) => client.send('feedback', r);
+    if (!id || !account) return;
+    const entry = parseFeedback(data);
+    if (!entry) return this.bad(client, 'feedback');
+    if (!WorldRoom.feedbacks.take(account.id)) return reply({ ok: false, error: 'You sent a lot of feedback just now: wait a minute and send this one again.' });
+    const p = this.world.pilots.get(id);
+    const m = p?.flight.model;
+    const position = m && m.status !== 'hidden' ? { x: Math.round(m.position.x), y: Math.round(m.position.y), z: Math.round(m.position.z) } : null;
+    const context = {
+      ...entry.context,
+      serverVersion: pkg.version,
+      session: this.roomId,
+      sessionTitle: this.title,
+      sessionLeft: Math.round(this.hour.left(Date.now())),
+      players: this.world.pilots.size,
+      desk: p?.home?.id ?? null,
+      mode: p?.state?.phase ?? null,
+      aircraft: m?.spec.id ?? null,
+      position,
+      serverPing: p ? Math.round(p.rtt * 1000) : null,
+    };
+    try {
+      await services().store.addFeedback({ worldId: this.worldId, playerId: account.id, category: entry.category, body: entry.text, repro: entry.repro, rating: entry.rating, context });
+      this.log('info', 'feedback', { player: id, category: entry.category, rating: entry.rating ?? undefined, length: entry.text.length });
+      reply({ ok: true });
+    } catch (error) {
+      this.log('error', 'feedback.error', { player: id, error });
+      reply({ ok: false, error: 'Your feedback couldn\'t be saved right now. Try again in a moment.' });
+    }
+  }
+
   // ---- The admin endpoint (v0.0.14) -------------------------------------------------------------
 
   /** Everyone in this session, for the admin endpoint: who, where, connected, ping. */
@@ -1279,6 +1326,31 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       desks: this.desks(),
     };
   }
+}
+
+/** A feedback message, checked: a known category, text within limits, a small flat context. */
+export function parseFeedback(data: unknown): { category: (typeof FEEDBACK_CATEGORIES)[number]; text: string; repro: string | null; rating: number | null; context: Record<string, string | number | boolean | null> } | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const category = FEEDBACK_CATEGORIES.find((c) => c === d.category);
+  const text = typeof d.text === 'string' ? d.text.trim() : '';
+  if (!category || text.length === 0 || text.length > FEEDBACK_LIMITS.text) return null;
+  const repro = typeof d.repro === 'string' && d.repro.trim().length > 0 ? d.repro.trim() : null;
+  if (repro && repro.length > FEEDBACK_LIMITS.repro) return null;
+  const rating = d.rating === undefined || d.rating === null ? null : d.rating;
+  if (rating !== null && !(Number.isInteger(rating) && (rating as number) >= 1 && (rating as number) <= 5)) return null;
+  const context: Record<string, string | number | boolean | null> = {};
+  if (d.context && typeof d.context === 'object') {
+    const entries = Object.entries(d.context as Record<string, unknown>);
+    if (entries.length > FEEDBACK_LIMITS.contextKeys) return null;
+    for (const [k, v] of entries) {
+      if (!/^[a-zA-Z][a-zA-Z0-9]{0,31}$/.test(k)) return null;
+      if (typeof v === 'string') context[k] = v.slice(0, FEEDBACK_LIMITS.contextValue);
+      else if ((typeof v === 'number' && Number.isFinite(v)) || typeof v === 'boolean' || v === null) context[k] = v;
+      else return null;
+    }
+  }
+  return { category, text, repro, rating: rating as number | null, context };
 }
 
 /** A player as the admin endpoint lists them. */
