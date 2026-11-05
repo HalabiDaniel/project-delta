@@ -72,7 +72,7 @@ describe('BaseMode', () => {
 
   it('upgrade stats say what changes', () => {
     const next = levelStats('workshop', 2, 1);
-    expect(next[0]).toMatchObject({ value: '+5/m', delta: '+3/m' });
+    expect(next[0]).toMatchObject({ value: '+3.5/m', delta: '+2/m' });
     expect(levelStats('storage', 1)[0].value).toBe('+200');
   });
 });

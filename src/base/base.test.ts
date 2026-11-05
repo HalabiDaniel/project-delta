@@ -71,22 +71,22 @@ describe('Base: building', () => {
 });
 
 describe('Base: economy', () => {
-  it('workshops raise production 5 → 7 → 10 → 14 paper a minute, by level, and less when damaged', () => {
+  it('workshops raise production 3.5 → 5 → 7 → 9.5 paper a minute, by level, and less when damaged (v0.0.12 retune)', () => {
     const { base } = setup(2000);
-    expect(base.production).toBe(5);
+    expect(base.production).toBe(3.5);
     base.build('E1', 'workshop');
+    expect(base.production).toBe(5);
+    base.upgrade('E1');
     expect(base.production).toBe(7);
     base.upgrade('E1');
-    expect(base.production).toBe(10);
-    base.upgrade('E1');
-    expect(base.production).toBe(14);
+    expect(base.production).toBe(9.5);
     base.installation('E1')!.damage(60); // half of 120
-    expect(base.production).toBeCloseTo(9.5, 5);
+    expect(base.production).toBeCloseTo(6.5, 5);
     base.installation('E1')!.damage(1000);
-    expect(base.production).toBe(5);
+    expect(base.production).toBe(3.5);
     // A wrecked paper store halves base production.
     base.store.damage(1000);
-    expect(base.production).toBe(5 * BASE.wreckedStore);
+    expect(base.production).toBe(3.5 * BASE.wreckedStore);
   });
 
   it('storage boxes raise capacity 300 → 500 → 800 and protect more paper; damage exposes it', () => {

@@ -220,8 +220,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Dart',
     role: 'recon',
     roleLabel: 'Fast recon',
-    cost: 25,
-    refitCost: 6,
+    cost: 40,
+    refitCost: 10,
     tagline: 'The fastest plane in the classroom, with the longest legs. A light gun, no bombs: it looks, it runs.',
     flight: {
       minSpeed: 11, cruiseSpeed: 24, maxSpeed: 38,
@@ -247,8 +247,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Falcon',
     role: 'fighter',
     roleLabel: 'Agile fighter',
-    cost: 30,
-    refitCost: 7,
+    cost: 45,
+    refitCost: 11,
     tagline: 'Turns tighter than anything else, with twin ink guns. No bombs: built to dogfight.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 33,
@@ -274,8 +274,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Swift',
     role: 'multirole',
     roleLabel: 'Basic fighter',
-    cost: 10,
-    refitCost: 3,
+    cost: 15,
+    refitCost: 5,
     tagline: 'The starter: cheap, forgiving and balanced. Twin guns and one small bomb.',
     flight: {
       minSpeed: 9, cruiseSpeed: 20, maxSpeed: 30,
@@ -300,8 +300,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Widewing',
     role: 'bomber',
     roleLabel: 'Bomber',
-    cost: 40,
-    refitCost: 10,
+    cost: 75,
+    refitCost: 19,
     tagline: 'Slow, heavy and tough. Carries four bombs and turns like a barge.',
     flight: {
       minSpeed: 9, cruiseSpeed: 17, maxSpeed: 26,
@@ -327,8 +327,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Raptor',
     role: 'fighter',
     roleLabel: 'Air superiority',
-    cost: 45,
-    refitCost: 10,
+    cost: 70,
+    refitCost: 15,
     tagline: 'The fastest fighter with the heaviest guns. No bombs: it rules the air.',
     flight: {
       minSpeed: 11, cruiseSpeed: 23, maxSpeed: 36,
@@ -353,8 +353,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Lightning',
     role: 'multirole',
     roleLabel: 'Stealth multirole',
-    cost: 45,
-    refitCost: 10,
+    cost: 80,
+    refitCost: 18,
     tagline: 'Hard to spot, good at everything: guns for a fight, two bombs for the target.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 31,
@@ -379,8 +379,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Thug',
     role: 'multirole',
     roleLabel: 'Ground attack',
-    cost: 40,
-    refitCost: 9,
+    cost: 70,
+    refitCost: 16,
     tagline: 'Slow, armoured and loud. A spinning ink cannon and three mini bombs for low passes.',
     flight: {
       minSpeed: 8, cruiseSpeed: 17, maxSpeed: 26,
@@ -405,8 +405,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Jumper',
     role: 'multirole',
     roleLabel: 'VTOL fighter',
-    cost: 40,
-    refitCost: 9,
+    cost: 70,
+    refitCost: 16,
     tagline: 'Flies slower than anything else with jets, and turns tight. Hover mode comes later.',
     flight: {
       minSpeed: 7, cruiseSpeed: 19, maxSpeed: 29,
@@ -431,8 +431,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Specter',
     role: 'recon',
     roleLabel: 'Surveillance drone',
-    cost: 30,
-    refitCost: 6,
+    cost: 50,
+    refitCost: 10,
     tagline: 'A long, quiet glider that flies further than anything. Barely armed, no bombs.',
     flight: {
       minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
@@ -457,8 +457,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Lancer',
     role: 'bomber',
     roleLabel: 'Supersonic bomber',
-    cost: 55,
-    refitCost: 12,
+    cost: 105,
+    refitCost: 23,
     tagline: 'A bomber that can outrun fighters: swing wings, three bombs, a quick dash home.',
     flight: {
       minSpeed: 11, cruiseSpeed: 22, maxSpeed: 34,
@@ -483,8 +483,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     name: 'Ghost',
     role: 'bomber',
     roleLabel: 'Stealth bomber',
-    cost: 60,
-    refitCost: 13,
+    cost: 120,
+    refitCost: 26,
     tagline: 'A flying wing defenses barely notice. Four bombs, long legs, no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
@@ -1083,8 +1083,8 @@ export interface BuildingSpec {
 export const BASE = {
   /** Paper T1 holds with no storage boxes. Earnings beyond the capacity are lost. */
   capacity: 300,
-  /** Paper per minute with no workshop… */
-  production: 5,
+  /** Paper per minute with no workshop (v0.0.12: 5 → 3.5, paper comes in more slowly)… */
+  production: 3.5,
   /** …times this while the balance is below the protected reserve: the crew scavenges scraps. */
   lowBoost: 3,
   /** …and times this while the paper store lies wrecked. */
@@ -1146,9 +1146,9 @@ export const BASE = {
     workshop: {
       kind: 'workshop', name: 'Paper workshop', short: 'Workshop', slots: ['economy', 'utility'], purpose: 'More paper per minute',
       levels: [
-        { cost: 80, health: 90, production: 2 },
-        { cost: 60, health: 105, production: 5 },
-        { cost: 90, health: 120, production: 9 },
+        { cost: 80, health: 90, production: 1.5 },
+        { cost: 60, health: 105, production: 3.5 },
+        { cost: 90, health: 120, production: 6 },
       ],
     },
     storage: {

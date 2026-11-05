@@ -1,6 +1,9 @@
 import { BASE, ECONOMY } from '../config';
 import type { ResourceManager } from './ResourceManager';
 
+/** Rounding left over from adding up fractions of a sheet. */
+const CARRY_EPSILON = 1e-9;
+
 /**
  * producing – paper comes in at the normal rate.
  * boosted   – the balance is below the protected reserve: the crew scavenges scraps, faster.
@@ -74,8 +77,9 @@ export class HomeIncome {
       return 0;
     }
     this.carry += (this.ratePerMinute(resources.paper) * dt) / 60;
-    while (this.carry >= 1 && this.isProducing(resources.paper)) {
-      this.carry -= 1;
+    // A hair under 1 is 1: fractional rates (3.5 a minute) mustn't lose a sheet to rounding.
+    while (this.carry >= 1 - CARRY_EPSILON && this.isProducing(resources.paper)) {
+      this.carry = Math.max(0, this.carry - 1);
       this.lastPaid += resources.earn(1, 'income', 'Home production');
     }
     if (!this.isProducing(resources.paper)) this.carry = 0;

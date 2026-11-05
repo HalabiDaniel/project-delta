@@ -434,7 +434,7 @@ describe('GameState: landing, rearming and the end of a sortie', () => {
 
   it('paper never goes negative: building is refused, and home income gets the player going again', () => {
     const { state, resources, events } = setupWith(new HomeIncome(), 'delivery');
-    state.selectAircraft('dart'); // 25 paper a plane
+    state.selectAircraft('dart'); // 40 paper a plane
     let builds = 0;
     for (let i = 0; i < 10; i++) {
       if (state.build()) {
@@ -446,7 +446,7 @@ describe('GameState: landing, rearming and the end of a sortie', () => {
       }
       expect(resources.paper).toBeGreaterThanOrEqual(0);
     }
-    expect(builds).toBe(4);
+    expect(builds).toBe(Math.floor(ECONOMY.startingPaper / AIRCRAFT.dart.cost));
     expect(state.canBuild()).toBe(false);
     expect(events).toContain('build-refused');
     const wait = state.income.timeToAfford(resources.paper, state.buildCost)!;
@@ -598,8 +598,9 @@ describe('GameState: aircraft and raids', () => {
   });
 
   it('raid losses during a sortie show in its report', () => {
-    const { state } = setup();
+    const { state, resources } = setup();
     sortie(state);
+    resources.restore(ECONOMY.protectedPaper + 30);
     state.raidHit(5, ECONOMY.protectedPaper);
     expect(state.sortie!.paperLost).toBe(5);
   });

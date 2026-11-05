@@ -25,8 +25,8 @@ describe('aircraft catalog', () => {
     expect(new Set(AIRCRAFT_ORDER)).toEqual(new Set(Object.keys(AIRCRAFT)));
     expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].name)).size).toBe(11);
     expect(new Set(AIRCRAFT_ORDER.map((id) => AIRCRAFT[id].role)).size).toBe(4);
-    // v0.0.11 re-roling: the Swift is the starter and the cheapest; the Dart costs more than before.
-    expect(['swift', 'dart', 'falcon', 'widewing'].map((id) => AIRCRAFT[id as AircraftId].cost)).toEqual([10, 25, 30, 40]);
+    // v0.0.11 re-roling: the Swift is the starter and the cheapest. v0.0.12: every plane dearer to fold.
+    expect(['swift', 'dart', 'falcon', 'widewing'].map((id) => AIRCRAFT[id as AircraftId].cost)).toEqual([15, 40, 45, 75]);
     expect(STARTER_AIRCRAFT).toBe('swift');
     expect(AIRCRAFT_ORDER[0]).toBe(STARTER_AIRCRAFT);
     for (const id of AIRCRAFT_ORDER) if (id !== 'swift') expect(AIRCRAFT[id].cost).toBeGreaterThan(AIRCRAFT.swift.cost);
@@ -69,8 +69,8 @@ describe('aircraft catalog', () => {
     expect(dart.bombs.capacity).toBe(0);
     expect(aircraftRatings(dart).firepower).toBe(1);
     expect(dart.traits?.reconRate).toBeGreaterThan(1);
-    // Widewing: the heavy bomber it was.
-    expect(widewing).toMatchObject({ cost: 40, refitCost: 10, maxHealth: 150, bombs: { capacity: 4, kind: 'standard' }, signature: 1.25 });
+    // Widewing: the heavy bomber it was (at v0.0.12's prices).
+    expect(widewing).toMatchObject({ cost: 75, refitCost: 19, maxHealth: 150, bombs: { capacity: 4, kind: 'standard' }, signature: 1.25 });
   });
 });
 

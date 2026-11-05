@@ -36,8 +36,11 @@ describe('Economy simulation', () => {
     for (let seed = 1; seed <= 8; seed++) {
       const r = run('struggling', seed);
       expect(r.missions).toBe(40);
-      // Never long without the paper for a Falcon, and better off at the end than at the start.
-      expect(r.longestBroke).toBeLessThanOrEqual(4);
+      // v0.0.12 made planes dearer so a lost plane is felt: a struggling player may go a while
+      // without the paper for a Falcon (flying cheaper planes meanwhile), but rarely needs the free
+      // emergency plane, and always ends better off than a Falcon.
+      expect(r.longestBroke).toBeLessThanOrEqual(8);
+      expect(r.emergencies).toBeLessThanOrEqual(3);
       expect(r.paperEnd).toBeGreaterThan(AIRCRAFT.falcon.cost);
     }
   });
@@ -55,8 +58,8 @@ describe('Economy simulation', () => {
     };
     const rookie = perSuccess('new');
     const veteran = perSuccess('veteran');
-    // A newcomer's mix of easy and medium work pays two to four Darts…
-    expect(rookie).toBeGreaterThan(AIRCRAFT.dart.cost * 2);
+    // A newcomer's mix of easy and medium work pays one and a half to four Darts (v0.0.12 prices)…
+    expect(rookie).toBeGreaterThan(AIRCRAFT.dart.cost * 1.5);
     expect(rookie).toBeLessThan(AIRCRAFT.widewing.cost * 2);
     // …a veteran's hard and very hard work two to six Widewings: more, but not unbounded.
     expect(veteran).toBeGreaterThan(rookie * 2);
