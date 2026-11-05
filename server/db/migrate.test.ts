@@ -26,8 +26,10 @@ describe.skipIf(!TEST_DATABASE_URL)('migrating PostgreSQL', () => {
     const first = await migrate(t!.db);
     expect(first.applied.map((m) => m.version)).toEqual(loadMigrations().map((m) => m.version));
     expect(await tables(t!.db)).toEqual(
-      expect.arrayContaining(['players', 'player_tokens', 'invites', 'transfer_codes', 'worlds', 'territories', 'buildings', 'balances', 'aircraft', 'transactions', 'missions', 'progress', 'pvp_records', 'feedback', 'schema_migrations']),
+      expect.arrayContaining(['players', 'player_tokens', 'invites', 'transfer_codes', 'worlds', 'territories', 'bases', 'base_buildings', 'balances', 'aircraft', 'transactions', 'missions', 'progress', 'pvp_records', 'feedback', 'schema_migrations']),
     );
+    // v0.0.12: bases belong to players; the territory-keyed buildings table is gone.
+    expect(await tables(t!.db)).not.toContain('buildings');
     const second = await migrate(t!.db);
     expect(second.applied).toEqual([]);
   });

@@ -11,6 +11,11 @@ import type { Store } from './store/Store';
 export interface Services {
   store: Store;
   identity: Identity;
+  /**
+   * Lets a client pick its desk (tests and tools). Off in a real server: until v0.0.13's sessions,
+   * every base is placed on a random free desk.
+   */
+  chooseDesk?: boolean;
 }
 
 export function memoryServices(access: AccessMode = 'open', pepper = DEV_PEPPER): Services {

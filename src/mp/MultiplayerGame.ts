@@ -426,6 +426,8 @@ export class MultiplayerGame {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
       if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
+      // v0.0.12: the server places our own base on a free desk; we only ask for it.
+      if (!this.home) this.claim('');
     });
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
@@ -433,7 +435,8 @@ export class MultiplayerGame {
       for (const e of events) this.onEvent(e);
     });
     room.onMessage('claimed', (m: { ok: boolean; error: string | null; territory: string }) => {
-      this.claimError = m.ok ? null : `Can't claim ${m.territory}: ${m.error}`;
+      // Already placed (a reconnect that raced the welcome) is not an error worth showing.
+      this.claimError = m.ok || m.error === 'already claimed' ? null : `Couldn't place your base: ${m.error}`;
       if (m.ok) this.sounds.play('spotted');
     });
     room.onStateChange((s) => this.onState(s));

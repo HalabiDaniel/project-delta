@@ -103,6 +103,62 @@ export type TransactionResult =
   /** A debit larger than the balance: nothing changed. */
   | { status: 'insufficient'; balance: number };
 
+// ---- Portable bases (v0.0.12) ---------------------------------------------------------------------
+
+/** The version of a saved base's data (`bases.format`): refused if newer, upgraded by migrations if older. */
+export const BASE_FORMAT = 1;
+
+/** A building as saved: where it stands, what it is, and the rules' own fields in `data`. */
+export interface SavedBuilding {
+  /** A slot id from BASE.slots ("D1", ...). */
+  slot: string;
+  kind: 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage';
+  level: number;
+  health: number;
+  data: Record<string, unknown>;
+}
+
+/** What a base is made of, wherever it stands. */
+export interface BaseState {
+  /** The paper store's health. */
+  storeHealth: number;
+  stats: Record<string, unknown>;
+  buildings: SavedBuilding[];
+}
+
+/** Where a base stands right now: which server room holds it, on which desk, and for how long. */
+export interface BasePlacement {
+  /** The room holding the base ("<server instance>/<room id>"). */
+  holder: string;
+  territoryId: string;
+  /** The placement lapses after this unless the holder saves again (a crashed server lets go). */
+  leaseUntil: Date;
+}
+
+export interface BaseRecord {
+  playerId: string;
+  /** Null until the player's first base has been built and saved (a new player starts fresh). */
+  state: BaseState | null;
+  placement: BasePlacement | null;
+  updatedAt: Date;
+}
+
+export type PlaceResult =
+  /** Placed for this holder: build the base from `state` (null: a new player's starting base). */
+  | { status: 'placed'; state: BaseState | null }
+  /** Already standing somewhere else: a base is never in two places. */
+  | { status: 'elsewhere'; placement: BasePlacement };
+
+/** A base saved by a newer build than this one: refused rather than misread. */
+export class IncompatibleBaseError extends Error {
+  constructor(
+    readonly playerId: string,
+    readonly found: number,
+  ) {
+    super(`The base of player ${playerId} was saved in format ${found}, but this server only understands format ${BASE_FORMAT} and older. Update the server.`);
+  }
+}
+
 export interface Store {
   readonly kind: 'memory' | 'postgres';
 
@@ -163,11 +219,50 @@ export interface Store {
   applyTransaction(tx: TransactionInput): Promise<TransactionResult>;
   transactions(worldId: string, playerId: string, limit?: number): Promise<TransactionRecord[]>;
 
+  // ---- Portable bases (v0.0.12) -----------------------------------------------------------------
+  //
+  // A base belongs to the player, not to a desk. A room places it (taking a lease on it), saves it
+  // while the player plays (renewing the lease), and packs it when they leave. Only the holder can
+  // save or pack; a lease that runs out (a crashed server) lets anyone place it again.
+
+  /** The player's base as last saved, and where it stands (null: never placed). */
+  base(playerId: string): Promise<BaseRecord | null>;
+  /**
+   * Places the player's base for `holder` on `territoryId` for `leaseSeconds`, unless another
+   * holder has it with a live lease. Placing again for the same holder renews it.
+   */
+  placeBase(playerId: string, holder: string, territoryId: string, leaseSeconds: number): Promise<PlaceResult>;
+  /** Saves the base and renews the lease, only if `holder` still holds it. False: it doesn't. */
+  saveBase(playerId: string, holder: string, state: BaseState, leaseSeconds: number): Promise<boolean>;
+  /** Saves the base for the last time and lets go of it, only if `holder` holds it. */
+  packBase(playerId: string, holder: string, state: BaseState): Promise<boolean>;
+  /**
+   * Lets go of the base without saving it (its saved state stays): only if `holder` holds it, or
+   * whoever does when no holder is given (the developer's way out).
+   */
+  releaseBase(playerId: string, holder?: string): Promise<boolean>;
+
   // ---- Health -----------------------------------------------------------------------------------
 
   /** True if the store can be reached right now. */
   ping(): Promise<boolean>;
   close(): Promise<void>;
+}
+
+const BUILDING_KINDS: ReadonlySet<string> = new Set(['turret', 'launcher', 'radar', 'workshop', 'storage']);
+
+/** Shared validation: a base's shape, before either store writes it. */
+export function checkBaseState(state: BaseState): void {
+  if (!Number.isSafeInteger(state.storeHealth) || state.storeHealth < 0) throw new Error(`base store health must be a whole number ≥ 0, not ${state.storeHealth}`);
+  const slots = new Set<string>();
+  for (const b of state.buildings) {
+    if (typeof b.slot !== 'string' || !/^[A-Za-z0-9-]{1,32}$/.test(b.slot)) throw new Error(`bad building slot "${b.slot}"`);
+    if (slots.has(b.slot)) throw new Error(`two buildings in slot "${b.slot}"`);
+    slots.add(b.slot);
+    if (!BUILDING_KINDS.has(b.kind)) throw new Error(`bad building kind "${b.kind}"`);
+    if (!Number.isSafeInteger(b.level) || b.level < 1 || b.level > 10) throw new Error(`bad building level ${b.level}`);
+    if (!Number.isSafeInteger(b.health) || b.health < 0) throw new Error(`bad building health ${b.health}`);
+  }
 }
 
 /** Shared validation: a transaction's shape, before either store touches it. */

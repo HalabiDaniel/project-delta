@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import {
+  checkBaseState,
   checkTransaction,
   IncompatibleSaveError,
   SAVE_FORMAT,
+  type BaseRecord,
+  type BaseState,
   type InviteRecord,
   type InviteRefusal,
   type NewInvite,
   type NewPlayer,
+  type PlaceResult,
   type PlayerRecord,
   type Store,
   type TokenOrigin,
@@ -46,6 +50,7 @@ export class MemoryStore implements Store {
   private readonly log: TransactionRecord[] = [];
   private readonly keys = new Set<string>();
   private readonly tutorials = new Map<string, Record<string, unknown>>();
+  private readonly bases = new Map<string, BaseRecord>();
   /** Tests can make the store "newer" than the code to check refusals. */
   worldFormatOverride: number | null = null;
 
@@ -208,6 +213,53 @@ export class MemoryStore implements Store {
       .map((t) => ({ ...t }));
   }
 
+  // ---- Portable bases ---------------------------------------------------------------------------
+
+  async base(playerId: string): Promise<BaseRecord | null> {
+    const b = this.bases.get(playerId);
+    return b ? copyBase(b) : null;
+  }
+
+  async placeBase(playerId: string, holder: string, territoryId: string, leaseSeconds: number): Promise<PlaceResult> {
+    if (!this.players.has(playerId)) throw new Error(`no player ${playerId}`);
+    let b = this.bases.get(playerId);
+    if (!b) {
+      b = { playerId, state: null, placement: null, updatedAt: new Date() };
+      this.bases.set(playerId, b);
+    }
+    const p = b.placement;
+    if (p && p.holder !== holder && p.leaseUntil.getTime() > Date.now()) return { status: 'elsewhere', placement: { ...p } };
+    b.placement = { holder, territoryId, leaseUntil: new Date(Date.now() + leaseSeconds * 1000) };
+    return { status: 'placed', state: b.state ? copyState(b.state) : null };
+  }
+
+  async saveBase(playerId: string, holder: string, state: BaseState, leaseSeconds: number): Promise<boolean> {
+    checkBaseState(state);
+    const b = this.bases.get(playerId);
+    if (!b?.placement || b.placement.holder !== holder) return false;
+    b.placement.leaseUntil = new Date(Date.now() + leaseSeconds * 1000);
+    b.state = copyState(state);
+    b.updatedAt = new Date();
+    return true;
+  }
+
+  async packBase(playerId: string, holder: string, state: BaseState): Promise<boolean> {
+    checkBaseState(state);
+    const b = this.bases.get(playerId);
+    if (!b?.placement || b.placement.holder !== holder) return false;
+    b.placement = null;
+    b.state = copyState(state);
+    b.updatedAt = new Date();
+    return true;
+  }
+
+  async releaseBase(playerId: string, holder?: string): Promise<boolean> {
+    const b = this.bases.get(playerId);
+    if (!b?.placement || (holder !== undefined && b.placement.holder !== holder)) return false;
+    b.placement = null;
+    return true;
+  }
+
   async ping(): Promise<boolean> {
     return true;
   }
@@ -219,4 +271,12 @@ export class MemoryStore implements Store {
 
 function publicInvite(i: InviteRecord & { codeHash: string }): InviteRecord {
   return { id: i.id, label: i.label, maxUses: i.maxUses, uses: i.uses, createdAt: i.createdAt, expiresAt: i.expiresAt, revoked: i.revoked };
+}
+
+function copyState(s: BaseState): BaseState {
+  return structuredClone(s);
+}
+
+function copyBase(b: BaseRecord): BaseRecord {
+  return { playerId: b.playerId, state: b.state ? copyState(b.state) : null, placement: b.placement ? { ...b.placement, leaseUntil: new Date(b.placement.leaseUntil) } : null, updatedAt: new Date(b.updatedAt) };
 }

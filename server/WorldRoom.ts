@@ -19,6 +19,8 @@ import { parseTutorial } from '../src/progress/Tutorial';
 import { refusal, type Authenticated } from './identity/Identity';
 import { services } from './services';
 import type { PlayerRecord } from './store/Store';
+import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper';
+import { fromBaseState, toBaseState } from './world/bases';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 
 export interface RoomOptions extends ServerWorldOptions {
@@ -60,7 +62,12 @@ const SPARE_SEATS = 4;
  * NET.reconnectGrace seconds (their plane flies on straight ahead); a browser refresh comes back
  * with Colyseus's reconnection token, or with the device token as the same player. A player who
  * leaves (or doesn't come back in time) is removed: their base comes down and the territory is
- * free again (persistence of territories comes in the next phases of v0.0.10).
+ * free again.
+ *
+ * Portable bases (v0.0.12): a base belongs to the player. Claiming places the player's saved base
+ * (or a new player's starting base) on a random free desk; the room saves every base standing in it
+ * every BASE_SAVE_EVERY seconds and packs it when its player leaves for good. The store's lease
+ * keeps a base in one place at a time (see BaseKeeper).
  */
 export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata }> {
   /** Every player in a room on this server, and which room: one connection per player, process-wide. */
@@ -88,9 +95,15 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
    * during onJoin arrive before the client can listen for them).
    */
   private readonly greetings = new Map<string, { reconnected: boolean; token: string | null }>();
+  /** Places, saves and packs this room's bases in the store. */
+  private keeper!: BaseKeeper;
+  /** Players whose base is being loaded, and the desks held for them meanwhile. */
+  private readonly placing = new Map<string, string>();
+  private saveTimer = BASE_SAVE_EVERY;
 
   onCreate(options: RoomOptions = {}): void {
     this.world = new ServerWorld(options);
+    this.keeper = new BaseKeeper(() => services().store, `${SERVER_INSTANCE}/${this.roomId}`);
     this.state = new WorldState();
     for (const t of this.world.territories) {
       const ts = new TerritoryState();
@@ -107,15 +120,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (id) this.world.input(id, unpackFrames(data));
     });
     this.onMessage('claim', (client, data: unknown) => {
-      const id = this.idOf(client);
-      if (!id) return;
       const territory = typeof (data as { t?: unknown })?.t === 'string' ? (data as { t: string }).t : '';
-      const error = this.world.claim(id, territory);
-      client.send('claimed', { ok: error === null, territory, error });
-      if (error === null) {
-        this.sendPrivate(client, true);
-        void this.refreshMetadata();
-      }
+      void this.placeBase(client, territory);
     });
     this.onMessage('cmd', (client, data: unknown) => {
       const id = this.idOf(client);
@@ -266,8 +272,81 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.removePlayer(id);
   }
 
-  onDispose(): void {
+  async onDispose(): Promise<void> {
     for (const [id, room] of WorldRoom.presence) if (room === this) WorldRoom.presence.delete(id);
+    // Anyone still here (a shutdown) has their base packed before the room goes.
+    for (const id of [...this.world.pilots.keys()]) this.removePlayer(id);
+    await this.keeper.settle();
+  }
+
+  // ---- Portable bases ---------------------------------------------------------------------------
+
+  /**
+   * The player's base onto a desk: a random free one (or `wanted`, where the server lets clients
+   * choose). Loaded from the store first; a base the store can't load is never replaced by a fresh
+   * one, the player is asked to try again.
+   */
+  private async placeBase(client: Client, wanted: string): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    if (!id || !account || this.placing.has(id)) return;
+    const reply = (territory: string, error: string | null) => client.send('claimed', { ok: error === null, territory, error });
+    const taken = new Set(this.placing.values());
+    let desk: string;
+    if (services().chooseDesk) {
+      const refused = this.world.claimRefusal(id, wanted) ?? (taken.has(wanted) ? 'taken' : null);
+      if (refused) return reply(wanted, refused);
+      desk = wanted;
+    } else {
+      const refused = this.world.pilots.get(id)?.home ? 'already claimed' : null;
+      if (refused) return reply(wanted, refused);
+      const free = this.world.freeDesks().filter((t) => !taken.has(t));
+      if (free.length === 0) return reply(wanted, 'no free desk');
+      desk = free[Math.floor(Math.random() * free.length)];
+    }
+    this.placing.set(id, desk);
+    try {
+      const placed = await this.keeper.place(account.id, desk);
+      if (placed.status === 'elsewhere') {
+        console.warn(`[room ${this.roomId}] base of ${id} is still held by ${placed.placement.holder}`);
+        return reply(desk, 'Your base is still in another classroom. Try again in a minute.');
+      }
+      // Gone while the base loaded (left, or a newer connection took over): let it go again.
+      if (this.idOf(client) !== id || this.world.claimRefusal(id, desk) !== null) {
+        await this.keeper.release(account.id);
+        return;
+      }
+      const save = placed.state ? fromBaseState(placed.state) : null;
+      const error = this.world.claim(id, desk, save);
+      if (error) {
+        await this.keeper.release(account.id);
+        return reply(desk, error);
+      }
+      // A new player's starting base is saved at once.
+      if (!save) this.saveBase(id);
+      reply(desk, null);
+      this.sendPrivate(client, true);
+      void this.refreshMetadata();
+      console.log(`[room ${this.roomId}] ${account.name} (${id}): ${save ? 'base placed' : 'new base'} on ${desk}`);
+    } catch (error) {
+      console.error(`[room ${this.roomId}] could not load the base of ${id}:`, error);
+      reply(desk, "Your base couldn't be loaded right now. Try again in a moment.");
+    } finally {
+      this.placing.delete(id);
+    }
+  }
+
+  /** Saves a player's base as it stands now (renewing the room's lease on it). */
+  private saveBase(id: string): void {
+    const account = this.accounts.get(id);
+    const save = this.world.baseSave(id);
+    if (!account || !save) return;
+    this.keeper.save(account.id, toBaseState(save)).then(
+      (ok) => {
+        if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} is no longer held by this room; not saved`);
+      },
+      (error) => console.error(`[room ${this.roomId}] could not save the base of ${id}:`, error),
+    );
   }
 
   /** The player a connection speaks for, if it is still their current connection. */
@@ -305,7 +384,16 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   }
 
   private removePlayer(id: string): void {
-    this.world.remove(id);
+    const account = this.accounts.get(id);
+    const packed = this.world.remove(id);
+    if (account && packed) {
+      this.keeper.pack(account.id, toBaseState(packed)).then(
+        (ok) => {
+          if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} was no longer held by this room; not packed`);
+        },
+        (error) => console.error(`[room ${this.roomId}] could not pack the base of ${id}:`, error),
+      );
+    }
     this.state.players.delete(id);
     this.state.planes.delete(id);
     this.pings.delete(id);
@@ -338,6 +426,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     while (this.accumulator >= NET.step) {
       this.world.step(NET.step);
       this.accumulator -= NET.step;
+    }
+    this.saveTimer -= seconds;
+    if (this.saveTimer <= 0) {
+      this.saveTimer = BASE_SAVE_EVERY;
+      for (const [id, p] of this.world.pilots) if (p.base) this.saveBase(id);
     }
     this.pingTimer -= seconds;
     if (this.pingTimer <= 0) {

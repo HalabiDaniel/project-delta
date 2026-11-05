@@ -16,6 +16,8 @@ import type { PlayerRecord, Store } from './store/Store';
  *   npm run admin -- player restore <player>
  *   npm run admin -- player logout <player>          # every device token stops working
  *   npm run admin -- player reissue <player>         # a code (valid 7 days) that gives them a new pass
+ *   npm run admin -- base show <player>             # their saved base and where it stands
+ *   npm run admin -- base release <player>          # a base stuck on a desk (its saved state stays)
  *   npm run admin -- world list
  *
  * Kicking connected players, freeing territories and the protected admin endpoint come with the
@@ -33,6 +35,8 @@ const USAGE = `Usage: npm run admin -- <command>
   player restore <player>                       Undo revoke
   player logout <player>                        Revoke every device token (they need a reissue code)
   player reissue <player>                       A one-time code (7 days) to get a new pass
+  base show <player>                            The player's saved base and where it stands
+  base release <player>                         Free a base stuck on a desk (it keeps its saved state)
   world list                                    Every world and its save format`;
 
 function flag(args: string[], name: string): number | null {
@@ -111,6 +115,28 @@ async function main(argv: string[]): Promise<number> {
         const { code, expiresAt } = await identity.transferCode(p.id, 'admin');
         console.log(`Code for ${p.name} (${p.publicId}), valid once until ${expiresAt.toISOString()}:\n\n  ${code}\n`);
         console.log('They enter it in the multiplayer lobby\'s Code field; their territory and progress stay theirs.');
+        return 0;
+      }
+      case 'base show': {
+        const p = await onePlayer(store, rest.join(' '));
+        const b = await store.base(p.id);
+        if (!b) {
+          console.log(`${p.name} (${p.publicId}) has no base yet.`);
+          return 0;
+        }
+        const where = b.placement ? `on ${b.placement.territoryId}, held by ${b.placement.holder} until ${b.placement.leaseUntil.toISOString()}` : 'packed (not on any desk)';
+        console.log(`${p.name} (${p.publicId}): ${where}; last saved ${b.updatedAt.toISOString()}`);
+        if (!b.state) {
+          console.log('  Never saved: they start with the starting base.');
+          return 0;
+        }
+        console.log(`  Paper store: ${b.state.storeHealth} health`);
+        for (const x of b.state.buildings) console.log(`  ${x.slot.padEnd(4)} ${x.kind.padEnd(9)} level ${x.level}  ${x.health} health`);
+        return 0;
+      }
+      case 'base release': {
+        const p = await onePlayer(store, rest.join(' '));
+        console.log((await store.releaseBase(p.id)) ? `${p.name}'s base is off its desk; it goes on a free desk next time they join.` : `${p.name}'s base isn't on a desk.`);
         return 0;
       }
       case 'world list':

@@ -1,13 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { Database, type Queryable, type Row } from '../db/Database';
 import {
+  BASE_FORMAT,
+  checkBaseState,
   checkTransaction,
+  IncompatibleBaseError,
   IncompatibleSaveError,
   SAVE_FORMAT,
+  type BasePlacement,
+  type BaseRecord,
+  type BaseState,
   type InviteRecord,
   type InviteRefusal,
   type NewInvite,
   type NewPlayer,
+  type PlaceResult,
   type PlayerRecord,
   type Store,
   type TokenOrigin,
@@ -220,6 +227,71 @@ export class PgStore implements Store {
     }));
   }
 
+  // ---- Portable bases ---------------------------------------------------------------------------
+
+  async base(playerId: string): Promise<BaseRecord | null> {
+    if (!isUuid(playerId)) return null;
+    return readBase(this.db, playerId);
+  }
+
+  async placeBase(playerId: string, holder: string, territoryId: string, leaseSeconds: number): Promise<PlaceResult> {
+    return this.db.transaction(async (tx) => {
+      // Taken only if nobody holds it, the same holder does, or the holder's lease ran out. The
+      // upsert's condition is checked on the locked row, so two rooms placing at once can't both win.
+      const { rows } = await tx.query(
+        `insert into bases as b (player_id, placed_by, placed_on, placed_at, lease_until)
+              values ($1, $2, $3, now(), now() + make_interval(secs => $4))
+         on conflict (player_id) do update
+                 set placed_by = excluded.placed_by, placed_on = excluded.placed_on,
+                     placed_at = case when b.placed_by = excluded.placed_by and b.placed_on = excluded.placed_on then b.placed_at else now() end,
+                     lease_until = excluded.lease_until
+               where b.placed_by is null or b.placed_by = excluded.placed_by or b.lease_until <= now()
+         returning player_id`,
+        [playerId, holder, territoryId, leaseSeconds],
+      );
+      const record = await readBase(tx, playerId);
+      if (!record) throw new Error(`base of ${playerId} vanished while it was placed`);
+      if (rows.length === 0) return { status: 'elsewhere' as const, placement: record.placement! };
+      return { status: 'placed' as const, state: record.state };
+    });
+  }
+
+  async saveBase(playerId: string, holder: string, state: BaseState, leaseSeconds: number): Promise<boolean> {
+    checkBaseState(state);
+    return this.db.transaction(async (tx) => {
+      const { rows } = await tx.query(
+        `update bases set lease_until = now() + make_interval(secs => $3) where player_id = $1 and placed_by = $2 returning player_id`,
+        [playerId, holder, leaseSeconds],
+      );
+      if (rows.length === 0) return false;
+      await writeBase(tx, playerId, state);
+      return true;
+    });
+  }
+
+  async packBase(playerId: string, holder: string, state: BaseState): Promise<boolean> {
+    checkBaseState(state);
+    return this.db.transaction(async (tx) => {
+      const { rows } = await tx.query(
+        `update bases set placed_by = null, placed_on = null, placed_at = null, lease_until = null where player_id = $1 and placed_by = $2 returning player_id`,
+        [playerId, holder],
+      );
+      if (rows.length === 0) return false;
+      await writeBase(tx, playerId, state);
+      return true;
+    });
+  }
+
+  async releaseBase(playerId: string, holder?: string): Promise<boolean> {
+    if (!isUuid(playerId)) return false;
+    const { rowCount } = await this.db.query(
+      `update bases set placed_by = null, placed_on = null, placed_at = null, lease_until = null
+        where player_id = $1 and placed_by is not null and ($2::text is null or placed_by = $2)`,
+      [playerId, holder ?? null],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
   // ---- Health -----------------------------------------------------------------------------------
 
   ping(): Promise<boolean> {
@@ -265,6 +337,34 @@ function toInvite(r: Row): InviteRecord {
 
 function toWorld(r: Row): WorldRecord {
   return { id: String(r.id), name: String(r.name), format: Number(r.format), createdAt: r.created_at as Date, settings: (r.settings as Record<string, unknown>) ?? {} };
+}
+
+async function readBase(q: Queryable, playerId: string): Promise<BaseRecord | null> {
+  const { rows } = await q.query('select * from bases where player_id = $1', [playerId]);
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  const format = Number(r.format);
+  if (format > BASE_FORMAT) throw new IncompatibleBaseError(playerId, format);
+  const placement: BasePlacement | null = r.placed_by === null ? null : { holder: String(r.placed_by), territoryId: String(r.placed_on), leaseUntil: r.lease_until as Date };
+  let state: BaseState | null = null;
+  if (r.store_health !== null) {
+    const b = await q.query('select slot, kind, level, health, data from base_buildings where player_id = $1 order by slot', [playerId]);
+    state = {
+      storeHealth: Number(r.store_health),
+      stats: (r.stats as Record<string, unknown>) ?? {},
+      buildings: b.rows.map((x) => ({ slot: String(x.slot), kind: x.kind as BaseState['buildings'][number]['kind'], level: Number(x.level), health: Number(x.health), data: (x.data as Record<string, unknown>) ?? {} })),
+    };
+  }
+  return { playerId, state, placement, updatedAt: r.updated_at as Date };
+}
+
+/** Replaces the saved base (inside the caller's transaction, after it checked who holds it). */
+async function writeBase(tx: Queryable, playerId: string, state: BaseState): Promise<void> {
+  await tx.query('update bases set format = $2, store_health = $3, stats = $4::jsonb, updated_at = now() where player_id = $1', [playerId, BASE_FORMAT, state.storeHealth, JSON.stringify(state.stats)]);
+  await tx.query('delete from base_buildings where player_id = $1', [playerId]);
+  for (const b of state.buildings) {
+    await tx.query('insert into base_buildings (player_id, slot, kind, level, health, data) values ($1, $2, $3, $4, $5, $6::jsonb)', [playerId, b.slot, b.kind, b.level, b.health, JSON.stringify(b.data)]);
+  }
 }
 
 function isUuid(s: string): boolean {
