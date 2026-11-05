@@ -6,13 +6,14 @@ import { launch, place, player, quietWorld, run } from './testkit';
 const events = (world: ReturnType<typeof quietWorld>, type: NetEvent['t']) => world.drainEvents().map((o) => o.e).filter((e) => e.t === type);
 
 describe('joining and claiming territories', () => {
-  it('gives each player one territory, refuses taken ones and the centre', () => {
+  it('gives each player one territory and refuses taken ones; every desk can hold a player (v0.0.13)', () => {
     const world = quietWorld();
     world.join('a', 'Ann');
     world.join('b', 'Bo');
     expect(world.claim('a', 'T3')).toBeNull();
     expect(world.claim('b', 'T3')).toBe('taken');
-    expect(world.claim('b', 'T11')).toBe('not claimable');
+    expect(world.claim('b', 'T99')).toBe('not claimable');
+    expect(world.shared.claimable).toHaveLength(16);
     expect(world.claim('a', 'T7')).toBe('already claimed');
     expect(world.claim('b', 'T7')).toBeNull();
     expect(world.owners.get('T3')).toBe('a');

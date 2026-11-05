@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOSE_TAKEN_OVER, PROTOCOL_VERSION, ROOM, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type TransferDTO, type WelcomeDTO } from '../net/protocol';
+import { CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
 
 /**
@@ -11,13 +11,7 @@ import { WorldState } from '../net/schema';
  */
 export type ConnectionStatus = 'offline' | 'connecting' | 'connected' | 'reconnecting' | 'lost';
 
-export interface RoomListing {
-  roomId: string;
-  clients: number;
-  maxClients: number;
-  locked: boolean;
-  metadata?: { title?: string; claimed?: number; free?: number };
-}
+export type { SessionListing };
 
 const RESUME_KEY = 'paperwars.mp.resume';
 /** The device token, per server: it is how the server recognises this browser's player. */
@@ -26,7 +20,8 @@ const TOKEN_KEY = 'paperwars.mp.token';
 const RESUME_WINDOW_MS = 55_000;
 
 /**
- * The browser's side of the connection: lists, creates and joins classroom sessions, keeps the
+ * The browser's side of the connection: lists and joins classroom sessions (the server opens them,
+ * v0.0.13: quick join asks it which one to join), keeps the
  * connection status, resumes a session after a page refresh (the reconnection token is kept in
  * session storage), measures the round trip, and sends input frames, commands and emotes.
  *
@@ -133,24 +128,43 @@ export class NetClient {
     this.statusListeners.push(listener);
   }
 
-  /** The sessions on the server (the HTTP endpoint next to the WebSocket one). */
-  async list(): Promise<RoomListing[]> {
-    const url = this.endpoint.replace(/^ws/, 'http').replace(/\/$/, '') + '/rooms';
-    const response = await fetch(url);
+  /** The HTTP side of the server (next to the WebSocket one). */
+  private get http(): string {
+    return this.endpoint.replace(/^ws/, 'http').replace(/\/$/, '');
+  }
+
+  /** The sessions on the server. Also measures the round trip to it (`rtt`), for the list. */
+  async list(): Promise<SessionListing[]> {
+    const started = performance.now();
+    const response = await fetch(`${this.http}/sessions`);
     if (!response.ok) throw new Error(`Server answered ${response.status}`);
-    return (await response.json()) as RoomListing[];
+    const list = (await response.json()) as SessionListing[];
+    if (!this.room) this.rtt = Math.round(performance.now() - started);
+    return list;
   }
 
-  async create(title: string, name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.create(ROOM, this.joinOptions(name, { title }), WorldState));
+  async join(id: string, name: string): Promise<Room<unknown, WorldState>> {
+    return this.enter(() => this.sdk.joinById(id, this.joinOptions(name), WorldState));
   }
 
-  async join(roomId: string, name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.joinById(roomId, this.joinOptions(name), WorldState));
-  }
-
+  /**
+   * The session the server picks (the busiest one with space, or a new one), joined. Two players
+   * taking the last desk at once: the one refused asks again and is sent elsewhere.
+   */
   async quickJoin(name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.joinOrCreate(ROOM, this.joinOptions(name, { title: 'Classroom' }), WorldState));
+    return this.enter(async () => {
+      for (let attempt = 0; ; attempt++) {
+        const response = await fetch(`${this.http}/sessions/quick`, { method: 'POST' });
+        const body = (await response.json().catch(() => ({}))) as Partial<QuickJoinDTO> & { error?: string };
+        if (!response.ok || !body.id) throw new Error(body.error ?? `Server answered ${response.status}`);
+        try {
+          return await this.sdk.joinById(body.id, this.joinOptions(name), WorldState);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (attempt >= 3 || !/full|about to end|has ended|locked|not found/i.test(message)) throw error;
+        }
+      }
+    });
   }
 
   /** Back into the session this tab was in before a refresh, if it is still waiting for us. */
@@ -234,10 +248,12 @@ export class NetClient {
     room.onLeave((code, reason) => {
       if (this.room !== room) return;
       this.room = null;
-      if (code === CLOSE_TAKEN_OVER) this.forget();
-      if (code !== 4000) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
+      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED) this.forget();
+      // The end of a session is no error: the results card is up.
+      const clean = code === 4000 || code === CLOSE_SESSION_ENDED;
+      if (!clean) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
       this.stopPinging();
-      this.setStatus(code === 4000 ? 'offline' : 'lost');
+      this.setStatus(clean ? 'offline' : 'lost');
     });
     room.onError((code, message) => {
       this.lastError = message ?? `Error ${code}`;

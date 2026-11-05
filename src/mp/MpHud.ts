@@ -65,6 +65,9 @@ export interface MpHudView {
   outgoing: { victim: string; colour: number } | null;
   protection: { newPlayer: number; shield: number } | null;
   emoteKeys: boolean;
+  /** Seconds of the session left (v0.0.13), and whether joining has closed (the end is near). */
+  sessionLeft: number | null;
+  closing: boolean;
 }
 
 const WEAPON_ICONS: Record<Weapon, IconName> = { ink: 'ink', rocket: 'rocket', bomb: 'bomb', ram: 'damage', crash: 'crumple' };
@@ -137,7 +140,7 @@ export class MpHud {
   }
 
   private renderNet(v: MpHudView): void {
-    const key = `${v.status}|${Math.round(v.ping / 5)}|${v.players}|${v.room}|${v.protection?.newPlayer ?? 0}|${v.protection?.shield ?? 0}|${v.emoteKeys}`;
+    const key = `${v.status}|${Math.round(v.ping / 5)}|${v.players}|${v.room}|${v.protection?.newPlayer ?? 0}|${v.protection?.shield ?? 0}|${v.emoteKeys}|${v.sessionLeft}|${v.closing}`;
     if (key === this.lastNet) return;
     this.lastNet = key;
     const tone = v.status === 'connected' ? (v.ping > 200 ? 'warn' : 'good') : v.status === 'reconnecting' || v.status === 'connecting' ? 'warn' : 'bad';
@@ -145,8 +148,9 @@ export class MpHud {
       ? `<span class="stat" title="${v.protection.newPlayer > 0 ? 'New-player protection: nobody can raid your base yet' : 'Raid shield: your base was just raided, nobody can raid it again yet'}">${icon('shield')}<b>${fmtTime(Math.max(v.protection.newPlayer, v.protection.shield))}</b></span>`
       : '';
     this.net.innerHTML = `<span class="mp-dot" data-tone="${tone}" title="${v.status}"></span>
-      <span class="stat" title="Round trip to the server">${icon('clock')}<b>${v.status === 'connected' ? Math.round(v.ping) : '—'}</b><small>ms</small></span>
-      <span class="stat" title="Players in this classroom">${icon('fighter')}<b>${v.players}/${v.maxPlayers}</b></span>${shield}
+      <span class="stat" title="Round trip to the server">${icon('radar')}<b>${v.status === 'connected' ? Math.round(v.ping) : '—'}</b><small>ms</small></span>
+      <span class="stat" title="Players in this session">${icon('fighter')}<b>${v.players}/${v.maxPlayers}</b></span>${shield}
+      ${v.sessionLeft !== null ? `<span class="stat mp-session${v.closing ? ' closing' : ''}" title="${v.closing ? 'The session ends soon (nobody new can join)' : 'Time left in this session'}">${icon('clock')}<b>${fmtTime(v.sessionLeft)}</b></span>` : ''}
       <span class="mp-room-name" title="Classroom">${esc(v.room)}</span>
       ${v.emoteKeys ? `<span class="mp-keys" title="Emotes"><kbd>Z</kbd>${EMOTE_TEXT.waggle}<kbd>C</kbd>${EMOTE_TEXT.confetti}<kbd>V</kbd>${EMOTE_TEXT.heart}<kbd>Tab</kbd>${icon('kills')}</span>` : `<span class="mp-keys"><kbd>Tab</kbd>${icon('kills')}</span>`}`;
   }

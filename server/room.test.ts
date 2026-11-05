@@ -4,6 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { NET, PROTOCOL_VERSION, ROOM, type MeDTO, type WelcomeDTO } from '../src/net/protocol';
 import type { WorldState } from '../src/net/schema';
 import { memoryServices, setServices } from './services';
+import { serverOptions } from './sessions/directory';
+import { sessionRoutes } from './sessions/routes';
 import { WorldRoom } from './WorldRoom';
 import { persistenceCases } from './persistence.cases';
 
@@ -17,7 +19,7 @@ let colyseus: ColyseusTestServer;
 const join = { v: PROTOCOL_VERSION };
 
 beforeAll(async () => {
-  colyseus = await boot(defineServer({ rooms: { [ROOM]: defineRoom(WorldRoom) }, greet: false }), 2581);
+  colyseus = await boot(defineServer({ rooms: { [ROOM]: defineRoom(WorldRoom) }, routes: sessionRoutes(), greet: false }), 2581);
 });
 afterAll(async () => colyseus.shutdown());
 beforeEach(async () => {
@@ -26,7 +28,7 @@ beforeEach(async () => {
 });
 
 async function room(): Promise<WorldRoom> {
-  const r = (await colyseus.createRoom(ROOM, { ambient: false, seed: 5 })) as unknown as WorldRoom;
+  const r = (await colyseus.createRoom(ROOM, serverOptions({ ambient: false, seed: 5 }))) as unknown as WorldRoom;
   // Stays up while empty, so a test can leave and come back.
   r.autoDispose = false;
   return r;
@@ -68,7 +70,7 @@ describe('the classroom room', () => {
     expect(state.players.get(boId)?.name).toBe('Boscript');
     expect(state.territories.get('T1')?.owner).toBe(annId);
     expect(state.territories.get('T9')?.owner).toBe(boId);
-    expect(state.territories.get('T11')?.claimable).toBe(false);
+    expect(state.territories.get('T11')?.claimable).toBe(true);
     expect([...state.installations.values()].some((i) => i.owner === boId && i.slot === 'store')).toBe(true);
     // Ann's private state: her paper and her cards, nobody else's.
     const merged = Object.assign({}, ...me) as MeDTO;
@@ -138,7 +140,7 @@ describe('the classroom room', () => {
     expect(await bo.waitForMessage('claimed')).toMatchObject({ ok: true });
   });
 
-  it('holds eight players and turns the ninth away', async () => {
+  it('holds sixteen players (one per desk) and turns the seventeenth away', async () => {
     const r = await room();
     for (let i = 0; i < NET.maxPlayers; i++) await colyseus.connectTo(r, { ...join, name: `P${i}` });
     await expect(colyseus.connectTo(r, { ...join, name: 'Late' })).rejects.toThrow();

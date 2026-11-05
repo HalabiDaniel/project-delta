@@ -418,6 +418,30 @@ export class ServerWorld {
   }
 
   /**
+   * The session is over, or the server is stopping (v0.0.13): raids in progress are settled as they
+   * stand (no bomb has landed yet, so nothing was lost), every plane in the air or on the ground away
+   * from the pad goes back to its hangar in its current condition, and missions in flight are called
+   * off (a completed one has already paid). Bases stay up until each player is removed.
+   */
+  wrapUp(): void {
+    for (const attack of [...this.attacks.active]) this.endAttack(attack, 'abandoned');
+    for (const p of this.pilots.values()) this.recall(p);
+  }
+
+  /** The player's plane back to the hangar from wherever it is, in its current condition. */
+  recall(p: Pilot): boolean {
+    const st = p.state;
+    if (!st || (st.phase !== 'flying' && st.phase !== 'landed')) return false;
+    if (!st.recall()) return false;
+    this.guns.clear(p.id);
+    this.bombs.clear(p.id);
+    this.history.forget(p.plane);
+    p.flight.model.hide();
+    p.stopped = false;
+    return true;
+  }
+
+  /**
    * The player's paper changes since the last call, oldest first, for the ledger (also after they
    * left: what their last moments changed).
    */

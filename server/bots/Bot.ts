@@ -4,7 +4,7 @@ import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
 import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
 import { Predictor } from '../../src/net/Prediction';
-import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, ROOM, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
+import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
 import { sharedWorld } from '../../src/net/World';
 
@@ -33,6 +33,15 @@ export interface BotStats {
 
 const shared = sharedWorld();
 
+/** The session quick join picks on the server `sdk` talks to (POST /sessions/quick). */
+export async function quickSession(sdk: Client): Promise<string> {
+  const url = (sdk as unknown as { getHttpEndpoint(path: string): string }).getHttpEndpoint('sessions/quick');
+  const response = await fetch(url, { method: 'POST' });
+  const body = (await response.json().catch(() => ({}))) as { id?: string; error?: string };
+  if (!response.ok || !body.id) throw new Error(body.error ?? `quick join: server answered ${response.status}`);
+  return body.id;
+}
+
 /**
  * A headless player for load tests: a real Colyseus client that joins, claims a desk, folds a
  * fighter and flies it with the same input frames and client prediction the browser uses. It
@@ -41,6 +50,8 @@ const shared = sharedWorld();
  */
 export class Bot {
   room: Room<unknown, WorldState> | null = null;
+  /** The session we are in (or were last in). */
+  sessionId = '';
   /** Our public player id (from the welcome message), and the device token we were given. */
   id = '';
   token: string | null = null;
@@ -67,8 +78,22 @@ export class Bot {
     readonly role: 'hunter' | 'raider' = 'hunter',
   ) {}
 
-  async join(): Promise<void> {
-    const room = await this.sdk.joinOrCreate(ROOM, { name: this.name, v: PROTOCOL_VERSION, ...(this.token ? { token: this.token } : {}) }, WorldState);
+  /**
+   * Joins a session: `sessionId`, or the one quick join picks (as the browser's Quick join: the
+   * server opens sessions, v0.0.13). A session that filled up meanwhile: ask again.
+   */
+  async join(sessionId?: string): Promise<void> {
+    const options = { name: this.name, v: PROTOCOL_VERSION, ...(this.token ? { token: this.token } : {}) };
+    let room: Room<unknown, WorldState> | null = null;
+    for (let attempt = 0; !room; attempt++) {
+      const id = sessionId ?? (await quickSession(this.sdk));
+      try {
+        room = await this.sdk.joinById(id, options, WorldState);
+      } catch (error) {
+        if (sessionId || attempt >= 3) throw error;
+      }
+    }
+    this.sessionId = room.roomId;
     this.attach(room);
     await this.welcomed();
     this.timer = setInterval(() => this.loop(), 1000 / NET.tickRate);

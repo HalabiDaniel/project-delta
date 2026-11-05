@@ -660,6 +660,18 @@ export class GameState {
     return true;
   }
 
+  /**
+   * flying | landed → debrief, wherever the plane is: it goes into the hangar in its current
+   * condition, as if it had landed at home and ended the sortie, and an unfinished mission is
+   * abandoned (a completed one keeps its reward). Multiplayer only (v0.0.13): the session ended,
+   * the server is shutting down, or the pilot was away too long out of combat.
+   */
+  recall(): boolean {
+    if (this.phase !== 'flying' && this.phase !== 'landed') return false;
+    this.phase = 'landed';
+    return this.endSortie();
+  }
+
   /** The plane is destroyed. An unresolved mission fails; a completed one keeps its reward. */
   crash(cause: CrashCause): void {
     if (this.phase !== 'flying') return;

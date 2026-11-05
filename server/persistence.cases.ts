@@ -9,6 +9,7 @@ import { Identity } from './identity/Identity';
 import { economyWorld, memoryServices, setServices, type Services } from './services';
 import { PgStore } from './store/PgStore';
 import type { Store } from './store/Store';
+import { serverOptions } from './sessions/directory';
 import { WorldRoom } from './WorldRoom';
 import type { Client } from '@colyseus/sdk';
 import { Bot } from './bots/Bot';
@@ -38,10 +39,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
   });
 
   async function room(): Promise<WorldRoom> {
-    const r = (await colyseus.createRoom(ROOM, {
-      ambient: false,
-      seed: 5,
-    })) as unknown as WorldRoom;
+    const r = (await colyseus.createRoom(ROOM, serverOptions({ ambient: false, seed: 5 }))) as unknown as WorldRoom;
     r.autoDispose = false;
     return r;
   }

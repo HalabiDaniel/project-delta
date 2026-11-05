@@ -1,7 +1,9 @@
 import { Room, type Client, type Deferred } from '@colyseus/core';
 import {
+  CLOSE_SESSION_ENDED,
   CLOSE_TAKEN_OVER,
   EMOTES,
+  SESSION_STATUSES,
   NET,
   PROTOCOL_VERSION,
   cleanName,
@@ -10,6 +12,8 @@ import {
   type Emote,
   type JoinOptions,
   type NetEvent,
+  type ResultLineDTO,
+  type SessionResultsDTO,
   type TransferDTO,
   type UsernameDTO,
   type WelcomeDTO,
@@ -21,8 +25,10 @@ import { refusal, type Authenticated } from './identity/Identity';
 import { economyWorld, services } from './services';
 import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRecord } from './store/Store';
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
-import { PVP } from '../src/config';
-import { ECONOMY } from '../src/config';
+import { ECONOMY, PVP, SESSION } from '../src/config';
+import { SESSION_KEY, ensureSpare, mayClose, register, unregister, type SessionHandle } from './sessions/directory';
+import { SessionClock, spokenTime, type SessionSummary } from './sessions/rules';
+import type { SessionRecord } from './store/Store';
 import type { PaperChange } from './world/Paper';
 import { randomUUID } from 'node:crypto';
 import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper';
@@ -30,19 +36,35 @@ import { fromBaseState, toBaseState } from './world/bases';
 import { planesFrom, progressFrom } from './world/carry';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 
+/** A session's settings, given by the server only (a client can't create a room). */
 export interface RoomOptions extends ServerWorldOptions {
-  /** Shown in the room list. */
+  /** Proves the server opened it (directory.ts). */
+  sessionKey?: string;
+  /** Shown in the session list. */
   title?: string;
+  /** The session's settings where they differ from SESSION (tests and tools: short, small sessions). */
+  session?: Partial<SessionSettings>;
+}
+
+/** What a session runs by (SESSION's values unless the server says otherwise). */
+export interface SessionSettings {
+  length: number;
+  capacity: number;
+  emptyClose: number;
+  resultsHold: number;
 }
 
 export type { JoinOptions };
 
-/** What the room list shows about a session. */
+/** What Colyseus keeps about a session (the lobby reads the directory instead). */
 export interface RoomMetadata {
   title: string;
   claimed: number;
   free: number;
 }
+
+/** Sessions opened by this process, for their titles ("Classroom 3"). */
+let opened = 0;
 
 /** How far back raids and kills are loaded for a placed player (s): as far as any rule looks. */
 const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow);
@@ -79,11 +101,13 @@ const SPARE_SEATS = 4;
  * every BASE_SAVE_EVERY seconds and packs it when its player leaves for good. The store's lease
  * keeps a base in one place at a time (see BaseKeeper).
  */
-export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata }> {
+export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata }> implements SessionHandle {
   /** Every player in a room on this server, and which room: one connection per player, process-wide. */
   static readonly presence = new Map<string, WorldRoom>();
 
-  maxClients = NET.maxPlayers + SPARE_SEATS;
+  maxClients = SESSION.capacity + SPARE_SEATS;
+  /** This session's length, capacity and timers. */
+  settings: SessionSettings = { length: SESSION.length, capacity: SESSION.capacity, emptyClose: SESSION.emptyClose, resultsHold: SESSION.resultsHold };
   /** Input frames come about 60 times a second; anything far beyond that is abuse. */
   maxMessagesPerSecond = 240;
   world!: ServerWorld;
@@ -120,7 +144,33 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** The economy world's id, once a base has been placed. */
   private worldId: string | null = null;
 
+  // ---- The session (v0.0.13) --------------------------------------------------------------------
+  /** The session's time: started by the first player, warnings, joining closing, the end. */
+  hour!: SessionClock;
+  private title = 'Classroom';
+  private readonly createdAt = new Date();
+  /** When the last player left (clock time), while nobody is here. */
+  private emptySince: number | null = null;
+  private peak = 0;
+  private sessionTimer = 0;
+  /** The results card's lines of players who left before the end. */
+  private readonly departed = new Map<string, ResultLineDTO>();
+  /** Paper each player earned in this session (credits only). */
+  private readonly earned = new Map<string, number>();
+  /** The results, once the session has ended. */
+  results: SessionResultsDTO | null = null;
+
   onCreate(options: RoomOptions = {}): void {
+    // Sessions are opened by the server alone: its seed, protection time and length are its own.
+    if (options.sessionKey !== SESSION_KEY) throw new Error('Sessions are opened by the server. Use Quick join or pick one from the list.');
+    // An empty session stays up for a while (SESSION.emptyClose), so it closes itself.
+    this.autoDispose = false;
+    for (const [k, v] of Object.entries(options.session ?? {})) if (k in this.settings && typeof v === 'number' && v > 0) this.settings[k as keyof SessionSettings] = v;
+    this.maxClients = this.settings.capacity + SPARE_SEATS;
+    this.hour = new SessionClock(this.settings.length);
+    this.title = cleanName(options.title, `Classroom ${++opened}`);
+    this.emptySince = Date.now();
+    register(this.roomId, this);
     this.world = new ServerWorld(options);
     this.keeper = new BaseKeeper(() => services().store, `${SERVER_INSTANCE}/${this.roomId}`);
     this.state = new WorldState();
@@ -131,7 +181,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.state.territories.set(t.id, ts);
     }
     this.setPatchRate(NET.patchMs);
-    void this.setMetadata({ title: cleanName(options.title, 'Classroom'), claimed: 0, free: this.world.shared.claimable.length });
+    void this.setMetadata({ title: this.title, claimed: 0, free: this.world.shared.claimable.length });
+    this.recordSession();
+    console.log(`[room ${this.roomId}] session "${this.title}" opened (${this.hour.length} s, ${this.settings.capacity} players)`);
     this.setSimulationInterval((ms) => this.update(ms / 1000), 1000 / NET.tickRate);
 
     this.onMessage('in', (client, data: unknown) => {
@@ -174,8 +226,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** Who is connecting: their device token (or code) checked by the identity service. */
   async onAuth(_client: Client, options: Partial<JoinOptions>): Promise<Authenticated> {
     if (options?.v !== PROTOCOL_VERSION) throw refusal(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
+    if (this.results) throw refusal('This session has ended. Join the next one.');
     const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
-    if (!this.world.pilots.has(auth.player.publicId) && this.world.pilots.size >= NET.maxPlayers) throw refusal(`This classroom is full (${NET.maxPlayers} players).`);
+    const refused = this.seatRefusal(auth.player.publicId);
+    if (refused) throw refusal(refused);
     this.usernameNotes.set(auth.player.publicId, await this.chooseUsername(auth.player, options.username ?? options.name));
     return auth;
   }
@@ -236,7 +290,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const id = player.publicId;
     const returning = this.world.pilots.get(id);
     // Checked again here: two new players may have passed onAuth at the same moment.
-    if (!returning && this.world.pilots.size >= NET.maxPlayers) throw refusal(`This classroom is full (${NET.maxPlayers} players).`);
+    const refused = this.seatRefusal(id);
+    if (refused) throw refusal(refused);
     // The same player in another room on this server leaves it; in this room, the older connection is closed.
     const elsewhere = WorldRoom.presence.get(id);
     if (elsewhere && elsewhere !== this) elsewhere.takeOver(id, true);
@@ -262,6 +317,13 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     this.greetings.set(client.sessionId, { reconnected: !!returning, token: auth.token, note: this.usernameNotes.get(id) ?? null });
     this.usernameNotes.delete(id);
+    // The first player starts the session's hour.
+    if (!this.hour.started) this.hour.start(Date.now());
+    this.emptySince = null;
+    this.peak = Math.max(this.peak, this.world.pilots.size);
+    this.departed.delete(id);
+    this.recordSession();
+    ensureSpare();
     console.log(`[room ${this.roomId}] ${player.name} (${id}) joined via ${auth.via}${returning ? ', back to their seat' : ''}`);
   }
 
@@ -299,7 +361,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const greeting = this.greetings.get(client.sessionId);
     this.greetings.delete(client.sessionId);
     const account = this.accounts.get(id);
-    const welcome: WelcomeDTO = { id, name: account?.name ?? '', tick: NET.tickRate, reconnected: greeting?.reconnected ?? true, username: account?.username ?? null, usernameNote: greeting?.note ?? null };
+    const welcome: WelcomeDTO = { id, name: account?.name ?? '', tick: NET.tickRate, reconnected: greeting?.reconnected ?? true, username: account?.username ?? null, usernameNote: greeting?.note ?? null, title: this.title };
     if (greeting?.token) welcome.token = greeting.token;
     client.send('welcome', welcome);
     this.sendPrivate(client, true);
@@ -365,8 +427,13 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   }
 
   async onDispose(): Promise<void> {
+    unregister(this.roomId);
     for (const [id, room] of WorldRoom.presence) if (room === this) WorldRoom.presence.delete(id);
-    // Anyone still here (a shutdown) has their base packed before the room goes.
+    if (!this.results) this.hour.status = 'ended';
+    this.recordSession(new Date());
+    ensureSpare();
+    // Anyone still here (a shutdown) has their plane brought home and their base packed before the room goes.
+    this.world.wrapUp();
     for (const id of [...this.world.pilots.keys()]) this.removePlayer(id);
     await this.keeper.settle();
   }
@@ -383,6 +450,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const account = id ? this.accounts.get(id) : undefined;
     if (!id || !account || this.placing.has(id)) return;
     const reply = (territory: string, error: string | null) => client.send('claimed', { ok: error === null, territory, error });
+    if (this.results || !this.world.pilots.has(id)) return reply(wanted, 'This session has ended.');
     const taken = new Set(this.placing.values());
     let desk: string;
     if (services().chooseDesk) {
@@ -489,6 +557,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const worldId = this.worldId;
     if (!worldId) return;
     for (const c of changes) {
+      if (c.amount > 0) this.earned.set(id, (this.earned.get(id) ?? 0) + c.amount);
       this.keeper
         .queue(playerId, (store) => store.applyTransaction({ worldId, playerId, key: c.key, kind: c.kind, amount: c.amount, reason: c.reason }))
         .then(
@@ -591,6 +660,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
 
   private removePlayer(id: string): void {
     const account = this.accounts.get(id);
+    // Their line on the results card stays (they played in this session).
+    const line = this.lineFor(id);
+    if (line) this.departed.set(id, { ...line, present: false });
     if (account) this.saveLimits(id, account.id);
     const stint = this.world.stintOf(id);
     const packed = this.world.remove(id);
@@ -618,6 +690,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (account) this.tips.delete(account.id);
     this.transferAt.delete(id);
     void this.refreshMetadata();
+    if (this.world.pilots.size === 0 && this.emptySince === null) this.emptySince = Date.now();
+    if (!this.results) {
+      this.recordSession();
+      ensureSpare();
+    }
   }
 
   /** A one-time code for moving this player to another computer (the pause menu). */
@@ -646,6 +723,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.accumulator -= NET.step;
     }
     this.flushPaper();
+    this.sessionTimer -= seconds;
+    if (this.sessionTimer <= 0) {
+      this.sessionTimer = 0.25;
+      this.updateSession(Date.now());
+    }
     this.saveTimer -= seconds;
     if (this.saveTimer <= 0) {
       this.saveTimer = BASE_SAVE_EVERY;
@@ -695,6 +777,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const { world, state } = this;
     state.time = world.time;
     state.tick = world.tick;
+    state.left = Math.ceil(this.hour.left(Date.now()));
+    state.session = SESSION_STATUSES.indexOf(this.hour.status);
     for (const [id, p] of world.pilots) {
       const ps = state.players.get(id);
       if (!ps) continue;
@@ -802,7 +886,116 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   }
 
   private async refreshMetadata(): Promise<void> {
+    if (this.results) return;
     const claimed = this.world.owners.size;
-    await this.setMetadata({ title: this.metadata?.title ?? 'Classroom', claimed, free: this.world.shared.claimable.length - claimed });
+    await this.setMetadata({ title: this.title, claimed, free: this.world.shared.claimable.length - claimed });
+  }
+
+  // ---- The session (v0.0.13) --------------------------------------------------------------------
+
+  /** Why player `id` can't take a seat now (null: they can). Players already in it always can. */
+  private seatRefusal(id: string): string | null {
+    if (this.results) return 'This session has ended. Join the next one.';
+    if (this.world.pilots.has(id)) return null;
+    if (this.hour.status !== 'open') return 'This session is about to end. Join another one.';
+    if (this.world.pilots.size >= this.settings.capacity) return `This session is full (${this.settings.capacity} players).`;
+    return null;
+  }
+
+  /** What the directory and the lobby know about this session. */
+  summary(_now: number): SessionSummary {
+    return {
+      id: this.roomId,
+      title: this.title,
+      players: this.world.pilots.size,
+      capacity: this.settings.capacity,
+      startedAt: this.hour.startedAt,
+      endsAt: this.hour.endsAt,
+      length: this.hour.length,
+      status: this.hour.status,
+    };
+  }
+
+  /** The session's clock: warnings, joining closing, the end; an empty session closing. */
+  private updateSession(now: number): void {
+    for (const e of this.hour.update(now)) {
+      if (e.kind === 'warning') {
+        this.world.emit({ t: 'news', text: `The session ends in ${spokenTime(e.seconds)}`, tone: 'info' });
+        for (const p of this.world.pilots.values()) this.world.note(p, 'clock', 'Session ends', spokenTime(e.seconds), 'warn');
+        console.log(`[room ${this.roomId}] session ends in ${e.seconds} s`);
+      } else if (e.kind === 'closing') {
+        this.recordSession();
+        ensureSpare(now);
+        console.log(`[room ${this.roomId}] joining closed`);
+      } else {
+        this.endSession(null);
+      }
+    }
+    if (!this.results && this.emptySince !== null && this.world.pilots.size === 0 && this.placing.size === 0 && now - this.emptySince >= this.settings.emptyClose * 1000) {
+      if (mayClose(this.roomId, now)) {
+        console.log(`[room ${this.roomId}] empty for ${this.settings.emptyClose} s: closing`);
+        void this.disconnect();
+      } else {
+        // The spare everyone needs: it waits on, and its own clock hasn't started.
+        this.emptySince = now;
+      }
+    }
+  }
+
+  /** A player's line on the results card, from what they did in this session. */
+  private lineFor(id: string): ResultLineDTO | null {
+    const p = this.world.pilots.get(id);
+    if (!p) return null;
+    const s = p.stats;
+    return { id, name: p.name, colour: p.colour, placing: 0, score: s.score, kills: s.kills, deaths: s.deaths, raids: s.raids, missions: s.missions, paper: this.earned.get(id) ?? 0, present: true };
+  }
+
+  /**
+   * The end of the session (or of the server: `reason` says why): raids and missions in flight are
+   * settled, planes in the air go home, every base is packed, and everyone gets the results card.
+   * The connections close `resultsHold` seconds later.
+   */
+  endSession(reason: string | null): SessionResultsDTO {
+    if (this.results) return this.results;
+    this.hour.status = 'ended';
+    void this.lock();
+    this.world.wrapUp();
+    this.flushPaper();
+    const lines = new Map(this.departed);
+    for (const id of this.world.pilots.keys()) {
+      const line = this.lineFor(id);
+      if (line) lines.set(id, line);
+    }
+    for (const id of [...this.world.pilots.keys()]) this.removePlayer(id);
+    // What everyone earned, now that their last paper changes are counted.
+    for (const line of lines.values()) line.paper = this.earned.get(line.id) ?? 0;
+    const ranked = [...lines.values()].sort((a, b) => b.score - a.score || b.kills - a.kills || b.paper - a.paper || a.name.localeCompare(b.name));
+    ranked.forEach((l, i) => (l.placing = i > 0 && ranked[i - 1].score === l.score && ranked[i - 1].kills === l.kills ? ranked[i - 1].placing : i + 1));
+    const played = this.hour.startedAt === null ? 0 : Math.round((Date.now() - this.hour.startedAt) / 1000);
+    this.results = { title: this.title, played, lines: ranked, reason };
+    this.broadcast('results', this.results);
+    this.recordSession(new Date());
+    ensureSpare();
+    console.log(`[room ${this.roomId}] session ended${reason ? ` (${reason})` : ''}: ${ranked.length} players`);
+    this.clock.setTimeout(() => void this.disconnect(CLOSE_SESSION_ENDED), this.settings.resultsHold * 1000);
+    return this.results;
+  }
+
+  /** The session as the database keeps it. */
+  private recordSession(endedAt: Date | null = null): void {
+    const record: SessionRecord = {
+      id: this.roomId,
+      title: this.title,
+      capacity: this.settings.capacity,
+      createdAt: this.createdAt,
+      startedAt: this.hour.startedAt === null ? null : new Date(this.hour.startedAt),
+      endsAt: this.hour.endsAt === null ? null : new Date(this.hour.endsAt),
+      endedAt,
+      status: this.hour.status,
+      peakPlayers: this.peak,
+    };
+    services()
+      .store.recordSession(record)
+      .catch((error) => console.error(`[room ${this.roomId}] could not record the session:`, error));
   }
 }

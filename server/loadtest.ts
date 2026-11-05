@@ -4,6 +4,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import type { AircraftId } from '../src/config';
 import { NET, ROOM } from '../src/net/protocol';
 import { Bot, type NetConditions } from './bots/Bot';
+import { sessionRoutes } from './sessions/routes';
 import { WorldRoom } from './WorldRoom';
 
 /**
@@ -98,7 +99,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-const server = defineServer({ rooms: { [ROOM]: defineRoom(WorldRoom) }, transport: new WebSocketTransport(), greet: false });
+const server = defineServer({ rooms: { [ROOM]: defineRoom(WorldRoom) }, routes: sessionRoutes(), transport: new WebSocketTransport(), greet: false });
 await server.listen(port);
 const runs: Array<[number, NetConditions]> = custom
   ? counts.map((n) => [n, custom])

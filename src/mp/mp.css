@@ -36,7 +36,7 @@
 .mp-list { display: flex; flex-direction: column; gap: var(--s1); max-height: 260px; overflow: auto; }
 .mp-room {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto auto auto;
   gap: var(--s3);
   align-items: center;
   padding: var(--s2) var(--s3);
@@ -56,6 +56,18 @@
 .mp-username { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; }
 .mp-username .mp-field { flex: 1; min-width: 180px; }
 .mp-username .mp-error { flex-basis: 100%; }
+
+/* The end of a session (v0.0.13): placings, and "Join next session". */
+.mp-results-table { width: 100%; border-collapse: collapse; font-size: var(--t-s); }
+.mp-results-table th { color: var(--ink-3); font-weight: 600; text-align: left; padding: var(--s1) var(--s2); }
+.mp-results-table th .icon { width: 14px; height: 14px; }
+.mp-results-table td { padding: var(--s1) var(--s2); border-top: 1px solid var(--edge); }
+.mp-results-table tr.me td { background: var(--paper-2); font-weight: 700; }
+.mp-results-table tr.away td { color: var(--ink-3); }
+.mp-results-table .mp-place { font-weight: 700; width: 2em; }
+.mp-results-table .mp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: var(--s1); }
+.mp-results .muted { color: var(--ink-3); }
+.mp-session.closing b { color: var(--warn, #c98a12); }
 
 /* The classroom map: three rows of desks, as the world is laid out. */
 .mp-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }

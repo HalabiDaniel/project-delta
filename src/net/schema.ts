@@ -133,6 +133,9 @@ export const WorldState = schema(
     /** Server simulation time in seconds, and the step count. */
     time: t.float64().default(0),
     tick: t.uint32().default(0),
+    /** Seconds of the session left (v0.0.13), and where its clock stands (index into SESSION_STATUSES). */
+    left: t.uint32().default(0),
+    session: t.uint8().default(0),
     players: t.map(PlayerState),
     planes: t.map(PlaneState),
     ai: t.map(AiState),

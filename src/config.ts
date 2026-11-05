@@ -979,8 +979,9 @@ export const RAIDS = {
  */
 export const PVP = {
   /**
-   * The AI's own desk: nobody can claim it. With 4 × 4 desks nothing sits exactly in the middle, so
-   * it is one of the four middle desks, the one furthest from the single-player home.
+   * One of the four middle desks (the one furthest from the single-player home). Until v0.0.13 it was
+   * the AI's own desk, which nobody could claim; now every desk can hold a player, and this is only
+   * where a card aims when it has no better desk to name.
    */
   centre: 'T11',
   /** A new player's base can't be raided for this long after claiming it (seconds), unless they raid first. */
@@ -1040,6 +1041,26 @@ export const PVP = {
   aiRebuild: 120,
   /** Scoreboard points. */
   score: { kill: 10, assist: 4, raid: 15, defend: 10, mission: 5 },
+} as const;
+
+/**
+ * Multiplayer sessions (v0.0.13): there is no permanent world, only timed sessions with a capacity,
+ * several at once. Provisional values: the developer confirms them (plan v0.0.13, section 11).
+ * The rules that use them are in server/sessions/ and server/WorldRoom.ts.
+ */
+export const SESSION = {
+  /** How long a session lasts (seconds). */
+  length: 3600,
+  /** Players per session: one per desk (16 now; 32 once the larger classrooms arrive in v0.0.20). */
+  capacity: 16,
+  /** Everyone is warned this long before the end (seconds). */
+  warnings: [600, 120, 30] as readonly number[],
+  /** New players can't join a session this close to its end (seconds); players coming back still can. */
+  joinCloses: 300,
+  /** A session nobody is in closes after this long (seconds). */
+  emptyClose: 120,
+  /** The results card stays up this long before the session closes everyone's connection (seconds). */
+  resultsHold: 30,
 } as const;
 
 /** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */
