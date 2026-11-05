@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import {
+  checkAircraft,
   checkBaseState,
+  cleanTips,
   checkLimits,
   checkTransaction,
   IncompatibleSaveError,
   SAVE_FORMAT,
+  type AircraftRecord,
   type BaseRecord,
+  type MissionOutcome,
+  type ProgressRecord,
   type BaseState,
   type EconomyRecord,
   type InviteRecord,
@@ -54,6 +59,11 @@ export class MemoryStore implements Store {
   private readonly keys = new Set<string>();
   private readonly tutorials = new Map<string, Record<string, unknown>>();
   private readonly bases = new Map<string, BaseRecord>();
+  /** Every plane ever saved, by id, with its owner and whether it was destroyed. */
+  private readonly planes = new Map<string, AircraftRecord & { at: string; destroyed: boolean }>();
+  private readonly progresses = new Map<string, ProgressRecord>();
+  private readonly outcomes = new Map<string, MissionOutcome & { at: string }>();
+  private readonly tipsOf = new Map<string, string[]>();
   /** Tests can make the store "newer" than the code to check refusals. */
   worldFormatOverride: number | null = null;
 
@@ -228,6 +238,49 @@ export class MemoryStore implements Store {
     const at = `${worldId}/${playerId}`;
     if (!this.balances.has(at)) this.balances.set(at, 0);
     this.limits.set(at, { capacity, protected: protectedPaper });
+  }
+
+  // ---- What travels with the player -------------------------------------------------------------
+
+  async aircraft(worldId: string, playerId: string): Promise<AircraftRecord[]> {
+    const at = `${worldId}/${playerId}`;
+    return [...this.planes.values()].filter((p) => p.at === at && !p.destroyed).map(({ at: _a, destroyed: _d, ...a }) => structuredClone(a));
+  }
+
+  async saveAircraft(worldId: string, playerId: string, alive: AircraftRecord[]): Promise<void> {
+    checkAircraft(alive);
+    const at = `${worldId}/${playerId}`;
+    for (const a of alive) {
+      const known = this.planes.get(a.id);
+      if (known && (known.at !== at || known.destroyed)) throw new Error(`aircraft ${a.id} was destroyed and cannot be restored`);
+    }
+    const listed = new Set(alive.map((a) => a.id));
+    for (const p of this.planes.values()) if (p.at === at && !p.destroyed && !listed.has(p.id)) p.destroyed = true;
+    for (const a of alive) this.planes.set(a.id, { ...structuredClone(a), at, destroyed: false });
+  }
+
+  async progress(worldId: string, playerId: string): Promise<ProgressRecord | null> {
+    const p = this.progresses.get(`${worldId}/${playerId}`);
+    return p ? structuredClone(p) : null;
+  }
+
+  async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
+    if (!this.players.has(playerId)) throw new Error(`no player ${playerId}`);
+    this.progresses.set(`${worldId}/${playerId}`, structuredClone(record));
+  }
+
+  async recordMission(worldId: string, playerId: string, outcome: MissionOutcome): Promise<boolean> {
+    if (this.outcomes.has(outcome.id)) return false;
+    this.outcomes.set(outcome.id, { ...structuredClone(outcome), at: `${worldId}/${playerId}` });
+    return true;
+  }
+
+  async tips(playerId: string): Promise<string[]> {
+    return [...(this.tipsOf.get(playerId) ?? [])];
+  }
+
+  async setTips(playerId: string, tips: string[]): Promise<void> {
+    if (this.players.has(playerId)) this.tipsOf.set(playerId, cleanTips(tips));
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------

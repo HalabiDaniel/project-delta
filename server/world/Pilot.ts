@@ -1,7 +1,8 @@
 import type { AirSpawn } from '../../src/ai/AirTraffic';
 import type { Base } from '../../src/base/Base';
 import type { RaidReport } from '../../src/base/Raids';
-import { AIRCRAFT, type PlayerSide } from '../../src/config';
+import { AIRCRAFT, type AircraftId, type PlayerSide } from '../../src/config';
+import type { MissionOutcome } from '../store/Store';
 import type { MissionDirector } from '../../src/director/MissionDirector';
 import type { Mission } from '../../src/missions/Mission';
 import { PilotFlight } from '../../src/net/PilotFlight';
@@ -53,6 +54,15 @@ export class Pilot {
    * ("raid:<id>:loss"): the journal uses it as the change's key.
    */
   cause: string | null = null;
+  /**
+   * The id (a UUID, the `aircraft` row) of each plane the player owns, by design: one in the hangar,
+   * on the pad or in the air. A plane that crashes loses its id for good; a new one gets a new id.
+   */
+  readonly planeIds = new Map<AircraftId, string>();
+  /** Lifetime statistics from before this session (added to this session's when saved). */
+  lifetime: Record<string, number> = {};
+  /** Missions flown to the end on this placement, for the store (written once each). */
+  readonly outcomes: MissionOutcome[] = [];
   /** Each card's id (a UUID): mission rewards are keyed by it, so a mission never pays twice. */
   private readonly missionIds = new WeakMap<Mission, string>();
   base: Base | null = null;

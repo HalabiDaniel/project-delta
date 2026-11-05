@@ -51,6 +51,8 @@ export class NetClient {
   /** The last transfer code the server gave us, for the pause menu. */
   transfer: (TransferDTO & { at: number }) | null = null;
   private readonly tutorialListeners: Array<(record: unknown) => void> = [];
+  /** First-time tips this player has already seen (kept on their record on the server). */
+  readonly tipsSeen = new Set<string>();
 
   constructor(readonly endpoint: string = NetClient.defaultEndpoint()) {
     this.sdk = new Client(endpoint);
@@ -108,6 +110,13 @@ export class NetClient {
    */
   onTutorial(listener: (record: unknown) => void): void {
     this.tutorialListeners.push(listener);
+  }
+
+  /** A first-time tip was shown: the server keeps it, so it isn't shown again on any computer. */
+  sawTip(id: string): void {
+    if (this.tipsSeen.has(id)) return;
+    this.tipsSeen.add(id);
+    this.room?.send('tip', { id });
   }
 
   /** Keeps the player's tutorial progress on their record on the server. */
@@ -234,7 +243,8 @@ export class NetClient {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       if (m.token) this.token = m.token;
     });
-    room.onMessage('tutorial', (m: { t?: unknown }) => {
+    room.onMessage('tutorial', (m: { t?: unknown; tips?: unknown }) => {
+      if (Array.isArray(m?.tips)) for (const t of m.tips) if (typeof t === 'string') this.tipsSeen.add(t);
       for (const l of this.tutorialListeners) l(m?.t ?? null);
     });
     room.onMessage('transfer', (m: TransferDTO) => {

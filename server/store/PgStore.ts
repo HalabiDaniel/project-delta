@@ -2,13 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { Database, type Queryable, type Row } from '../db/Database';
 import {
   BASE_FORMAT,
+  checkAircraft,
   checkBaseState,
+  cleanTips,
   checkLimits,
   checkTransaction,
   IncompatibleBaseError,
   IncompatibleSaveError,
   SAVE_FORMAT,
+  type AircraftRecord,
   type BasePlacement,
+  type MissionOutcome,
+  type ProgressRecord,
   type BaseRecord,
   type BaseState,
   type EconomyRecord,
@@ -243,6 +248,80 @@ export class PgStore implements Store {
        on conflict (world_id, player_id) do update set capacity = excluded.capacity, protected = excluded.protected, updated_at = now()`,
       [worldId, playerId, capacity, protectedPaper],
     );
+  }
+
+  // ---- What travels with the player -------------------------------------------------------------
+
+  async aircraft(worldId: string, playerId: string): Promise<AircraftRecord[]> {
+    if (!isUuid(playerId)) return [];
+    const { rows } = await this.db.query(
+      `select id, type, status, health, loadout from aircraft where world_id = $1 and player_id = $2 and status <> 'destroyed' order by created_at, id`,
+      [worldId, playerId],
+    );
+    return rows.map((r) => ({ id: String(r.id), type: String(r.type), status: r.status as AircraftRecord['status'], health: Number(r.health), loadout: (r.loadout as Record<string, unknown>) ?? {} }));
+  }
+
+  async saveAircraft(worldId: string, playerId: string, alive: AircraftRecord[]): Promise<void> {
+    checkAircraft(alive);
+    await this.db.transaction(async (tx) => {
+      // Lost since the last save: destroyed, for good (the trigger keeps them so).
+      await tx.query(
+        `update aircraft set status = 'destroyed', destroyed_at = now(), updated_at = now()
+          where world_id = $1 and player_id = $2 and status <> 'destroyed' and not (id = any($3::uuid[]))`,
+        [worldId, playerId, alive.map((a) => a.id)],
+      );
+      for (const a of alive) {
+        // A plane id belongs to one player in one world: another's row is never overwritten.
+        const { rowCount } = await tx.query(
+          `insert into aircraft as x (id, world_id, player_id, type, status, health, loadout) values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+           on conflict (id) do update set type = excluded.type, status = excluded.status, health = excluded.health, loadout = excluded.loadout, updated_at = now()
+            where x.world_id = excluded.world_id and x.player_id = excluded.player_id`,
+          [a.id, worldId, playerId, a.type, a.status, a.health, JSON.stringify(a.loadout)],
+        );
+        if ((rowCount ?? 0) === 0) throw new Error(`aircraft ${a.id} belongs to someone else`);
+      }
+    });
+  }
+
+  async progress(worldId: string, playerId: string): Promise<ProgressRecord | null> {
+    if (!isUuid(playerId)) return null;
+    const { rows } = await this.db.query('select stats, director, garage from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
+    if (rows.length === 0) return null;
+    const director = rows[0].director as Record<string, unknown> | null;
+    return {
+      stats: (rows[0].stats as Record<string, number>) ?? {},
+      director: director && Object.keys(director).length > 0 ? director : null,
+      garage: (rows[0].garage as Record<string, unknown>) ?? {},
+    };
+  }
+
+  async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
+    await this.db.query(
+      `insert into progress (world_id, player_id, stats, director, garage) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb)
+       on conflict (world_id, player_id) do update set stats = excluded.stats, director = excluded.director, garage = excluded.garage, updated_at = now()`,
+      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage)],
+    );
+  }
+
+  async recordMission(worldId: string, playerId: string, o: MissionOutcome): Promise<boolean> {
+    const { rowCount } = await this.db.query(
+      `insert into missions (id, world_id, player_id, template, state, spec, resolved_at, outcome, reward)
+       values ($1, $2, $3, $4, $5, $6::jsonb, now(), $7, $8) on conflict (id) do nothing`,
+      [o.id, worldId, playerId, o.template, o.state, JSON.stringify(o.spec), o.outcome, o.reward],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async tips(playerId: string): Promise<string[]> {
+    if (!isUuid(playerId)) return [];
+    const { rows } = await this.db.query('select tips from players where id = $1', [playerId]);
+    const t = rows[0]?.tips;
+    return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string') : [];
+  }
+
+  async setTips(playerId: string, tips: string[]): Promise<void> {
+    if (!isUuid(playerId)) return;
+    await this.db.query('update players set tips = $2::jsonb where id = $1', [playerId, JSON.stringify(cleanTips(tips))]);
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------

@@ -112,6 +112,41 @@ export interface EconomyRecord {
   protected: number;
 }
 
+// ---- What travels with the player (v0.0.12) -------------------------------------------------------
+
+/** A plane the player owns (destroyed planes are history and never come back). */
+export interface AircraftRecord {
+  id: string;
+  /** An aircraft id from src/config.ts ("falcon"). */
+  type: string;
+  /** ready: in the hangar, ready to roll out. damaged: recovered, needs a refit. airborne: on the pad or in the air when last saved. */
+  status: 'ready' | 'airborne' | 'damaged' | 'in-repair';
+  health: number;
+  /** What the plane carries with it: the paper already put into it (`invested`), and later loadouts. */
+  loadout: Record<string, unknown>;
+}
+
+/** The player's progress in a world, as last saved (each part checked by the game when it is loaded). */
+export interface ProgressRecord {
+  /** Lifetime statistics (kills, deaths, sorties, ...). */
+  stats: Record<string, number>;
+  /** The mission director's state (MissionDirector.DirectorState), or null. */
+  director: unknown;
+  /** The garage: the design chosen, the ids of the cards on the board. */
+  garage: Record<string, unknown>;
+}
+
+/** A mission's outcome, written once per card. */
+export interface MissionOutcome {
+  /** The card's id (a UUID): the same id twice is the same mission. */
+  id: string;
+  template: string;
+  state: 'completed' | 'failed' | 'cancelled' | 'expired';
+  outcome: string | null;
+  reward: number;
+  spec: Record<string, unknown>;
+}
+
 // ---- Portable bases (v0.0.12) ---------------------------------------------------------------------
 
 /** The version of a saved base's data (`bases.format`): refused if newer, upgraded by migrations if older. */
@@ -232,6 +267,23 @@ export interface Store {
   /** Saves the capacity and protected reserve with the balance (the paper itself only changes through the ledger). */
   setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void>;
 
+  // ---- What travels with the player (v0.0.12) ---------------------------------------------------
+
+  /** The player's planes that still exist (not destroyed). */
+  aircraft(worldId: string, playerId: string): Promise<AircraftRecord[]>;
+  /**
+   * The player's planes as they are now: those listed are written, every other plane of theirs
+   * that still existed is destroyed (lost since the last save). Destroyed is final.
+   */
+  saveAircraft(worldId: string, playerId: string, alive: AircraftRecord[]): Promise<void>;
+  progress(worldId: string, playerId: string): Promise<ProgressRecord | null>;
+  saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void>;
+  /** Writes a mission's outcome once: false if that card's outcome was already written. */
+  recordMission(worldId: string, playerId: string, outcome: MissionOutcome): Promise<boolean>;
+  /** First-time tips the player has seen (ids), across every world and computer. */
+  tips(playerId: string): Promise<string[]>;
+  setTips(playerId: string, tips: string[]): Promise<void>;
+
   // ---- Portable bases (v0.0.12) -----------------------------------------------------------------
   //
   // A base belongs to the player, not to a desk. A room places it (taking a lease on it), saves it
@@ -289,4 +341,24 @@ export function checkTransaction(tx: TransactionInput): void {
 export function checkLimits(capacity: number, protectedPaper: number): void {
   if (!Number.isSafeInteger(capacity) || capacity < 0) throw new Error(`capacity must be a whole number ≥ 0, not ${capacity}`);
   if (!Number.isSafeInteger(protectedPaper) || protectedPaper < 0) throw new Error(`protected paper must be a whole number ≥ 0, not ${protectedPaper}`);
+}
+
+const AIRCRAFT_STATUSES: ReadonlySet<string> = new Set(['ready', 'airborne', 'damaged', 'in-repair']);
+
+/** Shared validation: planes as they are saved. */
+export function checkAircraft(alive: AircraftRecord[]): void {
+  const ids = new Set<string>();
+  for (const a of alive) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.id)) throw new Error(`bad aircraft id "${a.id}"`);
+    if (ids.has(a.id)) throw new Error(`aircraft ${a.id} listed twice`);
+    ids.add(a.id);
+    if (typeof a.type !== 'string' || !/^[a-z]{1,32}$/.test(a.type)) throw new Error(`bad aircraft type "${a.type}"`);
+    if (!AIRCRAFT_STATUSES.has(a.status)) throw new Error(`bad aircraft status "${a.status}"`);
+    if (!Number.isSafeInteger(a.health) || a.health < 0) throw new Error(`bad aircraft health ${a.health}`);
+  }
+}
+
+/** Shared validation: tip ids. */
+export function cleanTips(tips: string[]): string[] {
+  return [...new Set(tips.filter((t) => typeof t === 'string' && /^[a-z0-9-]{1,40}$/.test(t)))].slice(0, 100);
 }

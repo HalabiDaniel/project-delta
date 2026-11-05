@@ -16,6 +16,8 @@ const pepper = 'test-pepper-0123456789';
 const h = (s: string) => hashSecret(s, pepper);
 const player = (name = 'Ann'): NewPlayer => ({ id: randomUUID(), publicId: newPublicId(), name });
 
+const sortById = <T extends { id: string }>(xs: T[]) => [...xs].sort((a, b) => a.id.localeCompare(b.id));
+
 function contract(label: string, open: () => Promise<Store>, extra?: (store: () => Store) => void) {
   describe(`the store (${label})`, () => {
     let store: Store;
@@ -203,6 +205,49 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       const q = await store.createPlayer(player('Lim2'), h('tok-lim2'), 'open');
       await store.setEconomyLimits(world.id, q.id, 300, 30);
       expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30 });
+    });
+
+    it('keeps the planes a player owns, and destroys for good the ones no longer listed', async () => {
+      const world = await store.openWorld('planes');
+      const p = await store.createPlayer(player('Pilot'), h('tok-pilot'), 'open');
+      const falcon = { id: randomUUID(), type: 'falcon', status: 'ready' as const, health: 70, loadout: { invested: 45 } };
+      const dart = { id: randomUUID(), type: 'dart', status: 'damaged' as const, health: 12, loadout: {} };
+      expect(await store.aircraft(world.id, p.id)).toEqual([]);
+      await store.saveAircraft(world.id, p.id, [falcon, dart]);
+      expect(sortById(await store.aircraft(world.id, p.id))).toEqual(sortById([falcon, dart]));
+      // The Dart crashed: it isn't listed any more, and it never comes back.
+      await store.saveAircraft(world.id, p.id, [{ ...falcon, status: 'airborne', health: 50 }]);
+      expect(await store.aircraft(world.id, p.id)).toEqual([{ ...falcon, status: 'airborne', health: 50 }]);
+      await expect(store.saveAircraft(world.id, p.id, [falcon, dart])).rejects.toThrow(/destroyed/);
+      expect(await store.aircraft(world.id, p.id)).toHaveLength(1);
+      // Another player can't take over someone's plane by its id.
+      const q = await store.createPlayer(player('Thief'), h('tok-thief'), 'open');
+      await expect(store.saveAircraft(world.id, q.id, [falcon])).rejects.toThrow();
+      await expect(store.saveAircraft(world.id, p.id, [{ ...falcon, status: 'flying' as never }])).rejects.toThrow();
+    });
+
+    it("keeps a player's progress and writes each mission's outcome once", async () => {
+      const world = await store.openWorld('progress');
+      const p = await store.createPlayer(player('Prog'), h('tok-prog'), 'open');
+      expect(await store.progress(world.id, p.id)).toBeNull();
+      const record = { stats: { kills: 3, sorties: 9 }, director: { swaps: 2, offers: [] }, garage: { aircraft: 'falcon', board: { safe: randomUUID() } } };
+      await store.saveProgress(world.id, p.id, record);
+      expect(await store.progress(world.id, p.id)).toEqual(record);
+      await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 4, sorties: 10 } });
+      expect((await store.progress(world.id, p.id))?.stats).toEqual({ kills: 4, sorties: 10 });
+      const outcome = { id: randomUUID(), template: 'strike', state: 'completed' as const, outcome: null, reward: 60, spec: { title: 'Strike' } };
+      expect(await store.recordMission(world.id, p.id, outcome)).toBe(true);
+      expect(await store.recordMission(world.id, p.id, { ...outcome, reward: 999 })).toBe(false);
+      const racing = { ...outcome, id: randomUUID() };
+      const twice = await Promise.all([1, 2, 3].map(() => store.recordMission(world.id, p.id, racing)));
+      expect(twice.filter(Boolean)).toHaveLength(1);
+    });
+
+    it("keeps the first-time tips a player has seen, cleaned", async () => {
+      const p = await store.createPlayer(player('Tippy'), h('tok-tippy'), 'open');
+      expect(await store.tips(p.id)).toEqual([]);
+      await store.setTips(p.id, ['mp-desk', 'mp-desk', '<script>', 'raid-card']);
+      expect(await store.tips(p.id)).toEqual(['mp-desk', 'raid-card']);
     });
 
     it("places a new player's base for one room, which saves and packs it; nobody else can meanwhile", async () => {

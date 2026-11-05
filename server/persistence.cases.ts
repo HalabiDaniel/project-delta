@@ -182,4 +182,67 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
       });
     });
   }
+
+  for (const [label, make] of stores) {
+    describe.skipIf(label === 'postgres' && !TEST_DATABASE_URL)(`planes and progress (${label})`, () => {
+      let s: Services;
+      beforeEach(async () => {
+        await colyseus.cleanup();
+        s = make()!;
+        setServices(s);
+      });
+
+      it('brings back the hangar, the garage, the board and the statistics after leaving', async () => {
+        // The same desk both times, so every card on the board still makes sense there.
+        setServices({ ...s, chooseDesk: true });
+        const r = await room();
+        const ann = await enter(r, { name: 'Ann' });
+        await placed(ann.client);
+        const pilot = r.world.pilots.get(ann.id)!;
+        // A plane on the pad (paid for), and a board to come back to.
+        ann.client.send('cmd', { a: 'aircraft', id: 'dart' });
+        ann.client.send('cmd', { a: 'build' });
+        await eventually(() => pilot.state!.phase === 'ready', 4000);
+        pilot.stats.kills = 2;
+        const board = pilot.director!.offers.map((o) => ({ title: o.mission.title, id: pilot.missionId(o.mission) }));
+        const paper = pilot.resources.paper;
+        await ann.client.leave();
+        const rec = (await s.store.findPlayers(ann.id))[0];
+        await eventually(async () => (await s.store.base(rec.id))?.placement === null);
+        await eventually(async () => (await s.store.progress(await economyWorld(), rec.id)) !== null);
+        const again = await enter(r, { name: 'Ann', token: ann.welcome.token });
+        expect((await placed(again.client)).ok).toBe(true);
+        const back = r.world.pilots.get(ann.id)!;
+        expect(back.state!.aircraft).toBe('dart');
+        expect(back.state!.buildKindFor('dart')).toBe('rollout');
+        expect(back.resources.paper).toBe(paper);
+        expect(back.lifetime.kills).toBe(2);
+        expect(back.director!.offers.map((o) => ({ title: o.mission.title, id: back.missionId(o.mission) }))).toEqual(board);
+      }, 10000);
+
+      it('destroys for good a plane its pilot leaves in the air, and writes the mission once', async () => {
+        const r = await room();
+        const ann = await enter(r, { name: 'Ann' });
+        await placed(ann.client);
+        const pilot = r.world.pilots.get(ann.id)!;
+        ann.client.send('cmd', { a: 'aircraft', id: 'swift' });
+        ann.client.send('cmd', { a: 'build' });
+        await eventually(() => pilot.state!.phase === 'ready', 4000);
+        ann.client.send('cmd', { a: 'launch' });
+        await eventually(() => pilot.state!.phase === 'flying');
+        const planeId = pilot.planeIds.get('swift')!;
+        const missionId = pilot.missionId(pilot.state!.mission!);
+        // Saved while flying: airborne.
+        (r as unknown as { saveBase(id: string): void }).saveBase(ann.id);
+        const worldId = await economyWorld();
+        const rec = (await s.store.findPlayers(ann.id))[0];
+        await eventually(async () => (await s.store.aircraft(worldId, rec.id)).some((a) => a.id === planeId && a.status === 'airborne'));
+        await ann.client.leave();
+        await eventually(async () => (await s.store.base(rec.id))?.placement === null);
+        await eventually(async () => (await s.store.aircraft(worldId, rec.id)).length === 0);
+        expect(await s.store.recordMission(worldId, rec.id, { id: missionId, template: 'x', state: 'failed', outcome: null, reward: 0, spec: {} })).toBe(false);
+        await expect(s.store.saveAircraft(worldId, rec.id, [{ id: planeId, type: 'swift', status: 'ready', health: 10, loadout: {} }])).rejects.toThrow();
+      }, 10000);
+    });
+  }
 }

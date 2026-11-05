@@ -18,12 +18,13 @@ import { foldPose } from '../src/systems/GameState';
 import { parseTutorial } from '../src/progress/Tutorial';
 import { refusal, type Authenticated } from './identity/Identity';
 import { economyWorld, services } from './services';
-import type { EconomyRecord, PlayerRecord } from './store/Store';
+import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord } from './store/Store';
 import { ECONOMY } from '../src/config';
 import type { PaperChange } from './world/Paper';
 import { randomUUID } from 'node:crypto';
 import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper';
 import { fromBaseState, toBaseState } from './world/bases';
+import { planesFrom, progressFrom } from './world/carry';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 
 export interface RoomOptions extends ServerWorldOptions {
@@ -93,6 +94,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   readonly accounts = new Map<string, PlayerRecord>();
   private readonly transferAt = new Map<string, number>();
   private readonly tutorialSavedAt = new Map<string, number>();
+  /** First-time tips each player has seen (by account), loaded with their tutorial. */
+  private readonly tips = new Map<string, Set<string>>();
   /**
    * What the next welcome says, per connection: sent when the client says hello (messages sent
    * during onJoin arrive before the client can listen for them).
@@ -150,6 +153,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.onMessage('hello', (client) => this.welcome(client));
     this.onMessage('transfer', (client) => void this.sendTransferCode(client));
     this.onMessage('tutorial', (client, data: unknown) => void this.saveTutorial(client, data));
+    this.onMessage('tip', (client, data: unknown) => void this.saveTip(client, data));
     this.onMessage('*', () => {
       // Unknown message types are ignored.
     });
@@ -241,8 +245,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const account = id ? this.accounts.get(id) : undefined;
     if (!account) return;
     try {
-      const record = parseTutorial(await services().store.tutorial(account.id));
-      client.send('tutorial', { t: record });
+      const [record, tips] = await Promise.all([services().store.tutorial(account.id).then(parseTutorial), services().store.tips(account.id)]);
+      this.tips.set(account.id, new Set(tips));
+      client.send('tutorial', { t: record, tips });
     } catch (error) {
       console.warn(`[room ${this.roomId}] could not load the tutorial of ${id}:`, error);
     }
@@ -262,6 +267,21 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       await services().store.setTutorial(account.id, { ...record });
     } catch (error) {
       console.warn(`[room ${this.roomId}] could not save the tutorial of ${id}:`, error);
+    }
+  }
+
+  /** A first-time tip the player has now seen, kept on their record. */
+  private async saveTip(client: Client, data: unknown): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    const tip = (data as { id?: unknown } | null)?.id;
+    const seen = account ? this.tips.get(account.id) : undefined;
+    if (!account || !seen || typeof tip !== 'string' || !/^[a-z0-9-]{1,40}$/.test(tip) || seen.has(tip) || seen.size >= 100) return;
+    seen.add(tip);
+    try {
+      await services().store.setTips(account.id, [...seen]);
+    } catch (error) {
+      console.warn(`[room ${this.roomId}] could not save the tips of ${id}:`, error);
     }
   }
 
@@ -317,9 +337,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         console.warn(`[room ${this.roomId}] base of ${id} is still held by ${placed.placement.holder}`);
         return reply(desk, 'Your base is still in another classroom. Try again in a minute.');
       }
+      // Everything else the player carries, read after every earlier write for them has landed.
       let economy: EconomyRecord | null;
+      let planes: AircraftRecord[];
+      let progress: ProgressRecord | null;
       try {
-        economy = await this.keeper.queue(account.id, (store) => store.economy(worldId, account.id));
+        [economy, planes, progress] = await this.keeper.queue(account.id, (store) =>
+          Promise.all([store.economy(worldId, account.id), store.aircraft(worldId, account.id), store.progress(worldId, account.id)]),
+        );
       } catch (error) {
         await this.keeper.release(account.id);
         throw error;
@@ -331,7 +356,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       }
       const save = placed.state ? fromBaseState(placed.state) : null;
       const stint = randomUUID();
-      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint });
+      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint, planes: planesFrom(planes), ...progressFrom(progress) });
       if (error) {
         await this.keeper.release(account.id);
         return reply(desk, error);
@@ -360,8 +385,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     for (const id of this.world.paperWaiting()) {
       const account = this.accounts.get(id);
       const changes = this.world.takePaper(id);
-      if (!account || changes.length === 0) continue;
-      this.writePaper(id, account.id, this.world.stintOf(id), changes);
+      if (!account) continue;
+      if (changes.length > 0) this.writePaper(id, account.id, this.world.stintOf(id), changes);
+      this.writeOutcomes(id, account.id);
     }
   }
 
@@ -394,6 +420,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const save = this.world.baseSave(id);
     if (!account || !save) return;
     this.saveLimits(id, account.id);
+    this.saveCarry(id, account.id, this.world.aircraftSave(id), this.world.progressSave(id));
     this.keeper.save(account.id, toBaseState(save)).then(
       (ok) => {
         if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} is no longer held by this room; not saved`);
@@ -436,6 +463,33 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
   }
 
+  /** The player's planes and progress, as they stand. */
+  private saveCarry(id: string, playerId: string, aircraft: AircraftRecord[] | null, progress: ProgressRecord | null): void {
+    const worldId = this.worldId;
+    if (!worldId) return;
+    if (aircraft) {
+      this.keeper.queue(playerId, (store) => store.saveAircraft(worldId, playerId, aircraft)).catch((error) => console.error(`[room ${this.roomId}] could not save the planes of ${id}:`, error));
+    }
+    if (progress) {
+      this.keeper.queue(playerId, (store) => store.saveProgress(worldId, playerId, progress)).catch((error) => console.error(`[room ${this.roomId}] could not save the progress of ${id}:`, error));
+    }
+  }
+
+  /** Missions flown to the end, each written once (its card id is the key). */
+  private writeOutcomes(id: string, playerId: string): void {
+    const worldId = this.worldId;
+    const outcomes = this.world.takeOutcomes(id);
+    if (!worldId) return;
+    for (const o of outcomes) {
+      this.keeper
+        .queue(playerId, (store) => store.recordMission(worldId, playerId, o))
+        .then((fresh) => {
+          if (!fresh) console.warn(`[room ${this.roomId}] mission ${o.id} of ${id} was already recorded`);
+        })
+        .catch((error) => console.error(`[room ${this.roomId}] could not record mission ${o.id} of ${id}:`, error));
+    }
+  }
+
   /** The player's capacity and protected reserve, saved with their balance. */
   private saveLimits(id: string, playerId: string): void {
     const worldId = this.worldId;
@@ -451,8 +505,13 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (account) this.saveLimits(id, account.id);
     const stint = this.world.stintOf(id);
     const packed = this.world.remove(id);
-    // What their last moments changed reaches the ledger before the base is packed.
-    if (account) this.writePaper(id, account.id, stint, this.world.takePaper(id));
+    // What their last moments changed reaches the store before the base is packed.
+    if (account) {
+      this.writePaper(id, account.id, stint, this.world.takePaper(id));
+      this.writeOutcomes(id, account.id);
+      const departure = this.world.takeDeparture(id);
+      if (departure) this.saveCarry(id, account.id, departure.aircraft, departure.progress);
+    }
     if (account && packed) {
       this.keeper.pack(account.id, toBaseState(packed)).then(
         (ok) => {
@@ -465,6 +524,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.state.planes.delete(id);
     this.pings.delete(id);
     this.accounts.delete(id);
+    if (account) this.tips.delete(account.id);
     this.transferAt.delete(id);
     void this.refreshMetadata();
   }

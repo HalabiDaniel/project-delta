@@ -681,3 +681,12 @@ class Checker {
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
+
+/**
+ * A mission director's saved state on its own (multiplayer keeps it on the server): checked the
+ * same way as in a saved game, null if it is missing or unusable.
+ */
+export function parseDirector(raw: unknown, problems: string[] = []): DirectorState | null {
+  if (raw === null || raw === undefined) return null;
+  return validateDirector(raw, new Checker(problems));
+}

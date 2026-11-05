@@ -11,7 +11,8 @@ import { distanceToShape, footprint, type Collider } from '../../src/combat/Coll
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
 import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, PLAYER_ID, PVP, RAIDS, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
-import { MissionDirector, type Situation } from '../../src/director/MissionDirector';
+import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
+import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
 import { overHome } from '../../src/defenses/Layout';
 import { Mission, type MissionSpec, type Point3 } from '../../src/missions/Mission';
@@ -60,6 +61,30 @@ export interface PlayerCarry {
   paper?: number | null;
   /** Names this placement in ledger keys (default: a new UUID). */
   stint?: string;
+  /** The planes they own (none: a new player's empty hangar). */
+  planes?: CarriedPlane[];
+  /** The design chosen in the garage. */
+  aircraft?: AircraftId;
+  /** The mission director as last saved, and the ids of the cards on the board by slot. */
+  director?: DirectorState | null;
+  board?: Record<string, string>;
+  /** Lifetime statistics so far. */
+  stats?: Record<string, number>;
+}
+
+/** A plane as it travels with the player. */
+export interface CarriedPlane {
+  id: string;
+  design: AircraftId;
+  condition: 'ready' | 'recovered';
+  health: number;
+  invested: number;
+}
+
+/** What a player who left was carrying when they left: saved by the room after the base is packed. */
+export interface Departure {
+  aircraft: AircraftRecord[];
+  progress: ProgressRecord | null;
 }
 
 /** An event to send: to one player, to everyone but one, or to everyone. */
@@ -118,6 +143,9 @@ export class ServerWorld {
   private readonly missionKeys = new WeakMap<Mission, string>();
   /** Paper changes of players who have left, not yet taken for the ledger. */
   private readonly leftovers = new Map<string, PaperChange[]>();
+  /** What players who have left were carrying, and their last missions' outcomes. */
+  private readonly departures = new Map<string, Departure>();
+  private readonly leftOutcomes = new Map<string, MissionOutcome[]>();
   private keySerial = 0;
   private solidsCache: Collider[] | null = null;
   private pvpTimer = 0;
@@ -190,9 +218,29 @@ export class ServerWorld {
     });
     const director = new MissionDirector(() => this.missionContext(p), () => this.situation(p), seededRng(this.seed + this.pilots.size * 7919 + this.keySerial));
     p.director = director;
-    director.deal();
+    // The garage and the hangar as the player left them (before the board, which looks at what they can fly).
+    for (const plane of carry.planes ?? []) p.planeIds.set(plane.design, plane.id);
+    p.lifetime = { ...(carry.stats ?? {}) };
+    if (carry.director) {
+      // The board as it was left: cards made again from their recipes keep their ids (and so
+      // their rewards' keys); cards that make no sense on this desk are dealt afresh.
+      director.load(carry.director);
+      for (const offer of director.offers) {
+        const id = carry.board?.[offer.slot];
+        if (id && offer.reasons.includes('Restored from the saved game')) p.setMissionId(offer.mission, id);
+      }
+    } else {
+      director.deal();
+    }
     const state = new GameState(p.resources, () => p.cards());
     p.state = state;
+    for (const plane of carry.planes ?? []) {
+      const spec = AIRCRAFT[plane.design];
+      state.hangar.set(plane.design, { condition: plane.condition, health: Math.max(1, Math.min(spec.maxHealth, plane.health)), invested: plane.invested });
+    }
+    if (carry.aircraft && carry.aircraft in AIRCRAFT) state.aircraft = carry.aircraft;
+    // The board is checked against the new desk: a card that no longer makes sense here is replaced.
+    if (carry.director && director.validate()) state.updateOffers(p.cards());
     state.onEvent((e) => this.onGameEvent(p, e));
     base.onEvent((e) => this.onBaseEvent(p, e));
     p.protectUntil = this.time + this.protection;
@@ -263,6 +311,8 @@ export class ServerWorld {
       this.owners.delete(t.id);
       this.news(`${territoryName(t.id)} is free`, 'info');
     }
+    if (p.state) this.departures.set(id, { aircraft: this.aircraftSave(id) ?? [], progress: this.progressSave(id) });
+    if (p.outcomes.length > 0) this.leftOutcomes.set(id, [...(this.leftOutcomes.get(id) ?? []), ...p.outcomes.splice(0)]);
     this.pilots.delete(id);
     this.solidsCache = null;
     this.news(`${p.name} left`, 'info');
@@ -278,6 +328,65 @@ export class ServerWorld {
     this.leftovers.delete(id);
     const now = this.pilots.get(id)?.journal?.take() ?? [];
     return left.length > 0 ? [...left, ...now] : now;
+  }
+
+  /** What a player who just left was carrying (once). */
+  takeDeparture(id: string): Departure | null {
+    const d = this.departures.get(id) ?? null;
+    this.departures.delete(id);
+    return d;
+  }
+
+  /** Missions the player flew to the end since the last call (also after they left). */
+  takeOutcomes(id: string): MissionOutcome[] {
+    const left = this.leftOutcomes.get(id) ?? [];
+    this.leftOutcomes.delete(id);
+    const now = this.pilots.get(id)?.outcomes.splice(0) ?? [];
+    return left.length > 0 ? [...left, ...now] : now;
+  }
+
+  /**
+   * The planes the player owns as they stand now, for the store: the hangar, and the plane on the
+   * pad (saved as ready, with what was paid for it) or in the air (airborne). The free emergency
+   * plane is never one of them. Null before the base is placed.
+   */
+  aircraftSave(id: string): AircraftRecord[] | null {
+    const p = this.pilots.get(id);
+    const st = p?.state;
+    if (!p || !st) return null;
+    const out: AircraftRecord[] = [];
+    const idOf = (design: AircraftId) => {
+      let planeId = p.planeIds.get(design);
+      if (!planeId) {
+        planeId = randomUUID();
+        p.planeIds.set(design, planeId);
+      }
+      return planeId;
+    };
+    for (const [design, h] of st.hangar) {
+      out.push({ id: idOf(design), type: design, status: h.condition === 'ready' ? 'ready' : 'damaged', health: Math.ceil(h.health), loadout: { invested: Math.round(h.invested) } });
+    }
+    const plane = st.plane;
+    if (plane && !st.emergency && !st.hangar.has(plane.id) && st.phase !== 'crashed') {
+      const onPad = st.phase === 'building' || st.phase === 'ready';
+      const health = Math.ceil(st.durability?.health ?? plane.maxHealth);
+      out.push({ id: idOf(plane.id), type: plane.id, status: onPad ? 'ready' : 'airborne', health: Math.max(1, health), loadout: { invested: onPad ? Math.round(st.sortie?.paperSpent ?? 0) : 0 } });
+    }
+    return out;
+  }
+
+  /** The player's progress for the store: lifetime statistics, the board, the garage. Null before the base is placed. */
+  progressSave(id: string): ProgressRecord | null {
+    const p = this.pilots.get(id);
+    const st = p?.state;
+    if (!p || !st || !p.director) return null;
+    const stats: Record<string, number> = { ...p.lifetime };
+    const add = (key: string, n: number) => (stats[key] = (stats[key] ?? 0) + n);
+    for (const [k, v] of Object.entries(p.stats)) add(k, v);
+    for (const [k, v] of Object.entries(st.stats)) add(k, v);
+    const board: Record<string, string> = {};
+    for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
+    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board } };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -1175,6 +1284,8 @@ export class ServerWorld {
     const m = p.flight.model;
     switch (e.type) {
       case 'built':
+        // A newly folded plane is a new plane (a refit or a roll-out keeps the one from the hangar).
+        if (!st.emergency && e.kind === 'fold') p.planeIds.set(e.aircraft, randomUUID());
         m.setAircraft(st.plane!);
         m.setHealth(1);
         {
@@ -1233,6 +1344,8 @@ export class ServerWorld {
         }
         break;
       case 'crashed':
+        // Destroyed for good: the next save marks it so, and a new plane of the design gets a new id.
+        if (!st.emergency && st.plane) p.planeIds.delete(st.plane.id);
         this.onCrashed(p);
         this.sortieOver(p, false);
         break;
@@ -1349,6 +1462,10 @@ export class ServerWorld {
     this.endMissionAi(p);
     if (!mission || !sortie || !plane) return;
     const success = mission.status === 'succeeded';
+    p.outcomes.push({
+      id: p.missionId(mission), template: mission.spec.type, state: success ? 'completed' : 'failed', outcome: mission.failure ?? null,
+      reward: success ? mission.reward : 0, spec: { title: mission.title, tier: mission.tier, recovered, aircraft: plane.id },
+    });
     const damageTaken = Math.min(1, sortie.damageTaken / plane.maxHealth);
     const card = p.pvpCard(mission);
     p.director?.afterSortie(

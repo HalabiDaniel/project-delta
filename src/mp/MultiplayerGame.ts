@@ -810,7 +810,11 @@ export class MultiplayerGame {
     this.lobby.hide();
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
     this.hud.alert('home', territoryName(territoryId), 'yours', 'good', 3);
-    this.hud.tip('Pick a card, pick a plane (Q/E), fold it (F), launch (Space). Tab shows the scoreboard; Z / C / V are emotes.', ['F', 'Space', 'Tab']);
+    // A first-time tip: once per player (the server keeps which tips they have seen).
+    if (!this.net.tipsSeen.has('mp-desk')) {
+      this.hud.tip('Pick a card, pick a plane (Q/E), fold it (F), launch (Space). Tab shows the scoreboard; Z / C / V are emotes.', ['F', 'Space', 'Tab']);
+      this.net.sawTip('mp-desk');
+    }
   }
 
   private onPhase(phase: GamePhase): void {

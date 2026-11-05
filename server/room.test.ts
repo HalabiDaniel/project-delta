@@ -281,13 +281,15 @@ describe('player identity in the room', () => {
       return { client, welcome, got };
     };
     const first = await tutorialOf({ name: 'Tess' });
-    expect(first.got).toEqual([{ t: null }]);
+    expect(first.got).toEqual([{ t: null, tips: [] }]);
     first.client.send('tutorial', { t: { v: 1, step: 5, skipped: false } });
     first.client.send('tutorial', { t: 'junk' });
+    first.client.send('tip', { id: 'mp-desk' });
+    first.client.send('tip', { id: '<b>bad</b>' });
     await wait(150);
     await first.client.leave();
     const again = await tutorialOf({ name: 'Tess', token: first.welcome.token });
-    expect(again.got).toEqual([{ t: { v: 1, step: 5, skipped: false } }]);
+    expect(again.got).toEqual([{ t: { v: 1, step: 5, skipped: false }, tips: ['mp-desk'] }]);
   });
 });
 
