@@ -87,6 +87,18 @@ export interface QuickJoinDTO {
   id: string;
 }
 
+/**
+ * A desk's place in the territory lifecycle (v0.0.13), TerritoryState.state:
+ *   ai        – the AI's installations defend it; a joining player can be placed here at once.
+ *   player    – a player's base is on it.
+ *   draining  – its player has left or dropped; the base stays, defenses active, until the
+ *               reconnect grace is over and any raid on it is settled.
+ *   empty     – bare; nobody can be placed here until the gap is over.
+ *   open      – bare; a joining player may be placed here; the AI moves in if nobody comes.
+ */
+export const DESK_STATES = ['ai', 'player', 'draining', 'empty', 'open'] as const;
+export type DeskState = (typeof DESK_STATES)[number];
+
 /** Where a session's clock stands (WorldState.session). */
 export const SESSION_STATUSES = ['open', 'closing', 'ended'] as const;
 

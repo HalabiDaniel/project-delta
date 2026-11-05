@@ -255,3 +255,14 @@
 /* v0.0.11: the home dashboard sits under the connection line, and the kill feed under the dashboard. */
 .hud .dashboard { margin-top: 30px; }
 .mp-feed { top: max(330px, 46%); }
+
+/* "You landed on…" (v0.0.13): the desk the server picked. */
+.mp-landed { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); display: flex; gap: var(--s3); align-items: center; padding: var(--s3) var(--s4); transition: opacity 0.6s; }
+.mp-landed.fade { opacity: 0; }
+.mp-landed small { display: block; color: var(--ink-3); font-size: var(--t-s); }
+.mp-landed b { display: block; font-size: var(--t-l); }
+.mp-landed span { color: var(--ink-2); font-size: var(--t-s); }
+.mp-landed-map { display: grid; gap: 3px; width: 64px; }
+.mp-landed-map i { aspect-ratio: 1; border-radius: 2px; background: var(--paper-2); border: 1px solid var(--edge); }
+.mp-landed-map i.taken { background: var(--ink-3); }
+.mp-landed-map i.mine { background: var(--friend); border-color: var(--friend); }

@@ -91,6 +91,8 @@ export class MpHud {
   private lastBoard = '';
   private lastBanner = '';
   private lastNet = '';
+  private readonly landing: HTMLElement;
+  private landingTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(root: HTMLElement) {
     const layer = document.createElement('div');
@@ -103,6 +105,8 @@ export class MpHud {
     this.banner = div(layer, 'mp-banner');
     this.banner2 = div(layer, 'mp-connection');
     this.board.hidden = true;
+    this.landing = div(layer, 'mp-landed card');
+    this.landing.hidden = true;
   }
 
   render(v: MpHudView): void {
@@ -123,6 +127,23 @@ export class MpHud {
       ? `${who(killer, killerColour)}${assists.length ? `<small> + ${assists.map(esc).join(', ')}</small>` : ''} ${icon(WEAPON_ICONS[weapon])} ${who(victim, victimColour)}`
       : `${icon(WEAPON_ICONS[weapon])} ${who(victim, victimColour)}`;
     this.push(line, mine ? 'mine' : 'kill');
+  }
+
+  /** "You landed on…" (v0.0.13): where the server placed our base, shown for a few seconds. */
+  landed(v: { label: string; id: string; cells: Array<{ id: string; x: number; z: number; mine: boolean; taken: boolean }> }): void {
+    const xs = [...new Set(v.cells.map((c) => Math.round(c.x)))].sort((a, b) => a - b);
+    const zs = [...new Set(v.cells.map((c) => Math.round(c.z)))].sort((a, b) => a - b);
+    const grid = v.cells
+      .map((c) => `<i class="${c.mine ? 'mine' : c.taken ? 'taken' : ''}" style="grid-column:${xs.indexOf(Math.round(c.x)) + 1};grid-row:${zs.indexOf(Math.round(c.z)) + 1}"></i>`)
+      .join('');
+    this.landing.innerHTML = `<div class="mp-landed-map" style="grid-template-columns:repeat(${xs.length},1fr)">${grid}</div><div><small>You landed on</small><b>${esc(v.label)}</b><span>${esc(v.id)} · your base, as you left it</span></div>`;
+    this.landing.hidden = false;
+    this.landing.classList.remove('fade');
+    clearTimeout(this.landingTimer);
+    this.landingTimer = setTimeout(() => {
+      this.landing.classList.add('fade');
+      this.landingTimer = setTimeout(() => (this.landing.hidden = true), 600);
+    }, 4500);
   }
 
   news(text: string, tone: 'good' | 'bad' | 'info'): void {

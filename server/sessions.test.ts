@@ -142,6 +142,30 @@ describe('sessions', () => {
     expect((await store.sessionRecords()).find((s) => s.id === id)).toMatchObject({ status: 'ended', peakPlayers: 2 });
   }, 10000);
 
+  it("keeps a departed defender's base on the desk until the raid on it is settled, then packs it", async () => {
+    const id = await quick();
+    const ann = await enter(id, 'Ann');
+    const bob = await enter(id, 'Bob');
+    const r = roomOf(id);
+    await eventually(() => [...r.world.pilots.values()].every((p) => !!p.base));
+    const [a, b] = ['Ann', 'Bob'].map((n) => [...r.world.pilots.values()].find((p) => p.name === n)!);
+    const attack = r.world.attacks.start(a.id, b.id, b.home!.id, { installationId: b.base!.idOf('store'), name: 'store', x: b.home!.x, z: b.home!.z }, r.world.time);
+    await bob.leave();
+    await wait(300);
+    // Still on the desk, draining, its defenses up: the raid goes on.
+    expect(r.world.pilots.get(b.id)?.leaving).toBe(true);
+    expect(r.world.deskState(b.home!.id)).toBe('draining');
+    await ann.waitForNextPatch();
+    expect((ann.state as WorldState).territories.get(b.home!.id)?.state).toBe(2);
+    const bobRecord = (await services().store.findPlayers(b.id))[0];
+    expect((await services().store.base(bobRecord.id))?.placement).not.toBeNull();
+    // Settled: now the base is packed and the desk's gap starts.
+    (r.world as unknown as { endAttack(x: unknown, o: string): void }).endAttack(attack, 'repelled');
+    await eventually(() => !r.world.pilots.has(b.id));
+    await eventually(async () => (await services().store.base(bobRecord.id))?.placement === null);
+    expect(r.world.deskState(b.home?.id ?? attack.territoryId)).toBe('empty');
+  });
+
   it('shows the time left in the shared state', async () => {
     setSessionDefaults({ ambient: false, seed: 5, session: { length: 600 } });
     const id = await quick();

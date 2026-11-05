@@ -1041,6 +1041,25 @@ export const PVP = {
   aiRebuild: 120,
   /** Scoreboard points. */
   score: { kill: 10, assist: 4, raid: 15, defend: 10, mission: 5 },
+  /** A player just placed on a desk can't be the target of a new raid for this long (v0.0.13, provisional). */
+  arrivalGrace: 120,
+  /**
+   * A plane that took or dealt damage from or to another player, or was on a raid, this recently is
+   * "in combat" (v0.0.13, provisional): if its pilot is gone for good, it is lost, with no kill reward.
+   */
+  combatWindow: 10,
+} as const;
+
+/**
+ * The territory lifecycle in sessions (v0.0.13): when a player's base is packed, the desk stays
+ * empty for `gap`, is then open to joining players, and the AI moves back in after `aiDelay` more if
+ * nobody comes. Provisional: the developer confirms them (plan v0.0.13, section 11).
+ */
+export const TERRITORY_LIFECYCLE = {
+  /** Empty → open (seconds). */
+  gap: 120,
+  /** Open → AI-held (seconds). */
+  aiDelay: 300,
 } as const;
 
 /**

@@ -10,7 +10,7 @@ import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
@@ -28,6 +28,7 @@ import {
   type InputFrame,
   type MeDTO,
   type NetEvent,
+  type DeskState,
   type OwnFlight,
   type Weapon,
 } from '../../src/net/protocol';
@@ -56,6 +57,16 @@ export interface ServerWorldOptions {
   newPlayerProtection?: number;
   /** The real clock (ms since 1970), for the timers that outlive the world (tests set their own). */
   clock?: () => number;
+  /** The territory lifecycle's timers where they differ from TERRITORY_LIFECYCLE (tests). */
+  lifecycle?: { gap?: number; aiDelay?: number };
+  /** New raids wait this long after a player is placed (default PVP.arrivalGrace). */
+  arrivalGrace?: number;
+}
+
+/** Where an unowned desk is in its lifecycle, and when it moves on (world time). */
+interface DeskTimer {
+  state: 'ai' | 'empty' | 'open';
+  until: number;
 }
 
 /** A raid or a kill as the world reports it for the store: players by public id, the time as a clock time (ms). */
@@ -177,9 +188,17 @@ export class ServerWorld {
   private readonly pvpOut: PvpEvent[] = [];
   /** The AI's name for each desk this session ("Billy" → "Billy's desk"). */
   private readonly aiNames = new Map<string, string>();
+  /** Unowned desks' place in the lifecycle (v0.0.13); an owned desk is the player's or draining. */
+  private readonly desks = new Map<string, DeskTimer>();
+  private readonly gap: number;
+  private readonly aiDelay: number;
+  readonly arrivalGrace: number;
 
   constructor(options: ServerWorldOptions = {}) {
     this.protection = options.newPlayerProtection ?? PVP.newPlayerProtection;
+    this.gap = options.lifecycle?.gap ?? TERRITORY_LIFECYCLE.gap;
+    this.aiDelay = options.lifecycle?.aiDelay ?? TERRITORY_LIFECYCLE.aiDelay;
+    this.arrivalGrace = options.arrivalGrace ?? PVP.arrivalGrace;
     this.clock = options.clock ?? Date.now;
     this.seed = options.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = seededRng(this.seed);
@@ -197,6 +216,62 @@ export class ServerWorld {
     // Every desk the AI holds gets a goofy name for this session.
     const names = [...DESK_NAMES];
     for (const t of this.territories) this.aiNames.set(t.id, names.splice(Math.floor(this.nameRng() * names.length), 1)[0] ?? t.id);
+    // Every desk starts the session held by the AI.
+    for (const t of this.territories) this.desks.set(t.id, { state: 'ai', until: Infinity });
+  }
+
+  // ---- The territory lifecycle (v0.0.13) --------------------------------------------------------
+
+  /** Where desk `territoryId` is in its lifecycle. */
+  deskState(territoryId: string): DeskState {
+    const owner = this.owners.get(territoryId);
+    if (owner) {
+      const p = this.pilots.get(owner);
+      return p && p.connected && !p.leaving ? 'player' : 'draining';
+    }
+    return this.desks.get(territoryId)?.state ?? 'ai';
+  }
+
+  /** Seconds until an empty or open desk moves on (null: it doesn't on its own). */
+  deskTimeLeft(territoryId: string): number | null {
+    if (this.owners.has(territoryId)) return null;
+    const d = this.desks.get(territoryId);
+    return d && Number.isFinite(d.until) ? Math.max(0, d.until - this.time) : null;
+  }
+
+  /** Empty desks open after the gap; open desks nobody took go back to the AI after its delay. */
+  private updateDesks(): void {
+    for (const [id, d] of this.desks) {
+      if (this.owners.has(id) || this.time < d.until) continue;
+      if (d.state === 'empty') {
+        this.desks.set(id, { state: 'open', until: this.time + this.aiDelay });
+        this.news(`${territoryName(id)} is free`, 'info');
+      } else if (d.state === 'open') {
+        const t = this.territories.find((x) => x.id === id)!;
+        // The AI never moves in under a player's nose.
+        if (this.seen({ x: t.x, y: t.top, z: t.z })) continue;
+        this.desks.set(id, { state: 'ai', until: Infinity });
+        t.threat = THREAT.map[id] ?? 0;
+        for (const spec of this.shared.layout.installations) if (spec.territoryId === id) this.network.add(spec);
+        this.solidsCache = null;
+      }
+    }
+  }
+
+  /**
+   * A desk for a joining player: a random one among those open to players (open, or the AI's),
+   * preferring one no plane can see right now (bases come and go out of sight), or null if none is
+   * free. `taken`: desks held for players whose base is being loaded.
+   */
+  pickDesk(taken: ReadonlySet<string> = new Set(), random: () => number = Math.random): string | null {
+    const free = this.freeDesks().filter((t) => !taken.has(t));
+    if (free.length === 0) return null;
+    const unseen = free.filter((id) => {
+      const t = this.territories.find((x) => x.id === id)!;
+      return !this.seen({ x: t.x, y: t.top, z: t.z });
+    });
+    const from = unseen.length > 0 ? unseen : free;
+    return from[Math.floor(random() * from.length)];
   }
 
   // ---- Clock times ------------------------------------------------------------------------------
@@ -213,11 +288,15 @@ export class ServerWorld {
 
   // ---- Desk names -------------------------------------------------------------------------------
 
-  /** "Daniel's desk" for a player's, "Billy's desk" for the AI's. */
+  /** "Daniel's desk" for a player's, "Billy's desk" for the AI's, "Empty desk" or "Free desk" between them. */
   deskName(territoryId: string): string {
     const owner = this.owners.get(territoryId);
     const p = owner ? this.pilots.get(owner) : undefined;
-    return deskLabel(p?.name ?? this.aiNames.get(territoryId) ?? territoryId);
+    if (p) return deskLabel(p.name);
+    const state = this.deskState(territoryId);
+    if (state === 'empty') return 'Empty desk';
+    if (state === 'open') return 'Free desk';
+    return deskLabel(this.aiNames.get(territoryId) ?? territoryId);
   }
 
   /** An AI desk named like a player in the session takes another name (no two "Billy"s). */
@@ -273,9 +352,9 @@ export class ServerWorld {
     return pilot;
   }
 
-  /** Desks a base could be placed on right now: claimable and not taken. */
+  /** Desks a base could be placed on right now: not a player's, and open or the AI's (not in its empty gap). */
   freeDesks(): string[] {
-    return this.shared.claimable.filter((t) => !this.owners.has(t));
+    return this.shared.claimable.filter((t) => !this.owners.has(t) && this.desks.get(t)?.state !== 'empty');
   }
 
   /**
@@ -288,7 +367,9 @@ export class ServerWorld {
     const p = this.pilots.get(id)!;
     const t = this.territories.find((x) => x.id === territoryId)!;
     this.owners.set(territoryId, id);
+    this.desks.delete(territoryId);
     p.home = t;
+    p.arrivedAt = this.time;
     // The AI's defenses make way for the player's base.
     t.threat = 0;
     for (const spec of this.shared.layout.installations) {
@@ -356,6 +437,7 @@ export class ServerWorld {
     if (p.home) return 'already claimed';
     if (!this.territories.some((x) => x.id === territoryId) || !this.shared.claimable.includes(territoryId)) return 'not claimable';
     if (this.owners.has(territoryId)) return 'taken';
+    if (this.desks.get(territoryId)?.state === 'empty') return 'empty';
     return null;
   }
 
@@ -370,12 +452,55 @@ export class ServerWorld {
     if (!p || p.connected === connected) return;
     p.connected = connected;
     p.droppedAt = this.time;
+    // Back before a raid on their base was settled: their desk is theirs again.
+    if (connected) p.leaving = false;
     this.news(connected ? `${p.name} is back` : `${p.name} lost connection`, connected ? 'good' : 'bad');
-    // A raid on someone who went offline is called off: nobody has to defend while away.
-    if (!connected) {
-      const attack = this.attacks.on(id);
-      if (attack) this.endAttack(attack, 'abandoned');
+    // A raid in progress on someone who dropped goes on (v0.0.13): their base stays, its defenses
+    // keep firing, and it ends as it would have. No new raid can start on them meanwhile.
+  }
+
+  /**
+   * The player is gone for good, but a raid on their base is in progress: the base stays (draining),
+   * its defenses active, until the raid is settled. Their plane, if in the air, is dealt with now
+   * (see `depart`'s caller). Returns false if nothing holds them (they can be removed at once).
+   */
+  holdForRaid(id: string): boolean {
+    const p = this.pilots.get(id);
+    if (!p || !this.attacks.on(id)) return false;
+    p.connected = false;
+    p.leaving = true;
+    this.settleFlight(p);
+    return true;
+  }
+
+  /** In combat: took or dealt damage from or to another player lately, or on a raid. */
+  inCombat(p: Pilot): boolean {
+    return this.time - p.combatAt < PVP.combatWindow || !!this.attacks.by(p.id);
+  }
+
+  /**
+   * The pilot is gone for good with their plane out (v0.0.13, approved by the developer): in combat
+   * it is lost as if shot down, but nobody earns a kill for it (pulling the plug never escapes a
+   * fight, nor pays anyone); otherwise it glides home and is returned undamaged, and an active
+   * mission fails without further penalty. Returns what happened.
+   */
+  settleFlight(p: Pilot): 'lost' | 'returned' | null {
+    const st = p.state;
+    if (!st || (st.phase !== 'flying' && st.phase !== 'landed')) return null;
+    if (st.phase === 'flying' && this.inCombat(p)) {
+      p.forfeit = true;
+      st.crash(p.damageLog.length > 0 ? 'shot-down' : 'impact');
+      p.forfeit = false;
+      return 'lost';
     }
+    if (st.durability && st.plane) st.durability.health = st.plane.maxHealth;
+    this.recall(p);
+    return 'returned';
+  }
+
+  /** Players who left during a raid on their base and whose raid has now been settled. */
+  released(): string[] {
+    return [...this.pilots.values()].filter((p) => p.leaving && !this.attacks.on(p.id)).map((p) => p.id);
   }
 
   /**
@@ -385,9 +510,8 @@ export class ServerWorld {
   remove(id: string): BaseSave | null {
     const p = this.pilots.get(id);
     if (!p) return null;
-    // Leaving mid-flight counts as going down: whoever hurt the plane lately gets the kill
-    // (quitting can't save a lost fight), and a raid in progress fails.
-    if (p.state?.phase === 'flying') p.state.crash(p.damageLog.length > 0 ? 'shot-down' : 'impact');
+    // A plane still out is dealt with by the flight-across-disconnects rules (v0.0.13).
+    this.settleFlight(p);
     for (const attack of [...this.attacks.active]) if (attack.attacker === id || attack.victim === id) this.endAttack(attack, 'abandoned');
     this.endMissionAi(p);
     this.guns.clear(id);
@@ -404,10 +528,10 @@ export class ServerWorld {
       const t = p.home;
       for (const key of [...p.base.buildings.keys()]) this.network.remove(p.base.idOf(key));
       this.network.remove(p.base.idOf(STORE));
-      t.threat = THREAT.map[t.id] ?? 0;
-      for (const spec of this.shared.layout.installations) if (spec.territoryId === t.id) this.network.add(spec);
+      // The desk is bare for a while, then open to players, then the AI's (v0.0.13).
+      t.threat = 0;
       this.owners.delete(t.id);
-      this.news(`${territoryName(t.id)} is free`, 'info');
+      this.desks.set(t.id, this.gap > 0 ? { state: 'empty', until: this.time + this.gap } : { state: 'open', until: this.time + this.aiDelay });
     }
     if (p.state) this.departures.set(id, { aircraft: this.aircraftSave(id) ?? [], progress: this.progressSave(id) });
     if (p.outcomes.length > 0) this.leftOutcomes.set(id, [...(this.leftOutcomes.get(id) ?? []), ...p.outcomes.splice(0)]);
@@ -666,6 +790,7 @@ export class ServerWorld {
     this.updateBombs(dt);
     this.updateAttacks();
     this.rebuildAi();
+    this.updateDesks();
     this.pvpTimer -= dt;
     if (this.pvpTimer <= 0) {
       this.pvpTimer = PVP_REFRESH;
@@ -788,7 +913,10 @@ export class ServerWorld {
     p.lastWeapon = weapon;
     if (by?.player) {
       p.damageLog.push({ by: by.player, amount: Math.round(amount), at: this.time });
-      this.pilots.get(by.player)?.aggression.set(p.id, this.time);
+      const attacker = this.pilots.get(by.player);
+      attacker?.aggression.set(p.id, this.time);
+      p.combatAt = this.time;
+      if (attacker) attacker.combatAt = this.time;
     }
     const { dealt, destroyed } = st.damageAircraft(amount, source, by?.name ?? null);
     if (dealt <= 0) return 0;
@@ -1154,7 +1282,10 @@ export class ServerWorld {
         if (known) known.destroyed ||= destroyed;
         else attack.structures.push({ name, destroyed });
       }
-      if (by) by.aggression.set(owner.id, this.time);
+      if (by) {
+        by.aggression.set(owner.id, this.time);
+        by.combatAt = this.time;
+      }
       if (destroyed) this.note(owner, 'wrecked', `${i.spec.name} wrecked`, null, 'bad');
     } else if (destroyed && i.side === 'enemy') {
       this.aiWrecks.set(i.id, this.time + PVP.aiRebuild);
@@ -1349,7 +1480,7 @@ export class ServerWorld {
     const others = [...this.pilots.values()].filter((o) => o !== p && o.home && o.base && o.state);
     const offered: Array<() => void> = [];
     // A raid: on a base that may be raided now, keeping the same target while it stays valid.
-    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0);
+    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0);
     const current = p.pvp.find((c) => c.tag.kind === 'raid' && raidable.some((o) => o.id === c.tag.target));
     const victim = current ? this.pilots.get(current.tag.target)! : raidable.length > 0 ? raidable[Math.floor(this.rng() * raidable.length)] : null;
     if (victim) {
@@ -1391,7 +1522,7 @@ export class ServerWorld {
     if (!other?.home) return false;
     switch (tag.kind) {
       case 'raid':
-        return this.attacks.refusal(p, other, this.time) === null;
+        return this.attacks.refusal(p, other, this.time, this.arrivalGrace) === null;
       case 'hunt':
         return other.flying;
       case 'intercept':
@@ -1529,7 +1660,8 @@ export class ServerWorld {
     p.stopped = false;
     p.stats.deaths++;
     this.history.forget(p.plane);
-    const { killer, assists } = creditFor(p.damageLog, this.time);
+    // A plane lost because its pilot left in combat is nobody's kill.
+    const { killer, assists } = p.forfeit ? { killer: null, assists: [] as string[] } : creditFor(p.damageLog, this.time);
     const k = killer ? this.pilots.get(killer) : undefined;
     const plane = st.plane!;
     const role = plane.role === 'bomber' ? 'bomber' : 'fighter';
@@ -1643,7 +1775,8 @@ export class ServerWorld {
     const installations = this.network.installations
       .filter((i) => i.alive && (i.side === 'enemy' || i.side === p.side))
       .map((i) => ({ id: i.id, kind: i.spec.kind, territoryId: i.spec.territoryId, side: (i.side === p.side ? 'player' : 'enemy') as Side, x: i.spec.x, z: i.spec.z, range: i.spec.range }));
-    const excluded = new Set([...this.owners.keys()].filter((t) => t !== home.id));
+    // Other players' desks, and bare desks (missions never aim at an empty or open desk).
+    const excluded = new Set([...this.owners.keys(), ...[...this.desks].filter(([, d]) => d.state !== 'ai').map(([id]) => id)].filter((t) => t !== home.id));
     return {
       territories: this.territories,
       homeId: home.id,

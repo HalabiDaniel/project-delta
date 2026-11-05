@@ -123,6 +123,8 @@ export const TerritoryState = schema(
     claimable: t.boolean().default(true),
     /** "Daniel's desk", or the AI's goofy name for it this session ("Billy's desk"). */
     label: t.string().default(''),
+    /** Its place in the lifecycle (index into DESK_STATES, v0.0.13). */
+    state: t.uint8().default(0),
   },
   'TerritoryState',
 );

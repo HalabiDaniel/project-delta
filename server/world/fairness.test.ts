@@ -10,7 +10,7 @@ import { ServerWorld } from './ServerWorld';
 /** A world on a clock the test moves. */
 function clocked(start = 1_800_000_000_000, protection: number = PVP.newPlayerProtection) {
   const clock = { now: start };
-  const world = new ServerWorld({ seed: 4, ambient: false, newPlayerProtection: protection, clock: () => clock.now });
+  const world = new ServerWorld({ seed: 4, ambient: false, newPlayerProtection: protection, clock: () => clock.now, arrivalGrace: 0 });
   return { world, clock };
 }
 
@@ -73,10 +73,10 @@ describe('raids and kills remembered across sessions', () => {
     const next = rivals();
     next.clock.now = clock.now + 300_000;
     next.b.shieldUntil = 0;
-    expect(next.world.attacks.refusal(next.a, next.b, next.world.time)).toBeNull();
+    expect(next.world.attacks.refusal(next.a, next.b, next.world.time, next.world.arrivalGrace)).toBeNull();
     next.world.rememberPvp([raid, raid]);
     expect(PVP.pairCooldown).toBeGreaterThan(300);
-    expect(next.world.attacks.refusal(next.a, next.b, next.world.time)).toBe('cooldown');
+    expect(next.world.attacks.refusal(next.a, next.b, next.world.time, next.world.arrivalGrace)).toBe('cooldown');
     expect(next.world.attacks.repeatFactor('a', 'b', next.world.time)).toBe(PVP.repeat[1]);
     void a;
     void b;
@@ -115,7 +115,8 @@ describe('desk names', () => {
     world.claim('a', 'T5');
     expect(world.deskName('T5')).toBe("Daniel's desk");
     world.remove('a');
-    expect(DESK_NAMES.map((n) => `${n}'s desk`)).toContain(world.deskName('T5'));
+    // Bare between players (v0.0.13), then the AI's again under its own name.
+    expect(world.deskName('T5')).toBe('Empty desk');
   });
 
   it("never names an AI desk like a player in the session", () => {

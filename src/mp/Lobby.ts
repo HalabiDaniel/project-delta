@@ -1,5 +1,5 @@
 import { icon } from '../ui/icons';
-import { colourCss, type SessionResultsDTO } from '../net/protocol';
+import { colourCss, type DeskState, type SessionResultsDTO } from '../net/protocol';
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../net/Username';
 import type { SessionListing } from './NetClient';
 
@@ -29,6 +29,8 @@ export interface ClaimCell {
   claimable: boolean;
   mine: boolean;
   connected: boolean;
+  /** Its place in the territory lifecycle (v0.0.13). */
+  state: DeskState;
 }
 
 export interface ClaimView {
@@ -160,13 +162,15 @@ export class Lobby {
     this.lastClaimKey = key;
     const cells = view.cells
       .map((c) => {
-        const free = c.claimable && !c.owner;
+        const free = c.claimable && !c.owner && c.state !== 'empty';
         const tone = c.owner ? `style="--owner: ${colourCss(c.colour)}"` : '';
         const body = c.owner
-          ? `<span class="mp-owner">${esc(c.ownerName ?? '?')}${c.connected ? '' : ' (away)'}</span>`
-          : c.claimable
-            ? `<span class="mp-free">Free${c.threat > 0 ? ` · AI defenses ${'▮'.repeat(c.threat)}` : ''}</span>`
-            : `<span class="mp-ai">AI stronghold</span>`;
+          ? `<span class="mp-owner">${esc(c.ownerName ?? '?')}${c.state === 'draining' ? ' (leaving)' : c.connected ? '' : ' (away)'}</span>`
+          : c.state === 'empty'
+            ? `<span class="mp-ai">Empty · opens soon</span>`
+            : c.state === 'open'
+              ? `<span class="mp-free">Free desk</span>`
+              : `<span class="mp-free">AI desk${c.threat > 0 ? ` · defenses ${'▮'.repeat(c.threat)}` : ''}</span>`;
         return `<button class="mp-cell${free ? ' free' : ''}${c.owner ? ' owned' : ''}${c.mine ? ' mine' : ''}" data-t="${c.id}" disabled ${tone}>
           <span class="mp-cell-id">${c.id}</span><span class="mp-cell-name">${esc(c.name)}</span>${body}</button>`;
       })
@@ -179,7 +183,7 @@ export class Lobby {
       .join('');
     this.claim.innerHTML = /* html */ `
       <div class="mp-head"><b class="brand">paperwars<span>.io</span></b><h2>${esc(view.title)}</h2></div>
-      <p class="mp-hint">${view.username ? 'Pick the name everyone will see you as, and your base is placed.' : view.error ? 'Your base is waiting.' : 'Placing your base on a free desk…'} Your base is yours: it comes with you to whichever desk you get, exactly as you left it.</p>
+      <p class="mp-hint">${view.username ? 'Pick the name everyone will see you as, and your base is placed.' : view.error ? 'Your base is waiting.' : 'Landing your base on a random free desk…'} Your base is yours: it comes with you to whichever desk you get, exactly as you left it.</p>
       ${username}
       <div class="mp-map">${cells}</div>
       <div class="mp-players">${players}</div>

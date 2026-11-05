@@ -2,6 +2,7 @@ import { Room, type Client, type Deferred } from '@colyseus/core';
 import {
   CLOSE_SESSION_ENDED,
   CLOSE_TAKEN_OVER,
+  DESK_STATES,
   EMOTES,
   SESSION_STATUSES,
   NET,
@@ -423,6 +424,20 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id) return;
     this.current.delete(id);
     if (WorldRoom.presence.get(id) === this) WorldRoom.presence.delete(id);
+    this.depart(id);
+  }
+
+  /**
+   * The player is gone for good. A raid in progress on their base holds it on the desk (draining,
+   * defenses active) until it is settled; otherwise the base is packed now (v0.0.13).
+   */
+  private depart(id: string): void {
+    if (!this.results && this.world.holdForRaid(id)) {
+      const ps = this.state.players.get(id);
+      if (ps) ps.connected = false;
+      console.log(`[room ${this.roomId}] ${id} left during a raid on their base: it stays until the raid is settled`);
+      return;
+    }
     this.removePlayer(id);
   }
 
@@ -460,9 +475,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     } else {
       const refused = this.world.pilots.get(id)?.home ? 'already claimed' : null;
       if (refused) return reply(wanted, refused);
-      const free = this.world.freeDesks().filter((t) => !taken.has(t));
-      if (free.length === 0) return reply(wanted, 'no free desk');
-      desk = free[Math.floor(Math.random() * free.length)];
+      // A random desk open to players (v0.0.13): an open one or the AI's, out of sight if possible.
+      const picked = this.world.pickDesk(taken);
+      if (!picked) return reply(wanted, 'Every desk is taken or between players right now. Try again in a moment.');
+      desk = picked;
     }
     // Everyone sees players by their username, so it comes first.
     if (!account.username) return reply(desk, 'Choose a username first.');
@@ -617,7 +633,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     if (moved) {
       if (WorldRoom.presence.get(id) === this) WorldRoom.presence.delete(id);
-      this.removePlayer(id);
+      this.depart(id);
     }
   }
 
@@ -723,6 +739,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.accumulator -= NET.step;
     }
     this.flushPaper();
+    // Players who left during a raid on their base, now that it has been settled.
+    for (const id of this.world.released()) this.removePlayer(id);
     this.sessionTimer -= seconds;
     if (this.sessionTimer <= 0) {
       this.sessionTimer = 0.25;
@@ -880,7 +898,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ts.owner = owner;
       ts.label = world.deskName(t.id);
       ts.threat = t.threat;
-      ts.safe = !!p && (!p.connected || world.time < p.protectUntil || world.time < p.shieldUntil);
+      ts.safe = !!p && (!p.connected || p.leaving || world.time < p.protectUntil || world.time < p.shieldUntil || world.time - p.arrivedAt < world.arrivalGrace);
+      ts.state = DESK_STATES.indexOf(world.deskState(t.id));
       ts.alert = !!owner && !!world.attacks.on(owner);
     }
   }

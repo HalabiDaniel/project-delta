@@ -1,6 +1,6 @@
 import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, PVP, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -18,6 +18,7 @@ import { PoseBuffer, ServerClock, angleDiff, type Pose } from '../net/Interpolat
 import { Predictor, type PredictionWorld } from '../net/Prediction';
 import {
   NET,
+  DESK_STATES,
   PLAYER_COLOURS,
   planeOwner,
   type CardDTO,
@@ -863,6 +864,13 @@ export class MultiplayerGame {
       return i ? { x: i.x, z: i.z, r: i.footprint + 0.6 } : null;
     });
     this.lobby.hide();
+    // "You landed on…" (v0.0.13): the desk the server picked, on a little map of the classroom.
+    const s = this.room?.state;
+    this.mpHud.landed({
+      label: s?.territories.get(territoryId)?.label || territoryName(territoryId),
+      id: territoryId,
+      cells: this.territories.map((t) => ({ id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId })),
+    });
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
     this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
     // A first-time tip: once per player (the server keeps which tips they have seen).
@@ -1093,7 +1101,7 @@ export class MultiplayerGame {
         const p = owner ? s?.players.get(owner) : undefined;
         return {
           id: t.id, name: st?.label || territoryName(t.id), threat: st?.threat ?? t.threat, owner, ownerName: p?.name ?? null, colour: p?.colour ?? 0,
-          claimable: st?.claimable ?? t.id !== PVP.centre, mine: owner === this.me, connected: p?.connected ?? true,
+          claimable: st?.claimable ?? true, mine: owner === this.me, connected: p?.connected ?? true, state: DESK_STATES[st?.state ?? 0] ?? 'ai',
         };
       }),
       players: players.map(([id, p]) => ({ name: p.name, colour: p.colour, territory: p.territory || null, connected: p.connected, me: id === this.me })),

@@ -28,7 +28,7 @@ beforeEach(async () => {
 });
 
 async function room(): Promise<WorldRoom> {
-  const r = (await colyseus.createRoom(ROOM, serverOptions({ ambient: false, seed: 5 }))) as unknown as WorldRoom;
+  const r = (await colyseus.createRoom(ROOM, serverOptions({ ambient: false, seed: 5, lifecycle: { gap: 0 } }))) as unknown as WorldRoom;
   // Stays up while empty, so a test can leave and come back.
   r.autoDispose = false;
   return r;

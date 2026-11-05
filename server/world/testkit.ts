@@ -1,14 +1,15 @@
 import type { AircraftId } from '../../src/config';
 import { NET, NEUTRAL_FRAME, type InputFrame } from '../../src/net/protocol';
 import type { Pilot } from './Pilot';
-import { ServerWorld } from './ServerWorld';
+import { ServerWorld, type ServerWorldOptions } from './ServerWorld';
 
 /**
  * Test support: a world with no ambient traffic, players that join and claim in one call, and
  * "clients" that send one input frame per step the way the browser does.
  */
-export function quietWorld(seed = 1): ServerWorld {
-  return new ServerWorld({ seed, ambient: false });
+export function quietWorld(seed = 1, options: ServerWorldOptions = {}): ServerWorld {
+  // No arrival grace unless a test asks for one: raids between players start at once.
+  return new ServerWorld({ seed, ambient: false, arrivalGrace: 0, ...options });
 }
 
 export function player(world: ServerWorld, id: string, territory: string, name = id): Pilot {
