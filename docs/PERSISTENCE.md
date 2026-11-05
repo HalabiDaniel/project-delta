@@ -537,3 +537,36 @@ Known limitations after v0.0.12:
   that minute (never more, never a spend).
 - The block list is short and obvious; the developer can extend it in `src/net/Username.ts`.
 
+## v0.0.13: sessions, shutdown, restore and crash recovery
+
+v0.0.13 ([plan](roadmap/v0.0.13.md)) puts the portable bases into timed sessions (see
+[MULTIPLAYER.md](MULTIPLAYER.md#sessions-v0013)). What it changes here:
+
+- **`sessions` table** (migration `0007`): one row per session (id, title, capacity, status
+  `open`/`closing`/`ended`/`interrupted`, the busiest moment, when it was created, started, ends
+  and ended, and `desks`: which desk each player's base stood on). Written when a session opens,
+  when a player is placed, when joining closes and at the end.
+- **When things are saved.** Paper changes, purchases, builds, repairs, raid results and mission
+  outcomes are written at once, in transactions (v0.0.12). The rest of a base (building health
+  between hits) is saved every **5 s** (`BASE_SAVE_EVERY`, was 15), and at packing and shutdown.
+- **Graceful shutdown** (SIGTERM, SIGINT): no session opens and nobody is placed any more;
+  everyone is told the server is restarting; raids and missions are settled as at a session end;
+  planes in the air come home; every base is saved and packed; each session is recorded as
+  `interrupted` with its desks; then the connections close (4013) and the database is released.
+- **Restore after a restart.** On start, every session still `open`, `closing` or `interrupted`
+  whose time isn't up is reopened with the **same id** and clock for 5 minutes
+  (`SESSION.restoreWindow`), each player's desk held for them. Returning players (the browser
+  rejoins by itself, retrying while the server comes back) land on their desk; players who don't
+  come back in time are placed normally next time. A session whose time is up, or that nobody
+  was in, is recorded as ended instead.
+- **Crash recovery.** Nothing uncommitted survives, so every base is in its last committed state.
+  A session the dead process left `open` is restored like an interrupted one; a base it still
+  holds a lease on is recognised by the session's id (`<instance>/<session id>`) and taken back at
+  once instead of waiting out the 120 s lease. A plane in the air comes back as recovered in its
+  last saved condition. The host restarts the process (v0.0.14).
+- **Checked by hand** (PostgreSQL, two bots): SIGTERM saved and packed both bases and recorded the
+  session as interrupted with both desks; the restarted server reopened it with the same id and
+  the same clock. The tests (`server/sessions.test.ts`) also restart a session under bots: both
+  land back on their desks with the same base, and every balance still equals its ledger.
+- A base saved by a newer build is refused with a message saying so; it stays untouched.
+

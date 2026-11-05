@@ -33,7 +33,7 @@ not because the code compiles. Working features from earlier versions are preser
 | [v0.0.10](v0.0.10.md) | Player identity and the database | **Done after phase 3** (closed): device tokens, invites, transfer codes, one connection per player, PostgreSQL with migrations and an idempotent ledger. Its later phases moved to v0.0.12 to v0.0.14. |
 | [v0.0.11](v0.0.11.md) | Art integration and controller support | **Coding done:** the 16-desk classroom, 11 aircraft, custom buildings, themed desks, controller support, tutorial, performance. Its hardware checks and playtest move to v0.0.14. |
 | [v0.0.12](v0.0.12.md) | Persistent, portable bases | **Done (all six phases, 2026-11-05)**; the developer plays the retune at the checkpoint. A base belongs to the player and is placed on any desk; every paper change through the ledger; production only while online; dearer planes and slower paper; saved planes, missions and progress; fairness timers that survive restarts; usernames and "{username}'s desk". |
-| [v0.0.13](v0.0.13.md) | Sessions | Timed sessions with a capacity, several at once; random desk placement; the territory lifecycle (draining, empty, open, AI-held); raids that finish even if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and logs. |
+| [v0.0.13](v0.0.13.md) | Sessions | **Done (all seven phases, 2026-11-05)**; the developer confirms the provisional timers. Timed sessions with a capacity, several at once; random desk placement; the territory lifecycle (draining, empty, open, AI-held); raids that finish even if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and logs. |
 | [v0.0.14](v0.0.14.md) | **Going live** | **The whole multiplayer system on the internet:** the server and database on Railway, the game on Vercel, invite-only access, a minimal admin endpoint, daily backups with a tested restore, logs and an uptime check, the F8 feedback log, tests at scale, the first online playtest, and a **step-by-step setup guide for the developer**. |
 | [v0.0.15](v0.0.15.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. Pencil outlines removed from the 3D world; Medium as the default preset. Raptor finalised. |
 | [v0.0.16](v0.0.16.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. Lancer finalised. |
@@ -85,7 +85,7 @@ mode:
 | Version | Developer input |
 |---|---|
 | v0.0.12 | Approval of the price and production retune, the username rules and the goofy desk names (all approved 2026-11-05; the retune is confirmed by playing it at the phase 3 checkpoint) |
-| v0.0.13 | Approval of the session length and capacity and the lifecycle timers |
+| v0.0.13 | Approval of the session length and capacity, the lifecycle timers, the arrival grace and the combat window (all provisional in `src/config.ts`) |
 | v0.0.14 | Railway, Cloudflare and UptimeRobot accounts (following the setup guide), the invited friend, the online playtest, a real controller and two test computers |
 | v0.0.15 | Approval of the UI style and icon set |
 | v0.0.16 | Commissioned or licensed music and sound effects, with licences |

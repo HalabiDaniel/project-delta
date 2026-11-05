@@ -1,4 +1,14 @@
-# paperwars.io: v0.0.12 (persistent, portable bases), on top of v0.0.11 and v0.0.9 multiplayer
+# paperwars.io: v0.0.13 (sessions), on top of v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.13: sessions.** No more forever-world: players meet in timed sessions of up to sixteen,
+> several at once, opened by the server. Quick join picks the busiest one with a free desk; each
+> join lands the player's base on a random free desk ("You landed on…"); desks go from a player to
+> draining, empty, open and back to the AI. A raid finishes even if the defender leaves, nobody is
+> raided while away or just after arriving, and a plane whose pilot is gone is lost in combat
+> (with no kill reward) or glides home otherwise. Sessions end with a results card and "Join next
+> session". A restart saves everything, reopens the sessions and puts everyone back on their desk;
+> a crash loses nothing committed. Rate limits, validated messages and structured logs harden the
+> server. See [v0.0.13: sessions](#v0013-sessions) and the [plan](docs/roadmap/v0.0.13.md).
 
 > **v0.0.12: bases that belong to players.** Everything a multiplayer player builds is theirs for
 > good, in PostgreSQL. Their base (buildings, levels, damage) is placed on a random free desk each
@@ -312,6 +322,42 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.13: sessions
+
+All seven phases of the [plan](docs/roadmap/v0.0.13.md) are done; the developer confirms the
+provisional timers (`SESSION`, `TERRITORY_LIFECYCLE`, `PVP.arrivalGrace`, `PVP.combatWindow` in
+`src/config.ts`). Details in [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md#sessions-v0013) and
+[docs/PERSISTENCE.md](docs/PERSISTENCE.md#v0013-sessions-shutdown-restore-and-crash-recovery).
+
+- **Timed sessions, several at once** (`server/sessions/`): 60 minutes, 16 players, warnings at
+  10 min, 2 min and 30 s, joining closed in the last 5 minutes, empty sessions closed after 2
+  minutes; the hour starts with the first player. `GET /sessions` lists them, `POST
+  /sessions/quick` picks one (opening one if needed) and a spare opens when every session is full
+  or closing. Only the server opens sessions. At the end: raids settled as they stand, planes home,
+  missions called off, bases packed, and a results card with "Join next session".
+- **Random desks and the territory lifecycle**: AI-held, player-held, draining, empty (2 min),
+  open (5 min), then the AI again, only where no player can see it; a joining player replaces the
+  AI at once. Every desk, T11 included, can hold a player; sixteen tape colours.
+- **Fair disconnects**: a raid in progress goes on when the defender drops or leaves (their base
+  and defenses stay until it is settled, once); no new raids on players who are away; 2 minutes'
+  grace after arriving.
+- **Flight across disconnects**: back within 60 s, the flight goes on; gone longer in combat, the
+  plane is lost with no kill reward; otherwise it glides home undamaged. No practice targets in
+  sessions.
+- **Saving, shutdown, restore, crash recovery**: bases saved every 5 s; SIGTERM settles and saves
+  everything and records each session with its desks; a restart reopens the sessions for 5
+  minutes with every desk held, and the browser rejoins by itself; a base held by a crashed
+  process is taken back at once.
+- **Hardening**: rate limits per player and per address, every message validated (malformed ones
+  dropped, logged, and repeat offenders disconnected), readable errors, and one structured JSON
+  log line per event (`server/log.ts`).
+- **Tests and measurements**: 636 tests (with PostgreSQL); the load test runs 16 players in one
+  session and two sessions at once with saving to PostgreSQL (0.65 ms of each 16.7 ms step for a
+  full session). `npm run bots -- --churn 20` makes bots come and go; bots follow a restart back
+  to their desks.
+- **Trying it**: `npm run server` and `npm run dev`, then `?mp`. `SESSION_LENGTH=300 npm run
+  server` gives five-minute sessions to see the end and the results card.
 
 ## v0.0.12: portable bases
 

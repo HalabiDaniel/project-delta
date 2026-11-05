@@ -142,23 +142,58 @@ are cleaned and capped at 16 characters, commands are limited to 20 a second, em
 1.5 s, and a client sending more than 240 messages a second is disconnected by Colyseus. A client
 speaking another protocol version is refused at join.
 
-## Sessions and territories
+## Sessions (v0.0.13)
 
-- A session is a Colyseus room of up to **eight players**. The menu lists sessions (`GET /rooms`)
-  with players and free desks; Quick join takes any open one or starts one.
-- Players join an ongoing session; the world doesn't restart. They pick a display name and then a
-  desk on the classroom map.
-- The classroom is single-player's 3 × 3 world. **Eight of the nine territories can be claimed**;
-  the centre (T5, Paper Citadel) stays the AI's stronghold, because a home needs a runway pointing
-  at the middle of the world. Unclaimed territories keep their AI defenses and ambient AI patrols,
-  so there is always something to do with few players online.
-- Claiming swaps the territory's AI defenses for the player's base: the paper store and the starter
-  turret, exactly as a new single-player game, in the player's own side. It is dressed as a desk
-  with a runway (blue tape for your own, masking tape for others') and labelled with its owner.
-  Leaving (or not returning within the grace period) takes the base down and brings the AI's
-  defenses back; the territory is free again.
+There is no permanent world: players meet in **timed sessions**, several at once
+([plan](roadmap/v0.0.13.md)). What a player builds and earns is theirs and travels with them
+([PERSISTENCE.md](PERSISTENCE.md)); what lives only for a session is its scoreboard, kill streaks,
+raids and missions in flight and the AI traffic.
+
+- **A session** is one Colyseus room (`server/WorldRoom.ts`) running one `ServerWorld`, with a
+  clock and a capacity (`SESSION` in `src/config.ts`, provisional): 60 minutes, 16 players (one per
+  desk), warnings at 10 minutes, 2 minutes and 30 seconds, joining closed 5 minutes before the end,
+  closed after 2 minutes with nobody in it. The hour starts when the first player arrives.
+- **Opened by the server only.** A room refuses to be created without the process's key
+  (`server/sessions/directory.ts`), so a client can neither create a session nor pick its seed,
+  length or protection time.
+- **The directory** lists the running sessions (`GET /sessions`: players, time left, open or
+  closing) and answers quick join (`POST /sessions/quick`): the open session with the most players
+  that has space, or a new one. When every session is full or closing a spare opens, so the next
+  player finds one waiting; an empty spare stays while others run. The lobby lists sessions with
+  players, time left and ping, and the HUD shows the time left.
+- **The end.** Raids in progress are settled as they stand, planes in the air go back to their
+  hangar in their current condition, missions in flight are called off, every base is packed, and
+  everyone gets the **results card** (placing, score, kills, raids, missions, paper earned, players
+  who left included) with **Join next session**, which quick joins a new session on a new random
+  desk. The connections close 30 s later.
+- Sessions are recorded in the database (`sessions`: id, title, capacity, status, times, the
+  busiest moment, each player's desk) for restoring and statistics.
+- `SESSION_LENGTH=300 npm run server` runs five-minute sessions for trying the end by hand.
+
+## Placement and the territory lifecycle
+
+- **Placement.** Joining puts the player's base on a **random desk open to players**: an open desk
+  or one the AI holds (the AI makes way at once), preferring one no plane can see. A "You landed
+  on…" card shows the desk on a little map of the classroom. Within the reconnect grace (60 s) a
+  player keeps their desk, base and plane; a later join gets a new random desk.
+- **Every desk can hold a player** (sixteen of them, T11 included); the AI holds whichever desks
+  players don't.
+- **The lifecycle** (`TERRITORY_LIFECYCLE`, provisional), shown in the shared state
+  (`TerritoryState.state`), the desk labels and the lobby's map:
+
+| State | Meaning | Next |
+|---|---|---|
+| AI-held | The AI's installations defend it ("Billy's desk"); every desk starts like this | A joining player can be placed here at once |
+| Player-held | A player's base is on it | The player leaves or drops → Draining |
+| Draining | The player has left or dropped; the base stays with its defenses active, through the reconnect grace and until a raid on it is settled | Back in time → Player-held; otherwise base packed → Empty |
+| Empty | Bare ("Empty desk"); nobody can be placed here | After 2 minutes → Open |
+| Open | Bare ("Free desk"); a joining player may be placed here | Placed → Player-held; nobody for 5 minutes → AI-held |
+
+- The AI moves in only where no player's plane can see it, and missions never aim at an empty or
+  open desk.
 - Each player starts with 100 paper and their own production, storage, protected reserve, hangar,
-  mission board and base, all as in single-player.
+  mission board and base, as in single-player. There are no practice targets in sessions (they
+  are single-player only).
 
 ## Combat
 
@@ -244,19 +279,55 @@ Score: kill 10, assist 4, raid that got through 15, raider stopped 10, mission d
 
 ## Connections
 
+Nobody escapes a fight by pulling the plug, and nobody is attacked while away (v0.0.13).
+
 | Situation | What happens |
 |---|---|
-| Connection drops | The SDK reconnects automatically (up to 20 tries); the server keeps the player, their territory and their plane (which flies on straight ahead) for 60 s. Others see "away" on their tag and board. Their base can't be raided meanwhile, and a raid on it is called off. |
-| Browser refresh | The reconnection token is kept in session storage: the page goes straight back into the session as the same player. If that fails, the device token (v0.0.10, kept in local storage) brings back the same player, who takes over their waiting seat. |
-| Same player twice | (v0.0.10) The newer connection takes over the seat; the older one is closed with "Opened in another tab" (code 4011). |
-| Leaving | Menu → Leave classroom (or the lobby's Leave): the base comes down, the territory is free, a plane in the air counts as lost. |
-| Not back within 60 s | Treated as leaving. |
-| Session full | The ninth player is turned away with a message in the lobby. |
-| Server stops | The session ends. Clients show "reconnecting" while the SDK retries, then go back to the lobby, which says the server can't be reached. (No persistence yet: v0.0.10.) |
+| Connection drops | The SDK reconnects automatically (up to 20 tries); the server keeps the player, their desk and their plane (which flies on straight ahead) for 60 s. Their desk is Draining: no new raid can start on it, but **a raid in progress goes on**, with their defenses firing, and ends as it would have. |
+| Back within 60 s | The flight continues where the server kept it; the desk is theirs again. |
+| Gone longer, or Leave | The base is packed, unless a raid on it is in progress: then it stays (Draining) until the raid is settled, once, by its id, and only then is it packed and the desk's gap started. A plane still out **in combat** (damage from or to another player in the last 10 s, `PVP.combatWindow`, or on a raid) is **lost as if shot down, and nobody earns a kill for it**; out of combat it **glides home and is returned undamaged**, and its mission fails without further penalty. |
+| Just placed | No new raid can target the player for 2 minutes (`PVP.arrivalGrace`), on top of new-player protection, the raid shield, pair cooldowns and the repeat rules. |
+| Browser refresh | The reconnection token (session storage) brings the tab straight back; failing that, the device token brings back the same player. |
+| Same player twice | The newer connection takes over the seat; the older one is closed with "Opened in another tab" (4011). |
+| Session full or ending | A new player is turned away with a message ("This session is full", "This session is about to end"); quick join sends them elsewhere. |
+| Session ends | The results card stays up; the connection closes with 4012 and nothing is shown as an error. |
+| Server restarts | Everyone is told; raids and missions are settled, planes come home, every base is saved and packed, the connection closes with 4013. After the restart the session is reopened for 5 minutes with every player's desk held for them, and the browser rejoins it by itself ([PERSISTENCE.md](PERSISTENCE.md#v0013-sessions-shutdown-restore-and-crash-recovery)). A plane in the air at a crash comes back in its last saved condition. |
+
+## Hardening and logs
+
+- **Rate limits** (`server/RateLimit.ts`): joins and quick joins per address (a classroom behind
+  one address can all join at once, then 60 a minute; this machine is never limited), transfer
+  codes per address and per player, and per player commands (20 a second), emotes, usernames.
+- **Validation**: join options by type and size; input frames, claims, commands, emotes and
+  unknown message types by shape and range. A malformed message is dropped and counted, logged at
+  most every 10 s per player; a connection sending nothing but garbage is closed.
+- **Clear errors**: the server's refusals are plain sentences (full, ending, ended, restarting,
+  protocol version, pass withdrawn, a base saved by a newer build); the transport's are explained
+  in the browser ("Can't reach the server…", "That session has closed…").
+- **Structured logs** (`server/log.ts`): one JSON line per event with the time, level, session and
+  player: `session.open`, `join`, `place`, `leave.held`, `pack`, `mission.settle`, `pvp`, `ledger.refused`,
+  `session.warning`, `session.closing`, `session.end`, `session.shutdown`, `session.restore`,
+  `join.limited`, `message.malformed` and every error. `LOG_FORMAT=text` prints readable lines.
 
 ## Testing
 
-`npm test` runs everything (370 tests, 35 of them for multiplayer, in `server/`):
+`npm test` runs everything (636 tests with `TEST_DATABASE_URL` set, which adds the PostgreSQL
+cases). v0.0.13 added:
+
+- `server/sessions/rules.test.ts`: quick join, spare sessions, closing empty ones, the clock.
+- `server/world/wrapup.test.ts` and `server/world/lifecycle.test.ts`: the end of a session,
+  placement, every lifecycle state and timer, raids that go on after the defender drops or leaves
+  (settled once, the gap starting only afterwards), the arrival grace, the four flight rules, and no
+  practice targets.
+- `server/sessions.test.ts`, over WebSockets: sessions opened by the server only, quick join and
+  the spare, closing empty sessions, joining closing, the end with results and every base packed,
+  a departed defender's base held during a raid, graceful shutdown and restore, crash recovery,
+  and bots surviving a restart with no base or reward duplicated.
+- `server/hardening.test.ts`: rate limits, malformed messages, refused join options, server-only
+  settings, structured log lines and readable errors.
+
+Earlier suites:
+
 
 - `server/world/world.test.ts` drives `ServerWorld` directly: claiming and releasing, the AI's
   defenses swapped and restored, starting economies; flight from frames, the speed-hack bound,
@@ -275,8 +346,21 @@ Score: kill 10, assist 4, raid that got through 15, raider stopped 10, mission d
 
 ## Measurements
 
-`npm run loadtest`, 30 s per run after everyone has taken off, bots dogfighting with the browser's
-prediction, server and bots in one Node process on this machine (no GPU, shared CPU):
+`npm run loadtest` (v0.0.13), 20 s per run after everyone has taken off, bots dogfighting with the
+browser's prediction, every base saved every 5 s to PostgreSQL (`DATABASE_URL` set), server, bots
+and database on one machine (no GPU, shared CPU):
+
+| Players | Sessions | Network | Server step avg / max (ms) | Down per player (KB/s) | Up per player (KB/s) | Corrections / reconciles | Mean correction (m) | Server auto-steps | Frames dropped | Heap (MB) | Drop + resume |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2 | 1 | local | 0.46 / 2.3 | 7.0 | 1.2 | 0 / 388 | 0.000 | 0 | 0 | 66 | kept seat |
+| 8 | 1 | local | 0.65 / 6.6 | 10.1 | 1.2 | 1 / 2300 | 0.042 | 0 | 0 | 75 | kept seat |
+| 16 | 1 | local | 0.65 / 7.6 | 12.4 | 1.2 | 2 / 4284 | 0.018 | 0 | 0 | 90 | kept seat |
+| 8 | 1 | 120 ± 40 ms, a stall every 5 s | 0.59 / 12.6 | 12.1 | 1.2 | 6 / 2547 | 0.041 | 0 | 0 | 62 | kept seat |
+| 16 | 2 (8 each) | local | 0.43 / 3.5 | 9.8 | 1.2 | 0 / 4776 | 0.000 | 0 | 0 | 65 | kept seat |
+
+A full session of sixteen takes about 0.65 ms of each 16.7 ms step, saving included; two sessions
+at once share the process without trouble. No errors were logged in any run. The v0.0.9 figures
+for up to eight players, in memory:
 
 | Players | Network | Server step avg / max (ms) | Down per player (KB/s) | Up per player (KB/s) | Corrections / reconciles | Mean correction (m) | Server auto-steps | Frames dropped | Heap (MB) | Drop + resume |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -308,10 +392,9 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 
 ## Known limitations
 
-- **Single server process, in memory.** No persistence, accounts or campaign lifecycle (persistence in v0.0.10, accounts and the campaign lifecycle in v0.0.22).
-  A server restart ends every session.
-- **Three-by-three classroom**: eight claimable desks. With eight players only the centre is left
-  to the AI; more territory slots are future work (GDD §3.1 suggests 12–16).
+- **Single server process.** Every session runs in one process (v0.0.14 puts it on the internet);
+  matchmaking across servers and regions is v0.0.22. Accounts are v0.0.22.
+- **Sixteen desks, sixteen players**: 32-player sessions need the larger classrooms of v0.0.20.
 - Remote planes are drawn without their bomb racks or the fold animation on the pad; homes are
   dressed without the Home Desk landmark and tall props, because the server doesn't know their
   collision shapes.
