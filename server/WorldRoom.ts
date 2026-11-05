@@ -28,6 +28,8 @@ import { economyWorld, services } from './services';
 import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRecord } from './store/Store';
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
 import { ECONOMY, PVP, SESSION } from '../src/config';
+import { log, type Level, type LogFields } from './log';
+import { LIMITS } from './RateLimit';
 import { SESSION_KEY, ensureSpare, mayClose, register, unregister, type SessionHandle } from './sessions/directory';
 import { SessionClock, spokenTime, type SessionSummary } from './sessions/rules';
 import { IncompatibleBaseError, type SessionRecord } from './store/Store';
@@ -108,6 +110,9 @@ const SPARE_SEATS = 4;
 export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata }> implements SessionHandle {
   /** Every player in a room on this server, and which room: one connection per player, process-wide. */
   static readonly presence = new Map<string, WorldRoom>();
+  /** Joins and transfer codes per address, process-wide (v0.0.13). */
+  private static readonly joins = LIMITS.joinsPerAddress();
+  private static readonly transfers = LIMITS.transfersPerAddress();
 
   maxClients = SESSION.capacity + SPARE_SEATS;
   /** This session's length, capacity and timers. */
@@ -161,6 +166,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   private readonly departed = new Map<string, ResultLineDTO>();
   /** Paper each player earned in this session (credits only). */
   private readonly earned = new Map<string, number>();
+  /** Each player's address, for the logs and the per-address limits. */
+  private readonly addresses = new Map<string, string>();
+  /** Malformed messages per player since the last log line about them, and when that was. */
+  private readonly malformed = new Map<string, { count: number; loggedAt: number }>();
   /** The results, once the session has ended. */
   results: SessionResultsDTO | null = null;
   /** The server is shutting down: nobody is placed, and the session is recorded as interrupted. */
@@ -205,29 +214,36 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.setPatchRate(NET.patchMs);
     void this.setMetadata({ title: this.title, claimed: 0, free: this.world.shared.claimable.length });
     this.recordSession();
-    console.log(`[room ${this.roomId}] session "${this.title}" opened (${this.hour.length} s, ${this.settings.capacity} players)`);
+    this.log('info', 'session.open', { title: this.title, length: this.hour.length, capacity: this.settings.capacity, restored: !!restore });
     this.setSimulationInterval((ms) => this.update(ms / 1000), 1000 / NET.tickRate);
 
+    // Every message is checked for shape and range (v0.0.13); a malformed one is dropped and counted.
     this.onMessage('in', (client, data: unknown) => {
       const id = this.idOf(client);
-      if (id) this.world.input(id, unpackFrames(data));
+      if (!id) return;
+      const frames = unpackFrames(data);
+      if (frames.length === 0 && !(Array.isArray(data) && data.length === 0)) return this.bad(client, 'in');
+      this.world.input(id, frames);
     });
     this.onMessage('claim', (client, data: unknown) => {
-      const territory = typeof (data as { t?: unknown })?.t === 'string' ? (data as { t: string }).t : '';
-      void this.placeBase(client, territory);
+      const t = (data as { t?: unknown } | null)?.t;
+      if (t !== undefined && (typeof t !== 'string' || !/^(T\d{1,2})?$/.test(t))) return this.bad(client, 'claim');
+      void this.placeBase(client, typeof t === 'string' ? t : '');
     });
     this.onMessage('cmd', (client, data: unknown) => {
       const id = this.idOf(client);
       if (!id) return;
       const cmd = parseCommand(data);
-      if (cmd) this.world.command(id, cmd);
+      if (!cmd) return this.bad(client, 'cmd');
+      this.world.command(id, cmd);
       // Answer at once, so buttons feel immediate.
       this.sendPrivate(client, false);
     });
     this.onMessage('emote', (client, data: unknown) => {
       const id = this.idOf(client);
       const e = (data as { e?: unknown })?.e;
-      if (id && EMOTES.includes(e as Emote)) this.world.emote(id, e as Emote);
+      if (!EMOTES.includes(e as Emote)) return this.bad(client, 'emote');
+      if (id) this.world.emote(id, e as Emote);
     });
     this.onMessage('pong', (client, data: unknown) => {
       const id = this.idOf(client);
@@ -240,19 +256,28 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.onMessage('tutorial', (client, data: unknown) => void this.saveTutorial(client, data));
     this.onMessage('tip', (client, data: unknown) => void this.saveTip(client, data));
     this.onMessage('username', (client, data: unknown) => void this.setUsername(client, data));
-    this.onMessage('*', () => {
-      // Unknown message types are ignored.
-    });
+    this.onMessage('*', (client, type) => this.bad(client, typeof type === 'string' ? type.slice(0, 24) : '?'));
   }
 
   /** Who is connecting: their device token (or code) checked by the identity service. */
-  async onAuth(_client: Client, options: Partial<JoinOptions>): Promise<Authenticated> {
+  async onAuth(_client: Client, options: Partial<JoinOptions>, context?: { ip?: string }): Promise<Authenticated> {
     if (options?.v !== PROTOCOL_VERSION) throw refusal(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
+    const ip = context?.ip ?? 'unknown';
+    // This machine itself (development, bots, load tests) is never limited.
+    if (!LOOPBACK.has(ip) && !WorldRoom.joins.take(ip)) {
+      this.log('warn', 'join.limited', { ip });
+      throw refusal('Too many attempts to join from your address. Wait a minute and try again.');
+    }
+    if (!joinOptionsValid(options)) {
+      this.log('warn', 'join.malformed', { ip });
+      throw refusal('That join request was malformed. Reload the page.');
+    }
     if (this.results) throw refusal('This session has ended. Join the next one.');
     const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
     const refused = this.seatRefusal(auth.player.publicId, auth.player.id);
     if (refused) throw refusal(refused);
     this.usernameNotes.set(auth.player.publicId, await this.chooseUsername(auth.player, options.username ?? options.name));
+    this.addresses.set(auth.player.publicId, ip);
     return auth;
   }
 
@@ -276,7 +301,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       }
       return USERNAME_PROBLEMS[result];
     } catch (error) {
-      console.warn(`[room ${this.roomId}] could not set the username of ${player.publicId}:`, error);
+      this.log('warn', 'username.error', { player: player.publicId, error });
       return "Your username couldn't be saved right now. Try again in a moment.";
     }
   }
@@ -346,7 +371,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.departed.delete(id);
     this.recordSession();
     ensureSpare();
-    console.log(`[room ${this.roomId}] ${player.name} (${id}) joined via ${auth.via}${returning ? ', back to their seat' : ''}`);
+    this.log('info', 'join', { player: id, name: player.name, via: auth.via, returning: !!returning, ip: this.addresses.get(id) });
   }
 
   onDrop(client: Client): void {
@@ -400,7 +425,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.tips.set(account.id, new Set(tips));
       client.send('tutorial', { t: record, tips });
     } catch (error) {
-      console.warn(`[room ${this.roomId}] could not load the tutorial of ${id}:`, error);
+      this.log('warn', 'tutorial.error', { player: id ?? undefined, error });
     }
   }
 
@@ -417,7 +442,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     try {
       await services().store.setTutorial(account.id, { ...record });
     } catch (error) {
-      console.warn(`[room ${this.roomId}] could not save the tutorial of ${id}:`, error);
+      this.log('warn', 'tutorial.error', { player: id ?? undefined, error });
     }
   }
 
@@ -432,7 +457,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     try {
       await services().store.setTips(account.id, [...seen]);
     } catch (error) {
-      console.warn(`[room ${this.roomId}] could not save the tips of ${id}:`, error);
+      this.log('warn', 'tips.error', { player: id ?? undefined, error });
     }
   }
 
@@ -456,7 +481,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!this.results && this.world.holdForRaid(id)) {
       const ps = this.state.players.get(id);
       if (ps) ps.connected = false;
-      console.log(`[room ${this.roomId}] ${id} left during a raid on their base: it stays until the raid is settled`);
+      this.log('info', 'leave.held', { player: id, reason: 'raid in progress on their base' });
       return;
     }
     this.removePlayer(id);
@@ -516,10 +541,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (before && before.endsWith(`/${this.roomId}`) && !before.startsWith(`${SERVER_INSTANCE}/`)) {
         await this.keeper.queue(account.id, (store) => store.releaseBase(account.id, before));
         placed = await this.keeper.place(account.id, desk);
-        console.log(`[room ${this.roomId}] took back the base of ${id} from before the restart`);
+        this.log('info', 'place.reclaim', { player: id, from: before });
       }
       if (placed.status === 'elsewhere') {
-        console.warn(`[room ${this.roomId}] base of ${id} is still held by ${placed.placement.holder}`);
+        this.log('warn', 'place.elsewhere', { player: id, holder: placed.placement.holder });
         return reply(desk, 'Your base is still in another classroom. Try again in a minute.');
       }
       // Everything else the player carries, read after every earlier write for them has landed.
@@ -563,9 +588,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.sendPrivate(client, true);
       void this.refreshMetadata();
       this.recordSession();
-      console.log(`[room ${this.roomId}] ${account.name} (${id}): ${save ? 'base placed' : 'new base'} on ${desk}`);
+      this.log('info', 'place', { player: id, desk, base: save ? 'saved' : 'new', restored: reserved === desk });
     } catch (error) {
-      console.error(`[room ${this.roomId}] could not load the base of ${id}:`, error);
+      this.log('error', 'place.error', { player: id, desk, error });
       reply(desk, error instanceof IncompatibleBaseError ? 'Your base was saved by a newer version of the game than this server runs. It is kept safe; the server needs updating.' : "Your base couldn't be loaded right now. Try again in a moment.");
     } finally {
       this.placing.delete(id);
@@ -594,7 +619,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       const victim = this.known.get(e.victim);
       if (!attacker || !victim) continue;
       const record: PvpRecord = { id: e.id, kind: e.kind, attacker, victim, success: e.success, at: new Date(e.at) };
-      this.keeper.queue(attacker, (store) => store.addPvpRecord(worldId, record)).catch((error) => console.error(`[room ${this.roomId}] could not record ${e.kind} ${e.id}:`, error));
+      this.keeper.queue(attacker, (store) => store.addPvpRecord(worldId, record)).catch((error) => this.log('error', 'pvp.error', { kind: e.kind, id: e.id, error }));
     }
   }
 
@@ -613,11 +638,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         .then(
           (result) => {
             if (result.status === 'applied') return;
-            console.warn(`[room ${this.roomId}] ledger ${result.status} for ${id}: ${c.key} (${c.amount})`);
+            this.log('warn', 'ledger.refused', { player: id, status: result.status, key: c.key, amount: c.amount });
             // Only the same placement is corrected: a later one loaded the store's balance itself.
             if (stint !== null && this.world.stintOf(id) === stint) this.world.adjustPaper(id, -c.amount);
           },
-          (error) => console.error(`[room ${this.roomId}] could not write ${c.key} for ${id}:`, error),
+          (error) => this.log('error', 'ledger.error', { player: id, key: c.key, error }),
         );
     }
   }
@@ -631,9 +656,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.saveCarry(id, account.id, this.world.aircraftSave(id), this.world.progressSave(id));
     this.keeper.save(account.id, toBaseState(save)).then(
       (ok) => {
-        if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} is no longer held by this room; not saved`);
+        if (!ok) this.log('warn', 'save.lost-lease', { player: id });
       },
-      (error) => console.error(`[room ${this.roomId}] could not save the base of ${id}:`, error),
+      (error) => this.log('error', 'save.error', { player: id, error }),
     );
   }
 
@@ -676,10 +701,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const worldId = this.worldId;
     if (!worldId) return;
     if (aircraft) {
-      this.keeper.queue(playerId, (store) => store.saveAircraft(worldId, playerId, aircraft)).catch((error) => console.error(`[room ${this.roomId}] could not save the planes of ${id}:`, error));
+      this.keeper.queue(playerId, (store) => store.saveAircraft(worldId, playerId, aircraft)).catch((error) => this.log('error', 'save.error', { player: id, what: 'planes', error }));
     }
     if (progress) {
-      this.keeper.queue(playerId, (store) => store.saveProgress(worldId, playerId, progress)).catch((error) => console.error(`[room ${this.roomId}] could not save the progress of ${id}:`, error));
+      this.keeper.queue(playerId, (store) => store.saveProgress(worldId, playerId, progress)).catch((error) => this.log('error', 'save.error', { player: id, what: 'progress', error }));
     }
   }
 
@@ -692,9 +717,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.keeper
         .queue(playerId, (store) => store.recordMission(worldId, playerId, o))
         .then((fresh) => {
-          if (!fresh) console.warn(`[room ${this.roomId}] mission ${o.id} of ${id} was already recorded`);
+          if (fresh) this.log('info', 'mission.settle', { player: id, mission: o.id, state: o.state, reward: o.reward });
+          else this.log('warn', 'mission.duplicate', { player: id, mission: o.id });
         })
-        .catch((error) => console.error(`[room ${this.roomId}] could not record mission ${o.id} of ${id}:`, error));
+        .catch((error) => this.log('error', 'mission.error', { player: id, mission: o.id, error }));
     }
   }
 
@@ -705,7 +731,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!worldId || !limits) return;
     this.keeper
       .queue(playerId, (store) => store.setEconomyLimits(worldId, playerId, limits.capacity, limits.protected))
-      .catch((error) => console.error(`[room ${this.roomId}] could not save the paper limits of ${id}:`, error));
+      .catch((error) => this.log('error', 'save.error', { player: id, what: 'limits', error }));
   }
 
   private removePlayer(id: string): void {
@@ -726,9 +752,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (account && packed) {
       this.keeper.pack(account.id, toBaseState(packed)).then(
         (ok) => {
-          if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} was no longer held by this room; not packed`);
+          if (ok) this.log('info', 'pack', { player: id });
+          else this.log('warn', 'pack.lost-lease', { player: id });
         },
-        (error) => console.error(`[room ${this.roomId}] could not pack the base of ${id}:`, error),
+        (error) => this.log('error', 'pack.error', { player: id, error }),
       );
     }
     // A raid or kill in their last moments goes to the store too.
@@ -754,13 +781,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id || !account) return;
     const now = performance.now() / 1000;
     if (now - (this.transferAt.get(id) ?? -Infinity) < TRANSFER_COOLDOWN) return;
+    if (!WorldRoom.transfers.take(this.addresses.get(id) ?? id)) return this.log('warn', 'transfer.limited', { player: id });
     this.transferAt.set(id, now);
     try {
       const { code, expiresAt } = await services().identity.transferCode(account.id, 'player');
       const dto: TransferDTO = { code, expires: Math.round((expiresAt.getTime() - Date.now()) / 1000) };
       client.send('transfer', dto);
     } catch (error) {
-      console.error(`[room ${this.roomId}] transfer code for ${id} failed: ${(error as Error).message}`);
+      this.log('error', 'transfer.error', { player: id, error });
       client.send('transfer', { code: '', expires: 0 } satisfies TransferDTO);
     }
   }
@@ -976,11 +1004,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (e.kind === 'warning') {
         this.world.emit({ t: 'news', text: `The session ends in ${spokenTime(e.seconds)}`, tone: 'info' });
         for (const p of this.world.pilots.values()) this.world.note(p, 'clock', 'Session ends', spokenTime(e.seconds), 'warn');
-        console.log(`[room ${this.roomId}] session ends in ${e.seconds} s`);
+        this.log('info', 'session.warning', { left: e.seconds });
       } else if (e.kind === 'closing') {
         this.recordSession();
         ensureSpare(now);
-        console.log(`[room ${this.roomId}] joining closed`);
+        this.log('info', 'session.closing', {});
       } else {
         this.endSession(null);
       }
@@ -993,7 +1021,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     if (!this.results && !this.stopping && this.restoreUntil === 0 && this.emptySince !== null && this.world.pilots.size === 0 && this.placing.size === 0 && now - this.emptySince >= this.settings.emptyClose * 1000) {
       if (mayClose(this.roomId, now)) {
-        console.log(`[room ${this.roomId}] empty for ${this.settings.emptyClose} s: closing`);
+        this.log('info', 'session.empty-close', { after: this.settings.emptyClose });
         void this.disconnect();
       } else {
         // The spare everyone needs: it waits on, and its own clock hasn't started.
@@ -1036,7 +1064,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.broadcast('results', this.results);
     this.recordSession(new Date());
     ensureSpare();
-    console.log(`[room ${this.roomId}] session ended${reason ? ` (${reason})` : ''}: ${ranked.length} players`);
+    this.log('info', 'session.end', { reason: reason ?? undefined, players: ranked.length, played });
     this.clock.setTimeout(() => void this.disconnect(CLOSE_SESSION_ENDED), this.settings.resultsHold * 1000);
     return this.results;
   }
@@ -1082,8 +1110,35 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       for (const id of [...this.world.pilots.keys()]) this.removePlayer(id);
     }
     await this.keeper.settle();
-    console.log(`[room ${this.roomId}] shut down: every base saved`);
+    this.log('info', 'session.shutdown', { interrupted: this.interrupted });
     await this.disconnect(CLOSE_RESTARTING);
+  }
+
+  /**
+   * A malformed message: dropped. Logged at most every 10 s per player, with how many there were;
+   * a connection sending nothing but garbage (200 within that time) is closed.
+   */
+  private bad(client: Client, type: string): void {
+    const who = this.idOf(client) ?? client.sessionId;
+    const m = this.malformed.get(who) ?? { count: 0, loggedAt: -Infinity };
+    m.count++;
+    this.malformed.set(who, m);
+    const now = performance.now();
+    if (m.count >= 200) {
+      this.log('warn', 'message.abuse', { player: who, type, count: m.count });
+      this.malformed.delete(who);
+      client.leave(4002, 'Too many malformed messages');
+      return;
+    }
+    if (now - m.loggedAt < 10_000) return;
+    this.log('warn', 'message.malformed', { player: who, type, count: m.count });
+    m.loggedAt = now;
+    m.count = 0;
+  }
+
+  /** A structured log line about this session (server/log.ts). */
+  private log(level: Level, event: string, fields: LogFields = {}): void {
+    log(level, event, { session: this.roomId, ...fields });
   }
 
   /** The session as the database keeps it. */
@@ -1096,7 +1151,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   private writeSession(record: SessionRecord): Promise<void> {
     return services()
       .store.recordSession(record)
-      .catch((error) => console.error(`[room ${this.roomId}] could not record the session:`, error));
+      .catch((error) => this.log('error', 'session.record-error', { error }));
   }
 
   private sessionRecord(endedAt: Date | null): SessionRecord {
@@ -1113,4 +1168,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       desks: this.desks(),
     };
   }
+}
+
+/** Addresses of this machine, which the per-address limits leave alone. */
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost']);
+
+/** A join request's options are of the right types and sizes (anything else is refused). */
+function joinOptionsValid(o: Partial<JoinOptions> | undefined): boolean {
+  if (!o || typeof o !== 'object') return false;
+  const short = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
+  return short(o.name, 64) && short(o.username, 64) && short(o.token, 128) && short(o.code, 32);
 }

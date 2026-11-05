@@ -274,9 +274,10 @@ export class NetClient {
       this.bind(room);
       return room;
     } catch (error) {
-      this.lastError = error instanceof Error ? error.message : String(error);
+      const message = explain(error instanceof Error ? error.message : String(error), this.endpoint);
+      this.lastError = message;
       this.setStatus('lost');
-      throw error;
+      throw new Error(message);
     }
   }
 
@@ -375,4 +376,17 @@ export class NetClient {
     this.status = s;
     for (const l of this.statusListeners) l(s);
   }
+}
+
+/**
+ * What went wrong, for a person (v0.0.13): the server's own refusals are already plain ("This
+ * session is full", "This server speaks protocol 4; reload the page", "Your pass was withdrawn");
+ * the transport's are not.
+ */
+export function explain(message: string, endpoint: string): string {
+  if (/failed to fetch|fetch failed|networkerror|econnrefused|failed to connect|load failed/i.test(message)) return `Can't reach the server at ${endpoint}. It may be down or restarting; try again in a moment.`;
+  if (/room ".*" not found|not found/i.test(message)) return 'That session has closed. Pick another one or use Quick join.';
+  if (/is locked/i.test(message)) return 'That session is full or about to end. Pick another one or use Quick join.';
+  if (/seat reservation expired/i.test(message)) return 'Joining took too long. Try again.';
+  return message;
 }

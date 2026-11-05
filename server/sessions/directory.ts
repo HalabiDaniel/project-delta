@@ -1,6 +1,7 @@
 import { matchMaker } from '@colyseus/core';
 import { randomBytes } from 'node:crypto';
 import { ROOM, type SessionListing } from '../../src/net/protocol';
+import { log } from '../log';
 import type { Store } from '../store/Store';
 import { joinable, mayCloseEmpty, needsSpare, quickPick, timeLeft, type SessionSummary } from './rules';
 
@@ -74,7 +75,7 @@ export async function quickJoin(now: number = Date.now()): Promise<string> {
 /** Opens a spare session when every open one is full or closing (called when one changes). */
 export function ensureSpare(now: number = Date.now()): void {
   if (stopping || opening || !needsSpare(sessions(now), now)) return;
-  openSession().catch((error) => console.error('[sessions] could not open a new session:', error));
+  openSession().catch((error) => log('error', 'session.open-error', { error }));
 }
 
 /** Whether an empty session may close now (it isn't the spare everyone else needs). */
@@ -95,7 +96,7 @@ export function listing(now: number = Date.now()): SessionListing[] {
 /** Graceful shutdown: every session settles, saves and closes, and none opens meanwhile. */
 export async function shutdownAll(reason: string = 'The server is restarting. Back in a moment.'): Promise<void> {
   stopping = true;
-  await Promise.all([...live.values()].map((h) => h.shutdown(reason).catch((error) => console.error('[sessions] shutdown failed:', error))));
+  await Promise.all([...live.values()].map((h) => h.shutdown(reason).catch((error) => log('error', 'session.shutdown-error', { error }))));
 }
 
 /** For tests: sessions may open again after a simulated shutdown. */
@@ -120,9 +121,9 @@ export async function restoreSessions(store: Store, now: number = Date.now()): P
     try {
       const room = await matchMaker.createRoom(ROOM, serverOptions({ ...defaults, restore: record }));
       out.push(room.roomId);
-      console.log(`[sessions] restored "${record.title}" (${record.id}) for ${Object.keys(record.desks).length} players`);
+      log('info', 'session.restore', { session: record.id, title: record.title, players: Object.keys(record.desks).length });
     } catch (error) {
-      console.error(`[sessions] could not restore ${record.id}:`, error);
+      log('error', 'session.restore-error', { session: record.id, error });
     }
   }
   return out;
