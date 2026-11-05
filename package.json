@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
-  "description": "paperwars.io v0.0.13 - sessions",
+  "description": "paperwars.io v0.0.14 - going live",
   "type": "module",
   "scripts": {
     "dev": "vite",

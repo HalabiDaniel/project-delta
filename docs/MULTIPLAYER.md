@@ -38,7 +38,8 @@ npm run loadtest                          # 2, 4, 8 bots, then 8 on a poor netwo
 ```
 
 The server needs Node 20+. It is a plain Node process (`tsx server/index.ts`); `PORT` changes its
-port. Sessions live in memory and end when the server stops. Since v0.0.10, players have a
+port. On the internet (v0.0.14) it runs on Railway from the `Dockerfile`: see
+[SERVER_SETUP.md](SERVER_SETUP.md), and [Going live](#going-live-v0014) below. Sessions live in memory and end when the server stops. Since v0.0.10, players have a
 persistent identity (in PostgreSQL with `DATABASE_URL`): see [PERSISTENCE.md](PERSISTENCE.md).
 
 ## Architecture
@@ -308,6 +309,30 @@ Nobody escapes a fight by pulling the plug, and nobody is attacked while away (v
   player: `session.open`, `join`, `place`, `leave.held`, `pack`, `mission.settle`, `pvp`, `ledger.refused`,
   `session.warning`, `session.closing`, `session.end`, `session.shutdown`, `session.restore`,
   `join.limited`, `message.malformed` and every error. `LOG_FORMAT=text` prints readable lines.
+  Since v0.0.14 an error repeating (same event, same message) is written once, then once more
+  with `repeated` and `over` (seconds) when its minute is up.
+
+## Going live (v0.0.14)
+
+- **`GET /health`**: `{"status":"ok","version":"0.0.14","store":"postgres","storeReachable":true,"sessions":1,"players":2,"uptime":3600}`.
+  `503` with `"status":"degraded"` when the store doesn't answer within 3 s, `"stopping"` during
+  the graceful shutdown. Railway's deploy check and the uptime monitor read it.
+- **Allowed origins** (`server/origins.ts`, `ALLOWED_ORIGINS`): a browser on any other site is
+  refused at the WebSocket upgrade (`403`), at `POST /sessions/quick` (`403`) and gets no CORS
+  header from the matchmaking routes. No `Origin` header (bots, `curl`) is let through. `*` in a
+  host matches letters, digits and dashes (Vercel previews).
+- **The client's server address**: `?server=` (testing), else `VITE_SERVER_URL` (built in by
+  Vercel), else the page's host on port 2567. `?invite=CODE` opens multiplayer by itself.
+- **The admin endpoint** (`server/adminRoutes.ts`, `ADMIN_KEY`, `Authorization: Bearer`):
+  `GET /admin/sessions` (players, desks, ping, held desks), `POST /admin/kick` (close code 4014:
+  the browser doesn't rejoin by itself; refused for `minutes`), `POST /admin/end` (the clock is
+  brought forward, everyone is told, the results card follows), `POST /admin/desk` (drops holds
+  and removes an away player's base from a desk; a connected player has to be kicked first),
+  `GET /admin/stats` (step and tick timing per session, database writes, memory).
+- **Feedback** (`feedback` message): category, text up to 4000 characters, optional steps and a
+  1 to 5 rating, a flat context of at most 30 keys; the server adds its own (version, session,
+  desk, mode, aircraft, position, ping) over anything the client claims. 4 in a row, then one
+  every 20 s per player.
 
 ## Testing
 
@@ -392,7 +417,7 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 
 ## Known limitations
 
-- **Single server process.** Every session runs in one process (v0.0.14 puts it on the internet);
+- **Single server process.** Every session runs in one process (on Railway since v0.0.14: see [SERVER_SETUP.md](SERVER_SETUP.md));
   matchmaking across servers and regions is v0.0.22. Accounts are v0.0.22.
 - **Sixteen desks, sixteen players**: 32-player sessions need the larger classrooms of v0.0.20.
 - Remote planes are drawn without their bomb racks or the fold animation on the pad; homes are

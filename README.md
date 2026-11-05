@@ -1,4 +1,14 @@
-# paperwars.io: v0.0.13 (sessions), on top of v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.14 (going live), on top of v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.14: going live (phases 1 to 6 done; next, the developer's setup).** Everything the
+> multiplayer server needs to run on the internet: a `Dockerfile` Railway builds on its own,
+> `/health` for deploys and the uptime check, allowed origins, the game finding its server from
+> `VITE_SERVER_URL`, invite links (`/?invite=CODE`) straight into multiplayer, a protected admin
+> endpoint (sessions with ping, kick, end a session with notice, free a stuck desk), nightly
+> backups to Cloudflare R2 with each one test-restored, the F8 playtest feedback log, and a load
+> test that runs against the deployment. **Start here:** [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
+> See [v0.0.14: going live](#v0014-going-live) and the [plan](docs/roadmap/v0.0.14.md).
+
 
 > **v0.0.13: sessions.** No more forever-world: players meet in timed sessions of up to sixteen,
 > several at once, opened by the server. Quick join picks the busiest one with a free desk; each
@@ -322,6 +332,47 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.14: going live
+
+Phases 1 to 6 of the [plan](docs/roadmap/v0.0.14.md) are done; phase 7 (the setup, the load test
+on the deployment and the first online playtest) is the developer's checkpoint. **The setup guide
+is [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).**
+
+- **Deployment** (`Dockerfile`, `vercel.json`): Railway builds the server from the `Dockerfile`
+  (Node 22 and the PostgreSQL 18 client tools for the backups) and starts it with `node` directly,
+  so a deploy's SIGTERM runs the graceful shutdown. `GET /health` answers with the version, the
+  store and the number of sessions and players (`503` when the database can't be reached, or
+  while the server stops). `ALLOWED_ORIGINS` refuses browsers on other websites, on the WebSocket
+  upgrade, on matchmaking and on the lobby's endpoints. The game reads its server from
+  `VITE_SERVER_URL` (built in by Vercel; `?server=` still wins for testing), and an invite link
+  `/?invite=CODE` opens multiplayer with the code filled in; the welcome card has a Multiplayer
+  button.
+- **Admin** (`server/adminRoutes.ts`): `/admin/sessions`, `/admin/kick`, `/admin/end`,
+  `/admin/desk` and `/admin/stats`, behind `ADMIN_KEY` (off without it; wrong keys rate limited and
+  logged; every action logged). From the developer's computer: `npm run admin -- live sessions`,
+  `live kick <player>`, `live end <session>`, `live desk <session> <desk>`.
+- **Backups** (`server/db/backup.ts`, `server/db/r2.ts`): `npm run db:backup` (pg_dump, checked
+  readable, uploaded to R2, copies older than 14 days deleted), `npm run db:restore -- latest`
+  (asks first, naming the database), and with `DRILL_DATABASE_URL` every backup is restored into a
+  second database and compared with the live one. The R2 requests are signed with a small
+  Signature V4 implementation, checked against AWS's reference signer.
+- **Feedback** (`src/mp/FeedbackForm.ts`): **F8** or Menu → Feedback: a category, what happened,
+  optional steps and an enjoyment rating, with the version, session, desk, position and mode,
+  ping, frame rate, device and browser attached; rate limited, stored in the `feedback` table,
+  exported with `npm run admin -- feedback export [--format csv]`.
+- **Logs**: the same error repeating is written once, then once more with a count.
+- **Load test on the deployment** (`npm run loadtest:remote`): bots join over the internet with an
+  invite, fill two sessions of 16, and the report adds the server's own step and tick timing,
+  database writes per second and their latency, and memory (from `/admin/stats`). Bots now also
+  come back after a killed server.
+- **Tests**: 662 (with PostgreSQL), including the deploy settings and origins, `/health`, every
+  admin action, feedback, and a backup to a bucket restored into a fresh database.
+
+Measured locally (8 bots in one session, PostgreSQL, through the invite-only server and the remote
+load test): server step 1.1 ms average, 7.4 database writes a second at 5 ms, a dropped
+connection resumed in about 0.5 s, 180 MB of memory. The measurements on Railway (section 6) are
+recorded here after the deployment.
 
 ## v0.0.13: sessions
 
