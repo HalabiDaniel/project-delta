@@ -1,5 +1,6 @@
 import { Room, type Client, type Deferred } from '@colyseus/core';
 import {
+  CLOSE_KICKED,
   CLOSE_RESTARTING,
   CLOSE_SESSION_ENDED,
   CLOSE_TAKEN_OVER,
@@ -113,6 +114,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** Joins and transfer codes per address, process-wide (v0.0.13). */
   private static readonly joins = LIMITS.joinsPerAddress();
   private static readonly transfers = LIMITS.transfersPerAddress();
+  /** Players removed by the developer (account id → until when they can't join; v0.0.14). */
+  static readonly kicked = new Map<string, number>();
 
   maxClients = SESSION.capacity + SPARE_SEATS;
   /** This session's length, capacity and timers. */
@@ -170,6 +173,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   private readonly addresses = new Map<string, string>();
   /** Malformed messages per player since the last log line about them, and when that was. */
   private readonly malformed = new Map<string, { count: number; loggedAt: number }>();
+  /** Why the session ends early, when the developer ended it (v0.0.14). */
+  private endReason: string | null = null;
   /** The results, once the session has ended. */
   results: SessionResultsDTO | null = null;
   /** The server is shutting down: nobody is placed, and the session is recorded as interrupted. */
@@ -274,6 +279,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     if (this.results) throw refusal('This session has ended. Join the next one.');
     const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
+    const kickedUntil = WorldRoom.kicked.get(auth.player.id) ?? 0;
+    if (kickedUntil > Date.now()) throw refusal(`You were removed from the game. You can join again in ${spokenTime(Math.ceil((kickedUntil - Date.now()) / 60_000) * 60)}.`);
     const refused = this.seatRefusal(auth.player.publicId, auth.player.id);
     if (refused) throw refusal(refused);
     this.usernameNotes.set(auth.player.publicId, await this.chooseUsername(auth.player, options.username ?? options.name));
@@ -972,6 +979,110 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     await this.setMetadata({ title: this.title, claimed, free: this.world.shared.claimable.length - claimed });
   }
 
+  // ---- The admin endpoint (v0.0.14) -------------------------------------------------------------
+
+  /** Everyone in this session, for the admin endpoint: who, where, connected, ping. */
+  adminPlayers(): AdminPlayer[] {
+    return [...this.world.pilots.values()].map((p) => {
+      const account = this.accounts.get(p.id);
+      return {
+        id: p.id,
+        account: account?.id ?? this.known.get(p.id) ?? null,
+        name: p.name,
+        username: account?.username ?? null,
+        desk: p.home?.id ?? this.placing.get(p.id) ?? null,
+        connected: p.connected,
+        leaving: p.leaving,
+        ping: Math.round(p.rtt * 1000),
+        ip: this.addresses.get(p.id) ?? null,
+      };
+    });
+  }
+
+  /** Desks held without a player standing on them: being loaded, or kept for a player after a restart. */
+  adminHeld(): Array<{ desk: string; for: string; why: 'placing' | 'restore' }> {
+    const out: Array<{ desk: string; for: string; why: 'placing' | 'restore' }> = [];
+    for (const [id, desk] of this.placing) out.push({ desk, for: id, why: 'placing' });
+    if (this.restoreUntil > Date.now()) for (const [account, desk] of this.reservations) out.push({ desk, for: account, why: 'restore' });
+    return out;
+  }
+
+  /**
+   * Removes player `id` (public id) from this session now: no reconnection grace, their base is
+   * packed as when anyone leaves, and they can't join again for `minutes`. Returns false if they
+   * aren't here.
+   */
+  kick(id: string, reason: string, minutes: number): boolean {
+    if (!this.world.pilots.has(id)) return false;
+    const account = this.accounts.get(id)?.id ?? this.known.get(id);
+    if (account && minutes > 0) WorldRoom.kicked.set(account, Date.now() + minutes * 60_000);
+    this.log('info', 'admin.kick', { player: id, reason, minutes });
+    // As a takeover: the connection stops speaking for the player first (so it gets no reconnection
+    // grace), then it is closed, and the player leaves the session (their base is packed).
+    const sid = this.current.get(id);
+    this.current.delete(id);
+    if (sid !== undefined) {
+      const waiting = this.waiting.get(sid);
+      if (waiting) {
+        this.waiting.delete(sid);
+        waiting.reject(new Error('kicked'));
+      } else {
+        this.clients.getById(sid)?.leave(CLOSE_KICKED, reason);
+      }
+    }
+    if (WorldRoom.presence.get(id) === this) WorldRoom.presence.delete(id);
+    this.depart(id);
+    return true;
+  }
+
+  /** Ends the session `seconds` from now, telling everyone (the admin endpoint). */
+  endWithNotice(seconds: number, reason: string): { endsIn: number } {
+    if (this.results) return { endsIn: 0 };
+    const now = Date.now();
+    this.endReason = reason;
+    if (seconds <= 0 || !this.hour.started) {
+      this.log('info', 'admin.end', { reason, in: 0 });
+      this.endSession(reason);
+      return { endsIn: 0 };
+    }
+    this.hour.endEarly(now, seconds);
+    const left = Math.round(this.hour.left(now));
+    this.world.emit({ t: 'news', text: `${reason}: the session ends in ${spokenTime(left)}`, tone: 'info' });
+    for (const p of this.world.pilots.values()) this.world.note(p, 'clock', 'Session ends', spokenTime(left), 'warn');
+    this.recordSession();
+    this.log('info', 'admin.end', { reason, in: left });
+    return { endsIn: left };
+  }
+
+  /**
+   * Frees desk `desk`: a hold for a player being placed or coming back after a restart is dropped,
+   * and a player whose base stands there while they are disconnected or leaving is removed (their
+   * base is packed). A desk with a connected player on it is left alone: kick them first.
+   */
+  freeDesk(desk: string): { freed: boolean; what: string } {
+    const done: string[] = [];
+    for (const [id, d] of [...this.placing]) if (d === desk) {
+      this.placing.delete(id);
+      done.push(`hold for ${id} (being placed)`);
+    }
+    for (const [account, d] of [...this.reservations]) if (d === desk) {
+      this.reservations.delete(account);
+      done.push(`hold for ${account} (after a restart)`);
+    }
+    for (const p of [...this.world.pilots.values()]) {
+      if (p.home?.id !== desk) continue;
+      if (p.connected && !p.leaving) {
+        this.log('info', 'admin.desk', { desk, freed: false, player: p.id });
+        return { freed: done.length > 0, what: [...done, `${p.name} (${p.id}) is on it and connected: kick them first`].join('; ') };
+      }
+      this.kick(p.id, 'Your desk was freed by the developer', 0);
+      done.push(`${p.name} (${p.id}), who was away`);
+    }
+    if (done.length > 0) this.recordSession();
+    this.log('info', 'admin.desk', { desk, freed: done.length > 0, what: done });
+    return { freed: done.length > 0, what: done.length > 0 ? `freed: ${done.join('; ')}` : 'nothing held that desk' };
+  }
+
   // ---- The session (v0.0.13) --------------------------------------------------------------------
 
   /** Why player `id` can't take a seat now (null: they can). Players already in it always can. */
@@ -1010,7 +1121,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         ensureSpare(now);
         this.log('info', 'session.closing', {});
       } else {
-        this.endSession(null);
+        this.endSession(this.endReason);
       }
     }
     if (this.restoreUntil > 0 && now >= this.restoreUntil) {
@@ -1168,6 +1279,19 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       desks: this.desks(),
     };
   }
+}
+
+/** A player as the admin endpoint lists them. */
+export interface AdminPlayer {
+  id: string;
+  account: string | null;
+  name: string;
+  username: string | null;
+  desk: string | null;
+  connected: boolean;
+  leaving: boolean;
+  ping: number;
+  ip: string | null;
 }
 
 /** Addresses of this machine, which the per-address limits leave alone. */

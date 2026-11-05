@@ -19,9 +19,16 @@ import type { PlayerRecord, Store } from './store/Store';
  *   npm run admin -- base show <player>             # their saved base and where it stands
  *   npm run admin -- base release <player>          # a base stuck on a desk (its saved state stays)
  *   npm run admin -- world list
+ *   npm run admin -- feedback export [--format csv|md] [--days N]   # the playtest feedback log (v0.0.14)
  *
- * Kicking connected players, freeing territories and the protected admin endpoint come with the
- * deployment phase of v0.0.10.
+ * What only the running server can do goes through its protected /admin endpoint (v0.0.14,
+ * server/adminRoutes.ts). These need SERVER_URL (the server's https:// address) and ADMIN_KEY
+ * instead of the database:
+ *
+ *   npm run admin -- live sessions                              # sessions, players and their ping
+ *   npm run admin -- live kick <player> [--minutes N] [reason]  # remove a player now
+ *   npm run admin -- live end <session> [--seconds N] [reason]  # end a session, with notice
+ *   npm run admin -- live desk <session> <desk>                 # free a desk stuck in the wrong state
  */
 
 const USAGE = `Usage: npm run admin -- <command>
@@ -37,7 +44,71 @@ const USAGE = `Usage: npm run admin -- <command>
   player reissue <player>                       A one-time code (7 days) to get a new pass
   base show <player>                            The player's saved base and where it stands
   base release <player>                         Free a base stuck on a desk (it keeps its saved state)
-  world list                                    Every world and its save format`;
+  world list                                    Every world and its save format
+  feedback export [--format csv|md] [--days N]  The playtest feedback log (default: Markdown, all of it)
+
+On the running server (needs SERVER_URL=https://<server address> and ADMIN_KEY):
+
+  live sessions                                 Sessions, their players, ping and held desks
+  live kick <player> [--minutes N] [reason]     Remove a player now (they can't rejoin for N minutes, default 10)
+  live end <session> [--seconds N] [reason]     End a session N seconds from now (default 60), with notice
+  live desk <session> <desk>                    Free a desk stuck in the wrong state`;
+
+/** `live …`: the running server's /admin endpoint. */
+async function live(args: string[]): Promise<number> {
+  const base = (process.env.SERVER_URL ?? '').trim().replace(/^ws/, 'http').replace(/\/+$/, '');
+  const key = (process.env.ADMIN_KEY ?? '').trim();
+  if (!base || !key) {
+    console.error('Set SERVER_URL (the server\'s https:// address) and ADMIN_KEY first.');
+    return 1;
+  }
+  const [command, ...rest] = args;
+  const call = async (path: string, body?: Record<string, unknown>) => {
+    const response = await fetch(`${base}/admin/${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { Authorization: `Bearer ${key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(String(json.error ?? `the server answered ${response.status}`));
+    return json;
+  };
+  switch (command) {
+    case 'sessions': {
+      const { sessions } = (await call('sessions')) as { sessions: Array<{ id: string; title: string; status: string; players: number; capacity: number; left: number; people: Array<{ id: string; name: string; desk: string | null; connected: boolean; leaving: boolean; ping: number }>; held: Array<{ desk: string; for: string; why: string }> }> };
+      if (sessions.length === 0) console.log('No sessions running.');
+      for (const s of sessions) {
+        console.log(`${s.id}  ${s.title}  ${s.status}  ${s.players}/${s.capacity} players  ${Math.floor(s.left / 60)} min left`);
+        for (const p of s.people) console.log(`    ${p.id.padEnd(10)} ${p.name.padEnd(20)} ${(p.desk ?? '-').padEnd(5)} ${p.connected ? `${p.ping} ms` : p.leaving ? 'left (raid in progress)' : 'away'}`);
+        for (const h of s.held) console.log(`    desk ${h.desk} held for ${h.for} (${h.why})`);
+      }
+      return 0;
+    }
+    case 'kick': {
+      const minutes = flag(rest, '--minutes');
+      const [player, ...reason] = rest;
+      const r = await call('kick', { player, minutes: minutes ?? undefined, reason: reason.join(' ') || undefined });
+      console.log(`Removed ${r.player} from ${r.session}; they can join again in ${r.minutes} minute(s).`);
+      return 0;
+    }
+    case 'end': {
+      const seconds = flag(rest, '--seconds');
+      const [session, ...reason] = rest;
+      const r = await call('end', { session, seconds: seconds ?? undefined, reason: reason.join(' ') || undefined });
+      console.log(Number(r.endsIn) > 0 ? `${session} ends in ${r.endsIn} s; everyone was told.` : `${session} has ended.`);
+      return 0;
+    }
+    case 'desk': {
+      const [session, desk] = rest;
+      const r = await call('desk', { session, desk });
+      console.log(`${desk}: ${r.what}`);
+      return 0;
+    }
+    default:
+      console.log(USAGE);
+      return 1;
+  }
+}
 
 function flag(args: string[], name: string): number | null {
   const i = args.indexOf(name);
@@ -61,6 +132,7 @@ function describe(p: PlayerRecord): string {
 }
 
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === 'live') return live(argv.slice(1));
   const config = serverConfig();
   if (!config.databaseUrl) {
     console.error('DATABASE_URL is not set: the admin tool only works with the PostgreSQL store.');
@@ -78,7 +150,7 @@ async function main(argv: string[]): Promise<number> {
         const { code, invite } = await identity.createInvite(rest.join(' '), uses, days ?? undefined);
         console.log(`Invite ${invite.id}${invite.label ? ` (${invite.label})` : ''}: ${invite.maxUses} use(s), expires ${invite.expiresAt?.toISOString() ?? 'never'}`);
         console.log(`\n  Code: ${code}\n`);
-        console.log('Share the code (or an invite link: https://<your game address>/?mp&invite=' + code + '). It is shown only now.');
+        console.log('Share the code (or an invite link: https://<your game address>/?invite=' + code + '). It is shown only now.');
         return 0;
       }
       case 'invite list': {

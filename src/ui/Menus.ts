@@ -45,7 +45,7 @@ const CONTROLS: Array<[string, IconName, string]> = [
 ];
 
 /** The multiplayer game (?mp) shares this menu: the mode link and the reset button change. */
-const MULTIPLAYER = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('mp');
+const MULTIPLAYER = typeof window !== 'undefined' && ['mp', 'invite'].some((k) => new URLSearchParams(window.location.search).has(k));
 
 /** "This session" / "Last time" as icon stats. */
 export function sessionStats(s: SessionView): string {
@@ -117,6 +117,7 @@ export class Menus {
         <div class="wc-paper" title="Paper">${icon('paper')}<b data-u="wc-paper"></b></div>
         <div data-u="wc-session"></div>
         <button class="btn primary" data-u="wc-go">${icon('home')}<span>${SAY.continue}</span><kbd>Enter</kbd></button>
+        ${MULTIPLAYER ? '' : `<a class="btn ghost small" data-u="wc-mp" href="?mp" title="Play with others in a shared classroom">${icon('fighter')}<span>Multiplayer</span></a>`}
       </div>`;
     root.appendChild(this.welcome);
     // Hidden until the first render says otherwise (multiplayer doesn't render the HUD before a desk is claimed).
@@ -133,7 +134,7 @@ export class Menus {
     });
     if (this.el.move) bindButton(this.el.move, () => actions.moveDevice?.());
     bindButton(this.el['wc-go'], actions.dismissWelcome);
-    this.welcome.addEventListener('click', () => actions.dismissWelcome());
+    this.welcome.addEventListener('click', (e) => (e.target as HTMLElement).closest('[data-u="wc-mp"]') || actions.dismissWelcome());
     this.overlay.addEventListener('click', (e) => e.target === this.overlay && actions.resume());
     for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setHints(b.dataset.v as HintMode));
     for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setUiScale(Number(b.dataset.v)));

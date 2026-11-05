@@ -2,7 +2,10 @@ import { defineRoom, defineServer } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { ROOM } from '../src/net/protocol';
 import { ConfigError, serverConfig } from './config';
+import { adminRoutes } from './adminRoutes';
 import { Identity } from './identity/Identity';
+import { log } from './log';
+import { checkUpgrade, installCors, setAllowedOrigins } from './origins';
 import { setServices } from './services';
 import { restoreSessions, setSessionDefaults, shutdownAll } from './sessions/directory';
 import { sessionRoutes } from './sessions/routes';
@@ -22,6 +25,10 @@ import { WorldRoom } from './WorldRoom';
  *   LATENCY=120 npm run server                       # every message delayed by 120 ms (testing)
  *   PROTECTION=20 npm run server                     # new players can be raided after 20 s instead of 5 min (testing)
  *   SESSION_LENGTH=300 npm run server                # five-minute sessions (testing the end of a session)
+ *   ALLOWED_ORIGINS=https://game.example npm run server  # browsers on other sites are refused
+ *   ADMIN_KEY=… npm run server                        # turns on the protected /admin endpoint
+ *
+ * In production (Railway, v0.0.14) the Dockerfile starts it; docs/SERVER_SETUP.md has the settings.
  */
 
 let config;
@@ -42,14 +49,17 @@ const store = await openStore(config.databaseUrl).catch((error: Error) => {
 });
 setServices({ store, identity: new Identity(store, config.pepper, config.access) });
 
+setAllowedOrigins(config.allowedOrigins);
+installCors();
+
 if (config.sessionLength !== null) setSessionDefaults({ session: { length: config.sessionLength } });
 
 const server = defineServer({
   rooms: {
     [ROOM]: defineRoom(WorldRoom, config.protection !== null ? { newPlayerProtection: config.protection } : {}),
   },
-  routes: sessionRoutes(),
-  transport: new WebSocketTransport({ pingInterval: 3000, pingMaxRetries: 3 }),
+  routes: sessionRoutes().extend(adminRoutes(config.adminKey).endpoints),
+  transport: new WebSocketTransport({ pingInterval: 3000, pingMaxRetries: 3, beforeUpgrade: checkUpgrade }),
   greet: false,
 });
 // SIGTERM / SIGINT: every session settles raids and missions, saves every base and closes, telling
@@ -62,7 +72,12 @@ if (config.latency > 0) server.simulateLatency(config.latency);
 await server.listen(config.port);
 // The sessions that were running before this start (a restart, or a crash) come back for a while.
 await restoreSessions(store).catch((error) => console.error('[sessions] restore failed:', error));
-console.log(
-  `paperwars.io multiplayer server on ws://localhost:${config.port} (store: ${store.kind}, access: ${config.access})` +
-    (config.latency > 0 ? ` (simulated latency ${config.latency} ms)` : ''),
-);
+log('info', 'server.start', {
+  port: config.port,
+  store: store.kind,
+  access: config.access,
+  origins: config.allowedOrigins ?? 'any',
+  admin: config.adminKey ? 'on' : 'off',
+  latency: config.latency || undefined,
+});
+if (!config.production) console.log(`paperwars.io multiplayer server on ws://localhost:${config.port} (store: ${store.kind}, access: ${config.access})${config.latency > 0 ? ` (simulated latency ${config.latency} ms)` : ''}`);

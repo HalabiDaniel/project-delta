@@ -53,7 +53,7 @@ describe('the server configuration', () => {
   it('insists on a database and a pepper in production, and defaults to invites', () => {
     expect(() => serverConfig({ NODE_ENV: 'production', DATABASE_URL: 'postgres://x' })).toThrow(ConfigError);
     expect(() => serverConfig({ NODE_ENV: 'production', TOKEN_PEPPER: 'p'.repeat(32) })).toThrow(/DATABASE_URL/);
-    const c = serverConfig({ NODE_ENV: 'production', TOKEN_PEPPER: 'p'.repeat(32), DATABASE_URL: 'postgres://x', PORT: '8080' });
+    const c = serverConfig({ NODE_ENV: 'production', TOKEN_PEPPER: 'p'.repeat(32), DATABASE_URL: 'postgres://x', PORT: '8080', ALLOWED_ORIGINS: 'https://game.example' });
     expect(c).toMatchObject({ access: 'invite', port: 8080, production: true, warnings: [] });
   });
 

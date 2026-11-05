@@ -423,7 +423,9 @@ export class MultiplayerGame {
       const rooms = await this.net.list();
       this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info', this.net.rtt);
     } catch {
-      this.lobby.showRooms([], `No server at ${this.net.endpoint}. Start one with: npm run server`, 'bad');
+      // A deployed game (VITE_SERVER_URL) never asks the player to start a server.
+      const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.net.endpoint);
+      this.lobby.showRooms([], local ? `No server at ${this.net.endpoint}. Start one with: npm run server` : 'No server: the game server can\'t be reached. It may be restarting; try again in a moment.', 'bad');
     }
   }
 

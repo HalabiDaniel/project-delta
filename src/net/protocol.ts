@@ -68,6 +68,8 @@ export const CLOSE_TAKEN_OVER = 4011;
 export const CLOSE_SESSION_ENDED = 4012;
 /** Close code for a server restart (v0.0.13): the session comes back in a moment; rejoin it. */
 export const CLOSE_RESTARTING = 4013;
+/** Close code for a player removed by the developer (v0.0.14 admin endpoint): no automatic rejoin. */
+export const CLOSE_KICKED = 4014;
 
 // ---- Sessions (v0.0.13) ----------------------------------------------------------------------------
 
