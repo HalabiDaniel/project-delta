@@ -200,7 +200,7 @@ behaviour rather than tables:
 
 | Table | Contents | Used from |
 |---|---|---|
-| `players` | Player id, public id, display name, created and last-seen times, revoked time | Phase 2 |
+| `players` | Player id, public id, display name, created and last-seen times, revoked time; tutorial (0003), first-time tips (0005), username and when it last changed (0006) | Phase 2 |
 | `player_tokens` | Token hash, player, origin (open, invite, transfer), invite used, last use, revoked time | Phase 2 |
 | `invites` | Code hash, label, uses and maximum, expiry, revoked time | Phase 2 |
 | `transfer_codes` | Code hash, player, made by (player or admin), expiry, used time | Phase 2 |
@@ -211,10 +211,10 @@ behaviour rather than tables:
 | ~~`buildings`~~ | Replaced in v0.0.12 by `bases` and `base_buildings` (migration 0004): bases belong to players, not desks | ~~Phase 4~~ |
 | `bases` | One per player: format, paper store health, the base's record, where it stands (holder, desk, lease) | v0.0.12 |
 | `base_buildings` | Player, slot, kind, level, health, the rules' own fields | v0.0.12 |
-| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.21; a trigger makes destroyed final | Phase 5 |
-| `missions` | Template, state, card as generated, offered and resolved times, outcome, reward | Phase 5 |
-| `progress` | Tutorial flags, statistics, unlocks, the mission director's state | Phase 5 |
-| `pvp_records` | Raids and kills, for cooldowns, the repeat rule and kill-farming windows | Phase 5 |
+| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.21; a trigger makes destroyed final | v0.0.12 |
+| `missions` | Template, state, card as generated, offered and resolved times, outcome, reward | v0.0.12 |
+| `progress` | Statistics, unlocks, the mission director's state; the garage (0005); protections as clock times (0006) | v0.0.12 |
+| `pvp_records` | Raids and kills, for cooldowns, the repeat rule and kill-farming windows | v0.0.12 |
 | `feedback` | Category, text, reproduction steps, rating, context | Phase 8 |
 | `schema_migrations` | Applied migrations and their checksums | Phase 3 |
 
@@ -339,11 +339,11 @@ placed on whichever desk they get each session, exactly as they left it.
 | Phase | Focus | Status |
 |---|---|---|
 | 1 | Base data model and migration; save, load, pack and place on any desk | Done |
-| 2 | Ledger wiring for every paper change; online-only production | Next |
-| 3 | Price and production retune; balance tests and simulation | Checkpoint |
-| 4 | Planes, hangar, missions, statistics, tutorial progress | |
-| 5 | Fairness timers on the player; usernames and desk names | |
-| 6 | Tests, bots, documentation | |
+| 2 | Ledger wiring for every paper change; online-only production | Done ([below](#phase-2-paper-through-the-ledger)) |
+| 3 | Price and production retune; balance tests and simulation | Done ([below](#phase-3-the-retune)); the developer plays it at the checkpoint |
+| 4 | Planes, hangar, missions, statistics, tutorial progress | Done ([below](#phase-4-planes-the-board-and-progress)) |
+| 5 | Fairness timers on the player; usernames and desk names | Done ([below](#phase-5-fairness-timers-usernames-and-desk-names)) |
+| 6 | Tests, bots, documentation | Done ([below](#phase-6-tests-bots-and-checks)) |
 
 ### Phase 1: the base's life
 
@@ -389,5 +389,151 @@ Known limitations after phase 1:
 - A base left on a desk by a crashed server waits for its lease (two minutes) before it can be
   placed again, or `npm run admin -- base release <player>`.
 - The board is dealt fresh on placement, so there is nothing to check against the new desk yet;
-  that check comes with the saved board in phase 4.
+  that check comes with the saved board in phase 4. *(Done in phase 4.)*
+
+### Phase 2: paper through the ledger
+
+Every change to a multiplayer player's paper is a row in `transactions`, applied at most once.
+The rules decide each change in the world as before (`ResourceManager`, `GameState`, `Base`);
+`server/world/Paper.ts` writes each one down with a key built from its cause, and the room sends
+them to `Store.applyTransaction` in order, through the player's store queue (`BaseKeeper.queue`).
+
+| Change | Key |
+|---|---|
+| A new player's starting paper | `start:<player id>` (once per player, ever) |
+| A mission reward (a raid's included) | `mission:<card id>` (the card's id is saved with the board, phase 4) |
+| A successful raid's loss | `raid:<raid id>:loss` |
+| Production | `prod:<stint>:<n>` |
+| Everything else (folds, refits, buildings, upgrades, repairs, refunds, bounties, bonuses, AI raid hits) | `<kind>:<stint>:<serial>` |
+
+- A **stint** is one placement of a base (a UUID): keys never collide between sessions, and a
+  write retried after a database hiccup is still applied once.
+- **The world follows the store.** A change the store refuses (a key applied before, or a debit
+  the balance can't cover) is undone in the world without a new entry (`ServerWorld.adjustPaper`).
+- **The balance is restored on placement** from `balances` (in the same queue as the base, so the
+  last session's writes have landed). Capacity and the protected reserve are saved with it
+  (`Store.setEconomyLimits`) on every save and on leaving.
+- **Production only while online.** Workshops and the base produce nothing while the player's
+  connection is down (`p.connected`), and there is nothing to collect on return. In the world,
+  paper still trickles in sheet by sheet (the HUD's progress bar); the ledger is credited at most
+  once a minute (`PRODUCTION_EVERY`), always before a spend (so the ledger never debits paper it
+  hasn't been credited), and when the player leaves.
+- **One economy world.** Balances, transactions, planes, missions, progress and PvP records belong
+  to the `multiplayer` world (`ECONOMY_WORLD` in `server/services.ts`, opened once per store), so
+  paper travels from session to session like the base.
+
+### Phase 3: the retune
+
+The developer's approved values (2026-11-05) are in `src/config.ts`: every plane dearer to fold
+(Swift 10 → 15 up to Ghost 60 → 120, refits scaled the same way), base production 5 → 3.5 paper a
+minute, workshops +2 / +5 / +9 → +1.5 / +3.5 / +6. They apply to single-player too (one rule set).
+
+`tools/labs/economy-report.lab.ts` plays every simulated profile through 40 sorties on 20 seeds
+with the real director and economy:
+
+```bash
+npx vitest run --config tools/labs/vitest.lab.config.ts --disableConsoleIntercept economy-report
+```
+
+| Profile | Spent per sortie (before → after) | Rewards per sortie | Planes lost per sortie | Emergency planes per 40 sorties | Longest run without Falcon money |
+|---|---|---|---|---|---|
+| New | 16.2 → 28.1 | 37.8 → 38.3 | 0.3 | 0 → 0 | 0 → 4 |
+| Struggling | 18.7 → 26.6 | 27.7 → 28.3 | 0.5 | 0 → 0 (at most 2 in one run) | 4 → 9 |
+| Average | 14.5 → 24.4 | 60.5 | 0.2 | 0 | 0 → 1 |
+| Successful | 12.3 → 20.9 | 102.1 | 0.1 | 0 | 0 |
+| Veteran | 11.0 → 18.4 | 132.8 | 0.1 | 0 | 0 |
+
+What it shows (25 s at the desk between sorties, as the simulation assumes):
+
+- Every profile always has a card it can fly, and a struggling player recovers in every seed
+  (every run ends with more than a Falcon's worth). Not every run grows: one newcomer run in
+  eight ended at 44 paper after 40 sorties (it started with 100); the median newcomer ends at 639.
+- A lost plane is felt: spending per sortie is up by two thirds, and a struggling player can go
+  several sorties without the paper for a Falcon, flying the Swift or the Dart meanwhile. With a
+  minute at the desk between sorties (closer to real play) the emergency plane is never needed.
+- A newcomer's successful sortie now pays for about one and a half new Darts (it was two and a
+  half); a veteran's still pays for two Widewings or more.
+- The values were kept as approved: the simulation found no one getting stuck. The balance tests
+  (`src/director/simulation.test.ts` and the unit tests) were restated for the new prices. Home
+  income no longer loses a sheet to floating-point rounding at fractional rates (3.5 a minute).
+
+### Phase 4: planes, the board and progress
+
+| What | Where | Rules |
+|---|---|---|
+| Planes | `aircraft` (one row per plane) | A fold is a new plane (new id); a refit or roll-out keeps the hangar's plane; a crash destroys it for good (the next save marks it, the trigger keeps it so). A plane left on the pad comes back **ready**, paid for (roll out free). One in the air when the server last saved comes back **recovered** (it needs a refit), as single-player's plane in flight does. One in the air when its pilot leaves goes down (v0.0.11's rule until v0.0.13's flight rules). The free emergency plane is never stored. |
+| The garage | `progress.garage` | The design chosen, and the ids of the cards on the board by slot. |
+| The board | `progress.director` | `MissionDirector.save()`; on placement the board is made again from its recipes (cards keep their ids, so a reward keeps its ledger key), then checked against the new desk (`validate`): a card that makes no sense there is replaced, not paid. |
+| Mission outcomes | `missions` | Written once per card, by its id (`recordMission`; a second write is refused). |
+| Statistics | `progress.stats` | Lifetime: the last saved figures plus this session's (`Pilot.lifetime` + `Pilot.stats` + `GameState.stats`). The scoreboard still counts the session (per-session scores are v0.0.13's). |
+| Tutorial | `players.tutorial` (v0.0.11) | Unchanged. |
+| First-time tips | `players.tips` (migration 0005) | The multiplayer desk tip is shown once per player, on any computer. |
+
+The hangar's look (level 1 to 3) follows the number of planes kept, so it comes back with them.
+Everything loaded is checked (`server/world/carry.ts`): unknown designs, broken numbers and an
+unusable director state are dropped, never trusted.
+
+### Phase 5: fairness timers, usernames and desk names
+
+**Timers on the real clock.** New-player protection and the raid shield are saved as clock times
+with the player's progress (`progress.protect_until`, `shield_until`, migration 0006). The world
+converts them to and from its own time (`ServerWorld.wallOf`, `worldAt`), so a restart or a new
+session neither shortens nor lengthens them. New-player protection starts once, with the first
+base; a returning player never gets it again. Raids and kills go to `pvp_records` as they happen
+(each with its own id) and are loaded when a base is placed (as far back as any rule looks:
+`max(farmWindow, pairCooldown, killWindow)`), so the pair cooldown, the repeat rule and the
+kill-farming window follow the players from session to session.
+
+**Usernames** (`src/net/Username.ts`, shared by the browser and the server):
+
+- 3 to 16 letters, digits or `_`; unique across the game ignoring case (a unique index on
+  `lower(username)`); a block list (also matched through look-alike spellings such as `sh1t`) and
+  the reserved names admin, mod, server, ai and system; changed at most once a week.
+- The lobby's name field is now **Username**. A name saved from before is offered if it would do.
+- Joining with a username the player may have sets it (or changes it, within the cooldown); one
+  that breaks the rules is tried once more cleaned up (`Bo<script>` → `Boscript`).
+- A player who still has no username (theirs was taken, say) sees **Choose a username** on the
+  claim screen; their base is placed once they have one. The server's reason is shown as it is
+  ("That username is taken. Try another.").
+- Ownership never depends on it: players are still their UUID and public id. Accounts with sign-in
+  (v0.0.22) keep the username.
+
+**Desk names.** Every desk is named after whoever holds it: "Daniel's desk" for a player, and for
+the AI a goofy name from `DESK_NAMES` in `src/config.ts`, picked per session ("Billy's desk"),
+never one a player in the session uses. They are in the schema (`TerritoryState.label`), on the
+claim map, in the arrival note ("This session: Daniel's desk · a corner desk") and on rival bases'
+threat lines.
+
+The protocol version is now 3 (new join and welcome fields): an older page is asked to reload.
+
+### Phase 6: tests, bots and checks
+
+| File | What it checks |
+|---|---|
+| `server/world/paper.test.ts` | Every change journalled in order; production once a minute, before a spend, never while away; a leaving player's last changes kept; mission rewards keyed by the card, raid losses by the raid; the world following the store |
+| `server/world/carry.test.ts` | Recovered, on-the-pad and crashed planes; the emergency plane never stored; a plane in the air comes back recovered; the board brought back card for card; a card about the new desk replaced; lifetime statistics; mission outcomes; untrusted records dropped |
+| `server/world/fairness.test.ts` | Protections as clock times, carried exactly across sessions and restarts and never renewed; raids and kills remembered (cooldown, repeat rule, kill window); desk names, and never an AI desk named like a player |
+| `src/net/username.test.ts` | The username rules, the block list, suggestions, name comparison |
+| `server/store/store.test.ts` (both stores) | Paper limits; planes (lost ones destroyed for good, never someone else's); progress and protections; mission outcomes written once, also when racing; tips; PvP records from either side, once each; usernames (unique ignoring case, the cooldown, two players racing for one name) |
+| `server/persistence.cases.ts` (run by `room.test.ts`, both stores) | Through the real room: the starting paper once, every change in the ledger, the balance equal to the log; paper back exactly after leaving; a refused change corrected in the world; the hangar, garage, board and statistics back after leaving; a plane left in the air destroyed for good and its mission written once; usernames (taken, reserved, chosen on the claim screen, the desk label); a shield kept across sessions and new-player protection never renewed; a bot leaving and rejoining with its base |
+
+Bots (`server/bots/`) take a username (another if theirs is taken), and
+`npm run bots -- --count 2 --rejoin 60` makes one leave and join again every minute and checks its
+base came back as it left it.
+
+Checked by hand on PostgreSQL with the real client (Playwright, 2026-11-05): two browsers joining
+as "Daniel" and "daniel" (the second asked for another name, then placed as Sky_Ace), the desk
+names on the claim map, the new prices and 3.5/min on the HUD, and a full server restart between
+two visits (the folded plane back on the pad, ready to roll out; paper exactly as the ledger says).
+`npm run loadtest` (8 s runs): 4 players 0.79 ms per step, 8 players on a poor network 0.70 ms,
+drop and resume kept the seat.
+
+Known limitations after v0.0.12:
+
+- Sessions, time limits, the territory lifecycle and the AI filling desks are v0.0.13's: the
+  existing classroom room places bases on a random free desk.
+- A plane in the air when its pilot leaves still goes down (v0.0.13 section 5 replaces this).
+- In-world paper is ahead of the ledger by at most a minute's production: a server crash loses
+  that minute (never more, never a spend).
+- The block list is short and obvious; the developer can extend it in `src/net/Username.ts`.
 

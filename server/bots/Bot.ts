@@ -4,7 +4,7 @@ import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
 import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
 import { Predictor } from '../../src/net/Prediction';
-import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, ROOM, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type WelcomeDTO } from '../../src/net/protocol';
+import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, ROOM, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
 import { sharedWorld } from '../../src/net/World';
 
@@ -44,6 +44,8 @@ export class Bot {
   /** Our public player id (from the welcome message), and the device token we were given. */
   id = '';
   token: string | null = null;
+  /** The username the server gave us (null until it has). */
+  username: string | null = null;
   readonly predictor = new Predictor(AIRCRAFT.falcon);
   readonly priv: MeDTO = {};
   readonly stats: BotStats = { bytesIn: 0, messagesIn: 0, framesSent: 0, reconciles: 0, corrections: 0, maxError: 0, sumError: 0, hitsDealt: 0, kills: 0, deaths: 0, serverInputs: [0, 0, 0, 0], reconnects: 0 };
@@ -92,6 +94,25 @@ export class Bot {
     return this.id === id;
   }
 
+  /**
+   * Leaves for good (the base is packed and kept), then joins again with the same device token: the
+   * same player, and the same base, on whichever desk is free. True if the base came back as it was.
+   */
+  async leaveAndRejoin(): Promise<boolean> {
+    const id = this.id;
+    const before = baseKey(this.priv);
+    if (this.timer) clearInterval(this.timer);
+    await this.room?.leave(true).catch(() => undefined);
+    this.room = null;
+    this.id = '';
+    this.home = null;
+    for (const key of Object.keys(this.priv)) delete (this.priv as Record<string, unknown>)[key];
+    await new Promise((r) => setTimeout(r, 300));
+    await this.join();
+    for (let i = 0; i < 50 && !this.priv.base; i++) await new Promise((r) => setTimeout(r, 100));
+    return this.id === id && before !== null && baseKey(this.priv) === before;
+  }
+
   async leave(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
@@ -123,7 +144,13 @@ export class Bot {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.id = m.id;
       if (m.token) this.token = m.token;
+      this.username = m.username ?? null;
+      // A bot's name is taken (another run's bot): it picks another, as a player would.
+      if (!this.username) this.send(() => room.send('username', { name: `${this.name.replace(/[^A-Za-z0-9_]/g, '').slice(0, 10)}_${Math.floor(Math.random() * 1e5)}` }));
       this.onWelcome?.();
+    });
+    room.onMessage('username', (m: UsernameDTO) => {
+      if (m.ok) this.username = m.username;
     });
   }
 
@@ -220,6 +247,8 @@ export class Bot {
     this.actionAt = now + 500;
     const state = room.state;
     if (!this.priv.territory) {
+      // A username first: the server places no base before.
+      if (!this.username) return;
       const free = [...state.territories.entries()].find(([, t]) => t.claimable && !t.owner);
       if (free) room.send('claim', { t: free[0] });
       return;
@@ -335,4 +364,11 @@ class Link {
       this.schedule();
     }, Math.max(0, next.at - performance.now()));
   }
+}
+
+/** A base's buildings, levels and slots as a string, to tell whether it came back as it was. */
+function baseKey(priv: MeDTO): string | null {
+  const b = priv.base;
+  if (!b) return null;
+  return JSON.stringify([...b.buildings].map((x) => [x.slot, x.kind, x.level]).sort());
 }

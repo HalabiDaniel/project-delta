@@ -10,6 +10,8 @@ import { economyWorld, memoryServices, setServices, type Services } from './serv
 import { PgStore } from './store/PgStore';
 import type { Store } from './store/Store';
 import { WorldRoom } from './WorldRoom';
+import type { Client } from '@colyseus/sdk';
+import { Bot } from './bots/Bot';
 
 /**
  * What travels with a player (v0.0.12), through the real room and the real store: paper through
@@ -322,4 +324,20 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
       });
     });
   }
+
+  describe('bots (v0.0.12)', () => {
+    beforeEach(async () => {
+      await colyseus.cleanup();
+      setServices(memoryServices('open'));
+    });
+
+    it('leave, join again with their token, and get their base back as they left it', async () => {
+      const bot = new Bot(colyseus.sdk as unknown as Client, unique('Bot'), 'swift');
+      await bot.join();
+      await eventually(() => !!bot.priv.base && !!bot.priv.territory, 4000);
+      expect(bot.username).toBe(names.get('Bot'));
+      expect(await bot.leaveAndRejoin()).toBe(true);
+      await bot.leave();
+    }, 15000);
+  });
 }

@@ -1,13 +1,15 @@
-# paperwars.io: v0.0.12 in development (portable bases), on top of v0.0.11 and v0.0.9 multiplayer
+# paperwars.io: v0.0.12 (persistent, portable bases), on top of v0.0.11 and v0.0.9 multiplayer
 
-> **v0.0.12, phase 1: portable bases.** A multiplayer base now belongs to the player, not to a
-> desk. Joining places the player's saved base (or a new player's starting base) on a random free
-> desk, exactly as it was left: buildings, levels, damage, wrecks and its record. The room saves it
-> every 15 seconds while they play and packs it when they leave, and a lease in the database keeps
-> a base on one desk at a time, even across classrooms or a crashed server. Paper, planes and
-> missions follow in the next phases. See [v0.0.12: portable bases](#v0012-portable-bases-in-development)
-> and the [plan](docs/roadmap/v0.0.12.md).
->
+> **v0.0.12: bases that belong to players.** Everything a multiplayer player builds is theirs for
+> good, in PostgreSQL. Their base (buildings, levels, damage) is placed on a random free desk each
+> time they join, exactly as they left it; every change to their paper is a row in the idempotent
+> ledger, so no reward can be paid twice; paper is produced only while they are online; planes
+> cost more and paper comes in more slowly. Their planes, hangar, garage, mission board, lifetime
+> statistics and first-time tips come back with them, and new-player protection, raid shields,
+> cooldowns and kill windows are kept on the real clock, through restarts and session changes.
+> Players choose a username, shown everywhere, and desks are named after whoever holds them
+> ("Daniel's desk"; the AI's are "Billy's desk", "Big Greg's desk"…). See
+> [v0.0.12: portable bases](#v0012-portable-bases) and the [plan](docs/roadmap/v0.0.12.md).
 
 > **v0.0.11, part 2: controller support and the rest of the plan's coding.** The game is playable
 > with an Xbox or PlayStation controller (flight, weapons, landing, base, every menu, the lobby),
@@ -311,10 +313,10 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
 
-## v0.0.12: portable bases (in development)
+## v0.0.12: portable bases
 
-v0.0.12 makes everything a player builds theirs for good ([plan](docs/roadmap/v0.0.12.md)). It is
-built in six phases with a developer checkpoint after phase 3 (the economy retune). Details in
+v0.0.12 makes everything a player builds theirs for good ([plan](docs/roadmap/v0.0.12.md)). It was
+built in six phases; the developer's checkpoint is playing the economy retune. Details in
 [docs/PERSISTENCE.md](docs/PERSISTENCE.md#v0012-portable-bases).
 
 ### Phase 1: the portable base
@@ -325,7 +327,7 @@ built in six phases with a developer checkpoint after phase 3 (the economy retun
   rules' own fields).
 - **Placed on a random free desk.** On joining, the server loads the saved base and puts it on a
   free desk exactly as it was left, or gives a new player the starting base and saves it at once.
-  The player is told where they are ("Your base is here: Pencil Point · an edge desk"). The lobby
+  The player is told where they are ("This session: Daniel's desk · an edge desk"). The lobby
   shows the classroom while the base is placed; if the store can't load it, the player is asked to
   try again and is never handed a fresh base instead. Choosing a desk is gone (it stays available to
   tests, `chooseDesk` in `server/services.ts`); v0.0.13's sessions do the placing for real.
@@ -339,8 +341,29 @@ built in six phases with a developer checkpoint after phase 3 (the economy retun
 - **Admin:** `npm run admin -- base show <player>` and `base release <player>` (a base stuck on a
   desk; it keeps its saved state).
 
-Not yet: paper, planes, the mission board and statistics still start fresh in each session
-(phases 2 and 4).
+### Phases 2 to 6: paper, planes, progress, fairness and usernames
+
+- **Paper through the ledger.** Every change is written with a key from its cause
+  (`start:<player>`, `mission:<card>`, `raid:<raid>:loss`, `prod:<stint>:<n>`), so a repeated
+  message, a refresh or a retry after a restart pays nothing twice; a change the store refuses is
+  undone in the game. The balance, capacity and protected reserve come back on every join.
+- **Production only while online**, credited to the ledger once a minute; nothing accrues while
+  away.
+- **Dearer planes, slower paper** (approved 2026-11-05): Swift 15, Dart 40, Falcon 45, Specter 50,
+  Thug and Jumper 70, Raptor 70, Widewing 75, Lightning 80, Lancer 105, Ghost 120 (refits scaled the
+  same way); 3.5 paper a minute, workshops +1.5 / +3.5 / +6. The simulation and the economy report
+  (`tools/labs/economy-report.lab.ts`) show nobody gets stuck; the developer confirms it in play.
+- **Planes and progress travel with the player:** every plane has its own row (a crash destroys it
+  for good; the free emergency plane is never stored), the garage, the mission board card for card
+  (checked against the new desk), lifetime statistics, each mission's outcome (written once) and
+  first-time tips.
+- **Fairness on the real clock:** protections and shields are clock times on the player, and raids
+  and kills are kept in the database, so cooldowns and farming windows survive restarts.
+- **Usernames:** 3 to 16 letters, digits or `_`, unique, a block list, changed at most once a week.
+  The lobby asks for one; a player without one chooses it before their base is placed.
+- **Desk names:** "{username}'s desk", and a goofy name per session for each AI desk.
+- **Bots** take a username and can leave and rejoin to check their base comes back
+  (`npm run bots -- --count 2 --rejoin 60`).
 
 ## v0.0.10: persistent multiplayer (closed after phase 3)
 
@@ -1806,6 +1829,6 @@ The road to the first public release is planned version by version in
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
 The roadmap was reorganised on 2026-11-02 around portable bases and timed sessions (the
-[decisions](docs/roadmap/README.md#decisions-of-2026-11-02)). **Next up is v0.0.12.** From v0.1.0 on,
+[decisions](docs/roadmap/README.md#decisions-of-2026-11-02)). **v0.0.12 is done; next up is v0.0.13 (sessions).** From v0.1.0 on,
 0.1.x releases are small improvements, 0.x.0 releases are major versions, and 1.0.0 is the first
 full version.

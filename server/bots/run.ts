@@ -13,6 +13,9 @@ import { Bot } from './Bot';
  *
  * Bots claim free desks, fold fighters, hunt the nearest plane and fire when lined up. They leave
  * (freeing their desks) when the time is up or on Ctrl+C.
+ *
+ *   npm run bots -- --count 2 --rejoin 60  # every 60 s one bot leaves and joins again, and checks
+ *                                          # its base came back as it left it (v0.0.12)
  */
 
 const args = new Map<string, string>();
@@ -27,10 +30,20 @@ const sdk = new Client(endpoint);
 const bots: Bot[] = [];
 for (let i = 0; i < count; i++) {
   const raider = i < raiders;
-  const bot = new Bot(sdk, `Bot ${String.fromCharCode(65 + i)}`, raider ? 'widewing' : planes[i % planes.length], undefined, raider ? 'raider' : 'hunter');
+  // Usernames are unique across the game (and kept in the database): each run's bots get their own.
+  const bot = new Bot(sdk, `Bot${String.fromCharCode(65 + i)}_${Math.floor(Math.random() * 1e4)}`, raider ? 'widewing' : planes[i % planes.length], undefined, raider ? 'raider' : 'hunter');
   await bot.join();
   bots.push(bot);
   console.log(`${bot.name} joined (${bot.role}, ${bot.aircraft})`);
+}
+
+const rejoin = Number(args.get('rejoin') ?? 0);
+if (rejoin > 0) {
+  let next = 0;
+  setInterval(() => {
+    const bot = bots[next++ % bots.length];
+    void bot.leaveAndRejoin().then((ok) => console.log(`${bot.username ?? bot.name} left and joined again: ${ok ? 'same base' : 'BASE CHANGED OR LOST'}`));
+  }, rejoin * 1000);
 }
 
 const stop = async () => {

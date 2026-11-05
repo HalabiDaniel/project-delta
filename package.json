@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.12-dev",
+  "version": "0.0.12",
   "private": true,
-  "description": "paperwars.io v0.0.12 (in development) - persistent, portable bases",
+  "description": "paperwars.io v0.0.12 - persistent, portable bases",
   "type": "module",
   "scripts": {
     "dev": "vite",
