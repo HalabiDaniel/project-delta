@@ -5,7 +5,7 @@ import { TEST_DATABASE_URL, testDatabase, type TestDatabase } from '../db/testdb
 import { hashSecret, newPublicId } from '../identity/secrets';
 import { MemoryStore } from './MemoryStore';
 import { PgStore } from './PgStore';
-import { IncompatibleSaveError, SAVE_FORMAT, type NewPlayer, type Store } from './Store';
+import { BASE_FORMAT, IncompatibleBaseError, IncompatibleSaveError, SAVE_FORMAT, type BaseState, type NewPlayer, type Store } from './Store';
 
 /**
  * The store's contract, run against both stores: the in-memory one always, PostgreSQL when
@@ -178,6 +178,82 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.balance(world.id, p.id)).toBe(10);
     });
 
+    // ---- Portable bases (v0.0.12) -----------------------------------------------------------------
+
+    const aBase = (storeHealth = 80): BaseState => ({
+      storeHealth,
+      stats: { raids: 2, repelled: 1 },
+      buildings: [
+        { slot: 'D1', kind: 'turret', level: 2, health: 55, data: { invested: 105, kills: 3 } },
+        { slot: 'E1', kind: 'workshop', level: 1, health: 0, data: { invested: 80 } },
+      ],
+    });
+
+    it("places a new player's base for one room, which saves and packs it; nobody else can meanwhile", async () => {
+      const p = await store.createPlayer(player('Mo'), h('tok-mo'), 'open');
+      expect(await store.base(p.id)).toBeNull();
+      expect(await store.placeBase(p.id, 'srv/a', 'T3', 60)).toEqual({ status: 'placed', state: null });
+      const held = await store.placeBase(p.id, 'srv/b', 'T7', 60);
+      expect(held).toMatchObject({ status: 'elsewhere', placement: { holder: 'srv/a', territoryId: 'T3' } });
+      expect(await store.saveBase(p.id, 'srv/b', aBase(1), 60)).toBe(false);
+      expect(await store.saveBase(p.id, 'srv/a', aBase(), 60)).toBe(true);
+      expect((await store.base(p.id))?.state).toEqual(aBase());
+      // Placing again for the same room renews it (a reconnect).
+      expect(await store.placeBase(p.id, 'srv/a', 'T3', 60)).toEqual({ status: 'placed', state: aBase() });
+      expect(await store.packBase(p.id, 'srv/b', aBase(2))).toBe(false);
+      expect(await store.packBase(p.id, 'srv/a', aBase(70))).toBe(true);
+      const packed = await store.base(p.id);
+      expect(packed?.placement).toBeNull();
+      expect(packed?.state?.storeHealth).toBe(70);
+      // Packed: saving as the old room does nothing, and any room can place it now, as it was left.
+      expect(await store.saveBase(p.id, 'srv/a', aBase(1), 60)).toBe(false);
+      expect(await store.placeBase(p.id, 'srv/b', 'T7', 60)).toEqual({ status: 'placed', state: aBase(70) });
+      expect((await store.base(p.id))?.placement).toMatchObject({ holder: 'srv/b', territoryId: 'T7' });
+    });
+
+    it('replaces the buildings on every save: a removed building stays removed', async () => {
+      const p = await store.createPlayer(player('Ned'), h('tok-ned'), 'open');
+      await store.placeBase(p.id, 'srv/a', 'T2', 60);
+      await store.saveBase(p.id, 'srv/a', aBase(), 60);
+      const fewer = { ...aBase(), buildings: aBase().buildings.slice(0, 1) };
+      await store.saveBase(p.id, 'srv/a', fewer, 60);
+      expect((await store.base(p.id))?.state?.buildings).toEqual(fewer.buildings);
+    });
+
+    it("lets a crashed room's base go once its lease runs out", async () => {
+      const p = await store.createPlayer(player('Oz'), h('tok-oz'), 'open');
+      await store.placeBase(p.id, 'dead/a', 'T4', 0);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(await store.placeBase(p.id, 'srv/b', 'T9', 60)).toMatchObject({ status: 'placed' });
+      // The dead room can't write over it any more.
+      expect(await store.saveBase(p.id, 'dead/a', aBase(1), 60)).toBe(false);
+    });
+
+    it('never places one base in two rooms, even when both try at once', async () => {
+      const p = await store.createPlayer(player('Pia'), h('tok-pia'), 'open');
+      const results = await Promise.all(Array.from({ length: 6 }, (_, i) => store.placeBase(p.id, `srv/${i}`, `T${i + 1}`, 60)));
+      expect(results.filter((r) => r.status === 'placed')).toHaveLength(1);
+    });
+
+    it('releases a placement for its holder, or for the developer whoever holds it', async () => {
+      const p = await store.createPlayer(player('Quin'), h('tok-quin'), 'open');
+      await store.placeBase(p.id, 'srv/a', 'T5', 60);
+      expect(await store.releaseBase(p.id, 'srv/b')).toBe(false);
+      expect(await store.releaseBase(p.id, 'srv/a')).toBe(true);
+      expect(await store.releaseBase(p.id)).toBe(false);
+      await store.placeBase(p.id, 'srv/c', 'T5', 60);
+      expect(await store.releaseBase(p.id)).toBe(true);
+      expect((await store.base(p.id))?.placement).toBeNull();
+    });
+
+    it('refuses to save a broken base', async () => {
+      const p = await store.createPlayer(player('Ray'), h('tok-ray'), 'open');
+      await store.placeBase(p.id, 'srv/a', 'T6', 60);
+      await expect(store.saveBase(p.id, 'srv/a', { ...aBase(), storeHealth: -3 }, 60)).rejects.toThrow();
+      await expect(store.packBase(p.id, 'srv/a', { ...aBase(), buildings: [aBase().buildings[0], aBase().buildings[0]] })).rejects.toThrow();
+      expect((await store.base(p.id))?.placement).not.toBeNull();
+    });
+
     extra?.(() => store);
 
     afterAll(async () => {
@@ -216,6 +292,22 @@ describe.skipIf(!TEST_DATABASE_URL)('PostgreSQL', () => {
         const error = await s.openWorld('future').catch((e: unknown) => e);
         expect(error).toBeInstanceOf(IncompatibleSaveError);
         expect((error as Error).message).toMatch(/format 2.*only understands format 1/);
+      });
+
+      it('refuses a base saved in a newer format', async () => {
+        const s = store() as PgStore;
+        const p = await s.createPlayer(player('Sol'), h('tok-sol'), 'open');
+        await s.placeBase(p.id, 'srv/a', 'T1', 60);
+        await s.db.query('update bases set format = $2 where player_id = $1', [p.id, BASE_FORMAT + 1]);
+        await expect(s.base(p.id)).rejects.toBeInstanceOf(IncompatibleBaseError);
+      });
+
+      it("keeps a base's placement consistent in the database itself", async () => {
+        const s = store() as PgStore;
+        const p = await s.createPlayer(player('Tam'), h('tok-tam'), 'open');
+        await s.placeBase(p.id, 'srv/a', 'T1', 60);
+        await expect(s.db.query('update bases set placed_on = null where player_id = $1', [p.id])).rejects.toThrow();
+        await expect(s.db.query(`insert into base_buildings (player_id, slot, kind, level, health) values ($1, 'D1', 'castle', 1, 10)`, [p.id])).rejects.toThrow();
       });
 
       it('stores hashes, never tokens or codes', async () => {

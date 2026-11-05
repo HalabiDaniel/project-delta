@@ -130,7 +130,7 @@ export class Lobby {
     for (const b of list.querySelectorAll<HTMLButtonElement>('button[data-room]')) b.addEventListener('click', () => this.actions.join(this.name, b.dataset.room!));
   }
 
-  /** The classroom map: pick a free desk. */
+  /** The classroom map while our base is placed on a free desk (v0.0.12: the server picks it). */
   showClaim(view: ClaimView): void {
     this.screen = 'claim';
     this.root.hidden = false;
@@ -148,7 +148,7 @@ export class Lobby {
           : c.claimable
             ? `<span class="mp-free">Free${c.threat > 0 ? ` · AI defenses ${'▮'.repeat(c.threat)}` : ''}</span>`
             : `<span class="mp-ai">AI stronghold</span>`;
-        return `<button class="mp-cell${free ? ' free' : ''}${c.owner ? ' owned' : ''}${c.mine ? ' mine' : ''}" data-t="${c.id}" ${free ? '' : 'disabled'} ${tone}>
+        return `<button class="mp-cell${free ? ' free' : ''}${c.owner ? ' owned' : ''}${c.mine ? ' mine' : ''}" data-t="${c.id}" disabled ${tone}>
           <span class="mp-cell-id">${c.id}</span><span class="mp-cell-name">${esc(c.name)}</span>${body}</button>`;
       })
       .join('');
@@ -157,12 +157,12 @@ export class Lobby {
       .join('');
     this.claim.innerHTML = /* html */ `
       <div class="mp-head"><b class="brand">paperwars<span>.io</span></b><h2>${esc(view.title)}</h2></div>
-      <p class="mp-hint">Pick your desk. It becomes your base: your planes fold and land there, your paper is stored there, and your guns defend it.</p>
+      <p class="mp-hint">${view.error ? 'Your base is waiting.' : 'Placing your base on a free desk…'} Your base is yours: it comes with you to whichever desk you get, exactly as you left it.</p>
       <div class="mp-map">${cells}</div>
       <div class="mp-players">${players}</div>
       ${view.error ? `<div class="mp-error">${esc(view.error)}</div>` : ''}
-      <div class="mp-foot"><span></span><button class="btn ghost small" data-u="leave">${icon('close')}<span>Leave</span></button></div>`;
-    for (const b of this.claim.querySelectorAll<HTMLButtonElement>('button[data-t]')) b.addEventListener('click', () => this.actions.claim(b.dataset.t!));
+      <div class="mp-foot">${view.error ? `<button class="btn small" data-u="retry">${icon('swap')}<span>Try again</span></button>` : '<span></span>'}<button class="btn ghost small" data-u="leave">${icon('close')}<span>Leave</span></button></div>`;
+    this.claim.querySelector('[data-u="retry"]')?.addEventListener('click', () => this.actions.claim(''));
     this.claim.querySelector('[data-u="leave"]')!.addEventListener('click', () => this.actions.leave());
   }
 

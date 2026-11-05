@@ -5,7 +5,7 @@ import { assessSuitability } from '../../src/aircraft/Aircraft';
 import type { ZoneRef } from '../../src/aircraft/Bomb';
 import type { AiOrders, Contact } from '../../src/ai/AiAircraft';
 import { AirTraffic, type AirEvent, type AirSpawn } from '../../src/ai/AirTraffic';
-import { Base, STORE, type BaseEvent } from '../../src/base/Base';
+import { Base, STORE, type BaseEvent, type BaseSave } from '../../src/base/Base';
 import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
@@ -142,14 +142,20 @@ export class ServerWorld {
     return pilot;
   }
 
-  /** Claims `territoryId` as `id`'s home. Returns null, or why it can't be claimed. */
-  claim(id: string, territoryId: string): string | null {
-    const p = this.pilots.get(id);
-    if (!p) return 'unknown player';
-    if (p.home) return 'already claimed';
-    const t = this.territories.find((x) => x.id === territoryId);
-    if (!t || !this.shared.claimable.includes(territoryId)) return 'not claimable';
-    if (this.owners.has(territoryId)) return 'taken';
+  /** Desks a base could be placed on right now: claimable and not taken. */
+  freeDesks(): string[] {
+    return this.shared.claimable.filter((t) => !this.owners.has(t));
+  }
+
+  /**
+   * Places `id`'s base on `territoryId`: the saved base exactly as it was left (`save`), or the
+   * starting base for a new player (null). Returns null, or why it can't be placed there.
+   */
+  claim(id: string, territoryId: string, save: BaseSave | null = null): string | null {
+    const refused = this.claimRefusal(id, territoryId);
+    if (refused) return refused;
+    const p = this.pilots.get(id)!;
+    const t = this.territories.find((x) => x.id === territoryId)!;
     this.owners.set(territoryId, id);
     p.home = t;
     // The AI's defenses make way for the player's base.
@@ -160,7 +166,8 @@ export class ServerWorld {
       this.aiWrecks.delete(spec.id);
     }
     const base = new Base(t, this.network, p.resources, p.side);
-    base.startFresh();
+    if (save) base.load(save);
+    else base.startFresh();
     p.base = base;
     p.resources.capacity = base.capacity;
     const director = new MissionDirector(() => this.missionContext(p), () => this.situation(p), seededRng(this.seed + this.pilots.size * 7919 + this.keySerial));
@@ -174,7 +181,23 @@ export class ServerWorld {
     p.flight.model.hide();
     this.solidsCache = null;
     this.news(`${p.name} claimed ${territoryName(territoryId)}`, 'good');
+    this.note(p, 'home', save ? 'Your base is here' : 'Your new base', `${territoryName(territoryId)} · ${deskPosition(t, this.territories)}`, 'good');
     return null;
+  }
+
+  /** Why `id` can't place their base on `territoryId` right now, or null if they can. */
+  claimRefusal(id: string, territoryId: string): string | null {
+    const p = this.pilots.get(id);
+    if (!p) return 'unknown player';
+    if (p.home) return 'already claimed';
+    if (!this.territories.some((x) => x.id === territoryId) || !this.shared.claimable.includes(territoryId)) return 'not claimable';
+    if (this.owners.has(territoryId)) return 'taken';
+    return null;
+  }
+
+  /** The player's base as it stands now (to save it), or null if they have none yet. */
+  baseSave(id: string): BaseSave | null {
+    return this.pilots.get(id)?.base?.save() ?? null;
   }
 
   /** The player's connection dropped (their territory and plane wait for them) or came back. */
@@ -195,9 +218,9 @@ export class ServerWorld {
    * The player is gone for good: their plane vanishes, their base comes down and the AI's
    * defenses return to the territory, which can be claimed again.
    */
-  remove(id: string): void {
+  remove(id: string): BaseSave | null {
     const p = this.pilots.get(id);
-    if (!p) return;
+    if (!p) return null;
     // Leaving mid-flight counts as going down: whoever hurt the plane lately gets the kill
     // (quitting can't save a lost fight), and a raid in progress fails.
     if (p.state?.phase === 'flying') p.state.crash(p.damageLog.length > 0 ? 'shot-down' : 'impact');
@@ -206,6 +229,8 @@ export class ServerWorld {
     this.guns.clear(id);
     this.bombs.clear(id);
     this.history.forget(p.plane);
+    // The base as it stood when the player left: packed and kept for their next session.
+    const packed = p.base?.save() ?? null;
     if (p.home && p.base) {
       const t = p.home;
       for (const key of [...p.base.buildings.keys()]) this.network.remove(p.base.idOf(key));
@@ -218,6 +243,7 @@ export class ServerWorld {
     this.pilots.delete(id);
     this.solidsCache = null;
     this.news(`${p.name} left`, 'info');
+    return packed;
   }
 
   /** Input frames from the player's game. */
@@ -1535,3 +1561,16 @@ function failureWord(reason: string): string {
   }
 }
 
+
+/**
+ * Where a desk is in the classroom's grid, in words that don't depend on which way the player
+ * faces: a corner, an edge or the middle.
+ */
+export function deskPosition(t: Territory, all: readonly Territory[]): string {
+  const xs = [...new Set(all.map((x) => Math.round(x.x)))].sort((a, b) => a - b);
+  const zs = [...new Set(all.map((x) => Math.round(x.z)))].sort((a, b) => a - b);
+  const outer = (v: number, axis: number[]) => v === axis[0] || v === axis[axis.length - 1];
+  const ox = outer(Math.round(t.x), xs);
+  const oz = outer(Math.round(t.z), zs);
+  return ox && oz ? 'a corner desk' : ox || oz ? 'an edge desk' : 'a middle desk';
+}

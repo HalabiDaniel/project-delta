@@ -1,4 +1,13 @@
-# paperwars.io: v0.0.11 (coding complete, awaiting the developer's checks) and v0.0.10 in development, on top of v0.0.9 multiplayer
+# paperwars.io: v0.0.12 in development (portable bases), on top of v0.0.11 and v0.0.9 multiplayer
+
+> **v0.0.12, phase 1: portable bases.** A multiplayer base now belongs to the player, not to a
+> desk. Joining places the player's saved base (or a new player's starting base) on a random free
+> desk, exactly as it was left: buildings, levels, damage, wrecks and its record. The room saves it
+> every 15 seconds while they play and packs it when they leave, and a lease in the database keeps
+> a base on one desk at a time, even across classrooms or a crashed server. Paper, planes and
+> missions follow in the next phases. See [v0.0.12: portable bases](#v0012-portable-bases-in-development)
+> and the [plan](docs/roadmap/v0.0.12.md).
+>
 
 > **v0.0.11, part 2: controller support and the rest of the plan's coding.** The game is playable
 > with an Xbox or PlayStation controller (flight, weapons, landing, base, every menu, the lobby),
@@ -15,12 +24,11 @@
 > with three levels and four damage states, all from the developer's asset labs, without pencil
 > strokes. See [v0.0.11 part 1](#v0011-part-1-custom-assets-the-classroom-and-the-roster).
 >
-> **v0.0.10 is at developer checkpoint 1 of 3** (phases 1 to 3 of the
-> [plan](docs/roadmap/v0.0.10.md)): players have a stable, secure identity (a device token the
-> server issues and stores only hashed, invite and transfer codes, one connection per player), and
-> PostgreSQL is in place with versioned migrations, the full schema and an idempotent transaction
-> ledger. The world itself is still kept in memory until phases 4 to 6. See
-> [v0.0.10: persistent multiplayer](#v0010-persistent-multiplayer-in-progress) and
+> **v0.0.10 is done (closed after phase 3 of the [plan](docs/roadmap/v0.0.10.md)):** players have
+> a stable, secure identity (a device token the server issues and stores only hashed, invite and
+> transfer codes, one connection per player), and PostgreSQL is in place with versioned migrations,
+> the schema and an idempotent transaction ledger. Its later phases moved to v0.0.12 to v0.0.14. See
+> [v0.0.10: persistent multiplayer](#v0010-persistent-multiplayer-closed-after-phase-3) and
 > [docs/PERSISTENCE.md](docs/PERSISTENCE.md).
 >
 > **v0.0.9: multiplayer.** Up to eight players share a classroom on a Node + Colyseus server:
@@ -28,10 +36,8 @@
 > address (or Menu → Multiplayer). See [v0.0.9: core multiplayer](#v009-core-multiplayer) and
 > [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
 >
-> **v0.0.8 is at checkpoint 1 of 4** (the visual vertical slice, waiting for art-direction review).
-> Its later phases (the classroom backdrop, every territory's theme, onboarding, the home
-> dashboard) are not done yet; multiplayer is built on the game as it stands and picks them up as
-> they land. Everything below the v0.0.8 section describes v0.0.7.
+> **v0.0.8's later phases** (the classroom, every territory's theme, onboarding, the home
+> dashboard) were finished in v0.0.11. Everything below the v0.0.8 section describes v0.0.7.
 
 
 Through v0.0.6 the game became a connected single-player campaign: a mission director, adaptive
@@ -305,7 +311,38 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
 
-## v0.0.10: persistent multiplayer (in progress)
+## v0.0.12: portable bases (in development)
+
+v0.0.12 makes everything a player builds theirs for good ([plan](docs/roadmap/v0.0.12.md)). It is
+built in six phases with a developer checkpoint after phase 3 (the economy retune). Details in
+[docs/PERSISTENCE.md](docs/PERSISTENCE.md#v0012-portable-bases).
+
+### Phase 1: the portable base
+
+- **A base belongs to the player.** Migration `0004` replaces the desk-keyed `buildings` table
+  (never written to) with `bases` (one row per player: the paper store's health, the base's record,
+  a format version and where it stands) and `base_buildings` (slot, kind, level, health and the
+  rules' own fields).
+- **Placed on a random free desk.** On joining, the server loads the saved base and puts it on a
+  free desk exactly as it was left, or gives a new player the starting base and saves it at once.
+  The player is told where they are ("Your base is here: Pencil Point · an edge desk"). The lobby
+  shows the classroom while the base is placed; if the store can't load it, the player is asked to
+  try again and is never handed a fresh base instead. Choosing a desk is gone (it stays available to
+  tests, `chooseDesk` in `server/services.ts`); v0.0.13's sessions do the placing for real.
+- **Saved while playing, packed on leaving.** The room saves every base standing in it every 15 s
+  and packs it when its player leaves for good (after the reconnect grace), including on shutdown.
+- **Never in two places.** Placing takes a 120 s lease in the database for that room, renewed by
+  each save. A base with a live lease can't be placed anywhere else ("Your base is still in another
+  classroom"); a crashed server's lease simply runs out. Store calls for one player run one after
+  another across every room on the server, so moving to another classroom packs the base before
+  the new room places it.
+- **Admin:** `npm run admin -- base show <player>` and `base release <player>` (a base stuck on a
+  desk; it keeps its saved state).
+
+Not yet: paper, planes, the mission board and statistics still start fresh in each session
+(phases 2 and 4).
+
+## v0.0.10: persistent multiplayer (closed after phase 3)
 
 v0.0.10 turns the in-memory session into a world that remembers, and puts it online for a private
 two-player alpha ([plan](docs/roadmap/v0.0.10.md)). It is built in ten phases with three developer

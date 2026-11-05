@@ -21,7 +21,7 @@ beforeAll(async () => {
 afterAll(async () => colyseus.shutdown());
 beforeEach(async () => {
   await colyseus.cleanup();
-  setServices(memoryServices('open'));
+  setServices({ ...memoryServices('open'), chooseDesk: true });
 });
 
 async function room(): Promise<WorldRoom> {
@@ -287,5 +287,104 @@ describe('player identity in the room', () => {
     await first.client.leave();
     const again = await tutorialOf({ name: 'Tess', token: first.welcome.token });
     expect(again.got).toEqual([{ t: { v: 1, step: 5, skipped: false } }]);
+  });
+});
+
+describe('portable bases in the room (v0.0.12)', () => {
+  /** A real server's rules: the server picks the desk. */
+  function randomDesks() {
+    const s = memoryServices('open');
+    setServices(s);
+    return s;
+  }
+
+  const placed = async (client: Awaited<ReturnType<typeof enter>>['client'], t = 'T1') => {
+    client.send('claim', { t });
+    return (await client.waitForMessage('claimed')) as { ok: boolean; territory: string; error: string | null };
+  };
+
+  it("puts each player's base on a random free desk, whatever desk the client asks for", async () => {
+    randomDesks();
+    const r = await room();
+    const desks = new Set<string>();
+    for (const name of ['Ann', 'Bo', 'Cy']) {
+      const p = await enter(r, { name });
+      const m = await placed(p.client, 'T1');
+      expect(m.ok).toBe(true);
+      expect(r.world.shared.claimable).toContain(m.territory);
+      expect(r.world.owners.get(m.territory)).toBe(p.id);
+      desks.add(m.territory);
+    }
+    expect(desks.size).toBe(3);
+  });
+
+  it('saves a new base at once, packs it on leaving, and brings it back exactly as it was left', async () => {
+    const s = randomDesks();
+    const r = await room();
+    const ann = await enter(r, { name: 'Ann' });
+    const first = await placed(ann.client);
+    await wait(100);
+    const [record] = await s.store.findPlayers(ann.id);
+    const fresh = await s.store.base(record.id);
+    expect(fresh?.state?.buildings.length).toBeGreaterThan(0);
+    expect(fresh?.placement?.territoryId).toBe(first.territory);
+    // Some wear on the base, then leave.
+    const base = r.world.pilots.get(ann.id)!.base!;
+    base.installation('D1')!.durability.health = 12;
+    base.stats.raids = 3;
+    const left = r.world.baseSave(ann.id)!;
+    await ann.client.leave();
+    await wait(150);
+    const packed = await s.store.base(record.id);
+    expect(packed?.placement).toBeNull();
+    expect(packed?.state?.buildings.find((b) => b.slot === 'D1')?.health).toBe(12);
+    // Back with the same token: the same base, on whichever desk is free.
+    const again = await enter(r, { name: 'Ann', token: ann.welcome.token });
+    const second = await placed(again.client);
+    expect(second.ok).toBe(true);
+    expect(r.world.baseSave(ann.id)).toEqual(left);
+    expect(r.world.pilots.get(again.id)!.base!.stats.raids).toBe(3);
+  });
+
+  it('never has a base in two classrooms: moving packs it in the old one before the new one places it', async () => {
+    const s = randomDesks();
+    const a = await room();
+    const b = await room();
+    const ann = await enter(a, { name: 'Ann' });
+    await placed(ann.client);
+    a.world.pilots.get(ann.id)!.base!.stats.repelled = 7;
+    const there = await enter(b, { name: 'Ann', token: ann.welcome.token });
+    const m = await placed(there.client);
+    expect(m.ok).toBe(true);
+    expect(a.world.pilots.has(ann.id)).toBe(false);
+    expect(b.world.pilots.get(ann.id)!.base!.stats.repelled).toBe(7);
+    const [record] = await s.store.findPlayers(ann.id);
+    expect((await s.store.base(record.id))?.placement?.holder).toMatch(new RegExp(`/${b.roomId}$`));
+  });
+
+  it("keeps a base it can't load: the player is asked to try again, never handed a fresh one", async () => {
+    const s = randomDesks();
+    const r = await room();
+    const ann = await enter(r, { name: 'Ann' });
+    const real = s.store.placeBase.bind(s.store);
+    s.store.placeBase = async () => {
+      throw new Error('database down');
+    };
+    const m = await placed(ann.client);
+    expect(m).toMatchObject({ ok: false, error: expect.stringMatching(/try again/i) });
+    expect(r.world.pilots.get(ann.id)!.home).toBeNull();
+    s.store.placeBase = real;
+    expect((await placed(ann.client)).ok).toBe(true);
+  });
+
+  it("waits for a base another server still holds, rather than copying it", async () => {
+    const s = randomDesks();
+    const r = await room();
+    const ann = await enter(r, { name: 'Ann' });
+    const [record] = await s.store.findPlayers(ann.id);
+    await s.store.placeBase(record.id, 'other-server/room', 'T4', 60);
+    const m = await placed(ann.client);
+    expect(m).toMatchObject({ ok: false, error: expect.stringMatching(/another classroom/) });
+    expect(r.world.owners.size).toBe(0);
   });
 });

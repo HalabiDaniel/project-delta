@@ -1,4 +1,4 @@
-# paperwars.io persistence (v0.0.10)
+# paperwars.io persistence (v0.0.10 and v0.0.12)
 
 How the multiplayer world stops forgetting: player identity, the PostgreSQL store, and (in later
 phases) persistent territories, economy, aircraft, recovery and the private alpha. The plan this
@@ -17,8 +17,8 @@ implements is [docs/roadmap/v0.0.10.md](roadmap/v0.0.10.md).
 | 1 | Audit v0.0.9: everything kept only in memory, a regression baseline | Done ([below](#phase-1-the-audit)) |
 | 2 | Player identity: tokens, `onAuth`, player ids in `ServerWorld`, duplicate connections | Done ([below](#phase-2-player-identity)) |
 | 3 | Database: schema, migrations, data-access layer, local and test databases | Done ([below](#phase-3-the-database)) |
-| | **Checkpoint 1**: developer review | **Now** |
-| 4 | Persist territories, buildings, balances and the transaction log with idempotency | Next |
+| | **Checkpoint 1**: developer review | Done (2026-11-02) |
+| 4 | Persist territories, buildings, balances and the transaction log with idempotency | Moved to v0.0.12 ([below](#v0012-portable-bases)) |
 | 5 | Persist aircraft, missions, progression and fairness state; interrupted-sortie rules | |
 | 6 | World lifecycle, periodic saving, graceful shutdown, startup restoration, crash recovery | Checkpoint 2 |
 | 7 | Offline protection, reconnect grace, hardening, rate limits, error messages | |
@@ -208,7 +208,9 @@ behaviour rather than tables:
 | `balances` | Paper, capacity, protected reserve, production timestamp; per player and world; never negative | Phase 3 (ledger), 4 |
 | `transactions` | Idempotency key (unique per world), player, kind, amount, balance after, reason, reference | Phase 3 (ledger), 4 |
 | `territories` | Owner, claimed time, protection and shield as wall-clock times; one territory per player per world | Phase 4 |
-| `buildings` | Slot, kind, level, health, other per-building data | Phase 4 |
+| ~~`buildings`~~ | Replaced in v0.0.12 by `bases` and `base_buildings` (migration 0004): bases belong to players, not desks | ~~Phase 4~~ |
+| `bases` | One per player: format, paper store health, the base's record, where it stands (holder, desk, lease) | v0.0.12 |
+| `base_buildings` | Player, slot, kind, level, health, the rules' own fields | v0.0.12 |
 | `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.21; a trigger makes destroyed final | Phase 5 |
 | `missions` | Template, state, card as generated, offered and resolved times, outcome, reward | Phase 5 |
 | `progress` | Tutorial flags, statistics, unlocks, the mission director's state | Phase 5 |
@@ -326,3 +328,66 @@ session ends (the HUD stopped redrawing without a home, leaving the menu over th
   endpoint (phase 8).
 - No rate limiting on joins or transfer-code requests beyond a 10-second cooldown per player
   (phase 7).
+
+---
+
+## v0.0.12: portable bases
+
+The plan is [docs/roadmap/v0.0.12.md](roadmap/v0.0.12.md). A base belongs to the player and is
+placed on whichever desk they get each session, exactly as they left it.
+
+| Phase | Focus | Status |
+|---|---|---|
+| 1 | Base data model and migration; save, load, pack and place on any desk | Done |
+| 2 | Ledger wiring for every paper change; online-only production | Next |
+| 3 | Price and production retune; balance tests and simulation | Checkpoint |
+| 4 | Planes, hangar, missions, statistics, tutorial progress | |
+| 5 | Fairness timers on the player; usernames and desk names | |
+| 6 | Tests, bots, documentation | |
+
+### Phase 1: the base's life
+
+```
+join ─► placeBase (lease 120 s) ─► built on a random free desk ─► saveBase every 15 s (renews lease)
+                                                                      │
+                     leave for good (after the reconnect grace) ─► packBase (lease cleared)
+```
+
+- **Store** (`server/store/Store.ts`, both stores): `base`, `placeBase`, `saveBase`, `packBase`,
+  `releaseBase`. Only the holder (`<server instance>/<room id>`) can save or pack; a base with a
+  live lease held by someone else is refused (`elsewhere`). A lease that runs out (a crashed or
+  stalled server) lets the base be placed again, and the old holder can no longer write to it.
+- **Format:** `bases.format` (`BASE_FORMAT = 1`); a newer one is refused (`IncompatibleBaseError`).
+  `checkBaseState` refuses broken bases before either store writes them, and the database's own
+  checks back it up.
+- **Conversion** (`server/world/bases.ts`): the rules' `BaseSave` to the store's `BaseState` and
+  back. Health is kept in whole points, rounded up, so a hurt building never comes back as a wreck.
+  `Base.load` checks slots, kinds and one-radar again when it puts a base up.
+- **Ordering** (`server/world/BaseKeeper.ts`): store calls for one player run one after another
+  across every room in the process, so a base packed in one classroom is written before another
+  places it, and a slow periodic save can't land after a pack.
+- **Failures:** a base the store can't load is never replaced by a fresh one; the player sees
+  "Your base couldn't be loaded right now. Try again in a moment." and a Try again button. A save
+  or pack that fails is logged; the last periodic save (at most 15 s old) is what remains.
+- **What travels with the base in phase 1:** buildings (slot, kind, level, health, paper invested,
+  kills, bombers downed, damage dealt), the paper store's health and the base's record (raids,
+  repels, losses, construction and repair spending). Paper, capacity and the reserve come with the
+  ledger in phase 2; planes, the board and statistics in phase 4.
+- **The world per game mode:** bases are keyed by player only (multiplayer has one base per
+  player). The ledger's `world_id` will be the multiplayer game as a whole (one `worlds` row), so
+  paper also travels from session to session.
+
+Tests: `server/world/bases.test.ts` (a lived-in base round-trips and is placed on every claimable
+desk with identical buildings, levels and damage), the base part of `server/store/store.test.ts`
+(both stores: holders, leases, two rooms placing at once, broken bases, newer formats) and the
+portable-base part of `server/room.test.ts` (random desks, save at once, pack and return, moving
+classrooms, a store that fails, a base held by another server).
+
+Known limitations after phase 1:
+
+- Random placement uses the existing classroom room; v0.0.13's sessions replace it.
+- A base left on a desk by a crashed server waits for its lease (two minutes) before it can be
+  placed again, or `npm run admin -- base release <player>`.
+- The board is dealt fresh on placement, so there is nothing to check against the new desk yet;
+  that check comes with the saved board in phase 4.
+

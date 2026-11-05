@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.10-dev",
+  "version": "0.0.12-dev",
   "private": true,
-  "description": "paperwars.io v0.0.10 (in development) - persistent multiplayer: player identity, PostgreSQL, recovery and a private alpha",
+  "description": "paperwars.io v0.0.12 (in development) - persistent, portable bases",
   "type": "module",
   "scripts": {
     "dev": "vite",
