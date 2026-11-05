@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { raidLoss } from '../../src/base/Raids';
 import { PVP } from '../../src/config';
 import type { RaidTarget } from './PvpMissions';
@@ -28,6 +29,8 @@ export type RaidRefusal = 'self' | 'no-base' | 'offline' | 'new-player' | 'shiel
 /** A raid in progress, from launch until it succeeds, fails or is abandoned. */
 export interface Attack {
   id: number;
+  /** Unique for good (ledger keys: "raid:<uid>:loss"), where `id` is only unique in one world. */
+  uid: string;
   attacker: string;
   victim: string;
   territoryId: string;
@@ -99,7 +102,7 @@ export class AttackBook {
   }
 
   start(attacker: string, victim: string, territoryId: string, target: RaidTarget, now: number): Attack {
-    const attack: Attack = { id: this.nextId++, attacker, victim, territoryId, started: now, target, detected: false, structures: [], defended: false };
+    const attack: Attack = { id: this.nextId++, uid: randomUUID(), attacker, victim, territoryId, started: now, target, detected: false, structures: [], defended: false };
     this.active.push(attack);
     return attack;
   }

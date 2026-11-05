@@ -39,6 +39,8 @@ import { Territory } from '../../src/world/Territory';
 import { AttackBook, creditFor, KillBook, type Attack } from './Attacks';
 import { FallingBombs, type Landing } from './FallingBombs';
 import { History } from './History';
+import { PaperJournal, type PaperChange } from './Paper';
+import { randomUUID } from 'node:crypto';
 import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
 import { huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
@@ -50,6 +52,14 @@ export interface ServerWorldOptions {
   ambient?: boolean;
   /** Seconds of new-player protection (default PVP.newPlayerProtection; lower it to test raids alone). */
   newPlayerProtection?: number;
+}
+
+/** What travels with a player besides their buildings, loaded from the store when the base is placed. */
+export interface PlayerCarry {
+  /** Their paper as last saved; null or absent: a new player, who starts with ECONOMY.startingPaper. */
+  paper?: number | null;
+  /** Names this placement in ledger keys (default: a new UUID). */
+  stint?: string;
 }
 
 /** An event to send: to one player, to everyone but one, or to everyone. */
@@ -106,6 +116,8 @@ export class ServerWorld {
   /** Wrecked AI installations and when they stand up again. */
   private readonly aiWrecks = new Map<string, number>();
   private readonly missionKeys = new WeakMap<Mission, string>();
+  /** Paper changes of players who have left, not yet taken for the ledger. */
+  private readonly leftovers = new Map<string, PaperChange[]>();
   private keySerial = 0;
   private solidsCache: Collider[] | null = null;
   private pvpTimer = 0;
@@ -151,7 +163,7 @@ export class ServerWorld {
    * Places `id`'s base on `territoryId`: the saved base exactly as it was left (`save`), or the
    * starting base for a new player (null). Returns null, or why it can't be placed there.
    */
-  claim(id: string, territoryId: string, save: BaseSave | null = null): string | null {
+  claim(id: string, territoryId: string, save: BaseSave | null = null, carry: PlayerCarry = {}): string | null {
     const refused = this.claimRefusal(id, territoryId);
     if (refused) return refused;
     const p = this.pilots.get(id)!;
@@ -170,6 +182,12 @@ export class ServerWorld {
     else base.startFresh();
     p.base = base;
     p.resources.capacity = base.capacity;
+    if (carry.paper !== undefined && carry.paper !== null) p.resources.restore(carry.paper);
+    p.journal = new PaperJournal(carry.stint ?? randomUUID(), p.resources, (source, label) => {
+      if (p.cause) return p.cause;
+      const m = p.state?.mission;
+      return source === 'reward' && m && label.startsWith('Mission completed') ? `mission:${p.missionId(m)}` : null;
+    });
     const director = new MissionDirector(() => this.missionContext(p), () => this.situation(p), seededRng(this.seed + this.pilots.size * 7919 + this.keySerial));
     p.director = director;
     director.deal();
@@ -231,6 +249,11 @@ export class ServerWorld {
     this.history.forget(p.plane);
     // The base as it stood when the player left: packed and kept for their next session.
     const packed = p.base?.save() ?? null;
+    if (p.journal) {
+      p.journal.flushProduction();
+      const left = p.journal.take();
+      if (left.length > 0) this.leftovers.set(id, [...(this.leftovers.get(id) ?? []), ...left]);
+    }
     if (p.home && p.base) {
       const t = p.home;
       for (const key of [...p.base.buildings.keys()]) this.network.remove(p.base.idOf(key));
@@ -244,6 +267,47 @@ export class ServerWorld {
     this.solidsCache = null;
     this.news(`${p.name} left`, 'info');
     return packed;
+  }
+
+  /**
+   * The player's paper changes since the last call, oldest first, for the ledger (also after they
+   * left: what their last moments changed).
+   */
+  takePaper(id: string): PaperChange[] {
+    const left = this.leftovers.get(id) ?? [];
+    this.leftovers.delete(id);
+    const now = this.pilots.get(id)?.journal?.take() ?? [];
+    return left.length > 0 ? [...left, ...now] : now;
+  }
+
+  /** Players with paper changes waiting for the ledger. */
+  paperWaiting(): string[] {
+    return [...new Set([...this.leftovers.keys(), ...[...this.pilots.values()].filter((p) => p.journal).map((p) => p.id)])];
+  }
+
+  /**
+   * Corrects the player's paper by `delta` without a ledger entry: the store refused a change the
+   * world had already made (a duplicate key, or a debit it couldn't cover), so the world follows the
+   * store. Returns the new balance.
+   */
+  adjustPaper(id: string, delta: number): number | null {
+    const p = this.pilots.get(id);
+    if (!p?.journal) return null;
+    p.resources.restore(Math.max(0, p.resources.paper + Math.round(delta)));
+    return p.resources.paper;
+  }
+
+  /** The player's paper capacity and protected reserve right now (saved with their balance). */
+  paperLimits(id: string): { capacity: number; protected: number } | null {
+    const base = this.pilots.get(id)?.base;
+    if (!base) return null;
+    const cap = Number.isFinite(base.capacity) ? Math.round(base.capacity) : 0;
+    return { capacity: cap, protected: Math.round(base.protectedPaper) };
+  }
+
+  /** The stint (this placement of the base) the player's ledger keys are made with. */
+  stintOf(id: string): string | null {
+    return this.pilots.get(id)?.journal?.stint ?? null;
   }
 
   /** Input frames from the player's game. */
@@ -395,12 +459,14 @@ export class ServerWorld {
     const home = p.home;
     if (!st || !base || !home) return;
     const f = frame ?? NEUTRAL_FRAME;
-    // Their buildings set how fast paper comes in and how much the store holds.
-    st.income.perMinute = base.production;
+    // Their buildings set how fast paper comes in and how much the store holds. Paper is produced
+    // only while the player is connected: nothing comes in while they are away.
+    st.income.perMinute = p.connected ? base.production : 0;
     st.income.capacity = base.capacity;
     p.resources.capacity = base.capacity;
     st.tick(NET.step);
     base.recordIncome(st.income.lastPaid);
+    p.journal?.tick(NET.step);
     const m = p.flight.model;
     if (st.phase === 'flying' && m.status === 'flying') {
       const result = p.flight.step(f, home, this.territories, this.solids(), st.outOfRange);
@@ -995,7 +1061,9 @@ export class ServerWorld {
     let lost = 0;
     if (outcome === 'bombed' && victim?.state && victim.base) {
       const onStore = attack.target.installationId === victim.base.idOf(STORE);
+      victim.cause = `raid:${attack.uid}:loss`;
       lost = victim.state.raidHit(this.attacks.loss(victim.base.vulnerable(), onStore), victim.base.protectedPaper, `Raided by ${attacker?.name ?? 'a rival'}`);
+      victim.cause = null;
       victim.shieldUntil = this.time + PVP.raidShield;
       if (attacker) {
         attacker.stats.raids++;

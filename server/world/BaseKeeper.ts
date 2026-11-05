@@ -45,6 +45,14 @@ export class BaseKeeper {
     return this.run(playerId, () => this.store().releaseBase(playerId, this.holder));
   }
 
+  /**
+   * Any other store work for this player (the ledger, their progress), in the same order as their
+   * base's: a pack in one room is always written before the next room loads.
+   */
+  queue<T>(playerId: string, work: (store: Store) => Promise<T>): Promise<T> {
+    return this.run(playerId, () => work(this.store()));
+  }
+
   /** Resolves once every store call this room started has finished. */
   async settle(): Promise<void> {
     while (this.pending.size > 0) await Promise.allSettled([...this.pending]);

@@ -5,6 +5,7 @@ import { NET, PROTOCOL_VERSION, ROOM, type MeDTO, type WelcomeDTO } from '../src
 import type { WorldState } from '../src/net/schema';
 import { memoryServices, setServices } from './services';
 import { WorldRoom } from './WorldRoom';
+import { persistenceCases } from './persistence.cases';
 
 /**
  * The room over real WebSockets: joining, claiming, the schema and private state each player
@@ -388,3 +389,5 @@ describe('portable bases in the room (v0.0.12)', () => {
     expect(r.world.owners.size).toBe(0);
   });
 });
+
+persistenceCases(() => colyseus);

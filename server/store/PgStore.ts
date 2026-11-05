@@ -3,6 +3,7 @@ import { Database, type Queryable, type Row } from '../db/Database';
 import {
   BASE_FORMAT,
   checkBaseState,
+  checkLimits,
   checkTransaction,
   IncompatibleBaseError,
   IncompatibleSaveError,
@@ -10,6 +11,7 @@ import {
   type BasePlacement,
   type BaseRecord,
   type BaseState,
+  type EconomyRecord,
   type InviteRecord,
   type InviteRefusal,
   type NewInvite,
@@ -225,6 +227,22 @@ export class PgStore implements Store {
       reference: r.reference === null ? null : String(r.reference),
       createdAt: r.created_at as Date,
     }));
+  }
+
+  async economy(worldId: string, playerId: string): Promise<EconomyRecord | null> {
+    if (!isUuid(playerId)) return null;
+    const { rows } = await this.db.query('select paper, capacity, protected from balances where world_id = $1 and player_id = $2', [worldId, playerId]);
+    if (rows.length === 0) return null;
+    return { paper: Number(rows[0].paper), capacity: Number(rows[0].capacity), protected: Number(rows[0].protected) };
+  }
+
+  async setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void> {
+    checkLimits(capacity, protectedPaper);
+    await this.db.query(
+      `insert into balances (world_id, player_id, capacity, protected) values ($1, $2, $3, $4)
+       on conflict (world_id, player_id) do update set capacity = excluded.capacity, protected = excluded.protected, updated_at = now()`,
+      [worldId, playerId, capacity, protectedPaper],
+    );
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------

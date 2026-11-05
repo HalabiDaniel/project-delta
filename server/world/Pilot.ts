@@ -12,6 +12,8 @@ import { ResourceManager } from '../../src/systems/ResourceManager';
 import type { Territory } from '../../src/world/Territory';
 import type { DamageEntry } from './Attacks';
 import { InputClock } from './InputClock';
+import type { PaperJournal } from './Paper';
+import { randomUUID } from 'node:crypto';
 
 export interface PilotStats {
   kills: number;
@@ -44,6 +46,15 @@ export class Pilot {
   readonly joinedAt: number;
   home: Territory | null = null;
   readonly resources = new ResourceManager();
+  /** Their paper changes on the way to the ledger (from the moment the base is placed). */
+  journal: PaperJournal | null = null;
+  /**
+   * The cause of the paper change being made right now, when it must never pay twice
+   * ("raid:<id>:loss"): the journal uses it as the change's key.
+   */
+  cause: string | null = null;
+  /** Each card's id (a UUID): mission rewards are keyed by it, so a mission never pays twice. */
+  private readonly missionIds = new WeakMap<Mission, string>();
   base: Base | null = null;
   director: MissionDirector | null = null;
   state: GameState | null = null;
@@ -115,6 +126,21 @@ export class Pilot {
   get atHome(): boolean {
     const phase = this.state?.phase;
     return phase === 'desk' || phase === 'building' || phase === 'ready' || (phase === 'landed' && this.stopped);
+  }
+
+  /** The id of a card on (or flown from) this pilot's board, made the first time it is asked for. */
+  missionId(m: Mission): string {
+    let id = this.missionIds.get(m);
+    if (!id) {
+      id = randomUUID();
+      this.missionIds.set(m, id);
+    }
+    return id;
+  }
+
+  /** Gives a card the id it had before (a board restored from the store). */
+  setMissionId(m: Mission, id: string): void {
+    this.missionIds.set(m, id);
   }
 
   addScore(points: number): void {

@@ -189,6 +189,22 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       ],
     });
 
+    it('keeps the paper limits with the balance, and knows a player who has never had paper', async () => {
+      const world = await store.openWorld('limits');
+      const p = await store.createPlayer(player('Lim'), h('tok-lim'), 'open');
+      expect(await store.economy(world.id, p.id)).toBeNull();
+      await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'start', kind: 'reward', amount: 100, reason: '' });
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 0, protected: 0 });
+      await store.setEconomyLimits(world.id, p.id, 450, 40);
+      await store.setEconomyLimits(world.id, p.id, 500, 45);
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45 });
+      await expect(store.setEconomyLimits(world.id, p.id, -1, 0)).rejects.toThrow();
+      // Limits alone (a player whose first change hasn't been written yet) still count as a record.
+      const q = await store.createPlayer(player('Lim2'), h('tok-lim2'), 'open');
+      await store.setEconomyLimits(world.id, q.id, 300, 30);
+      expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30 });
+    });
+
     it("places a new player's base for one room, which saves and packs it; nobody else can meanwhile", async () => {
       const p = await store.createPlayer(player('Mo'), h('tok-mo'), 'open');
       expect(await store.base(p.id)).toBeNull();

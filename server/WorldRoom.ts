@@ -17,8 +17,11 @@ import { AiState, InstallationState, PHASES, PLANE_STATUSES, PlaneState, PlayerS
 import { foldPose } from '../src/systems/GameState';
 import { parseTutorial } from '../src/progress/Tutorial';
 import { refusal, type Authenticated } from './identity/Identity';
-import { services } from './services';
-import type { PlayerRecord } from './store/Store';
+import { economyWorld, services } from './services';
+import type { EconomyRecord, PlayerRecord } from './store/Store';
+import { ECONOMY } from '../src/config';
+import type { PaperChange } from './world/Paper';
+import { randomUUID } from 'node:crypto';
 import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper';
 import { fromBaseState, toBaseState } from './world/bases';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
@@ -100,6 +103,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** Players whose base is being loaded, and the desks held for them meanwhile. */
   private readonly placing = new Map<string, string>();
   private saveTimer = BASE_SAVE_EVERY;
+  /** The economy world's id, once a base has been placed. */
+  private worldId: string | null = null;
 
   onCreate(options: RoomOptions = {}): void {
     this.world = new ServerWorld(options);
@@ -306,10 +311,18 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     this.placing.set(id, desk);
     try {
+      const worldId = await economyWorld();
       const placed = await this.keeper.place(account.id, desk);
       if (placed.status === 'elsewhere') {
         console.warn(`[room ${this.roomId}] base of ${id} is still held by ${placed.placement.holder}`);
         return reply(desk, 'Your base is still in another classroom. Try again in a minute.');
+      }
+      let economy: EconomyRecord | null;
+      try {
+        economy = await this.keeper.queue(account.id, (store) => store.economy(worldId, account.id));
+      } catch (error) {
+        await this.keeper.release(account.id);
+        throw error;
       }
       // Gone while the base loaded (left, or a newer connection took over): let it go again.
       if (this.idOf(client) !== id || this.world.claimRefusal(id, desk) !== null) {
@@ -317,10 +330,16 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         return;
       }
       const save = placed.state ? fromBaseState(placed.state) : null;
-      const error = this.world.claim(id, desk, save);
+      const stint = randomUUID();
+      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint });
       if (error) {
         await this.keeper.release(account.id);
         return reply(desk, error);
+      }
+      this.worldId = worldId;
+      // A new player's starting paper is the first entry in their log (once, whatever happens).
+      if (!economy) {
+        this.writePaper(id, account.id, stint, [{ key: `start:${account.id}`, kind: 'reward', amount: ECONOMY.startingPaper, reason: 'Starting paper' }]);
       }
       // A new player's starting base is saved at once.
       if (!save) this.saveBase(id);
@@ -336,11 +355,45 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
   }
 
+  /** Sends every waiting paper change to the ledger, player by player, in order. */
+  private flushPaper(): void {
+    for (const id of this.world.paperWaiting()) {
+      const account = this.accounts.get(id);
+      const changes = this.world.takePaper(id);
+      if (!account || changes.length === 0) continue;
+      this.writePaper(id, account.id, this.world.stintOf(id), changes);
+    }
+  }
+
+  /**
+   * Paper changes into the ledger. The world has already made them; one the store refuses (a key
+   * already applied, or a debit the balance can't cover) is undone in the world, so the world
+   * always follows the store.
+   */
+  private writePaper(id: string, playerId: string, stint: string | null, changes: PaperChange[]): void {
+    const worldId = this.worldId;
+    if (!worldId) return;
+    for (const c of changes) {
+      this.keeper
+        .queue(playerId, (store) => store.applyTransaction({ worldId, playerId, key: c.key, kind: c.kind, amount: c.amount, reason: c.reason }))
+        .then(
+          (result) => {
+            if (result.status === 'applied') return;
+            console.warn(`[room ${this.roomId}] ledger ${result.status} for ${id}: ${c.key} (${c.amount})`);
+            // Only the same placement is corrected: a later one loaded the store's balance itself.
+            if (stint !== null && this.world.stintOf(id) === stint) this.world.adjustPaper(id, -c.amount);
+          },
+          (error) => console.error(`[room ${this.roomId}] could not write ${c.key} for ${id}:`, error),
+        );
+    }
+  }
+
   /** Saves a player's base as it stands now (renewing the room's lease on it). */
   private saveBase(id: string): void {
     const account = this.accounts.get(id);
     const save = this.world.baseSave(id);
     if (!account || !save) return;
+    this.saveLimits(id, account.id);
     this.keeper.save(account.id, toBaseState(save)).then(
       (ok) => {
         if (!ok) console.warn(`[room ${this.roomId}] the base of ${id} is no longer held by this room; not saved`);
@@ -383,9 +436,23 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
   }
 
+  /** The player's capacity and protected reserve, saved with their balance. */
+  private saveLimits(id: string, playerId: string): void {
+    const worldId = this.worldId;
+    const limits = this.world.paperLimits(id);
+    if (!worldId || !limits) return;
+    this.keeper
+      .queue(playerId, (store) => store.setEconomyLimits(worldId, playerId, limits.capacity, limits.protected))
+      .catch((error) => console.error(`[room ${this.roomId}] could not save the paper limits of ${id}:`, error));
+  }
+
   private removePlayer(id: string): void {
     const account = this.accounts.get(id);
+    if (account) this.saveLimits(id, account.id);
+    const stint = this.world.stintOf(id);
     const packed = this.world.remove(id);
+    // What their last moments changed reaches the ledger before the base is packed.
+    if (account) this.writePaper(id, account.id, stint, this.world.takePaper(id));
     if (account && packed) {
       this.keeper.pack(account.id, toBaseState(packed)).then(
         (ok) => {
@@ -427,6 +494,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.world.step(NET.step);
       this.accumulator -= NET.step;
     }
+    this.flushPaper();
     this.saveTimer -= seconds;
     if (this.saveTimer <= 0) {
       this.saveTimer = BASE_SAVE_EVERY;

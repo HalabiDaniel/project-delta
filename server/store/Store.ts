@@ -103,6 +103,15 @@ export type TransactionResult =
   /** A debit larger than the balance: nothing changed. */
   | { status: 'insufficient'; balance: number };
 
+/** A player's paper in one world, with the limits the store had when it was last saved. */
+export interface EconomyRecord {
+  paper: number;
+  /** The most the player's paper store holds (base capacity plus storage boxes). */
+  capacity: number;
+  /** Paper a raid can never take (the protected reserve). */
+  protected: number;
+}
+
 // ---- Portable bases (v0.0.12) ---------------------------------------------------------------------
 
 /** The version of a saved base's data (`bases.format`): refused if newer, upgraded by migrations if older. */
@@ -218,6 +227,10 @@ export interface Store {
   /** The balance change and its log row in one transaction, at most once per key. */
   applyTransaction(tx: TransactionInput): Promise<TransactionResult>;
   transactions(worldId: string, playerId: string, limit?: number): Promise<TransactionRecord[]>;
+  /** The player's paper and its saved limits, or null if they have never had any (a new player). */
+  economy(worldId: string, playerId: string): Promise<EconomyRecord | null>;
+  /** Saves the capacity and protected reserve with the balance (the paper itself only changes through the ledger). */
+  setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void>;
 
   // ---- Portable bases (v0.0.12) -----------------------------------------------------------------
   //
@@ -270,4 +283,10 @@ export function checkTransaction(tx: TransactionInput): void {
   if (!Number.isSafeInteger(tx.amount)) throw new Error(`transaction amount must be a whole number, not ${tx.amount}`);
   if (typeof tx.key !== 'string' || tx.key.length === 0 || tx.key.length > 200) throw new Error('transaction key must be 1 to 200 characters');
   if (typeof tx.kind !== 'string' || tx.kind.length === 0 || tx.kind.length > 40) throw new Error('transaction kind must be 1 to 40 characters');
+}
+
+/** Shared validation: saved paper limits. */
+export function checkLimits(capacity: number, protectedPaper: number): void {
+  if (!Number.isSafeInteger(capacity) || capacity < 0) throw new Error(`capacity must be a whole number ≥ 0, not ${capacity}`);
+  if (!Number.isSafeInteger(protectedPaper) || protectedPaper < 0) throw new Error(`protected paper must be a whole number ≥ 0, not ${protectedPaper}`);
 }

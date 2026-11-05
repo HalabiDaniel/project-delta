@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import {
   checkBaseState,
+  checkLimits,
   checkTransaction,
   IncompatibleSaveError,
   SAVE_FORMAT,
   type BaseRecord,
   type BaseState,
+  type EconomyRecord,
   type InviteRecord,
   type InviteRefusal,
   type NewInvite,
@@ -47,6 +49,7 @@ export class MemoryStore implements Store {
   private readonly invites = new Map<string, InviteRecord & { codeHash: string }>();
   private readonly worlds = new Map<string, WorldRecord>();
   private readonly balances = new Map<string, number>();
+  private readonly limits = new Map<string, { capacity: number; protected: number }>();
   private readonly log: TransactionRecord[] = [];
   private readonly keys = new Set<string>();
   private readonly tutorials = new Map<string, Record<string, unknown>>();
@@ -211,6 +214,20 @@ export class MemoryStore implements Store {
       .slice(-limit)
       .reverse()
       .map((t) => ({ ...t }));
+  }
+
+  async economy(worldId: string, playerId: string): Promise<EconomyRecord | null> {
+    const at = `${worldId}/${playerId}`;
+    if (!this.balances.has(at) && !this.limits.has(at)) return null;
+    const l = this.limits.get(at) ?? { capacity: 0, protected: 0 };
+    return { paper: this.balances.get(at) ?? 0, capacity: l.capacity, protected: l.protected };
+  }
+
+  async setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void> {
+    checkLimits(capacity, protectedPaper);
+    const at = `${worldId}/${playerId}`;
+    if (!this.balances.has(at)) this.balances.set(at, 0);
+    this.limits.set(at, { capacity, protected: protectedPaper });
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------
