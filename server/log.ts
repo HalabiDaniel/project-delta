@@ -6,6 +6,10 @@
  *   {"t":"2026-11-05T14:02:11.204Z","level":"info","event":"place","session":"c3plz6qcV","player":"m5hiv6vj","desk":"T14","base":"new"}
  *
  * LOG_FORMAT=text prints the same as a readable line instead (development).
+ *
+ * Errors repeating (v0.0.14): the same error event with the same message is written once; repeats
+ * within the next minute are counted, and one line says how many there were
+ * (`"repeated": 41, "over": 60`), so a failing database doesn't bury everything else in the log.
  */
 export type Level = 'info' | 'warn' | 'error';
 
@@ -23,7 +27,47 @@ export function setLogSink(next: ((line: string, level: Level) => void) | null):
   sink = next;
 }
 
+/** Errors seen lately: key → when the first was written, how many repeats since, the last fields. */
+const recent = new Map<string, { at: number; repeats: number; fields: LogFields }>();
+let repeatWindow = 60_000;
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Tests: a shorter window. */
+export function setRepeatWindow(ms: number): void {
+  repeatWindow = ms;
+}
+
+/** Writes the count of every repeated error whose window is over (all of them with `all`). */
+export function flushRepeats(all = false, now: number = Date.now()): void {
+  for (const [key, r] of recent) {
+    if (!all && now - r.at < repeatWindow) continue;
+    recent.delete(key);
+    if (r.repeats > 0) write('error', key.split('|')[0], { ...r.fields, repeated: r.repeats, over: Math.round((now - r.at) / 1000) });
+  }
+}
+
 export function log(level: Level, event: string, fields: LogFields = {}): void {
+  if (level === 'error') {
+    const message = Object.values(fields).find((v) => v instanceof Error)?.toString() ?? String(fields.error ?? '');
+    const key = `${event}|${message}`;
+    const now = Date.now();
+    const r = recent.get(key);
+    if (r && now - r.at < repeatWindow) {
+      r.repeats++;
+      r.fields = fields;
+      return;
+    }
+    if (r) flushRepeats(false, now);
+    recent.set(key, { at: now, repeats: 0, fields });
+    if (!flushTimer && !sink) {
+      flushTimer = setInterval(() => flushRepeats(), 15_000);
+      flushTimer.unref?.();
+    }
+  }
+  write(level, event, fields);
+}
+
+function write(level: Level, event: string, fields: LogFields): void {
   const out: Record<string, unknown> = { t: new Date().toISOString(), level, event };
   for (const [k, v] of Object.entries(fields)) {
     if (v === undefined) continue;

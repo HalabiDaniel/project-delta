@@ -24,6 +24,7 @@ import {
   type CardDTO,
   type Command,
   type Emote,
+  type FeedbackReplyDTO,
   type InputFrame,
   type MeDTO,
   type NetEvent,
@@ -60,6 +61,7 @@ import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
+import { FeedbackForm } from './FeedbackForm';
 import { Lobby, type ClaimView } from './Lobby';
 import { MpHud, type MpHudView, type ScoreRow } from './MpHud';
 import { NetBase } from './NetBase';
@@ -147,6 +149,8 @@ export class MultiplayerGame {
   readonly network: DefenseNetwork;
   me: string | null = null;
   paused = false;
+  /** The F8 feedback form (set right after construction). */
+  feedback!: FeedbackForm;
   /** The HUD as last drawn (it is only drawn while we have a home): closed when the session ends. */
   private lastHud: ReturnType<MpViews['hud']> | null = null;
   /** The private state, merged from the server's sections. */
@@ -298,6 +302,7 @@ export class MultiplayerGame {
       openMenu: () => game?.pause(),
       resetProgress: () => game?.leaveSession(),
       moveDevice: () => game?.net.requestTransfer(),
+      openFeedback: () => game?.feedback.show(),
       dismissWelcome: () => undefined,
       toggleSound: () => game?.toggleSound(),
       setHints: () => undefined,
@@ -367,6 +372,23 @@ export class MultiplayerGame {
       network,
     );
     game.outlines = outlines;
+    // The playtest feedback log (v0.0.14): F8, or Feedback in the pause menu.
+    let pausedBefore = false;
+    game.feedback = new FeedbackForm(hudRoot, {
+      send: (entry) => game!.net.sendFeedback(entry),
+      context: () => ({ ping: game!.net.rtt || null, graphics: game!.graphics.preset, connection: game!.net.status, phase: game!.state?.phase ?? null }),
+      opened: (open) => {
+        if (open) {
+          pausedBefore = game!.paused;
+          game!.pause();
+        } else if (!pausedBefore) game!.resume();
+      },
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'F8' || e.repeat) return;
+      e.preventDefault();
+      game!.feedback.toggle();
+    });
     game.setGraphics(game.graphics);
     game.bindInput();
     game.tutorial.onChange(() => game!.saveTutorialSoon());
@@ -423,7 +445,9 @@ export class MultiplayerGame {
       const rooms = await this.net.list();
       this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info', this.net.rtt);
     } catch {
-      this.lobby.showRooms([], `No server at ${this.net.endpoint}. Start one with: npm run server`, 'bad');
+      // A deployed game (VITE_SERVER_URL) never asks the player to start a server.
+      const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.net.endpoint);
+      this.lobby.showRooms([], local ? `No server at ${this.net.endpoint}. Start one with: npm run server` : 'No server: the game server can\'t be reached. It may be restarting; try again in a moment.', 'bad');
     }
   }
 
@@ -486,6 +510,10 @@ export class MultiplayerGame {
       if (this.lastHud) this.hud.render({ ...this.lastHud, paused: false, welcome: null });
       this.lobby.showResults(m, this.me);
       this.roomTitle = m.title;
+    });
+    room.onMessage('feedback', (m: FeedbackReplyDTO) => {
+      this.feedback.reply(m);
+      if (m.ok) this.hud.alert('ok', 'Feedback sent. Thank you!', null, 'good', 2.4);
     });
     room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? 'The server is restarting', null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));

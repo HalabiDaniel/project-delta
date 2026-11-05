@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
-  "description": "paperwars.io v0.0.13 - sessions",
+  "description": "paperwars.io v0.0.14 - going live",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,9 +19,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "loadtest": "tsx server/loadtest.ts",
+    "loadtest:remote": "tsx server/loadtest-remote.ts",
     "bots": "tsx server/bots/run.ts",
     "admin": "tsx server/admin.ts",
     "db:migrate": "tsx server/db/cli.ts",
+    "db:backup": "tsx server/db/backup.ts backup",
+    "db:restore": "tsx server/db/backup.ts restore",
     "db:up": "docker compose up -d postgres",
     "export-models": "node tools/export-models.mjs"
   },

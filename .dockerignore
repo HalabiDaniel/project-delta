@@ -1,0 +1,11 @@
+# Only what the server needs goes into the image (see Dockerfile).
+node_modules
+dist
+assets
+docs
+public
+tools
+.git
+.env
+.env.*
+*.log

@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
+import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type FeedbackDTO, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
 
 /**
@@ -92,15 +92,27 @@ export class NetClient {
     return options;
   }
 
+  /** A playtest feedback entry (F8, v0.0.14). False when not in a session. */
+  sendFeedback(entry: FeedbackDTO): boolean {
+    if (!this.room || this.status !== 'connected') return false;
+    this.room.send('feedback', entry);
+    return true;
+  }
+
   /** Asks the server for a one-time code that lets another computer play as us. */
   requestTransfer(): void {
     this.room?.send('transfer');
   }
 
-  /** ?server=wss://host:port in the address, else the page's host on port 2567. */
+  /**
+   * ?server=wss://host:port in the address (testing), else the address the build was given
+   * (VITE_SERVER_URL, set in Vercel: v0.0.14), else the page's host on port 2567 (development).
+   */
   static defaultEndpoint(): string {
     const given = new URLSearchParams(window.location.search).get('server');
     if (given) return given;
+    const built = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
+    if (built) return built.replace(/\/+$/, '');
     const secure = window.location.protocol === 'https:';
     return `${secure ? 'wss' : 'ws'}://${window.location.hostname || 'localhost'}:2567`;
   }
@@ -298,12 +310,14 @@ export class NetClient {
     room.onLeave((code, reason) => {
       if (this.room !== room) return;
       this.room = null;
-      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED) {
+      // Taken over, ended, or removed by the developer (kicked): the session isn't rejoined by itself
+      // (the device token stays: the player is still who they are).
+      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED || code === CLOSE_KICKED) {
         this.forget();
         this.forgetSession();
       }
       // A restart (said, or a connection that broke and couldn't be resumed): worth rejoining.
-      this.restarting = code === CLOSE_RESTARTING || (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_SESSION_ENDED && this.lastSession() !== null);
+      this.restarting = code === CLOSE_RESTARTING || (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_SESSION_ENDED && code !== CLOSE_KICKED && this.lastSession() !== null);
       // The end of a session is no error: the results card is up.
       const clean = code === 4000 || code === CLOSE_SESSION_ENDED;
       if (!clean) this.lastError = reason ? String(reason) : `Disconnected (${code})`;

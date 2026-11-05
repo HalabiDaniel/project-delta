@@ -99,6 +99,11 @@ export async function shutdownAll(reason: string = 'The server is restarting. Ba
   await Promise.all([...live.values()].map((h) => h.shutdown(reason).catch((error) => log('error', 'session.shutdown-error', { error }))));
 }
 
+/** The server is shutting down (graceful shutdown has begun). */
+export function isStopping(): boolean {
+  return stopping;
+}
+
 /** For tests: sessions may open again after a simulated shutdown. */
 export function resetStopping(): void {
   stopping = false;

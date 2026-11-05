@@ -68,6 +68,8 @@ export const CLOSE_TAKEN_OVER = 4011;
 export const CLOSE_SESSION_ENDED = 4012;
 /** Close code for a server restart (v0.0.13): the session comes back in a moment; rejoin it. */
 export const CLOSE_RESTARTING = 4013;
+/** Close code for a player removed by the developer (v0.0.14 admin endpoint): no automatic rejoin. */
+export const CLOSE_KICKED = 4014;
 
 // ---- Sessions (v0.0.13) ----------------------------------------------------------------------------
 
@@ -520,4 +522,30 @@ export function vec(x: number, y: number, z: number): number[] {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+// ---- Playtest feedback (v0.0.14) ------------------------------------------------------------------
+
+/** What a feedback entry is about (the `feedback` table's categories). */
+export const FEEDBACK_CATEGORIES = ['bug', 'frustration', 'interface', 'performance', 'balance', 'missing', 'enjoyment'] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+
+/** Limits the client and the server both apply. */
+export const FEEDBACK_LIMITS = { text: 4000, repro: 4000, contextKeys: 30, contextValue: 300 } as const;
+
+/** Client → server, "feedback": an entry from the F8 form. */
+export interface FeedbackDTO {
+  category: FeedbackCategory;
+  text: string;
+  repro?: string;
+  /** Enjoyment, 1 to 5 (optional). */
+  rating?: number | null;
+  /** What the browser knows: version, frame rate, ping, device and browser, graphics. */
+  context?: Record<string, string | number | boolean | null>;
+}
+
+/** Server → client, "feedback": stored, or why not. */
+export interface FeedbackReplyDTO {
+  ok: boolean;
+  error?: string;
 }

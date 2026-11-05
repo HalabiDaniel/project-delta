@@ -117,6 +117,18 @@ export class SessionClock {
     return timeLeft(this, now);
   }
 
+  /**
+   * The session ends `seconds` from now (the admin endpoint, v0.0.14), or at its own end if that is
+   * sooner. The usual warnings for times already past aren't given (the caller announces the end).
+   */
+  endEarly(now: number, seconds: number): void {
+    if (this.status === 'ended') return;
+    if (this.startedAt === null) this.startedAt = now;
+    this.endsAt = Math.min(this.endsAt ?? Infinity, now + Math.max(0, seconds) * 1000);
+    const left = this.left(now);
+    for (const w of SESSION.warnings) if (w >= left) this.warned.add(w);
+  }
+
   /** What has happened since the last call: warnings due, joining closing, the end. */
   update(now: number): ClockEvent[] {
     if (this.endsAt === null || this.status === 'ended') return [];

@@ -570,3 +570,23 @@ v0.0.13 ([plan](roadmap/v0.0.13.md)) puts the portable bases into timed sessions
   land back on their desks with the same base, and every balance still equals its ledger.
 - A base saved by a newer build is refused with a message saying so; it stays untouched.
 
+
+## v0.0.14: backups, restores and the feedback table
+
+- **Backups** (`npm run db:backup`, `server/db/backup.ts`): `pg_dump --format=custom` of
+  `DATABASE_URL`, checked with `pg_restore --list` (it must hold table data), uploaded to the R2
+  bucket as `paperwars/<UTC time>.dump`; copies older than `BACKUP_KEEP_DAYS` (14) are deleted,
+  never the newest. On Railway a second service runs it every night (cron `15 3 * * *`).
+  `--out <folder>` writes a local file instead; `--list` lists the bucket.
+- **Restores** (`npm run db:restore -- latest | <key> | <file>`): `pg_restore --clean --if-exists
+  --single-transaction --exit-on-error` into `DATABASE_URL`, after typing the database's name
+  (`--yes` skips it). The server migrates a restored database to its own schema when it starts.
+- **The drill**: with `DRILL_DATABASE_URL`, every backup is restored into that second database at
+  once and compared with the live one (rows in players, bases, buildings, balances, planes, the
+  ledger, missions and progress; paper in total; the most recent player's paper and buildings).
+  Logged as `drill.done` with `ok` and `identical`; a failed drill fails the job.
+- **Feedback** is stored in the `feedback` table from v0.0.10's first migration (category, body,
+  repro, rating, context as JSON): no new migration. `Store.addFeedback` / `Store.feedback(since)`
+  in both stores, with the table's rules checked in memory too.
+- **Write statistics**: `Database.writes` counts every write statement and transaction and its
+  time, for `/admin/stats` and the remote load test.

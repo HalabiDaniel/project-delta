@@ -2,7 +2,9 @@ import { Game } from './Game';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hudRoot = document.getElementById('hud') as HTMLElement;
-const multiplayer = new URLSearchParams(window.location.search).has('mp');
+// Multiplayer: ?mp, or an invite link (…/?invite=CODE) straight into the lobby.
+const query = new URLSearchParams(window.location.search);
+const multiplayer = query.has('mp') || query.has('invite');
 
 function bootError(error: unknown): void {
   console.error(error);
@@ -18,7 +20,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureConte
 }
 
 if (multiplayer) {
-  // Multiplayer (?mp): the shared classroom, loaded only when asked for.
+  // Multiplayer: the shared classroom, loaded only when asked for.
   import('./mp/MultiplayerGame')
     .then(({ MultiplayerGame }) => MultiplayerGame.create(canvas, hudRoot))
     .then((game) => {

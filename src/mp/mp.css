@@ -266,3 +266,44 @@
 .mp-landed-map i { aspect-ratio: 1; border-radius: 2px; background: var(--paper-2); border: 1px solid var(--edge); }
 .mp-landed-map i.taken { background: var(--ink-3); }
 .mp-landed-map i.mine { background: var(--friend); border-color: var(--friend); }
+
+/* ---- Playtest feedback (F8, v0.0.14) ---------------------------------------------------------- */
+.mp-feedback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(29, 39, 71, 0.35);
+  pointer-events: auto;
+  z-index: 30;
+}
+.mp-feedback[hidden] { display: none; }
+.mp-feedback .mp-card { width: min(560px, 92vw); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--paper-solid); }
+.mp-feedback .mp-head kbd { margin-left: auto; }
+.mp-feedback textarea {
+  font: 500 var(--t-m) var(--font);
+  color: var(--ink);
+  padding: var(--s2) var(--s3);
+  border: 1.5px solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  outline: none;
+  resize: vertical;
+}
+.mp-feedback textarea:focus { border-color: var(--friend); }
+.fb-cats { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.fb-cats button {
+  padding: 5px 10px;
+  border: 1.5px solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  font: 700 var(--t-s) var(--font);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.fb-cats button.on { border-color: var(--friend); background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(29, 39, 71, 0.2); }
+.fb-label { font-size: var(--t-s); color: var(--ink-2); }
+.fb-note { color: var(--ink-3); font-size: var(--t-xs, 11px); flex: 1; min-width: 160px; }
+.mp-feedback .mp-foot { display: flex; gap: var(--s2); align-items: center; }
+.mp-feedback .mp-foot .mp-status { flex: 1; }
+.mp-status.bad { color: var(--hostile, #c0392b); }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FeedbackCategory } from '../../src/net/protocol';
 import { Database, type Queryable, type Row } from '../db/Database';
 import {
   BASE_FORMAT,
@@ -11,6 +12,9 @@ import {
   IncompatibleSaveError,
   SAVE_FORMAT,
   type AircraftRecord,
+  checkFeedback,
+  type FeedbackRecord,
+  type NewFeedback,
   type BasePlacement,
   type MissionOutcome,
   type ProgressRecord,
@@ -461,6 +465,31 @@ export class PgStore implements Store {
       id: String(r.id), title: String(r.title), capacity: Number(r.capacity), status: r.status as SessionRecordStatus, peakPlayers: Number(r.peak_players),
       createdAt: r.created_at as Date, startedAt: (r.started_at as Date | null) ?? null, endsAt: (r.ends_at as Date | null) ?? null, endedAt: (r.ended_at as Date | null) ?? null,
       desks: cleanDesks(r.desks),
+    }));
+  }
+
+  // ---- Playtest feedback (v0.0.14) ----------------------------------------------------------------
+
+  async addFeedback(f: NewFeedback): Promise<void> {
+    checkFeedback(f);
+    await this.db.query(
+      `insert into feedback (world_id, player_id, category, body, repro, rating, context) values ($1, $2, $3, $4, $5, $6, $7)`,
+      [f.worldId, f.playerId, f.category, f.body, f.repro, f.rating, JSON.stringify(f.context)],
+    );
+  }
+
+  async feedback(since?: Date): Promise<FeedbackRecord[]> {
+    const { rows } = await this.db.query(
+      `select f.*, coalesce(p.username, p.display_name) as player_name
+         from feedback f left join players p on p.id = f.player_id
+        where $1::timestamptz is null or f.created_at >= $1
+        order by f.created_at, f.id`,
+      [since ?? null],
+    );
+    return rows.map((r) => ({
+      id: Number(r.id), worldId: (r.world_id as string | null) ?? null, playerId: (r.player_id as string | null) ?? null, playerName: (r.player_name as string | null) ?? null,
+      category: r.category as FeedbackCategory, body: String(r.body), repro: (r.repro as string | null) ?? null, rating: r.rating === null ? null : Number(r.rating),
+      context: (r.context as Record<string, unknown>) ?? {}, createdAt: r.created_at as Date,
     }));
   }
 

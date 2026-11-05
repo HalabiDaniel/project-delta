@@ -1,3 +1,4 @@
+import { FEEDBACK_CATEGORIES, type FeedbackCategory } from '../../src/net/protocol';
 /**
  * Durable storage, as the game server sees it. Two implementations keep the same contract (and run
  * the same tests, `store.test.ts`):
@@ -254,6 +255,25 @@ export function cleanDesks(raw: unknown): Record<string, string> {
   return out;
 }
 
+/** A playtest feedback entry (v0.0.14): what the player wrote, and what was attached. */
+export interface NewFeedback {
+  worldId: string | null;
+  playerId: string | null;
+  category: FeedbackCategory;
+  body: string;
+  repro: string | null;
+  rating: number | null;
+  /** Version, session, position and mode, ping, frame rate, device and browser. */
+  context: Record<string, unknown>;
+}
+
+export interface FeedbackRecord extends NewFeedback {
+  id: number;
+  /** The player's username (or name) when it was read back. */
+  playerName: string | null;
+  createdAt: Date;
+}
+
 export interface Store {
   readonly kind: 'memory' | 'postgres';
 
@@ -374,11 +394,24 @@ export interface Store {
   /** Sessions in any of `statuses` (all of them without), newest first. */
   sessionRecords(statuses?: SessionRecordStatus[]): Promise<SessionRecord[]>;
 
+  // ---- Playtest feedback (v0.0.14) ----------------------------------------------------------------
+
+  addFeedback(entry: NewFeedback): Promise<void>;
+  /** Every entry since `since` (all of them without it), oldest first. */
+  feedback(since?: Date): Promise<FeedbackRecord[]>;
+
   // ---- Health -----------------------------------------------------------------------------------
 
   /** True if the store can be reached right now. */
   ping(): Promise<boolean>;
   close(): Promise<void>;
+}
+
+/** A feedback entry is within the table's rules (both stores check, as PostgreSQL's constraints do). */
+export function checkFeedback(f: NewFeedback): void {
+  if (!(FEEDBACK_CATEGORIES as readonly string[]).includes(f.category)) throw new Error(`bad feedback category "${f.category}"`);
+  if (f.body.length === 0 || f.body.length > 4000 || (f.repro?.length ?? 0) > 4000) throw new Error('feedback text must be 1 to 4000 characters');
+  if (f.rating !== null && !(Number.isInteger(f.rating) && f.rating >= 1 && f.rating <= 5)) throw new Error('feedback rating must be 1 to 5');
 }
 
 const BUILDING_KINDS: ReadonlySet<string> = new Set(['turret', 'launcher', 'radar', 'workshop', 'storage']);

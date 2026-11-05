@@ -4,7 +4,7 @@ import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
 import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
 import { Predictor } from '../../src/net/Prediction';
-import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
+import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
 import { sharedWorld } from '../../src/net/World';
 
@@ -55,6 +55,11 @@ export class Bot {
   /** Our public player id (from the welcome message), and the device token we were given. */
   id = '';
   token: string | null = null;
+  /** An invite code for the first join, on a server with ACCESS=invite (v0.0.14). */
+  code: string | null = null;
+  /** When the connection was lost to a restart or a session's end, and how long coming back took (ms). */
+  private lostAt = 0;
+  lastComeBackMs: number | null = null;
   /** The username the server gave us (null until it has). */
   username: string | null = null;
   readonly predictor = new Predictor(AIRCRAFT.falcon);
@@ -83,7 +88,7 @@ export class Bot {
    * server opens sessions, v0.0.13). A session that filled up meanwhile: ask again.
    */
   async join(sessionId?: string): Promise<void> {
-    const options = { name: this.name, v: PROTOCOL_VERSION, ...(this.token ? { token: this.token } : {}) };
+    const options = { name: this.name, v: PROTOCOL_VERSION, ...(this.token ? { token: this.token } : this.code ? { code: this.code } : {}) };
     let room: Room<unknown, WorldState> | null = null;
     for (let attempt = 0; !room; attempt++) {
       const id = sessionId ?? (await quickSession(this.sdk));
@@ -185,8 +190,12 @@ export class Bot {
       if (this.stopped || this.room !== room) return;
       if (this.timer) clearInterval(this.timer);
       this.room = null;
+      this.lostAt = performance.now();
       if (code === CLOSE_RESTARTING) void this.comeBack(room.roomId);
       else if (code === CLOSE_SESSION_ENDED) void this.comeBack(undefined);
+      // A connection that broke and couldn't be resumed (a killed server, v0.0.14): the restarted
+      // server reopens the session for a while, so try that one.
+      else if (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_KICKED) void this.comeBack(room.roomId);
     });
   }
 
@@ -200,6 +209,7 @@ export class Bot {
       try {
         await this.join(sessionId);
         this.stats.reconnects++;
+        this.lastComeBackMs = Math.round(performance.now() - this.lostAt);
         this.onBack?.(this);
         return;
       } catch {
