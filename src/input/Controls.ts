@@ -11,7 +11,7 @@
  * Which controller button means which action depends on where the player is (`context`): in
  * flight the triggers fire, at home they cycle the mission cards and the D-pad moves the
  * highlight through the HUD's buttons (see FocusNav). The keyboard keeps its v0.0.10 keys.
- * The default controller mapping is in docs/roadmap/v0.0.11.md section 7C; rebinding is v0.0.14.
+ * The default controller mapping is in docs/roadmap/v0.0.11.md section 7C; rebinding is v0.0.17.
  */
 
 import {

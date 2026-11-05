@@ -105,7 +105,7 @@ checklist at the end of the plan ([Definition of done](docs/roadmap/v0.0.11.md#1
 
 The mapping follows the plan's section 7C, with one change: throttle had no button there, so it
 is LB + left stick (LB is the plan's "assisted banking modifier"). It may change after the
-playtest; rebinding is v0.0.14. Tests: `src/input/input.test.ts` (dead zones, curves, steering
+playtest; rebinding is v0.0.17. Tests: `src/input/input.test.ts` (dead zones, curves, steering
 against the real flight model, the raw layouts, connection and switching, context mapping,
 navigation, hints).
 
@@ -113,7 +113,7 @@ navigation, hints).
 
 - **Swift** is the starter (first in the garage, cheapest) and the **free emergency plane**
   (`STARTER_AIRCRAFT`, `emergencyPlane()`); **Falcon** is the agile fighter (best turn rate, no
-  bombs, a stealth value that does nothing until v0.0.15); **Dart** is the fast recon plane
+  bombs, a stealth value that does nothing until v0.0.18); **Dart** is the fast recon plane
   (fastest in the game, longest range of the four, no bombs, recon objectives fill 1.5× faster);
   **Widewing** is unchanged. Numbers in the [aircraft table](#aircraft).
 - **Saves migrate** (single-player save format 3): every aircraft id is kept; only "Emergency
@@ -350,6 +350,8 @@ TEST_DATABASE_URL=postgres://paperwars:paperwars@localhost:5432/paperwars_test n
 
 ### Decisions for the developer (checkpoint 1)
 
+Answered on 2026-11-02 (see the [roadmap decisions](docs/roadmap/README.md#decisions-of-2026-11-02)).
+
 The interrupted-sortie and offline-protection rules (plan §3D and §5A), transfer-code behaviour,
 public ids and the choice of host are listed in
 [PERSISTENCE.md](docs/PERSISTENCE.md#decisions-for-the-developer-checkpoint-1).
@@ -440,7 +442,7 @@ readability on real hardware still need playtesting.
 ### Known limitations
 
 - Sessions live in memory on one server process: no accounts, persistence or campaign yet
-  (persistence in v0.0.10, accounts and the campaign in v0.0.19). A server restart ends every session.
+  (persistence from v0.0.10 to v0.0.13, accounts in v0.0.22). A server restart ends every session.
 - Eight claimable desks in the 3 × 3 classroom; more territory slots come with the world expansion.
 - Homes are dressed without the Home Desk landmark and tall props (the server doesn't know their
   collision shapes); remote planes don't show bomb racks or the fold animation.
@@ -1749,18 +1751,24 @@ The road to the first public release is planned version by version in
 
 | Version | Theme |
 |---|---|
-| [v0.0.10](docs/roadmap/v0.0.10.md) | Persistent multiplayer and a private two-player alpha |
+| [v0.0.10](docs/roadmap/v0.0.10.md) | Player identity and the database (closed after phase 3) |
 | [v0.0.11](docs/roadmap/v0.0.11.md) | Art integration (finishing v0.0.8's phases) and controller support |
-| [v0.0.12](docs/roadmap/v0.0.12.md) | HUD and UI revamp |
-| [v0.0.13](docs/roadmap/v0.0.13.md) | Audio and music revamp |
-| [v0.0.14](docs/roadmap/v0.0.14.md) | Menus, settings and branding |
-| [v0.0.15](docs/roadmap/v0.0.15.md) | Economy and content depth |
-| [v0.0.16](docs/roadmap/v0.0.16.md) | Advanced multiplayer |
-| [v0.0.17](docs/roadmap/v0.0.17.md) | World scale and environments |
-| [v0.0.18](docs/roadmap/v0.0.18.md) | Customization and social |
-| [v0.0.19](docs/roadmap/v0.0.19.md) | Public readiness |
-| [v0.0.20](docs/roadmap/v0.0.20.md) | Release candidate |
+| [v0.0.12](docs/roadmap/v0.0.12.md) | Persistent, portable bases |
+| [v0.0.13](docs/roadmap/v0.0.13.md) | Sessions and the territory lifecycle |
+| [v0.0.14](docs/roadmap/v0.0.14.md) | Going live: the multiplayer server on the internet, with a setup guide |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp |
+| [v0.0.16](docs/roadmap/v0.0.16.md) | Audio and music revamp |
+| [v0.0.17](docs/roadmap/v0.0.17.md) | Menus, settings and branding |
+| [v0.0.18](docs/roadmap/v0.0.18.md) | Economy and content depth |
+| [v0.0.19](docs/roadmap/v0.0.19.md) | Advanced multiplayer |
+| [v0.0.20](docs/roadmap/v0.0.20.md) | World scale and environments |
+| [v0.0.21](docs/roadmap/v0.0.21.md) | Customization and social |
+| [v0.0.22](docs/roadmap/v0.0.22.md) | Public readiness |
+| [v0.0.23](docs/roadmap/v0.0.23.md) | Admin dashboard |
+| [v0.0.24](docs/roadmap/v0.0.24.md) | Release candidate |
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
-**v0.0.10** is in progress (checkpoint 1 of 3). From v0.1.0 on, 0.1.x releases are small improvements, 0.x.0 releases are
-major versions, and 1.0.0 is the first full version.
+The roadmap was reorganised on 2026-11-02 around portable bases and timed sessions (the
+[decisions](docs/roadmap/README.md#decisions-of-2026-11-02)). **Next up is v0.0.12.** From v0.1.0 on,
+0.1.x releases are small improvements, 0.x.0 releases are major versions, and 1.0.0 is the first
+full version.

@@ -4,10 +4,13 @@ How the multiplayer world stops forgetting: player identity, the PostgreSQL stor
 phases) persistent territories, economy, aircraft, recovery and the private alpha. The plan this
 implements is [docs/roadmap/v0.0.10.md](roadmap/v0.0.10.md).
 
-> **Status: developer checkpoint 1 of 3** (after phases 1 to 3). Players now have a stable,
-> secure identity backed by PostgreSQL, and the database schema, migrations and data-access layer
-> are in place. The world itself (territories, paper, aircraft, missions) is still kept in memory:
-> persisting it is phases 4 to 6, after this review.
+> **Status: v0.0.10 closed after phase 3 (2026-11-02).** Players have a stable, secure identity
+> backed by PostgreSQL, and the database schema, migrations and data-access layer are in place.
+> The developer then changed the multiplayer design (bases that belong to players and move
+> between desks, timed sessions), so phases 4 to 10 below were rewritten and moved to
+> [v0.0.12](roadmap/v0.0.12.md), [v0.0.13](roadmap/v0.0.13.md) and [v0.0.14](roadmap/v0.0.14.md);
+> the checkpoint decisions are recorded in the
+> [roadmap](roadmap/README.md#decisions-of-2026-11-02).
 
 | Phase | Focus | Status |
 |---|---|---|
@@ -206,7 +209,7 @@ behaviour rather than tables:
 | `transactions` | Idempotency key (unique per world), player, kind, amount, balance after, reason, reference | Phase 3 (ledger), 4 |
 | `territories` | Owner, claimed time, protection and shield as wall-clock times; one territory per player per world | Phase 4 |
 | `buildings` | Slot, kind, level, health, other per-building data | Phase 4 |
-| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.18; a trigger makes destroyed final | Phase 5 |
+| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.21; a trigger makes destroyed final | Phase 5 |
 | `missions` | Template, state, card as generated, offered and resolved times, outcome, reward | Phase 5 |
 | `progress` | Tutorial flags, statistics, unlocks, the mission director's state | Phase 5 |
 | `pvp_records` | Raids and kills, for cooldowns, the repeat rule and kill-farming windows | Phase 5 |
@@ -291,6 +294,9 @@ four spare connections for players taking over their own seat), and the pause me
 session ends (the HUD stopped redrawing without a home, leaving the menu over the lobby).
 
 ## Decisions for the developer (checkpoint 1)
+
+**Answered on 2026-11-02**: see the
+[decisions table in the roadmap](roadmap/README.md#decisions-of-2026-11-02). The questions as asked:
 
 1. **The interrupted-sortie rules** (plan §3D) need your confirmation before phase 5. Proposed:
    reconnect within the grace period resumes the sortie; a longer disconnect out of combat glides

@@ -6,12 +6,18 @@ release (v0.0.9) and the first public release (v0.1.0). The summary lives in
 requirements, testing, scope boundaries, developer responsibilities, implementation phases and a
 definition of done.
 
+**Reorganised on 2026-11-02** after v0.0.11: the developer changed the multiplayer design
+(portable bases and timed sessions, see [the decisions](#decisions-of-2026-11-02)). Three server
+versions now come straight after v0.0.11 so the game goes online early (v0.0.12 to v0.0.14), an
+admin dashboard version comes before the release candidate (v0.0.23), and the earlier plans for
+v0.0.12 to v0.0.20 moved to v0.0.15 to v0.0.24.
+
 ## Version numbering
 
 | Version | Meaning |
 |---|---|
-| 0.0.x | Pre-release development versions. 0.0.10 to 0.0.20 complete the game for its first public release. |
-| 0.1.0 | First public release (public alpha): the fixes from the testing period after 0.0.20, and no new features. |
+| 0.0.x | Pre-release development versions. 0.0.10 to 0.0.24 complete the game for its first public release. |
+| 0.1.0 | First public release (public alpha): the fixes from the testing period after 0.0.24, and no new features. |
 | 0.1.x | Small improvements and fixes after a major version. |
 | 0.x.0 | Major versions (for example 0.2.0). |
 | 1.0.0 | The first full version of the game. |
@@ -24,60 +30,96 @@ not because the code compiles. Working features from earlier versions are preser
 
 | Version | Theme | Summary |
 |---|---|---|
-| [v0.0.10](v0.0.10.md) (in progress: [checkpoint 1](../PERSISTENCE.md)) | Persistent multiplayer and private alpha | Player identity, PostgreSQL persistence, restart recovery, offline protection, a hardened server and an externally reachable, invite-only deployment for the developer and one friend. |
-| [v0.0.11](v0.0.11.md) | Art integration and controller support | Synty and custom models throughout, the four existing aircraft remodelled for the new roster (Swift, Falcon, Dart, Widewing), custom buildings, all nine territories finished (v0.0.8 phases 2 to 6), and full gamepad support through one input-action layer. |
-| [v0.0.12](v0.0.12.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. New aircraft: Raptor. |
-| [v0.0.13](v0.0.13.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. New aircraft: Lancer. |
-| [v0.0.14](v0.0.14.md) | Menus, settings and branding | Logo and branding, main menu, lobby, full settings with rebinding, loading screens and a first-launch flow. |
-| [v0.0.15](v0.0.15.md) | Economy and content depth | Ink and rubber balls as real resources, anti-snowball upkeep and caps, more missions, multiplayer world events and server-side progression. New aircraft: Lightning, Thug. |
-| [v0.0.16](v0.0.16.md) | Advanced multiplayer | AI escorts, mission director bounties and rivalries, cooperation offers, deeper raids, reputation, social features with mute and report, anti-farming. New aircraft: Ghost, Specter. |
-| [v0.0.17](v0.0.17.md) | World scale and environments | 12 to 16 territories, new environments, interest-based network updates, regional servers and level of detail. New aircraft: Jumper, Wasp. |
-| [v0.0.18](v0.0.18.md) | Customization and social | Cosmetic-only aircraft and territory customization, earned cosmetics, inventory, friends and small alliances. New aircraft: Hawk. |
-| [v0.0.19](v0.0.19.md) | Public readiness | Accounts, matchmaking, the campaign lifecycle, moderation, abuse prevention, analytics, legal compliance and scalable infrastructure. |
-| [v0.0.20](v0.0.20.md) | Release candidate | LiveOps tools, shop infrastructure behind a disabled flag, tutorial retune, browser matrix, support channels and feature freeze. |
-| [v0.1.0](v0.1.0.md) | First public release | Staged testing rounds after 0.0.20; only fixes and balance changes ship. |
+| [v0.0.10](v0.0.10.md) | Player identity and the database | **Done after phase 3** (closed): device tokens, invites, transfer codes, one connection per player, PostgreSQL with migrations and an idempotent ledger. Its later phases moved to v0.0.12 to v0.0.14. |
+| [v0.0.11](v0.0.11.md) | Art integration and controller support | **Coding done:** the 16-desk classroom, 11 aircraft, custom buildings, themed desks, controller support, tutorial, performance. Its hardware checks and playtest move to v0.0.14. |
+| [v0.0.12](v0.0.12.md) | Persistent, portable bases | A base belongs to the player and is placed on any desk; every paper change through the ledger; production only while online; dearer planes and slower paper; saved planes, missions and progress; fairness timers that survive restarts; usernames and "{username}'s desk". |
+| [v0.0.13](v0.0.13.md) | Sessions | Timed sessions with a capacity, several at once; random desk placement; the territory lifecycle (draining, empty, open, AI-held); raids that finish even if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and logs. |
+| [v0.0.14](v0.0.14.md) | **Going live** | **The whole multiplayer system on the internet:** the server and database on Railway, the game on Vercel, invite-only access, a minimal admin endpoint, daily backups with a tested restore, logs and an uptime check, the F8 feedback log, tests at scale, the first online playtest, and a **step-by-step setup guide for the developer**. |
+| [v0.0.15](v0.0.15.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. Pencil outlines removed from the 3D world; Medium as the default preset. Raptor finalised. |
+| [v0.0.16](v0.0.16.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. Lancer finalised. |
+| [v0.0.17](v0.0.17.md) | Menus, settings and branding | Logo and branding, main menu, the session lobby, full settings with rebinding, loading screens and a first-launch flow. |
+| [v0.0.18](v0.0.18.md) | Economy and content depth | Ink and rubber balls as real resources, upkeep and caps, more missions, **world events in sessions**, **medals, records and the logbook in multiplayer**, stealth. Lightning and Thug finalised. |
+| [v0.0.19](v0.0.19.md) | Advanced multiplayer | AI escorts, bounties and rivalries, **three kinds of raid (bombing, strike, challenge)**, **alliances for a session**, **escorting real players**, reputation, social features with mute and report, anti-farming. Ghost and Specter finalised. |
+| [v0.0.20](v0.0.20.md) | World scale and environments | **Sessions of up to 32 players** on larger layouts, new environments, interest-based network updates, regional servers, level of detail, the hover mode; Jumper hover, **Wasp and Hawk** helicopters. |
+| [v0.0.21](v0.0.21.md) | Customization and social | Cosmetic-only aircraft and desk customization, earned cosmetics, inventory, friends, optional persistent squads. |
+| [v0.0.22](v0.0.22.md) | Public readiness | Accounts alongside guests, matchmaking across servers and regions, sessions at scale, moderation as server APIs, abuse prevention, analytics, legal compliance, production infrastructure. |
+| [v0.0.23](v0.0.23.md) | **Admin dashboard** | A secure admin web app: live sessions and server health, player support with paper history, moderation queue, feedback, economy, LiveOps (events, news, patch notes, maintenance), backups, an audit log. |
+| [v0.0.24](v0.0.24.md) | Release candidate | Shop infrastructure behind a disabled flag, tutorial retune (and a possible tutorial mode), browser matrix, support channels, feature freeze. |
+| [v0.1.0](v0.1.0.md) | First public release | Staged testing rounds after 0.0.24; only fixes and balance changes ship. |
 
 ## Aircraft roster
 
-Thirteen aircraft, each a folded-paper interpretation of a real aircraft, arrive across the versions
-(full table in [GDD §5.3](../GDD.md#53-aircraft-roster)):
+Thirteen aircraft, each a folded-paper interpretation of a real aircraft (full table in
+[GDD §5.3](../GDD.md#53-aircraft-roster)). Eleven arrived together in v0.0.11 with provisional
+stats; later versions finalise their roles and stats, and the two helicopters arrive with the hover
+mode:
 
-| Version | Aircraft | Running total |
-|---|---|---|
-| v0.0.11 | Swift (F-16, basic fighter and new starter), Falcon (Su-57, agile stealth fighter), Dart (SR-71, high-speed reconnaissance), Widewing (B-52, heavy bomber): the existing four, remodelled and re-roled. Shadow and Courier are dropped. | 4 |
-| v0.0.12 | Raptor (F-22, air superiority) | 5 |
-| v0.0.13 | Lancer (B-1B, supersonic bomber) | 6 |
-| v0.0.15 | Lightning (F-35, stealth multirole), with the radar signature and stealth system; Thug (A-10, ground attack) | 8 |
-| v0.0.16 | Ghost (B-2, stealth bomber), Specter (RQ-4, surveillance drone) | 10 |
-| v0.0.17 | Jumper (AV-8B, VTOL fighter), with the hover flight mode; Wasp (AH-6, light attack helicopter) | 12 |
-| v0.0.18 | Hawk (AH-64, heavy attack helicopter) | 13 |
-
-v0.0.14, v0.0.19 and v0.0.20 add no aircraft (v0.0.20 is the feature freeze).
+| Version | Aircraft |
+|---|---|
+| v0.0.11 | In the game: Swift (starter and emergency plane), Falcon, Dart, Widewing, Raptor, Lancer, Lightning, Thug, Ghost, Specter, Jumper |
+| v0.0.12 | Every aircraft dearer to fold (the developer tunes stats later) |
+| v0.0.15 | Raptor finalised |
+| v0.0.16 | Lancer finalised |
+| v0.0.18 | Lightning (with the stealth system) and Thug finalised |
+| v0.0.19 | Ghost and Specter finalised |
+| v0.0.20 | Jumper gets its hover mode; Wasp and Hawk (helicopters) added: 13 in all |
 
 ## Why this order
 
-1. **Persistence and the private alpha come first** so the developer and a friend play on a real
-   server from v0.0.10 onward, and every later version is tested by two real players.
-2. **Art and controllers come next** because they complete the look and the input model that the
-   UI, audio and menu revamps are designed around.
-3. **The economy (v0.0.15) comes before advanced multiplayer (v0.0.16)** because bounties, escorts
-   and raid losses depend on the final resource set, and rebalancing a live economy after launch
-   is costly.
-4. **Public-facing systems (v0.0.19) come late** so accounts, moderation and matchmaking are built
-   for the finished game, but before strangers arrive.
-5. **The cosmetic shop is built in v0.0.20 but stays disabled** until retention is proven after
-   the public release (GDD §14).
+1. **Online first.** v0.0.12 to v0.0.14 finish the multiplayer server for the new design and put
+   it on the internet, so the developer and a friend play from their homes and every later
+   version is tested online.
+2. **Presentation next** (v0.0.15 to v0.0.17): the UI, audio and menus are built around the
+   finished input model (v0.0.11) and the session flow (v0.0.13).
+3. **The economy (v0.0.18) comes before advanced multiplayer (v0.0.19)** because bounties, escorts,
+   challenges and raid losses depend on the final resource set.
+4. **Scale (v0.0.20) after the systems it scales:** 32-player sessions, regions and helicopters.
+5. **Public-facing systems come late** (v0.0.22), so accounts, matchmaking and moderation are built
+   for the finished game, followed by **the admin dashboard (v0.0.23)** to run them, before
+   strangers arrive.
+6. **The cosmetic shop is built in v0.0.24 but stays disabled** until retention is proven after the
+   public release (GDD §14).
 
 ## What the developer supplies
 
 | Version | Developer input |
 |---|---|
-| v0.0.10 | Hosting and database accounts, the invited friend, the acceptance playtest |
-| v0.0.11 | Licensed Synty packs, approval of aircraft and building designs, a controller for hardware testing |
-| v0.0.12 | Approval of the UI style and icon set |
-| v0.0.13 | Commissioned or licensed music and sound effects, with licences |
-| v0.0.14 | Logo, branding approval, credits list |
-| v0.0.15 to v0.0.18 | Balance and design approval, playtesting |
-| v0.0.19 | Legal texts (privacy policy, terms), OAuth app registrations, production infrastructure budget |
-| v0.0.20 | Payment provider choice (kept disabled), support channel setup |
+| v0.0.12 | Approval of the price and production retune, the username rules and the goofy desk names |
+| v0.0.13 | Approval of the session length and capacity and the lifecycle timers |
+| v0.0.14 | Railway, Cloudflare and UptimeRobot accounts (following the setup guide), the invited friend, the online playtest, a real controller and two test computers |
+| v0.0.15 | Approval of the UI style and icon set |
+| v0.0.16 | Commissioned or licensed music and sound effects, with licences |
+| v0.0.17 | Logo, branding approval, credits list |
+| v0.0.18 to v0.0.21 | Balance and design approval, aircraft stats, playtesting |
+| v0.0.22 | Legal texts (privacy policy, terms), OAuth app registrations, production infrastructure budget |
+| v0.0.23 | Admin roles, two-factor setup, a week of using the dashboard |
+| v0.0.24 | Payment provider choice (kept disabled), support channel setup |
 | v0.1.0 | Tester recruitment, go/no-go decision |
+
+## Decisions of 2026-11-02
+
+The developer's answers at v0.0.10's checkpoint and after v0.0.11, and where each one is built:
+
+| Topic | Decision | Built in |
+|---|---|---|
+| Bases | A base belongs to the player and travels with them; each session places it on a random free desk, exactly as it was left | v0.0.12, v0.0.13 |
+| Production | Only while the player is online in a session; slower overall | v0.0.12 |
+| Prices | All aircraft dearer to fold; the developer tunes stats later | v0.0.12 |
+| Names | Players choose a username; desks are "{username}'s desk"; AI desks get goofy names ("Billy's desk") | v0.0.12 |
+| Public ids | Kept (random, reveal nothing); usernames are what players see | v0.0.12 |
+| Transfer codes | Using one adds a device; the old one keeps working; the developer can log out every device | v0.0.10 (done) |
+| Sessions | Timed sessions holding 16 to 32 players, several at once; players come and go | v0.0.13, v0.0.20 |
+| Empty desks | Empty for a gap after a player leaves, then open to players, then the AI after a longer wait; a player replaces an AI desk at once | v0.0.13 |
+| AI desks | No fixed AI desk: the AI holds whichever desks players don't | v0.0.13 |
+| Practice targets | Removed from sessions; maybe a tutorial mode later | v0.0.13, v0.0.24 |
+| Flight across disconnects | The proposed rules; no fuel, a player can always land, rearm and carry on | v0.0.13 |
+| Raid when the defender leaves | It continues normally with normal losses; their defenses stay active until it is settled; then the desk's gap starts; no new raids on players who are away | v0.0.13 |
+| Damaging bases | Only through a raid card; raids can be bombing, a strike on infrastructure, or a challenge to a dogfight that costs paper if declined | v0.0.19 |
+| Teams | Free-for-all for now; alliances that last only for a session; escorting real players | v0.0.19 |
+| PvP values | Kept for the alpha, tuned from the playtests and the feedback log | v0.0.14 onward |
+| Look | No pencil strokes or borders: the normal 3D look | v0.0.15 |
+| Synty | Not bought; the developer's own models cover the main assets | v0.0.11 |
+| Hosting | The game on Vercel, the server and database on Railway (cheap, reliable, WebSockets), movable later | v0.0.14 |
+| Accounts | Guests and signed-in players play together | v0.0.22 |
+| Admin | A complete admin dashboard before the public launch | v0.0.23 |
+| World events, medals, records, logbook in multiplayer | Yes | v0.0.18 |
