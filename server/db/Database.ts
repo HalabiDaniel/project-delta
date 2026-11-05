@@ -29,9 +29,19 @@ export interface DatabaseOptions {
 const RETRYABLE = new Set(['40001', '40P01']);
 const MAX_ATTEMPTS = 4;
 
+/** Writes since the start (v0.0.14, for the load test): statements and transactions, and their time. */
+export interface WriteStats {
+  writes: number;
+  totalMs: number;
+  maxMs: number;
+}
+
+const WRITE = /^\s*(insert|update|delete|with)\b/i;
+
 export class Database implements Queryable {
   readonly pool: pg.Pool;
   private closed = false;
+  readonly writes: WriteStats = { writes: 0, totalMs: 0, maxMs: 0 };
 
   constructor(
     readonly url: string,
@@ -50,7 +60,16 @@ export class Database implements Queryable {
   }
 
   query<R extends Row = Row>(text: string, params: readonly unknown[] = []): Promise<pg.QueryResult<R>> {
-    return this.pool.query<R>(text, params as unknown[]);
+    if (!WRITE.test(text)) return this.pool.query<R>(text, params as unknown[]);
+    const started = performance.now();
+    return this.pool.query<R>(text, params as unknown[]).finally(() => this.count(started));
+  }
+
+  private count(started: number): void {
+    const ms = performance.now() - started;
+    this.writes.writes++;
+    this.writes.totalMs += ms;
+    this.writes.maxMs = Math.max(this.writes.maxMs, ms);
   }
 
   /**
@@ -59,6 +78,7 @@ export class Database implements Queryable {
    * effects outside the database.
    */
   async transaction<T>(work: (tx: Queryable) => Promise<T>, isolation: 'read committed' | 'repeatable read' | 'serializable' = 'read committed'): Promise<T> {
+    const started = performance.now();
     for (let attempt = 1; ; attempt++) {
       const client = await this.pool.connect();
       let broken = false;
@@ -66,6 +86,7 @@ export class Database implements Queryable {
         await client.query(`begin isolation level ${isolation}`);
         const result = await work(client);
         await client.query('commit');
+        this.count(started);
         return result;
       } catch (error) {
         try {

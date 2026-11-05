@@ -807,8 +807,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
   }
 
+  /** How regularly the simulation interval fires (v0.0.14 load test): real seconds between calls. */
+  readonly ticks = { count: 0, totalGap: 0, maxGap: 0 };
+
   /** Real time passed: as many fixed steps as it holds. */
   update(seconds: number): void {
+    this.ticks.count++;
+    this.ticks.totalGap += seconds;
+    this.ticks.maxGap = Math.max(this.ticks.maxGap, seconds);
     this.accumulator = Math.min(this.accumulator + seconds, MAX_CATCH_UP);
     while (this.accumulator >= NET.step) {
       this.world.step(NET.step);

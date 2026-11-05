@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "loadtest": "tsx server/loadtest.ts",
+    "loadtest:remote": "tsx server/loadtest-remote.ts",
     "bots": "tsx server/bots/run.ts",
     "admin": "tsx server/admin.ts",
     "db:migrate": "tsx server/db/cli.ts",

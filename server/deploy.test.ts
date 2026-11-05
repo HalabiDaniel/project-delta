@@ -180,4 +180,17 @@ describe('the admin endpoint', () => {
     await wait(100);
     expect(room.world.pilots.size).toBe(0);
   });
+
+  it('reports step and tick timing, memory and writes for the load test', async () => {
+    const { room } = await enter('Ann');
+    await wait(200);
+    const body = (await (await admin('stats?reset=1')).json()) as { memory: { rssMB: number }; store: string; writes: unknown; sessions: Array<Record<string, number | string>> };
+    expect(body.memory.rssMB).toBeGreaterThan(0);
+    expect(body.store).toBe('memory');
+    expect(body.writes).toBeNull();
+    expect(body.sessions[0]).toMatchObject({ id: room.roomId, players: 1 });
+    expect(body.sessions[0].steps).toBeGreaterThan(0);
+    expect(body.sessions[0].ticks).toBeGreaterThan(0);
+    expect(room.ticks.maxGap).toBeLessThan(0.2);
+  });
 });

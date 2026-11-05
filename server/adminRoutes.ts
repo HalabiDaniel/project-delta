@@ -2,7 +2,9 @@ import { createEndpoint, createRouter, matchMaker } from '@colyseus/core';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { log } from './log';
 import { RateLimit } from './RateLimit';
+import { services } from './services';
 import { sessions } from './sessions/directory';
+import { PgStore } from './store/PgStore';
 import { timeLeft } from './sessions/rules';
 import type { WorldRoom } from './WorldRoom';
 
@@ -16,6 +18,9 @@ import type { WorldRoom } from './WorldRoom';
  *                                                          they can't join again for `minutes` (default 10)
  *   POST /admin/end   {"session", "seconds"?, "reason"?}    end a session `seconds` from now (default 60), with notice
  *   POST /admin/desk  {"session", "desk"}                  free a desk stuck in the wrong state
+ *   GET  /admin/stats[?reset=1]                            server step and tick timing per session,
+ *                                                          database writes, memory (the load test reads it);
+ *                                                          reset=1 starts the maxima over
  *
  * From the developer's computer, `npm run admin -- live …` calls these (server/admin.ts).
  */
@@ -86,6 +91,26 @@ export function adminRoutes(adminKey: string | null) {
       });
       log('info', 'admin.sessions', { sessions: out.length });
       return ctx.json({ sessions: out }, { headers: NO_STORE });
+    }),
+    adminStats: createEndpoint('/admin/stats', { method: 'GET' }, async (ctx) => {
+      const no = refuse(ctx as unknown as Ctx, 'stats');
+      if (no) return no as Response;
+      const reset = String(input(ctx as unknown as Ctx).reset ?? '') === '1';
+      const store = services().store;
+      const db = store instanceof PgStore ? store.db.writes : null;
+      const rooms = sessions().map((s) => {
+        const r = room(s.id);
+        const out = r ? { id: s.id, players: s.players, steps: r.world.perf.steps, stepMs: r.world.perf.totalMs, stepMaxMs: r.world.perf.maxMs, ticks: r.ticks.count, tickGapS: r.ticks.totalGap, tickGapMaxS: r.ticks.maxGap } : { id: s.id, players: s.players };
+        if (r && reset) {
+          r.world.perf.maxMs = 0;
+          r.ticks.maxGap = 0;
+        }
+        return out;
+      });
+      const db0 = db ? { ...db } : null;
+      if (db && reset) db.maxMs = 0;
+      const m = process.memoryUsage();
+      return ctx.json({ at: Date.now(), uptime: Math.round(process.uptime()), memory: { rssMB: Math.round(m.rss / 1e6), heapMB: Math.round(m.heapUsed / 1e6) }, store: store.kind, writes: db0, sessions: rooms }, { headers: NO_STORE });
     }),
     adminKick: createEndpoint('/admin/kick', { method: 'POST' }, async (ctx) => {
       const no = refuse(ctx as unknown as Ctx, 'kick');
