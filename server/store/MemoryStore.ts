@@ -12,6 +12,7 @@ import {
   type MissionOutcome,
   type ProgressRecord,
   type PvpRecord,
+  cleanDesks,
   type SessionRecord,
   type SessionRecordStatus,
   type UsernameResult,
@@ -386,7 +387,7 @@ export class MemoryStore implements Store {
 
 function copySession(r: SessionRecord): SessionRecord {
   const d = (x: Date | null) => (x ? new Date(x) : null);
-  return { ...r, createdAt: new Date(r.createdAt), startedAt: d(r.startedAt), endsAt: d(r.endsAt), endedAt: d(r.endedAt) };
+  return { ...r, createdAt: new Date(r.createdAt), startedAt: d(r.startedAt), endsAt: d(r.endsAt), endedAt: d(r.endedAt), desks: cleanDesks(r.desks) };
 }
 
 function publicInvite(i: InviteRecord & { codeHash: string }): InviteRecord {

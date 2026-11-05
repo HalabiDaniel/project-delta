@@ -4,7 +4,7 @@ import { ROOM } from '../src/net/protocol';
 import { ConfigError, serverConfig } from './config';
 import { Identity } from './identity/Identity';
 import { setServices } from './services';
-import { setSessionDefaults } from './sessions/directory';
+import { restoreSessions, setSessionDefaults, shutdownAll } from './sessions/directory';
 import { sessionRoutes } from './sessions/routes';
 import { openStore } from './store/open';
 import { WorldRoom } from './WorldRoom';
@@ -52,12 +52,16 @@ const server = defineServer({
   transport: new WebSocketTransport({ pingInterval: 3000, pingMaxRetries: 3 }),
   greet: false,
 });
-// After the rooms have closed: release the database.
+// SIGTERM / SIGINT: every session settles raids and missions, saves every base and closes, telling
+// its players the server is restarting; then the rooms close and the database is released.
+server.onBeforeShutdown(() => shutdownAll());
 server.onShutdown(() => store.close());
 
 if (config.latency > 0) server.simulateLatency(config.latency);
 
 await server.listen(config.port);
+// The sessions that were running before this start (a restart, or a crash) come back for a while.
+await restoreSessions(store).catch((error) => console.error('[sessions] restore failed:', error));
 console.log(
   `paperwars.io multiplayer server on ws://localhost:${config.port} (store: ${store.kind}, access: ${config.access})` +
     (config.latency > 0 ? ` (simulated latency ${config.latency} ms)` : ''),

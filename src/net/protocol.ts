@@ -66,6 +66,8 @@ export interface TransferDTO {
 export const CLOSE_TAKEN_OVER = 4011;
 /** Close code for the end of a session: the results card stays up, with "Join next session". */
 export const CLOSE_SESSION_ENDED = 4012;
+/** Close code for a server restart (v0.0.13): the session comes back in a moment; rejoin it. */
+export const CLOSE_RESTARTING = 4013;
 
 // ---- Sessions (v0.0.13) ----------------------------------------------------------------------------
 

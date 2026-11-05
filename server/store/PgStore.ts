@@ -15,6 +15,7 @@ import {
   type MissionOutcome,
   type ProgressRecord,
   type PvpRecord,
+  cleanDesks,
   type SessionRecord,
   type SessionRecordStatus,
   type UsernameResult,
@@ -443,12 +444,12 @@ export class PgStore implements Store {
 
   async recordSession(r: SessionRecord): Promise<void> {
     await this.db.query(
-      `insert into sessions (id, title, capacity, status, peak_players, created_at, started_at, ends_at, ended_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `insert into sessions (id, title, capacity, status, peak_players, created_at, started_at, ends_at, ended_at, desks)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        on conflict (id) do update set title = excluded.title, capacity = excluded.capacity, status = excluded.status,
          peak_players = greatest(sessions.peak_players, excluded.peak_players), started_at = excluded.started_at,
-         ends_at = excluded.ends_at, ended_at = excluded.ended_at`,
-      [r.id, r.title, r.capacity, r.status, r.peakPlayers, r.createdAt, r.startedAt, r.endsAt, r.endedAt],
+         ends_at = excluded.ends_at, ended_at = excluded.ended_at, desks = excluded.desks`,
+      [r.id, r.title, r.capacity, r.status, r.peakPlayers, r.createdAt, r.startedAt, r.endsAt, r.endedAt, JSON.stringify(cleanDesks(r.desks))],
     );
   }
 
@@ -459,6 +460,7 @@ export class PgStore implements Store {
     return rows.map((r) => ({
       id: String(r.id), title: String(r.title), capacity: Number(r.capacity), status: r.status as SessionRecordStatus, peakPlayers: Number(r.peak_players),
       createdAt: r.created_at as Date, startedAt: (r.started_at as Date | null) ?? null, endsAt: (r.ends_at as Date | null) ?? null, endedAt: (r.ended_at as Date | null) ?? null,
+      desks: cleanDesks(r.desks),
     }));
   }
 

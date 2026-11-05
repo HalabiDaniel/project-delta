@@ -1080,6 +1080,11 @@ export const SESSION = {
   emptyClose: 120,
   /** The results card stays up this long before the session closes everyone's connection (seconds). */
   resultsHold: 30,
+  /**
+   * After a restart, the sessions that were running are reopened for this long (seconds) with each
+   * player's desk held for them, so reconnecting players land back where they were.
+   */
+  restoreWindow: 300,
 } as const;
 
 /** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */

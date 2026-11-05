@@ -184,6 +184,8 @@ export class MultiplayerGame {
   /** The last session's results (v0.0.13), shown until the player moves on, and who we were in it. */
   results: SessionResultsDTO | null = null;
   private resultsMe: string | null = null;
+  /** Rejoining our session after a server restart. */
+  private rejoining = false;
 
   private readonly dressings = new Map<string, Dressing>();
   private readonly outbox: InputFrame[] = [];
@@ -485,6 +487,7 @@ export class MultiplayerGame {
       this.lobby.showResults(m, this.me);
       this.roomTitle = m.title;
     });
+    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? 'The server is restarting', null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
     room.onMessage('ev', (events: NetEvent[]) => {
@@ -502,7 +505,20 @@ export class MultiplayerGame {
         this.paused = false;
         // The HUD stops drawing without a home: close its menu so the lobby isn't drawn over it.
         if (this.lastHud) this.hud.render({ ...this.lastHud, paused: false, welcome: null });
-        void this.refreshRooms();
+        if (s === 'lost' && this.net.restarting && !this.rejoining) {
+          // The server is restarting (v0.0.13): it reopens our session and holds our desk.
+          this.rejoining = true;
+          this.lobby.showRooms(null, 'The server is restarting. Back in a moment…', 'info');
+          void this.net.rejoin(this.lobby.name).then((ok) => {
+            this.rejoining = false;
+            if (ok) {
+              this.attach();
+              this.hud.alert('ok', 'Back in', null, 'good', 2);
+            } else void this.refreshRooms();
+          });
+          return;
+        }
+        if (!this.rejoining) void this.refreshRooms();
       }
     });
     this.lobby.showClaim(this.claimView());

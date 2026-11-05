@@ -240,6 +240,18 @@ export interface SessionRecord {
   status: SessionRecordStatus;
   /** The most players it held at once. */
   peakPlayers: number;
+  /** Which desk each player's base stood on (player id → territory id), for a restore. */
+  desks: Record<string, string>;
+}
+
+/** A session's desk map, checked: player UUIDs to desk ids, nothing else. */
+export function cleanDesks(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [player, desk] of Object.entries(raw as Record<string, unknown>)) {
+    if (/^[0-9a-f-]{36}$/.test(player) && typeof desk === 'string' && /^T\d{1,2}$/.test(desk)) out[player] = desk;
+  }
+  return out;
 }
 
 export interface Store {

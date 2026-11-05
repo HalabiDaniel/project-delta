@@ -14,7 +14,10 @@ create table sessions (
   created_at    timestamptz not null default now(),
   started_at    timestamptz,
   ends_at       timestamptz,
-  ended_at      timestamptz
+  ended_at      timestamptz,
+  -- Which desk each player's base stood on (player id → territory id), so a session restored after a
+  -- restart puts returning players back where they were.
+  desks         jsonb not null default '{}'::jsonb
 );
 
 create index sessions_status on sessions (status, created_at desc);

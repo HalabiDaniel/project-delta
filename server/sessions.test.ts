@@ -1,10 +1,10 @@
 import { defineRoom, defineServer, matchMaker } from '@colyseus/core';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { CLOSE_SESSION_ENDED, PROTOCOL_VERSION, ROOM, type SessionListing, type SessionResultsDTO } from '../src/net/protocol';
+import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, PROTOCOL_VERSION, ROOM, type SessionListing, type SessionResultsDTO } from '../src/net/protocol';
 import type { WorldState } from '../src/net/schema';
 import { memoryServices, services, setServices } from './services';
-import { sessions, setSessionDefaults } from './sessions/directory';
+import { resetStopping, restoreSessions, sessions, setSessionDefaults, shutdownAll } from './sessions/directory';
 import { sessionRoutes } from './sessions/routes';
 import { WorldRoom } from './WorldRoom';
 
@@ -37,6 +37,7 @@ beforeAll(async () => {
 });
 afterAll(async () => colyseus.shutdown());
 beforeEach(async () => {
+  resetStopping();
   await colyseus.cleanup();
   setServices(memoryServices('open'));
   setSessionDefaults({ ambient: false, seed: 5 });
@@ -177,4 +178,85 @@ describe('sessions', () => {
     expect(state.left).toBeLessThanOrEqual(600);
     expect(state.session).toBe(0);
   });
+
+  it('shuts down gracefully: everyone told, planes home, bases saved, the session recorded with its desks; a restart restores it', async () => {
+    setSessionDefaults({ ambient: false, seed: 5, session: { length: 1200 } });
+    const id = await quick();
+    const ann = await enter(id, 'Ann');
+    const bob = await enter(id, 'Bob');
+    const r = roomOf(id);
+    await eventually(() => [...r.world.pilots.values()].every((p) => !!p.base));
+    const pilots = [...r.world.pilots.values()];
+    const desks = new Map(pilots.map((p) => [p.name, p.home!.id]));
+    const endsAt = r.hour.endsAt;
+    // Ann is in the air.
+    const a = pilots.find((p) => p.name === 'Ann')!;
+    ann.send('cmd', { a: 'aircraft', id: 'swift' });
+    ann.send('cmd', { a: 'build' });
+    await eventually(() => a.state!.phase === 'ready', 4000);
+    ann.send('cmd', { a: 'launch' });
+    await eventually(() => a.state!.phase === 'flying');
+    const told = ann.waitForMessage('restarting');
+    const closed = new Promise<number>((resolve) => ann.onLeave((code) => resolve(code)));
+    await shutdownAll('The server is restarting. Back in a moment.');
+    expect(await told).toMatchObject({ text: expect.stringMatching(/restarting/) });
+    expect(await closed).toBe(CLOSE_RESTARTING);
+    const store = services().store;
+    const players = await store.listPlayers();
+    for (const p of players) expect((await store.base(p.id))?.placement ?? null).toBeNull();
+    const record = (await store.sessionRecords(['interrupted'])).find((x) => x.id === id)!;
+    expect(record).toBeDefined();
+    const byName = new Map(players.map((p) => [p.username ?? p.name, p.id]));
+    expect(record.desks).toEqual({ [byName.get('Ann')!]: desks.get('Ann'), [byName.get('Bob')!]: desks.get('Bob') });
+    // Ann's plane came home rather than being lost.
+    const { economyWorld } = await import('./services');
+    expect((await store.aircraft(await economyWorld(), byName.get('Ann')!)).some((x) => x.type === 'swift')).toBe(true);
+    void bob;
+    await eventually(() => !roomOf(id));
+    // The restart: the same session, the same clock, each desk held for its player.
+    resetStopping();
+    expect(await restoreSessions(store)).toEqual([id]);
+    const back = roomOf(id);
+    expect(back.hour.endsAt).toBe(endsAt);
+    // A stranger can't take a held desk; Ann lands back on hers.
+    const cy = await enter(id, 'Cyd');
+    await eventually(() => [...back.world.pilots.values()].some((p) => p.name === 'Cyd' && !!p.home));
+    const cyDesk = [...back.world.pilots.values()].find((p) => p.name === 'Cyd')!.home!.id;
+    expect([...desks.values()]).not.toContain(cyDesk);
+    void cy;
+  }, 15000);
+
+  it("recovers from a crash: a session left running is restored and every base comes back as last committed", async () => {
+    const store = services().store;
+    setSessionDefaults({ ambient: false, seed: 5 });
+    // Ann played in session "crashed1" on T9 until the process died: her base still has a live
+    // lease held by the dead process, and the session was never closed.
+    const first = await quick();
+    const ann = await colyseus.connectTo(roomOf(first) as never, { ...join, name: 'Ann' });
+    ann.send('hello');
+    const welcome = (await ann.waitForMessage('welcome')) as { token?: string };
+    ann.send('claim', { t: '' });
+    const r = roomOf(first);
+    await eventually(() => [...r.world.pilots.values()].some((p) => !!p.base));
+    const pilot = [...r.world.pilots.values()][0];
+    const accountId = (await store.findPlayers(pilot.id))[0].id;
+    await ann.leave();
+    await eventually(async () => (await store.base(accountId))?.placement === null);
+    const saved = (await store.base(accountId))!.state!;
+    const crashed = 'crashed1';
+    await store.placeBase(accountId, `deadbeef/${crashed}`, 'T9', 120);
+    await store.saveBase(accountId, `deadbeef/${crashed}`, saved, 120);
+    await store.recordSession({ id: crashed, title: 'Classroom 9', capacity: 16, createdAt: new Date(), startedAt: new Date(Date.now() - 60_000), endsAt: new Date(Date.now() + 1800_000), endedAt: null, status: 'open', peakPlayers: 1, desks: { [accountId]: 'T9' } });
+    expect(await restoreSessions(store)).toContain(crashed);
+    // Ann comes back (her browser keeps its device token) and lands on T9 with her base as committed.
+    const again = await colyseus.connectTo(roomOf(crashed) as never, { ...join, name: 'Ann', token: welcome.token });
+    again.send('hello');
+    await again.waitForMessage('welcome');
+    again.send('claim', { t: '' });
+    const claimed = (await again.waitForMessage('claimed')) as { ok: boolean; territory: string };
+    expect(claimed).toMatchObject({ ok: true, territory: 'T9' });
+    expect((await store.base(accountId))?.placement?.holder).not.toMatch(/^deadbeef/);
+    const placed = roomOf(crashed).world.baseSave([...roomOf(crashed).world.pilots.keys()][0])!;
+    expect(placed.buildings.length).toBe(saved.buildings.length);
+  }, 15000);
 });

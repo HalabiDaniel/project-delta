@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
+import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
 
 /**
@@ -14,6 +14,10 @@ export type ConnectionStatus = 'offline' | 'connecting' | 'connected' | 'reconne
 export type { SessionListing };
 
 const RESUME_KEY = 'paperwars.mp.resume';
+/** The session this tab was last in, for rejoining it after a server restart (v0.0.13). */
+const SESSION_KEY = 'paperwars.mp.session';
+/** A restarted server holds each player's desk this long (SESSION.restoreWindow), less a margin. */
+const REJOIN_WINDOW_MS = 280_000;
 /** The device token, per server: it is how the server recognises this browser's player. */
 const TOKEN_KEY = 'paperwars.mp.token';
 /** A stored reconnection token is only worth trying this long after it was saved (the server's grace). */
@@ -38,6 +42,8 @@ export class NetClient {
   rtt = 0;
   /** Why the last connection ended, for the lobby. */
   lastError: string | null = null;
+  /** The server said it is restarting (or the connection broke): the session is worth rejoining. */
+  restarting = false;
   private readonly statusListeners: Array<(s: ConnectionStatus) => void> = [];
   private pinger: ReturnType<typeof setInterval> | null = null;
   readonly sent = { frames: 0, messages: 0 };
@@ -184,13 +190,56 @@ export class NetClient {
       return room;
     } catch {
       this.forget();
+      // A restarted server doesn't know the reconnection token, but reopens the session for a while.
+      const session = this.lastSession();
+      if (!session) return null;
+      try {
+        return await this.join(session, '');
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  /** The session this tab was in, if it ended recently enough to be rejoined after a restart. */
+  lastSession(): string | null {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null') as { id: string; at: number } | null;
+      return saved && Date.now() - saved.at < REJOIN_WINDOW_MS ? saved.id : null;
+    } catch {
       return null;
     }
+  }
+
+  /**
+   * Back into the session we were in after the server restarted: tries every few seconds while the
+   * server comes back (it holds our desk for a few minutes). False if it couldn't.
+   */
+  async rejoin(name: string, until: number = Date.now() + 120_000): Promise<boolean> {
+    const id = this.lastSession();
+    while (id && Date.now() < until) {
+      try {
+        await this.join(id, name);
+        this.restarting = false;
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // The server is up and the session isn't coming back: stop.
+        if (/not found|has ended|full|about to end/i.test(message)) break;
+        this.setStatus('reconnecting');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    this.restarting = false;
+    this.lastError = 'The session could not be rejoined after the restart.';
+    this.setStatus('lost');
+    return false;
   }
 
   /** Leaves the session for good: the server frees our territory. */
   async leave(): Promise<void> {
     this.forget();
+    this.forgetSession();
     const room = this.room;
     this.room = null;
     if (room) await room.leave(true).catch(() => undefined);
@@ -248,7 +297,12 @@ export class NetClient {
     room.onLeave((code, reason) => {
       if (this.room !== room) return;
       this.room = null;
-      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED) this.forget();
+      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED) {
+        this.forget();
+        this.forgetSession();
+      }
+      // A restart (said, or a connection that broke and couldn't be resumed): worth rejoining.
+      this.restarting = code === CLOSE_RESTARTING || (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_SESSION_ENDED && this.lastSession() !== null);
       // The end of a session is no error: the results card is up.
       const clean = code === 4000 || code === CLOSE_SESSION_ENDED;
       if (!clean) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
@@ -284,6 +338,7 @@ export class NetClient {
   private remember(room: Room<unknown, WorldState>): void {
     try {
       sessionStorage.setItem(RESUME_KEY, JSON.stringify({ token: room.reconnectionToken, at: Date.now() }));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ id: room.roomId, at: Date.now() }));
     } catch {
       // Storage blocked: a refresh just starts over.
     }
@@ -292,6 +347,14 @@ export class NetClient {
   /** Keeps the resume token fresh while we're connected (call now and then). */
   touch(): void {
     if (this.room && this.status === 'connected') this.remember(this.room);
+  }
+
+  private forgetSession(): void {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore
+    }
   }
 
   private forget(): void {

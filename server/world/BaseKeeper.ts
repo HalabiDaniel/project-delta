@@ -3,8 +3,12 @@ import type { BaseState, PlaceResult, Store } from '../store/Store';
 
 /** How long a placement holds without a save (s). A crashed server's bases are free again after this. */
 export const BASE_LEASE = 120;
-/** How often a room saves the bases standing in it (s), renewing their leases. */
-export const BASE_SAVE_EVERY = 15;
+/**
+ * How often a room saves the bases standing in it (s), renewing their leases: building health between
+ * hits and other frequent changes (v0.0.13: every 5 s). Paper, purchases, builds, repairs, raids and
+ * missions are written at once, in transactions.
+ */
+export const BASE_SAVE_EVERY = 5;
 
 /** This server process, so two processes (a restart overlapping the old one) never share a holder. */
 export const SERVER_INSTANCE = randomUUID().slice(0, 8);

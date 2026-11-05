@@ -1,5 +1,6 @@
 import { Room, type Client, type Deferred } from '@colyseus/core';
 import {
+  CLOSE_RESTARTING,
   CLOSE_SESSION_ENDED,
   CLOSE_TAKEN_OVER,
   DESK_STATES,
@@ -29,7 +30,7 @@ import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '.
 import { ECONOMY, PVP, SESSION } from '../src/config';
 import { SESSION_KEY, ensureSpare, mayClose, register, unregister, type SessionHandle } from './sessions/directory';
 import { SessionClock, spokenTime, type SessionSummary } from './sessions/rules';
-import type { SessionRecord } from './store/Store';
+import { IncompatibleBaseError, type SessionRecord } from './store/Store';
 import type { PaperChange } from './world/Paper';
 import { randomUUID } from 'node:crypto';
 import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper';
@@ -45,6 +46,8 @@ export interface RoomOptions extends ServerWorldOptions {
   title?: string;
   /** The session's settings where they differ from SESSION (tests and tools: short, small sessions). */
   session?: Partial<SessionSettings>;
+  /** A session that was running before a restart, reopened (v0.0.13). */
+  restore?: SessionRecord;
 }
 
 /** What a session runs by (SESSION's values unless the server says otherwise). */
@@ -149,7 +152,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   /** The session's time: started by the first player, warnings, joining closing, the end. */
   hour!: SessionClock;
   private title = 'Classroom';
-  private readonly createdAt = new Date();
+  private createdAt = new Date();
   /** When the last player left (clock time), while nobody is here. */
   private emptySince: number | null = null;
   private peak = 0;
@@ -160,6 +163,12 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   private readonly earned = new Map<string, number>();
   /** The results, once the session has ended. */
   results: SessionResultsDTO | null = null;
+  /** The server is shutting down: nobody is placed, and the session is recorded as interrupted. */
+  private stopping = false;
+  private interrupted = false;
+  /** After a restart: each returning player's desk (account id → desk), held until `restoreUntil`. */
+  private readonly reservations = new Map<string, string>();
+  private restoreUntil = 0;
 
   onCreate(options: RoomOptions = {}): void {
     // Sessions are opened by the server alone: its seed, protection time and length are its own.
@@ -171,6 +180,18 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.hour = new SessionClock(this.settings.length);
     this.title = cleanName(options.title, `Classroom ${++opened}`);
     this.emptySince = Date.now();
+    const restore = options.restore;
+    if (restore) {
+      // The same session as before the restart: its id (bases it held are recognised by it), its
+      // clock, and every player's desk held for them for a while.
+      this.roomId = restore.id;
+      this.title = cleanName(restore.title, this.title);
+      this.createdAt = restore.createdAt;
+      this.peak = restore.peakPlayers;
+      if (restore.startedAt && restore.endsAt) this.hour.resume(restore.startedAt.getTime(), restore.endsAt.getTime());
+      for (const [player, desk] of Object.entries(restore.desks)) this.reservations.set(player, desk);
+      this.restoreUntil = Date.now() + SESSION.restoreWindow * 1000;
+    }
     register(this.roomId, this);
     this.world = new ServerWorld(options);
     this.keeper = new BaseKeeper(() => services().store, `${SERVER_INSTANCE}/${this.roomId}`);
@@ -229,7 +250,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (options?.v !== PROTOCOL_VERSION) throw refusal(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
     if (this.results) throw refusal('This session has ended. Join the next one.');
     const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
-    const refused = this.seatRefusal(auth.player.publicId);
+    const refused = this.seatRefusal(auth.player.publicId, auth.player.id);
     if (refused) throw refusal(refused);
     this.usernameNotes.set(auth.player.publicId, await this.chooseUsername(auth.player, options.username ?? options.name));
     return auth;
@@ -291,7 +312,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const id = player.publicId;
     const returning = this.world.pilots.get(id);
     // Checked again here: two new players may have passed onAuth at the same moment.
-    const refused = this.seatRefusal(id);
+    const refused = this.seatRefusal(id, player.id);
     if (refused) throw refusal(refused);
     // The same player in another room on this server leaves it; in this room, the older connection is closed.
     const elsewhere = WorldRoom.presence.get(id);
@@ -466,7 +487,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id || !account || this.placing.has(id)) return;
     const reply = (territory: string, error: string | null) => client.send('claimed', { ok: error === null, territory, error });
     if (this.results || !this.world.pilots.has(id)) return reply(wanted, 'This session has ended.');
-    const taken = new Set(this.placing.values());
+    if (this.stopping) return reply(wanted, 'The server is restarting. Back in a moment.');
+    // Desks being loaded for someone, and desks held for players coming back after a restart.
+    const reserved = this.reservedDesk(account.id);
+    const taken = new Set([...this.placing.values(), ...this.heldDesks(account.id)]);
     let desk: string;
     if (services().chooseDesk) {
       const refused = this.world.claimRefusal(id, wanted) ?? (taken.has(wanted) ? 'taken' : null);
@@ -475,8 +499,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     } else {
       const refused = this.world.pilots.get(id)?.home ? 'already claimed' : null;
       if (refused) return reply(wanted, refused);
-      // A random desk open to players (v0.0.13): an open one or the AI's, out of sight if possible.
-      const picked = this.world.pickDesk(taken);
+      // Back after a restart: the desk they were on. Otherwise a random desk open to players
+      // (v0.0.13): an open one or the AI's, out of sight if possible.
+      const picked = reserved && this.world.claimRefusal(id, reserved) === null && !taken.has(reserved) ? reserved : this.world.pickDesk(taken);
       if (!picked) return reply(wanted, 'Every desk is taken or between players right now. Try again in a moment.');
       desk = picked;
     }
@@ -485,7 +510,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.placing.set(id, desk);
     try {
       const worldId = await economyWorld();
-      const placed = await this.keeper.place(account.id, desk);
+      let placed = await this.keeper.place(account.id, desk);
+      // Held by this very session before a crash (the same id, an older process): take it back.
+      const before = placed.status === 'elsewhere' ? placed.placement.holder : null;
+      if (before && before.endsWith(`/${this.roomId}`) && !before.startsWith(`${SERVER_INSTANCE}/`)) {
+        await this.keeper.queue(account.id, (store) => store.releaseBase(account.id, before));
+        placed = await this.keeper.place(account.id, desk);
+        console.log(`[room ${this.roomId}] took back the base of ${id} from before the restart`);
+      }
       if (placed.status === 'elsewhere') {
         console.warn(`[room ${this.roomId}] base of ${id} is still held by ${placed.placement.holder}`);
         return reply(desk, 'Your base is still in another classroom. Try again in a minute.');
@@ -527,12 +559,14 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       // A new player's starting base is saved at once.
       if (!save) this.saveBase(id);
       reply(desk, null);
+      this.reservations.delete(account.id);
       this.sendPrivate(client, true);
       void this.refreshMetadata();
+      this.recordSession();
       console.log(`[room ${this.roomId}] ${account.name} (${id}): ${save ? 'base placed' : 'new base'} on ${desk}`);
     } catch (error) {
       console.error(`[room ${this.roomId}] could not load the base of ${id}:`, error);
-      reply(desk, "Your base couldn't be loaded right now. Try again in a moment.");
+      reply(desk, error instanceof IncompatibleBaseError ? 'Your base was saved by a newer version of the game than this server runs. It is kept safe; the server needs updating.' : "Your base couldn't be loaded right now. Try again in a moment.");
     } finally {
       this.placing.delete(id);
     }
@@ -913,9 +947,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   // ---- The session (v0.0.13) --------------------------------------------------------------------
 
   /** Why player `id` can't take a seat now (null: they can). Players already in it always can. */
-  private seatRefusal(id: string): string | null {
+  private seatRefusal(id: string, account: string): string | null {
     if (this.results) return 'This session has ended. Join the next one.';
-    if (this.world.pilots.has(id)) return null;
+    if (this.stopping) return 'The server is restarting. Back in a moment.';
+    if (this.world.pilots.has(id) || this.reservedDesk(account)) return null;
     if (this.hour.status !== 'open') return 'This session is about to end. Join another one.';
     if (this.world.pilots.size >= this.settings.capacity) return `This session is full (${this.settings.capacity} players).`;
     return null;
@@ -950,7 +985,13 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         this.endSession(null);
       }
     }
-    if (!this.results && this.emptySince !== null && this.world.pilots.size === 0 && this.placing.size === 0 && now - this.emptySince >= this.settings.emptyClose * 1000) {
+    if (this.restoreUntil > 0 && now >= this.restoreUntil) {
+      // Players who didn't come back in time are placed normally next time.
+      this.restoreUntil = 0;
+      this.reservations.clear();
+      this.recordSession();
+    }
+    if (!this.results && !this.stopping && this.restoreUntil === 0 && this.emptySince !== null && this.world.pilots.size === 0 && this.placing.size === 0 && now - this.emptySince >= this.settings.emptyClose * 1000) {
       if (mayClose(this.roomId, now)) {
         console.log(`[room ${this.roomId}] empty for ${this.settings.emptyClose} s: closing`);
         void this.disconnect();
@@ -1000,9 +1041,66 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     return this.results;
   }
 
+  /** A desk held for this player after a restart, while the restore window lasts. */
+  private reservedDesk(account: string): string | null {
+    return this.restoreUntil > Date.now() ? (this.reservations.get(account) ?? null) : null;
+  }
+
+  /** Desks held for other players coming back after a restart. */
+  private heldDesks(except: string): string[] {
+    if (this.restoreUntil <= Date.now()) return [];
+    return [...this.reservations].filter(([player]) => player !== except).map(([, desk]) => desk);
+  }
+
+  /** Which desk each player's base stands on (account id → desk), with any still held after a restart. */
+  private desks(): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (this.restoreUntil > Date.now()) for (const [player, desk] of this.reservations) out[player] = desk;
+    for (const [id, p] of this.world.pilots) {
+      const account = this.accounts.get(id);
+      if (account && p.home) out[account.id] = p.home.id;
+    }
+    return out;
+  }
+
+  /**
+   * The server is stopping (SIGTERM, SIGINT): nobody new is placed, everyone is told, raids and
+   * missions are settled as at a session end, every base is saved and packed, and the session is
+   * recorded as interrupted with each player's desk, so it can be reopened after the restart.
+   */
+  async shutdown(reason: string): Promise<void> {
+    if (this.stopping) return;
+    this.stopping = true;
+    if (!this.results) {
+      this.interrupted = true;
+      this.world.emit({ t: 'news', text: reason, tone: 'bad' });
+      this.broadcast('restarting', { text: reason });
+      // The desks as they stand, before the bases are packed.
+      await this.writeSession(this.sessionRecord(null));
+      this.world.wrapUp();
+      this.flushPaper();
+      for (const id of [...this.world.pilots.keys()]) this.removePlayer(id);
+    }
+    await this.keeper.settle();
+    console.log(`[room ${this.roomId}] shut down: every base saved`);
+    await this.disconnect(CLOSE_RESTARTING);
+  }
+
   /** The session as the database keeps it. */
   private recordSession(endedAt: Date | null = null): void {
-    const record: SessionRecord = {
+    // An interrupted session's record (with its desks) is final until it is restored.
+    if (this.interrupted) return;
+    void this.writeSession(this.sessionRecord(endedAt));
+  }
+
+  private writeSession(record: SessionRecord): Promise<void> {
+    return services()
+      .store.recordSession(record)
+      .catch((error) => console.error(`[room ${this.roomId}] could not record the session:`, error));
+  }
+
+  private sessionRecord(endedAt: Date | null): SessionRecord {
+    return {
       id: this.roomId,
       title: this.title,
       capacity: this.settings.capacity,
@@ -1010,11 +1108,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       startedAt: this.hour.startedAt === null ? null : new Date(this.hour.startedAt),
       endsAt: this.hour.endsAt === null ? null : new Date(this.hour.endsAt),
       endedAt,
-      status: this.hour.status,
+      status: this.interrupted ? 'interrupted' : this.hour.status,
       peakPlayers: this.peak,
+      desks: this.desks(),
     };
-    services()
-      .store.recordSession(record)
-      .catch((error) => console.error(`[room ${this.roomId}] could not record the session:`, error));
   }
 }

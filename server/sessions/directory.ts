@@ -1,6 +1,7 @@
 import { matchMaker } from '@colyseus/core';
 import { randomBytes } from 'node:crypto';
 import { ROOM, type SessionListing } from '../../src/net/protocol';
+import type { Store } from '../store/Store';
 import { joinable, mayCloseEmpty, needsSpare, quickPick, timeLeft, type SessionSummary } from './rules';
 
 /**
@@ -16,6 +17,8 @@ import { joinable, mayCloseEmpty, needsSpare, quickPick, timeLeft, type SessionS
 /** What a running session tells the directory about itself. */
 export interface SessionHandle {
   summary(now: number): SessionSummary;
+  /** The server is stopping: settle, save and close (graceful shutdown). */
+  shutdown(reason: string): Promise<void>;
 }
 
 /** Room options only the server can give (a client can't know this key). */
@@ -23,6 +26,8 @@ export const SESSION_KEY = randomBytes(18).toString('base64url');
 
 const live = new Map<string, SessionHandle>();
 let opening: Promise<string> | null = null;
+/** The server is shutting down: no session opens any more. */
+let stopping = false;
 /** Options every session this process opens gets (tests and tools: a seed, short sessions). */
 let defaults: Record<string, unknown> = {};
 
@@ -50,6 +55,7 @@ export function serverOptions<T extends object>(options: T = {} as T): T & { ses
 
 /** Opens a new session and returns its id. Only one opens at a time (two quick joins share it). */
 export function openSession(options: Record<string, unknown> = {}): Promise<string> {
+  if (stopping) return Promise.reject(new Error('The server is restarting. Back in a moment.'));
   if (!opening) {
     opening = matchMaker
       .createRoom(ROOM, serverOptions({ ...defaults, ...options }))
@@ -67,7 +73,7 @@ export async function quickJoin(now: number = Date.now()): Promise<string> {
 
 /** Opens a spare session when every open one is full or closing (called when one changes). */
 export function ensureSpare(now: number = Date.now()): void {
-  if (opening || !needsSpare(sessions(now), now)) return;
+  if (stopping || opening || !needsSpare(sessions(now), now)) return;
   openSession().catch((error) => console.error('[sessions] could not open a new session:', error));
 }
 
@@ -84,4 +90,40 @@ export function listing(now: number = Date.now()): SessionListing[] {
     .filter((s) => s.status !== 'ended')
     .map((s) => ({ id: s.id, title: s.title, players: s.players, capacity: s.capacity, left: Math.round(timeLeft(s, now)), status: s.status, joinable: joinable(s, now) }))
     .sort((a, b) => Number(b.joinable) - Number(a.joinable) || b.players - a.players || b.left - a.left);
+}
+
+/** Graceful shutdown: every session settles, saves and closes, and none opens meanwhile. */
+export async function shutdownAll(reason: string = 'The server is restarting. Back in a moment.'): Promise<void> {
+  stopping = true;
+  await Promise.all([...live.values()].map((h) => h.shutdown(reason).catch((error) => console.error('[sessions] shutdown failed:', error))));
+}
+
+/** For tests: sessions may open again after a simulated shutdown. */
+export function resetStopping(): void {
+  stopping = false;
+}
+
+/**
+ * After a start: the sessions that were running when the server last stopped (shut down, or
+ * crashed) are reopened with their id, their clock and each player's desk, for SESSION.restoreWindow.
+ * One whose time is up, or that nobody was in, is recorded as over instead. Returns the ids reopened.
+ */
+export async function restoreSessions(store: Store, now: number = Date.now()): Promise<string[]> {
+  const out: string[] = [];
+  for (const record of await store.sessionRecords(['open', 'closing', 'interrupted'])) {
+    const over = record.endsAt !== null && record.endsAt.getTime() <= now;
+    const empty = Object.keys(record.desks).length === 0;
+    if (over || empty || live.has(record.id)) {
+      if (!live.has(record.id)) await store.recordSession({ ...record, status: 'ended', endedAt: record.endedAt ?? new Date(now) });
+      continue;
+    }
+    try {
+      const room = await matchMaker.createRoom(ROOM, serverOptions({ ...defaults, restore: record }));
+      out.push(room.roomId);
+      console.log(`[sessions] restored "${record.title}" (${record.id}) for ${Object.keys(record.desks).length} players`);
+    } catch (error) {
+      console.error(`[sessions] could not restore ${record.id}:`, error);
+    }
+  }
+  return out;
 }
