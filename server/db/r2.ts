@@ -86,7 +86,9 @@ export function sign(
 async function send(s: BucketSettings, method: string, key: string, query: Record<string, string> = {}, body: Uint8Array = new Uint8Array()): Promise<Response> {
   const req = sign(s, method, key, query, body);
   const { host: _host, ...headers } = req.headers;
-  const response = await fetch(req.url, { method, headers, body: method === 'PUT' ? (body as Uint8Array<ArrayBuffer>) : undefined });
+  const response = await fetch(req.url, { method, headers, body: method === 'PUT' ? (body as Uint8Array<ArrayBuffer>) : undefined }).catch((error: Error & { cause?: Error }) => {
+    throw new Error(`can't reach the bucket at ${s.endpoint} (${error.cause?.message ?? error.message}): check R2_ENDPOINT`);
+  });
   if (!response.ok && !(method === 'DELETE' && response.status === 404)) {
     const text = await response.text().catch(() => '');
     const code = /<Code>([^<]+)<\/Code>/.exec(text)?.[1];

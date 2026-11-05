@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { log } from '../log';
-import { redactUrl } from './Database';
+import { Database, redactUrl } from './Database';
 import { bucketFromEnv, deleteObject, getObject, listObjects, putObject, type BucketSettings } from './r2';
 
 /**
@@ -20,6 +20,12 @@ import { bucketFromEnv, deleteObject, getObject, listObjects, putObject, type Bu
  *   npm run db:restore -- <key in R2>         a given one (as --list shows it)
  *   npm run db:restore -- ./file.dump         a local file
  *   … -- --yes                                no confirmation prompt (scripts, the drill)
+ *
+ * The restore drill (v0.0.14): with DRILL_DATABASE_URL set (a second, empty database), every backup
+ * is also restored into it straight away and compared with the live database: the same players,
+ * bases, buildings, planes and paper. So every day's backup is known to restore, not just to exist.
+ *
+ *   npm run db:backup -- --drill-only         restore the newest backup into DRILL_DATABASE_URL and compare
  *
  * Restoring replaces every table in DATABASE_URL with the backup's. It asks first, and names the
  * database it is about to overwrite. The server migrates a restored database to its own schema
@@ -101,9 +107,47 @@ export async function backup(args: string[]): Promise<void> {
     const old = expired(await listObjects(b, PREFIX), KEEP_DAYS, at);
     for (const o of old) await deleteObject(b, o.key);
     if (old.length > 0) log('info', 'backup.pruned', { deleted: old.map((o) => o.key), keepDays: KEEP_DAYS });
+    const drillUrl = process.env.DRILL_DATABASE_URL?.trim();
+    if (drillUrl && !(await drill(url, drillUrl, file, key))) process.exitCode = 1;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/** What the drill compares: rows per table, paper in total, and one player in detail. */
+async function census(url: string): Promise<{ tables: Record<string, number>; paper: number; player: { id: string; name: string; paper: number; buildings: string } | null }> {
+  const db = new Database(url, { max: 1 });
+  try {
+    const tables: Record<string, number> = {};
+    for (const t of ['players', 'bases', 'base_buildings', 'balances', 'aircraft', 'transactions', 'missions', 'progress']) {
+      tables[t] = Number((await db.query(`select count(*)::int as n from ${t}`)).rows[0].n);
+    }
+    const paper = Number((await db.query('select coalesce(sum(paper), 0)::bigint as n from balances')).rows[0].n);
+    // The player seen most recently, in detail: their paper and every building of their base.
+    const p = (await db.query(`select p.id, coalesce(p.username, p.display_name) as name from players p order by p.last_seen_at desc, p.id limit 1`)).rows[0];
+    let player = null;
+    if (p) {
+      const bal = Number((await db.query('select coalesce(sum(paper), 0)::bigint as n from balances where player_id = $1', [p.id])).rows[0].n);
+      const b = (await db.query(`select string_agg(slot || ':' || kind || ':' || level || ':' || health, ',' order by slot) as s from base_buildings where player_id = $1`, [p.id])).rows[0];
+      player = { id: String(p.id), name: String(p.name), paper: bal, buildings: String(b?.s ?? '') };
+    }
+    return { tables, paper, player };
+  } finally {
+    await db.close();
+  }
+}
+
+/** Restores `file` into the drill database and compares it with the live one. */
+async function drill(liveUrl: string, drillUrl: string, file: string, name: string): Promise<boolean> {
+  if (new URL(drillUrl).host === new URL(liveUrl).host && new URL(drillUrl).pathname === new URL(liveUrl).pathname) throw new Error('DRILL_DATABASE_URL is the live database: the drill needs a second, separate one.');
+  await run('pg_restore', ['--clean', '--if-exists', '--no-owner', '--no-acl', '--single-transaction', '--exit-on-error', '--dbname', drillUrl, file]);
+  const [live, restored] = await Promise.all([census(liveUrl), census(drillUrl)]);
+  // Players may have played since the dump: a few more rows live is fine, fewer is not.
+  const short = Object.entries(restored.tables).filter(([t, n]) => n === 0 && live.tables[t] > 0 || n > live.tables[t]);
+  const same = JSON.stringify(live) === JSON.stringify(restored);
+  const ok = short.length === 0 && restored.tables.players > 0;
+  log(ok ? 'info' : 'error', 'drill.done', { backup: name, ok, identical: same, live: live.tables, restored: restored.tables, livePaper: live.paper, restoredPaper: restored.paper, restoredPlayer: restored.player, livePlayer: same ? undefined : live.player });
+  return ok;
 }
 
 async function list(): Promise<void> {
@@ -168,6 +212,21 @@ if (mode === 'backup' || mode === 'restore') {
   try {
     if (mode === 'restore') await restore(args);
     else if (args.includes('--list')) await list();
+    else if (args.includes('--drill-only')) {
+      const drillUrl = process.env.DRILL_DATABASE_URL?.trim();
+      if (!drillUrl) throw new Error('DRILL_DATABASE_URL is not set.');
+      const b = bucket();
+      const all = await listObjects(b, PREFIX);
+      if (all.length === 0) throw new Error(`No backups in ${b.bucket}.`);
+      const dir = mkdtempSync(join(tmpdir(), 'paperwars-drill-'));
+      try {
+        const file = join(dir, 'drill.dump');
+        writeFileSync(file, await getObject(b, all[all.length - 1].key));
+        if (!(await drill(databaseUrl(), drillUrl, file, all[all.length - 1].key))) process.exitCode = 1;
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
     else await backup(args);
   } catch (error) {
     log('error', `${mode}.failed`, { error });

@@ -3,7 +3,7 @@
 # is why it carries the PostgreSQL client tools. See docs/SERVER_SETUP.md.
 #
 #   docker build -t paperwars-server .
-#   docker run -p 2567:2567 -e PORT=2567 paperwars-server          # memory store, open access
+#   docker run -p 2567:2567 -e NODE_ENV=development paperwars-server   # memory store, open access
 FROM node:22-bookworm-slim
 
 # pg_dump / pg_restore / psql from the PostgreSQL project's own repository: version 18 reads and
@@ -28,8 +28,7 @@ COPY server ./server
 COPY src ./src
 
 ENV NODE_ENV=production
-# Railway sets PORT; 2567 when run elsewhere.
-ENV PORT=2567
+# Railway gives the port in PORT; elsewhere the server listens on 2567.
 EXPOSE 2567
 # node directly (not npm), so Railway's SIGTERM reaches the server and the graceful shutdown runs.
 CMD ["node", "--import", "tsx", "server/index.ts"]

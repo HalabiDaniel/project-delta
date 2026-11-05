@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { backup, backupKey, expired, restore } from './backup';
+import { setLogSink } from '../log';
 import { Database } from './Database';
 import { migrate } from './migrate';
 import { bucketFromEnv, listObjects, sign } from './r2';
@@ -87,7 +88,7 @@ const hasTools = (() => {
 
 describe.skipIf(!TEST_DATABASE_URL || !hasTools)('a backup and a restore drill (needs TEST_DATABASE_URL and pg_dump)', () => {
   const suffix = Math.random().toString(36).slice(2, 8);
-  const names = [`drill_src_${suffix}`, `drill_dst_${suffix}`];
+  const names = [`drill_src_${suffix}`, `drill_dst_${suffix}`, `drill_auto_${suffix}`];
   const urlOf = (name: string) => {
     const u = new URL(TEST_DATABASE_URL!);
     u.pathname = `/${name}`;
@@ -120,7 +121,18 @@ describe.skipIf(!TEST_DATABASE_URL || !hasTools)('a backup and a restore drill (
     await src.close();
 
     process.env.DATABASE_URL = urlOf(names[0]);
-    await backup([]);
+    // The daily drill: the new backup is restored into the drill database and compared.
+    process.env.DRILL_DATABASE_URL = urlOf(names[2]);
+    const logged: Array<Record<string, unknown>> = [];
+    setLogSink((line) => logged.push(JSON.parse(line)));
+    try {
+      await backup([]);
+    } finally {
+      setLogSink(null);
+      delete process.env.DRILL_DATABASE_URL;
+    }
+    expect(process.exitCode ?? 0).toBe(0);
+    expect(logged.find((l) => l.event === 'drill.done')).toMatchObject({ ok: true, identical: true, restoredPlayer: { name: 'Ann' } });
     const stored = await listObjects(bucketFromEnv()!, 'paperwars/');
     expect(stored).toHaveLength(1);
     expect(stored[0].key).toMatch(/^paperwars\/\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ\.dump$/);
