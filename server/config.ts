@@ -12,6 +12,7 @@
  *   NODE_ENV        "production" makes the checks above strict.
  *   LATENCY         Simulated latency on everything the server sends (ms, testing).
  *   PROTECTION      New-player protection in seconds (testing raids alone).
+ *   SESSION_LENGTH  Session length in seconds (testing the end of a session; default SESSION.length).
  */
 
 export type AccessMode = 'open' | 'invite';
@@ -24,6 +25,7 @@ export interface ServerConfig {
   production: boolean;
   latency: number;
   protection: number | null;
+  sessionLength: number | null;
   /** Problems worth a line in the log (a missing database in development, a default pepper). */
   warnings: string[];
 }
@@ -58,5 +60,7 @@ export function serverConfig(env: Record<string, string | undefined> = process.e
   const latency = Math.max(0, Number(env.LATENCY ?? 0) || 0);
   const protection = env.PROTECTION !== undefined && env.PROTECTION !== '' ? Number(env.PROTECTION) : null;
   if (protection !== null && !Number.isFinite(protection)) throw new ConfigError('PROTECTION must be a number of seconds.');
-  return { port, databaseUrl, pepper, access, production, latency, protection, warnings };
+  const sessionLength = env.SESSION_LENGTH !== undefined && env.SESSION_LENGTH !== '' ? Number(env.SESSION_LENGTH) : null;
+  if (sessionLength !== null && !(Number.isFinite(sessionLength) && sessionLength > 0)) throw new ConfigError('SESSION_LENGTH must be a number of seconds.');
+  return { port, databaseUrl, pepper, access, production, latency, protection, sessionLength, warnings };
 }

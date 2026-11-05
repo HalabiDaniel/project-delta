@@ -224,6 +224,36 @@ export class IncompatibleBaseError extends Error {
   }
 }
 
+/** Where a recorded session stands. `interrupted`: the server stopped while it ran (v0.0.13). */
+export type SessionRecordStatus = 'open' | 'closing' | 'ended' | 'interrupted';
+
+/** A session, as the database keeps it for restoring and for statistics (v0.0.13). */
+export interface SessionRecord {
+  id: string;
+  title: string;
+  capacity: number;
+  createdAt: Date;
+  /** When its first player arrived (its clock started); null while nobody has. */
+  startedAt: Date | null;
+  endsAt: Date | null;
+  endedAt: Date | null;
+  status: SessionRecordStatus;
+  /** The most players it held at once. */
+  peakPlayers: number;
+  /** Which desk each player's base stood on (player id → territory id), for a restore. */
+  desks: Record<string, string>;
+}
+
+/** A session's desk map, checked: player UUIDs to desk ids, nothing else. */
+export function cleanDesks(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [player, desk] of Object.entries(raw as Record<string, unknown>)) {
+    if (/^[0-9a-f-]{36}$/.test(player) && typeof desk === 'string' && /^T\d{1,2}$/.test(desk)) out[player] = desk;
+  }
+  return out;
+}
+
 export interface Store {
   readonly kind: 'memory' | 'postgres';
 
@@ -336,6 +366,13 @@ export interface Store {
    * whoever does when no holder is given (the developer's way out).
    */
   releaseBase(playerId: string, holder?: string): Promise<boolean>;
+
+  // ---- Sessions (v0.0.13) -----------------------------------------------------------------------
+
+  /** Writes the session as it stands (the first call creates it). */
+  recordSession(record: SessionRecord): Promise<void>;
+  /** Sessions in any of `statuses` (all of them without), newest first. */
+  sessionRecords(statuses?: SessionRecordStatus[]): Promise<SessionRecord[]>;
 
   // ---- Health -----------------------------------------------------------------------------------
 

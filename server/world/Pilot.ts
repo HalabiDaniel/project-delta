@@ -44,6 +44,17 @@ export class Pilot {
   connected = true;
   /** World time they dropped (while waiting to reconnect). */
   droppedAt = 0;
+  /**
+   * Gone for good, but their base stays on the desk (draining) until a raid on it is settled
+   * (v0.0.13): nobody escapes a raid by leaving.
+   */
+  leaving = false;
+  /** World time their base was placed (the arrival grace runs from it). */
+  arrivedAt = -Infinity;
+  /** World time their plane last took or dealt damage from or to another player (v0.0.13). */
+  combatAt = -Infinity;
+  /** The plane being lost now is forfeited (its pilot left in combat): nobody earns a kill for it. */
+  forfeit = false;
   readonly joinedAt: number;
   home: Territory | null = null;
   readonly resources = new ResourceManager();

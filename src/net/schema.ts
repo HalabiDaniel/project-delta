@@ -123,6 +123,8 @@ export const TerritoryState = schema(
     claimable: t.boolean().default(true),
     /** "Daniel's desk", or the AI's goofy name for it this session ("Billy's desk"). */
     label: t.string().default(''),
+    /** Its place in the lifecycle (index into DESK_STATES, v0.0.13). */
+    state: t.uint8().default(0),
   },
   'TerritoryState',
 );
@@ -133,6 +135,9 @@ export const WorldState = schema(
     /** Server simulation time in seconds, and the step count. */
     time: t.float64().default(0),
     tick: t.uint32().default(0),
+    /** Seconds of the session left (v0.0.13), and where its clock stands (index into SESSION_STATUSES). */
+    left: t.uint32().default(0),
+    session: t.uint8().default(0),
     players: t.map(PlayerState),
     planes: t.map(PlaneState),
     ai: t.map(AiState),

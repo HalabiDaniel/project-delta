@@ -62,7 +62,7 @@ describe('portable bases', () => {
     }
   });
 
-  it('hands the base back when the player leaves, and the desk returns to the AI', () => {
+  it('hands the base back when the player leaves; the desk is empty for a gap (v0.0.13)', () => {
     const world = quietWorld(6);
     world.join('ann', 'Ann');
     world.claim('ann', 'T5', fromBaseState(toBaseState(livedIn())));
@@ -70,7 +70,8 @@ describe('portable bases', () => {
     expect(world.freeDesks()).not.toContain('T5');
     const packed = world.remove('ann');
     expect(packed).toEqual(before);
-    expect(world.freeDesks()).toContain('T5');
+    expect(world.freeDesks()).not.toContain('T5');
+    expect(world.deskState('T5')).toBe('empty');
     expect(world.network.get('T5-E1')).toBeUndefined();
     expect(world.remove('ann')).toBeNull();
   });

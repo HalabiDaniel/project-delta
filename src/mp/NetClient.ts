@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOSE_TAKEN_OVER, PROTOCOL_VERSION, ROOM, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type TransferDTO, type WelcomeDTO } from '../net/protocol';
+import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
 
 /**
@@ -11,22 +11,21 @@ import { WorldState } from '../net/schema';
  */
 export type ConnectionStatus = 'offline' | 'connecting' | 'connected' | 'reconnecting' | 'lost';
 
-export interface RoomListing {
-  roomId: string;
-  clients: number;
-  maxClients: number;
-  locked: boolean;
-  metadata?: { title?: string; claimed?: number; free?: number };
-}
+export type { SessionListing };
 
 const RESUME_KEY = 'paperwars.mp.resume';
+/** The session this tab was last in, for rejoining it after a server restart (v0.0.13). */
+const SESSION_KEY = 'paperwars.mp.session';
+/** A restarted server holds each player's desk this long (SESSION.restoreWindow), less a margin. */
+const REJOIN_WINDOW_MS = 280_000;
 /** The device token, per server: it is how the server recognises this browser's player. */
 const TOKEN_KEY = 'paperwars.mp.token';
 /** A stored reconnection token is only worth trying this long after it was saved (the server's grace). */
 const RESUME_WINDOW_MS = 55_000;
 
 /**
- * The browser's side of the connection: lists, creates and joins classroom sessions, keeps the
+ * The browser's side of the connection: lists and joins classroom sessions (the server opens them,
+ * v0.0.13: quick join asks it which one to join), keeps the
  * connection status, resumes a session after a page refresh (the reconnection token is kept in
  * session storage), measures the round trip, and sends input frames, commands and emotes.
  *
@@ -43,6 +42,8 @@ export class NetClient {
   rtt = 0;
   /** Why the last connection ended, for the lobby. */
   lastError: string | null = null;
+  /** The server said it is restarting (or the connection broke): the session is worth rejoining. */
+  restarting = false;
   private readonly statusListeners: Array<(s: ConnectionStatus) => void> = [];
   private pinger: ReturnType<typeof setInterval> | null = null;
   readonly sent = { frames: 0, messages: 0 };
@@ -133,24 +134,43 @@ export class NetClient {
     this.statusListeners.push(listener);
   }
 
-  /** The sessions on the server (the HTTP endpoint next to the WebSocket one). */
-  async list(): Promise<RoomListing[]> {
-    const url = this.endpoint.replace(/^ws/, 'http').replace(/\/$/, '') + '/rooms';
-    const response = await fetch(url);
+  /** The HTTP side of the server (next to the WebSocket one). */
+  private get http(): string {
+    return this.endpoint.replace(/^ws/, 'http').replace(/\/$/, '');
+  }
+
+  /** The sessions on the server. Also measures the round trip to it (`rtt`), for the list. */
+  async list(): Promise<SessionListing[]> {
+    const started = performance.now();
+    const response = await fetch(`${this.http}/sessions`);
     if (!response.ok) throw new Error(`Server answered ${response.status}`);
-    return (await response.json()) as RoomListing[];
+    const list = (await response.json()) as SessionListing[];
+    if (!this.room) this.rtt = Math.round(performance.now() - started);
+    return list;
   }
 
-  async create(title: string, name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.create(ROOM, this.joinOptions(name, { title }), WorldState));
+  async join(id: string, name: string): Promise<Room<unknown, WorldState>> {
+    return this.enter(() => this.sdk.joinById(id, this.joinOptions(name), WorldState));
   }
 
-  async join(roomId: string, name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.joinById(roomId, this.joinOptions(name), WorldState));
-  }
-
+  /**
+   * The session the server picks (the busiest one with space, or a new one), joined. Two players
+   * taking the last desk at once: the one refused asks again and is sent elsewhere.
+   */
   async quickJoin(name: string): Promise<Room<unknown, WorldState>> {
-    return this.enter(() => this.sdk.joinOrCreate(ROOM, this.joinOptions(name, { title: 'Classroom' }), WorldState));
+    return this.enter(async () => {
+      for (let attempt = 0; ; attempt++) {
+        const response = await fetch(`${this.http}/sessions/quick`, { method: 'POST' });
+        const body = (await response.json().catch(() => ({}))) as Partial<QuickJoinDTO> & { error?: string };
+        if (!response.ok || !body.id) throw new Error(body.error ?? `Server answered ${response.status}`);
+        try {
+          return await this.sdk.joinById(body.id, this.joinOptions(name), WorldState);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (attempt >= 3 || !/full|about to end|has ended|locked|not found/i.test(message)) throw error;
+        }
+      }
+    });
   }
 
   /** Back into the session this tab was in before a refresh, if it is still waiting for us. */
@@ -170,13 +190,56 @@ export class NetClient {
       return room;
     } catch {
       this.forget();
+      // A restarted server doesn't know the reconnection token, but reopens the session for a while.
+      const session = this.lastSession();
+      if (!session) return null;
+      try {
+        return await this.join(session, '');
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  /** The session this tab was in, if it ended recently enough to be rejoined after a restart. */
+  lastSession(): string | null {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null') as { id: string; at: number } | null;
+      return saved && Date.now() - saved.at < REJOIN_WINDOW_MS ? saved.id : null;
+    } catch {
       return null;
     }
+  }
+
+  /**
+   * Back into the session we were in after the server restarted: tries every few seconds while the
+   * server comes back (it holds our desk for a few minutes). False if it couldn't.
+   */
+  async rejoin(name: string, until: number = Date.now() + 120_000): Promise<boolean> {
+    const id = this.lastSession();
+    while (id && Date.now() < until) {
+      try {
+        await this.join(id, name);
+        this.restarting = false;
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // The server is up and the session isn't coming back: stop.
+        if (/not found|has ended|full|about to end/i.test(message)) break;
+        this.setStatus('reconnecting');
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    this.restarting = false;
+    this.lastError = 'The session could not be rejoined after the restart.';
+    this.setStatus('lost');
+    return false;
   }
 
   /** Leaves the session for good: the server frees our territory. */
   async leave(): Promise<void> {
     this.forget();
+    this.forgetSession();
     const room = this.room;
     this.room = null;
     if (room) await room.leave(true).catch(() => undefined);
@@ -211,9 +274,10 @@ export class NetClient {
       this.bind(room);
       return room;
     } catch (error) {
-      this.lastError = error instanceof Error ? error.message : String(error);
+      const message = explain(error instanceof Error ? error.message : String(error), this.endpoint);
+      this.lastError = message;
       this.setStatus('lost');
-      throw error;
+      throw new Error(message);
     }
   }
 
@@ -234,10 +298,17 @@ export class NetClient {
     room.onLeave((code, reason) => {
       if (this.room !== room) return;
       this.room = null;
-      if (code === CLOSE_TAKEN_OVER) this.forget();
-      if (code !== 4000) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
+      if (code === CLOSE_TAKEN_OVER || code === CLOSE_SESSION_ENDED) {
+        this.forget();
+        this.forgetSession();
+      }
+      // A restart (said, or a connection that broke and couldn't be resumed): worth rejoining.
+      this.restarting = code === CLOSE_RESTARTING || (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_SESSION_ENDED && this.lastSession() !== null);
+      // The end of a session is no error: the results card is up.
+      const clean = code === 4000 || code === CLOSE_SESSION_ENDED;
+      if (!clean) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
       this.stopPinging();
-      this.setStatus(code === 4000 ? 'offline' : 'lost');
+      this.setStatus(clean ? 'offline' : 'lost');
     });
     room.onError((code, message) => {
       this.lastError = message ?? `Error ${code}`;
@@ -268,6 +339,7 @@ export class NetClient {
   private remember(room: Room<unknown, WorldState>): void {
     try {
       sessionStorage.setItem(RESUME_KEY, JSON.stringify({ token: room.reconnectionToken, at: Date.now() }));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ id: room.roomId, at: Date.now() }));
     } catch {
       // Storage blocked: a refresh just starts over.
     }
@@ -276,6 +348,14 @@ export class NetClient {
   /** Keeps the resume token fresh while we're connected (call now and then). */
   touch(): void {
     if (this.room && this.status === 'connected') this.remember(this.room);
+  }
+
+  private forgetSession(): void {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore
+    }
   }
 
   private forget(): void {
@@ -296,4 +376,17 @@ export class NetClient {
     this.status = s;
     for (const l of this.statusListeners) l(s);
   }
+}
+
+/**
+ * What went wrong, for a person (v0.0.13): the server's own refusals are already plain ("This
+ * session is full", "This server speaks protocol 4; reload the page", "Your pass was withdrawn");
+ * the transport's are not.
+ */
+export function explain(message: string, endpoint: string): string {
+  if (/failed to fetch|fetch failed|networkerror|econnrefused|failed to connect|load failed/i.test(message)) return `Can't reach the server at ${endpoint}. It may be down or restarting; try again in a moment.`;
+  if (/room ".*" not found|not found/i.test(message)) return 'That session has closed. Pick another one or use Quick join.';
+  if (/is locked/i.test(message)) return 'That session is full or about to end. Pick another one or use Quick join.';
+  if (/seat reservation expired/i.test(message)) return 'Joining took too long. Try again.';
+  return message;
 }

@@ -15,6 +15,9 @@ import {
   type MissionOutcome,
   type ProgressRecord,
   type PvpRecord,
+  cleanDesks,
+  type SessionRecord,
+  type SessionRecordStatus,
   type UsernameResult,
   type BaseRecord,
   type BaseState,
@@ -435,6 +438,30 @@ export class PgStore implements Store {
       [playerId, holder ?? null],
     );
     return (rowCount ?? 0) > 0;
+  }
+
+  // ---- Sessions (v0.0.13) -----------------------------------------------------------------------
+
+  async recordSession(r: SessionRecord): Promise<void> {
+    await this.db.query(
+      `insert into sessions (id, title, capacity, status, peak_players, created_at, started_at, ends_at, ended_at, desks)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       on conflict (id) do update set title = excluded.title, capacity = excluded.capacity, status = excluded.status,
+         peak_players = greatest(sessions.peak_players, excluded.peak_players), started_at = excluded.started_at,
+         ends_at = excluded.ends_at, ended_at = excluded.ended_at, desks = excluded.desks`,
+      [r.id, r.title, r.capacity, r.status, r.peakPlayers, r.createdAt, r.startedAt, r.endsAt, r.endedAt, JSON.stringify(cleanDesks(r.desks))],
+    );
+  }
+
+  async sessionRecords(statuses?: SessionRecordStatus[]): Promise<SessionRecord[]> {
+    const { rows } = statuses
+      ? await this.db.query('select * from sessions where status = any($1::text[]) order by created_at desc, id', [statuses])
+      : await this.db.query('select * from sessions order by created_at desc, id');
+    return rows.map((r) => ({
+      id: String(r.id), title: String(r.title), capacity: Number(r.capacity), status: r.status as SessionRecordStatus, peakPlayers: Number(r.peak_players),
+      createdAt: r.created_at as Date, startedAt: (r.started_at as Date | null) ?? null, endsAt: (r.ends_at as Date | null) ?? null, endedAt: (r.ended_at as Date | null) ?? null,
+      desks: cleanDesks(r.desks),
+    }));
   }
 
   // ---- Health -----------------------------------------------------------------------------------

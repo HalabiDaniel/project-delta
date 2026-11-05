@@ -1,4 +1,4 @@
-import { AIRCRAFT_ORDER, BASE, type AircraftId, type BuildingKind } from '../config';
+import { AIRCRAFT_ORDER, BASE, SESSION, type AircraftId, type BuildingKind } from '../config';
 import type { BaseSave } from '../base/Base';
 import type { RaidReport } from '../base/Raids';
 import type { MissionFailure, MissionSpec, MissionStatus } from '../missions/Mission';
@@ -16,7 +16,7 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
@@ -29,7 +29,6 @@ export interface JoinOptions {
   username?: string;
   token?: string;
   code?: string;
-  title?: string;
 }
 
 /** The first message after joining: who you are in this world. */
@@ -45,6 +44,8 @@ export interface WelcomeDTO {
   username?: string | null;
   /** Why the username you asked for wasn't given ("That username is taken"), if it wasn't. */
   usernameNote?: string | null;
+  /** The session's name ("Classroom 3", v0.0.13). */
+  title?: string;
 }
 
 /** The answer to a `username` request. */
@@ -63,6 +64,72 @@ export interface TransferDTO {
 
 /** Close code for a connection replaced by a newer one of the same player ("opened in another tab"). */
 export const CLOSE_TAKEN_OVER = 4011;
+/** Close code for the end of a session: the results card stays up, with "Join next session". */
+export const CLOSE_SESSION_ENDED = 4012;
+/** Close code for a server restart (v0.0.13): the session comes back in a moment; rejoin it. */
+export const CLOSE_RESTARTING = 4013;
+
+// ---- Sessions (v0.0.13) ----------------------------------------------------------------------------
+
+/** A running session, as the lobby lists it (GET /sessions). */
+export interface SessionListing {
+  id: string;
+  title: string;
+  players: number;
+  capacity: number;
+  /** Seconds of play left (the full length before anyone has joined). */
+  left: number;
+  status: 'open' | 'closing' | 'ended';
+  /** A new player can join it now. */
+  joinable: boolean;
+}
+
+/** The answer to POST /sessions/quick: the session to join. */
+export interface QuickJoinDTO {
+  id: string;
+}
+
+/**
+ * A desk's place in the territory lifecycle (v0.0.13), TerritoryState.state:
+ *   ai        – the AI's installations defend it; a joining player can be placed here at once.
+ *   player    – a player's base is on it.
+ *   draining  – its player has left or dropped; the base stays, defenses active, until the
+ *               reconnect grace is over and any raid on it is settled.
+ *   empty     – bare; nobody can be placed here until the gap is over.
+ *   open      – bare; a joining player may be placed here; the AI moves in if nobody comes.
+ */
+export const DESK_STATES = ['ai', 'player', 'draining', 'empty', 'open'] as const;
+export type DeskState = (typeof DESK_STATES)[number];
+
+/** Where a session's clock stands (WorldState.session). */
+export const SESSION_STATUSES = ['open', 'closing', 'ended'] as const;
+
+/** One line of the session results card. */
+export interface ResultLineDTO {
+  id: string;
+  name: string;
+  colour: number;
+  placing: number;
+  score: number;
+  kills: number;
+  deaths: number;
+  raids: number;
+  missions: number;
+  /** Paper earned in this session. */
+  paper: number;
+  /** Still in the session at the end (or left before it). */
+  present: boolean;
+}
+
+/** Sent to everyone when a session ends. */
+export interface SessionResultsDTO {
+  title: string;
+  /** Seconds the session ran. */
+  played: number;
+  lines: ResultLineDTO[];
+  /** Why it ended early, if it did ("The server is restarting"). */
+  reason: string | null;
+}
 
 export const NET = {
   /** Fixed simulation rate, server and client prediction alike (Hz), and its step. */
@@ -70,8 +137,8 @@ export const NET = {
   step: 1 / 60,
   /** Schema patches (and the per-patch messages that go with them), in milliseconds. */
   patchMs: 50,
-  /** Players per session (eight of the nine territories can be claimed; the centre stays the AI's). */
-  maxPlayers: 8,
+  /** Players per session: one per desk (SESSION.capacity, v0.0.13). */
+  maxPlayers: SESSION.capacity,
   /** Input frames the server keeps queued per player before dropping the oldest. */
   inputQueueMax: 150,
   /** Input frames accepted per message. */
@@ -244,6 +311,15 @@ export const PLAYER_COLOURS: ReadonlyArray<readonly [number, number, number]> = 
   [0.1, 0.66, 0.72],
   [0.86, 0.32, 0.56],
   [0.45, 0.33, 0.24],
+  // v0.0.13: sixteen players a session.
+  [0.84, 0.18, 0.2],
+  [0.3, 0.3, 0.72],
+  [0.52, 0.72, 0.16],
+  [0.98, 0.56, 0.66],
+  [0.12, 0.44, 0.4],
+  [0.7, 0.52, 0.86],
+  [0.62, 0.62, 0.62],
+  [0.96, 0.86, 0.44],
 ];
 
 export function colourCss(index: number): string {

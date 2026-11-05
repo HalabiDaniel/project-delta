@@ -1,4 +1,4 @@
-import { PVP, THREAT, WORLD, type PlayerSide } from '../config';
+import { THREAT, WORLD, type PlayerSide } from '../config';
 import { layoutDefenses, type DefenseLayout } from '../defenses/Layout';
 import { generateTerritories } from '../world/Grid';
 import type { Territory } from '../world/Territory';
@@ -15,7 +15,7 @@ import { allDecorColliders, decorFootprints } from '../world/territories/decor';
 export interface SharedWorld {
   territories: Territory[];
   layout: DefenseLayout;
-  /** Territories players may claim: all but the centre. */
+  /** Territories players may be placed on: every desk (v0.0.13: the AI holds whichever desks players don't). */
   claimable: string[];
   /** Every desk's landmark and tall props, solid for everyone (the same shapes as single-player's). */
   decor: Collider[];
@@ -27,7 +27,7 @@ export function sharedWorld(): SharedWorld {
   const territories = generateTerritories(WORLD.gridSize, WORLD.territorySize, WORLD.gap, THREAT.map, null);
   const decorGround = decorFootprints(territories);
   const layout = layoutDefenses(territories, decorGround);
-  return { territories, layout, claimable: territories.filter((t) => t.id !== PVP.centre).map((t) => t.id), decor: allDecorColliders(territories), decorGround };
+  return { territories, layout, claimable: territories.map((t) => t.id), decor: allDecorColliders(territories), decorGround };
 }
 
 /** A player's side: their plane, their base, their friendly AI. */

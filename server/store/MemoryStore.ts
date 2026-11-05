@@ -12,6 +12,9 @@ import {
   type MissionOutcome,
   type ProgressRecord,
   type PvpRecord,
+  cleanDesks,
+  type SessionRecord,
+  type SessionRecordStatus,
   type UsernameResult,
   type BaseState,
   type EconomyRecord,
@@ -67,6 +70,7 @@ export class MemoryStore implements Store {
   private readonly outcomes = new Map<string, MissionOutcome & { at: string }>();
   private readonly tipsOf = new Map<string, string[]>();
   private readonly pvp: Array<PvpRecord & { worldId: string }> = [];
+  private readonly sessionRows = new Map<string, SessionRecord>();
   /** Tests can make the store "newer" than the code to check refusals. */
   worldFormatOverride: number | null = null;
 
@@ -360,6 +364,18 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async recordSession(record: SessionRecord): Promise<void> {
+    const before = this.sessionRows.get(record.id);
+    this.sessionRows.set(record.id, { ...copySession(record), createdAt: before ? new Date(before.createdAt) : new Date(record.createdAt), peakPlayers: Math.max(before?.peakPlayers ?? 0, record.peakPlayers) });
+  }
+
+  async sessionRecords(statuses?: SessionRecordStatus[]): Promise<SessionRecord[]> {
+    return [...this.sessionRows.values()]
+      .filter((r) => !statuses || statuses.includes(r.status))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map(copySession);
+  }
+
   async ping(): Promise<boolean> {
     return true;
   }
@@ -367,6 +383,11 @@ export class MemoryStore implements Store {
   async close(): Promise<void> {
     // Nothing to release.
   }
+}
+
+function copySession(r: SessionRecord): SessionRecord {
+  const d = (x: Date | null) => (x ? new Date(x) : null);
+  return { ...r, createdAt: new Date(r.createdAt), startedAt: d(r.startedAt), endsAt: d(r.endsAt), endedAt: d(r.endedAt), desks: cleanDesks(r.desks) };
 }
 
 function publicInvite(i: InviteRecord & { codeHash: string }): InviteRecord {

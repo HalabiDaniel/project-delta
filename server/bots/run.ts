@@ -14,6 +14,7 @@ import { Bot } from './Bot';
  * Bots claim free desks, fold fighters, hunt the nearest plane and fire when lined up. They leave
  * (freeing their desks) when the time is up or on Ctrl+C.
  *
+ *   npm run bots -- --count 8 --churn 20   # every 20 s on average a random bot leaves, and joins again a few seconds later
  *   npm run bots -- --count 2 --rejoin 60  # every 60 s one bot leaves and joins again, and checks
  *                                          # its base came back as it left it (v0.0.12)
  */
@@ -45,6 +46,20 @@ if (rejoin > 0) {
     void bot.leaveAndRejoin().then((ok) => console.log(`${bot.username ?? bot.name} left and joined again: ${ok ? 'same base' : 'BASE CHANGED OR LOST'}`));
   }, rejoin * 1000);
 }
+
+// Players come and go during a session (v0.0.13): a random bot leaves and comes back a little later.
+const churn = Number(args.get('churn') ?? 0);
+if (churn > 0) {
+  const tick = () => {
+    setTimeout(() => {
+      const bot = bots[Math.floor(Math.random() * bots.length)];
+      void bot.leaveAndRejoin().then((ok) => console.log(`${bot.username ?? bot.name} came and went: ${ok ? 'same base' : 'BASE CHANGED OR LOST'}`));
+      tick();
+    }, churn * 1000 * (0.5 + Math.random()));
+  };
+  tick();
+}
+for (const b of bots) b.onBack = (bot) => console.log(`${bot.username ?? bot.name} is back in session ${bot.sessionId} after a restart or a session's end`);
 
 const stop = async () => {
   for (const b of bots) await b.leave();

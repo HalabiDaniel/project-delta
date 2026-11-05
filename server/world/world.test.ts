@@ -1,3 +1,4 @@
+import { TERRITORY_LIFECYCLE } from '../../src/config';
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, PVP } from '../../src/config';
 import { NET, parseCommand, planeId, unpackFrames, packFrames, type NetEvent } from '../../src/net/protocol';
@@ -6,13 +7,14 @@ import { launch, place, player, quietWorld, run } from './testkit';
 const events = (world: ReturnType<typeof quietWorld>, type: NetEvent['t']) => world.drainEvents().map((o) => o.e).filter((e) => e.t === type);
 
 describe('joining and claiming territories', () => {
-  it('gives each player one territory, refuses taken ones and the centre', () => {
+  it('gives each player one territory and refuses taken ones; every desk can hold a player (v0.0.13)', () => {
     const world = quietWorld();
     world.join('a', 'Ann');
     world.join('b', 'Bo');
     expect(world.claim('a', 'T3')).toBeNull();
     expect(world.claim('b', 'T3')).toBe('taken');
-    expect(world.claim('b', 'T11')).toBe('not claimable');
+    expect(world.claim('b', 'T99')).toBe('not claimable');
+    expect(world.shared.claimable).toHaveLength(16);
     expect(world.claim('a', 'T7')).toBe('already claimed');
     expect(world.claim('b', 'T7')).toBeNull();
     expect(world.owners.get('T3')).toBe('a');
@@ -20,7 +22,7 @@ describe('joining and claiming territories', () => {
     expect(world.pilots.get('a')!.colour).not.toBe(world.pilots.get('b')!.colour);
   });
 
-  it("replaces the AI's defenses with the player's base, and brings them back when the player leaves", () => {
+  it("replaces the AI's defenses with the player's base; the desk is empty, then open, then the AI's again (v0.0.13)", () => {
     const world = quietWorld();
     const ai = world.network.on('T3').map((i) => i.id);
     expect(ai.length).toBeGreaterThan(0);
@@ -30,8 +32,17 @@ describe('joining and claiming territories', () => {
     expect(now.some((i) => i.spec.kind === 'supply')).toBe(true);
     expect(world.territories.find((t) => t.id === 'T3')!.threat).toBe(0);
     world.remove('a');
-    expect(world.network.on('T3').map((i) => i.id).sort()).toEqual([...ai].sort());
     expect(world.owners.has('T3')).toBe(false);
+    expect(world.network.on('T3')).toEqual([]);
+    expect(world.deskState('T3')).toBe('empty');
+    expect(world.freeDesks()).not.toContain('T3');
+    run(world, TERRITORY_LIFECYCLE.gap + 0.1);
+    expect(world.deskState('T3')).toBe('open');
+    expect(world.freeDesks()).toContain('T3');
+    expect(world.network.on('T3')).toEqual([]);
+    run(world, TERRITORY_LIFECYCLE.aiDelay + 0.1);
+    expect(world.deskState('T3')).toBe('ai');
+    expect(world.network.on('T3').map((i) => i.id).sort()).toEqual([...ai].sort());
     expect(world.territories.find((t) => t.id === 'T3')!.threat).toBeGreaterThan(0);
   });
 
@@ -213,19 +224,20 @@ describe('raids between players', () => {
     expect(b.report?.outcome).toBe('bombed');
     expect(a.stats.raids).toBe(1);
     // The shield keeps everyone off for a while.
-    expect(world.attacks.refusal(a, b, world.time)).toBe('shield');
+    expect(world.attacks.refusal(a, b, world.time, world.arrivalGrace)).toBe('shield');
   });
 
-  it('never raids offline players, and calls off a raid when the defender drops', () => {
+  it('never starts a raid on offline players, but one in progress goes on when the defender drops (v0.0.13)', () => {
     const { world, a, b } = rivals();
     b.protectUntil = 0;
     world.setConnected('b', false);
-    expect(world.attacks.refusal(a, b, world.time)).toBe('offline');
+    expect(world.attacks.refusal(a, b, world.time, world.arrivalGrace)).toBe('offline');
     world.setConnected('b', true);
-    expect(world.attacks.refusal(a, b, world.time)).toBeNull();
+    expect(world.attacks.refusal(a, b, world.time, world.arrivalGrace)).toBeNull();
     world.attacks.start('a', 'b', 'T3', { installationId: 'T3-store', name: 'store', x: 0, z: 0 }, world.time);
     world.setConnected('b', false);
-    expect(world.attacks.on('b')).toBeUndefined();
+    expect(world.attacks.on('b')?.attacker).toBe('a');
+    expect(world.deskState('T3')).toBe('draining');
   });
 
   it("other players can't grind down a base outside a raid; its guns only engage intruders", () => {
@@ -335,7 +347,7 @@ describe('connections', () => {
     expect(world.history.at(planeId('a'), world.time, { x: 0, y: 0, z: 0 })).toBe(false);
   });
 
-  it('leaving mid-fight counts as being shot down by whoever was fighting you', () => {
+  it('leaving mid-fight loses the plane, but nobody earns a kill for it (v0.0.13)', () => {
     const world = quietWorld(7);
     const a = player(world, 'a', 'T1', 'Ann');
     const b = player(world, 'b', 'T3', 'Bo');
@@ -346,10 +358,14 @@ describe('connections', () => {
     run(world, 0.5, (id) => (id === 'a' ? { fire: true } : {}));
     expect(b.damageLog.length).toBeGreaterThan(0);
     world.drainEvents();
+    const paper = a.resources.paper;
     world.remove('b');
-    expect(a.stats.kills).toBe(1);
+    expect(a.stats.kills).toBe(0);
+    expect(a.resources.paper).toBe(paper);
+    expect(b.stats.deaths).toBe(1);
     const kill = world.drainEvents().map((o) => o.e).find((e) => e.t === 'kill');
-    expect(kill).toMatchObject({ killer: 'a', victimName: 'Bo' });
+    expect(kill).toMatchObject({ killer: null, victimName: 'Bo' });
+    expect(world.takeDeparture('b')!.aircraft.some((r) => r.type === 'falcon')).toBe(false);
   });
 
   it('limits emotes to one every so often', () => {

@@ -8,9 +8,13 @@ export interface Raidable {
   id: string;
   territory: string | null;
   connected: boolean;
+  /** Gone for good, their base draining until a raid on it is settled (v0.0.13). */
+  leaving?: boolean;
   /** World times until which they are protected: new-player protection, the shield after a raid. */
   protectUntil: number;
   shieldUntil: number;
+  /** World time their base was placed: new raids wait out the arrival grace (v0.0.13). */
+  arrivedAt?: number;
 }
 
 /**
@@ -24,7 +28,7 @@ export interface Raidable {
  * busy       – someone is raiding them right now.
  * attacking  – you are already on a raid.
  */
-export type RaidRefusal = 'self' | 'no-base' | 'offline' | 'new-player' | 'shield' | 'cooldown' | 'busy' | 'attacking';
+export type RaidRefusal = 'self' | 'no-base' | 'offline' | 'new-player' | 'arriving' | 'shield' | 'cooldown' | 'busy' | 'attacking';
 
 /** A raid in progress, from launch until it succeeds, fails or is abandoned. */
 export interface Attack {
@@ -72,11 +76,13 @@ export class AttackBook {
   readonly history: RaidRecord[] = [];
   private nextId = 1;
 
-  refusal(attacker: Raidable, victim: Raidable, now: number): RaidRefusal | null {
+  refusal(attacker: Raidable, victim: Raidable, now: number, arrivalGrace: number = PVP.arrivalGrace): RaidRefusal | null {
     if (attacker.id === victim.id) return 'self';
     if (!attacker.territory || !victim.territory) return 'no-base';
-    if (!victim.connected) return 'offline';
+    // Nobody is attacked while away: a dropped or departed player's base is draining.
+    if (!victim.connected || victim.leaving) return 'offline';
     if (now < victim.protectUntil) return 'new-player';
+    if (victim.arrivedAt !== undefined && now - victim.arrivedAt < arrivalGrace) return 'arriving';
     if (now < victim.shieldUntil) return 'shield';
     const last = this.lastRaid(attacker.id, victim.id);
     if (last && now - last.at < PVP.pairCooldown) return 'cooldown';

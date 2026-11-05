@@ -74,7 +74,7 @@ describe('the paper journal', () => {
   });
 
   it('keys a mission reward by the mission, and a raid loss by the raid', () => {
-    const world = new ServerWorld({ seed: 1, ambient: false, newPlayerProtection: 0 });
+    const world = new ServerWorld({ seed: 1, ambient: false, newPlayerProtection: 0, arrivalGrace: 0 });
     const a = player(world, 'a', 'T1', 'Ann');
     const b = player(world, 'b', 'T3', 'Bo');
     b.resources.restore(400);

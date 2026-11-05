@@ -9,6 +9,7 @@ import { Identity } from './identity/Identity';
 import { economyWorld, memoryServices, setServices, type Services } from './services';
 import { PgStore } from './store/PgStore';
 import type { Store } from './store/Store';
+import { serverOptions } from './sessions/directory';
 import { WorldRoom } from './WorldRoom';
 import type { Client } from '@colyseus/sdk';
 import { Bot } from './bots/Bot';
@@ -38,10 +39,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
   });
 
   async function room(): Promise<WorldRoom> {
-    const r = (await colyseus.createRoom(ROOM, {
-      ambient: false,
-      seed: 5,
-    })) as unknown as WorldRoom;
+    const r = (await colyseus.createRoom(ROOM, serverOptions({ ambient: false, seed: 5, lifecycle: { gap: 0 } }))) as unknown as WorldRoom;
     r.autoDispose = false;
     return r;
   }
@@ -240,7 +238,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         expect(back.director!.offers.map((o) => ({ title: o.mission.title, id: back.missionId(o.mission) }))).toEqual(board);
       }, 10000);
 
-      it('destroys for good a plane its pilot leaves in the air, and writes the mission once', async () => {
+      it('brings home undamaged a plane its pilot leaves in the air out of combat, and writes the mission once (v0.0.13)', async () => {
         const r = await room();
         const ann = await enter(r, { name: 'Ann' });
         await placed(ann.client);
@@ -252,6 +250,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         await eventually(() => pilot.state!.phase === 'flying');
         const planeId = pilot.planeIds.get('swift')!;
         const missionId = pilot.missionId(pilot.state!.mission!);
+        pilot.state!.durability!.health -= 5;
         // Saved while flying: airborne.
         (r as unknown as { saveBase(id: string): void }).saveBase(ann.id);
         const worldId = await economyWorld();
@@ -259,9 +258,11 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         await eventually(async () => (await s.store.aircraft(worldId, rec.id)).some((a) => a.id === planeId && a.status === 'airborne'));
         await ann.client.leave();
         await eventually(async () => (await s.store.base(rec.id))?.placement === null);
-        await eventually(async () => (await s.store.aircraft(worldId, rec.id)).length === 0);
+        // Glided home: in the hangar (it needs a refit), at full health.
+        await eventually(async () => (await s.store.aircraft(worldId, rec.id)).some((a) => a.id === planeId && a.status === 'damaged'));
+        const plane = (await s.store.aircraft(worldId, rec.id)).find((a) => a.id === planeId)!;
+        expect(plane.health).toBe(AIRCRAFT.swift.maxHealth);
         expect(await s.store.recordMission(worldId, rec.id, { id: missionId, template: 'x', state: 'failed', outcome: null, reward: 0, spec: {} })).toBe(false);
-        await expect(s.store.saveAircraft(worldId, rec.id, [{ id: planeId, type: 'swift', status: 'ready', health: 10, loadout: {} }])).rejects.toThrow();
       }, 10000);
     });
   }

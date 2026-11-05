@@ -354,6 +354,26 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect((await store.base(p.id))?.placement).toBeNull();
     });
 
+    it('records sessions as they open, start and end, keeping the busiest moment', async () => {
+      const id = `s-${randomUUID().slice(0, 8)}`;
+      const created = new Date(Date.now() - 1000);
+      const base = { id, title: 'Classroom', capacity: 16, createdAt: created, startedAt: null, endsAt: null, endedAt: null, status: 'open' as const, peakPlayers: 0, desks: {} as Record<string, string> };
+      await store.recordSession(base);
+      const started = new Date();
+      const ends = new Date(started.getTime() + 3600_000);
+      await store.recordSession({ ...base, startedAt: started, endsAt: ends, peakPlayers: 5 });
+      const ann = randomUUID();
+      await store.recordSession({ ...base, startedAt: started, endsAt: ends, status: 'closing', peakPlayers: 3, desks: { [ann]: 'T7', 'not-a-player': 'T1' } });
+      const running = (await store.sessionRecords(['open', 'closing'])).find((r) => r.id === id);
+      expect(running).toMatchObject({ status: 'closing', peakPlayers: 5, capacity: 16 });
+      expect(running?.endsAt?.getTime()).toBe(ends.getTime());
+      expect(running?.createdAt.getTime()).toBe(created.getTime());
+      expect(running?.desks).toEqual({ [ann]: 'T7' });
+      await store.recordSession({ ...base, startedAt: started, endsAt: ends, endedAt: new Date(), status: 'ended', peakPlayers: 0 });
+      expect((await store.sessionRecords(['open', 'closing'])).some((r) => r.id === id)).toBe(false);
+      expect((await store.sessionRecords()).find((r) => r.id === id)?.status).toBe('ended');
+    });
+
     it('refuses to save a broken base', async () => {
       const p = await store.createPlayer(player('Ray'), h('tok-ray'), 'open');
       await store.placeBase(p.id, 'srv/a', 'T6', 60);

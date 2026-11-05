@@ -1,6 +1,6 @@
 import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, PVP, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
@@ -18,6 +18,7 @@ import { PoseBuffer, ServerClock, angleDiff, type Pose } from '../net/Interpolat
 import { Predictor, type PredictionWorld } from '../net/Prediction';
 import {
   NET,
+  DESK_STATES,
   PLAYER_COLOURS,
   planeOwner,
   type CardDTO,
@@ -28,6 +29,7 @@ import {
   type NetEvent,
   type OwnFlight,
   type UsernameDTO,
+  type SessionResultsDTO,
   type WelcomeDTO,
 } from '../net/protocol';
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
@@ -179,6 +181,11 @@ export class MultiplayerGame {
   /** While we have no username yet: what to offer in the prompt, and why the last one wasn't given. */
   usernameNeeded: { value: string; note: string | null } | null = null;
   roomTitle = 'Classroom';
+  /** The last session's results (v0.0.13), shown until the player moves on, and who we were in it. */
+  results: SessionResultsDTO | null = null;
+  private resultsMe: string | null = null;
+  /** Rejoining our session after a server restart. */
+  private rejoining = false;
 
   private readonly dressings = new Map<string, Dressing>();
   private readonly outbox: InputFrame[] = [];
@@ -317,15 +324,18 @@ export class MultiplayerGame {
     const mpHud = new MpHud(hudRoot);
     const lobby = new Lobby(hudRoot, {
       quick: (name) => void game?.enter(() => game!.net.quickJoin(name)),
-      create: (name, title) => void game?.enter(() => game!.net.create(title, name)),
-      join: (name, roomId) => void game?.enter(() => game!.net.join(roomId, name)),
+      join: (name, id) => void game?.enter(() => game!.net.join(id, name)),
+      next: (name) => void game?.nextSession(name),
       refresh: () => void game?.refreshRooms(),
       claim: (t) => game?.claim(t),
       setCode: (code) => {
         if (game) game.net.code = code;
       },
       chooseUsername: (name) => game?.net.chooseUsername(name),
-      leave: () => void game?.leaveSession(),
+      leave: () => {
+        if (game) game.results = null;
+        void game?.leaveSession();
+      },
       singlePlayer: () => {
         void game?.net.leave();
         window.location.search = '';
@@ -404,15 +414,29 @@ export class MultiplayerGame {
 
   async refreshRooms(): Promise<void> {
     if (this.room) return;
+    // The results card stays up until the player chooses (next session, or the list).
+    if (this.results) {
+      this.lobby.showResults(this.results, this.resultsMe);
+      return;
+    }
     try {
       const rooms = await this.net.list();
-      this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info');
+      this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info', this.net.rtt);
     } catch {
       this.lobby.showRooms([], `No server at ${this.net.endpoint}. Start one with: npm run server`, 'bad');
     }
   }
 
+  /** From the results card: off to a new session (quick join), on a new random desk. */
+  async nextSession(name: string): Promise<void> {
+    this.results = null;
+    if (this.room) await this.net.leave();
+    this.reset();
+    await this.enter(() => this.net.quickJoin(name));
+  }
+
   async enter(open: () => Promise<unknown>): Promise<void> {
+    this.results = null;
     try {
       await open();
       this.lobby.clearCode();
@@ -429,6 +453,7 @@ export class MultiplayerGame {
     this.me = null;
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
+      if (m.title) this.roomTitle = m.title;
       if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
       if (m.username) {
         this.usernameNeeded = null;
@@ -453,6 +478,16 @@ export class MultiplayerGame {
       }
       if (!this.home) this.lobby.showClaim(this.claimView());
     });
+    room.onMessage('results', (m: SessionResultsDTO) => {
+      // The session is over: everything is saved; the card waits for "Join next session".
+      this.results = m;
+      this.resultsMe = this.me;
+      this.paused = false;
+      if (this.lastHud) this.hud.render({ ...this.lastHud, paused: false, welcome: null });
+      this.lobby.showResults(m, this.me);
+      this.roomTitle = m.title;
+    });
+    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? 'The server is restarting', null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
     room.onMessage('ev', (events: NetEvent[]) => {
@@ -470,7 +505,20 @@ export class MultiplayerGame {
         this.paused = false;
         // The HUD stops drawing without a home: close its menu so the lobby isn't drawn over it.
         if (this.lastHud) this.hud.render({ ...this.lastHud, paused: false, welcome: null });
-        void this.refreshRooms();
+        if (s === 'lost' && this.net.restarting && !this.rejoining) {
+          // The server is restarting (v0.0.13): it reopens our session and holds our desk.
+          this.rejoining = true;
+          this.lobby.showRooms(null, 'The server is restarting. Back in a moment…', 'info');
+          void this.net.rejoin(this.lobby.name).then((ok) => {
+            this.rejoining = false;
+            if (ok) {
+              this.attach();
+              this.hud.alert('ok', 'Back in', null, 'good', 2);
+            } else void this.refreshRooms();
+          });
+          return;
+        }
+        if (!this.rejoining) void this.refreshRooms();
       }
     });
     this.lobby.showClaim(this.claimView());
@@ -832,6 +880,13 @@ export class MultiplayerGame {
       return i ? { x: i.x, z: i.z, r: i.footprint + 0.6 } : null;
     });
     this.lobby.hide();
+    // "You landed on…" (v0.0.13): the desk the server picked, on a little map of the classroom.
+    const s = this.room?.state;
+    this.mpHud.landed({
+      label: territoryName(territoryId),
+      id: territoryId,
+      cells: this.territories.map((t) => ({ id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId })),
+    });
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
     this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
     // A first-time tip: once per player (the server keeps which tips they have seen).
@@ -979,7 +1034,7 @@ export class MultiplayerGame {
     }
     this.syncInstallations(s);
     this.syncTerritories(s);
-    if (!this.home && this.room) this.lobby.showClaim(this.claimView());
+    if (!this.home && this.room && !this.results) this.lobby.showClaim(this.claimView());
   }
 
   /** The installations as the server has them: added, removed, aimed, damaged. */
@@ -1062,7 +1117,7 @@ export class MultiplayerGame {
         const p = owner ? s?.players.get(owner) : undefined;
         return {
           id: t.id, name: st?.label || territoryName(t.id), threat: st?.threat ?? t.threat, owner, ownerName: p?.name ?? null, colour: p?.colour ?? 0,
-          claimable: st?.claimable ?? t.id !== PVP.centre, mine: owner === this.me, connected: p?.connected ?? true,
+          claimable: st?.claimable ?? true, mine: owner === this.me, connected: p?.connected ?? true, state: DESK_STATES[st?.state ?? 0] ?? 'ai',
         };
       }),
       players: players.map(([id, p]) => ({ name: p.name, colour: p.colour, territory: p.territory || null, connected: p.connected, me: id === this.me })),
@@ -1525,6 +1580,8 @@ export class MultiplayerGame {
       outgoing: outgoing ? { victim: outgoing.victimName, colour: s?.players.get(outgoing.victim)?.colour ?? 0 } : null,
       protection: this.priv.protection ?? null,
       emoteKeys: this.state?.phase === 'flying',
+      sessionLeft: s ? s.left : null,
+      closing: (s?.session ?? 0) > 0,
     };
   }
 }
