@@ -883,7 +883,7 @@ export class MultiplayerGame {
     // "You landed on…" (v0.0.13): the desk the server picked, on a little map of the classroom.
     const s = this.room?.state;
     this.mpHud.landed({
-      label: s?.territories.get(territoryId)?.label || territoryName(territoryId),
+      label: territoryName(territoryId),
       id: territoryId,
       cells: this.territories.map((t) => ({ id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId })),
     });

@@ -4,7 +4,7 @@ import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
 import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
 import { Predictor } from '../../src/net/Prediction';
-import { NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
+import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
 import { sharedWorld } from '../../src/net/World';
 
@@ -177,7 +177,39 @@ export class Bot {
     room.onMessage('username', (m: UsernameDTO) => {
       if (m.ok) this.username = m.username;
     });
+    room.onMessage('restarting', () => undefined);
+    room.onMessage('results', () => undefined);
+    // A server restart (v0.0.13): back into the same session once it is up again (it holds our desk);
+    // the end of a session: on to the next one, as a player pressing "Join next session".
+    room.onLeave((code) => {
+      if (this.stopped || this.room !== room) return;
+      if (this.timer) clearInterval(this.timer);
+      this.room = null;
+      if (code === CLOSE_RESTARTING) void this.comeBack(room.roomId);
+      else if (code === CLOSE_SESSION_ENDED) void this.comeBack(undefined);
+    });
   }
+
+  /** Joins `sessionId` (or quick joins) again, retrying while the server comes back. */
+  private async comeBack(sessionId: string | undefined): Promise<void> {
+    this.id = '';
+    this.home = null;
+    for (const key of Object.keys(this.priv)) delete (this.priv as Record<string, unknown>)[key];
+    for (let attempt = 0; attempt < 60 && !this.stopped; attempt++) {
+      await new Promise((r) => setTimeout(r, 500));
+      try {
+        await this.join(sessionId);
+        this.stats.reconnects++;
+        this.onBack?.(this);
+        return;
+      } catch {
+        // Not up yet.
+      }
+    }
+  }
+
+  /** Called when the bot is back in a session after a restart or a session's end. */
+  onBack: ((bot: Bot) => void) | null = null;
 
   private onWelcome: (() => void) | null = null;
 

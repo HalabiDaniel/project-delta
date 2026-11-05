@@ -3,7 +3,9 @@ import { ColyseusTestServer } from '@colyseus/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CLOSE_RESTARTING, CLOSE_SESSION_ENDED, PROTOCOL_VERSION, ROOM, type SessionListing, type SessionResultsDTO } from '../src/net/protocol';
 import type { WorldState } from '../src/net/schema';
-import { memoryServices, services, setServices } from './services';
+import { economyWorld, memoryServices, services, setServices } from './services';
+import { Bot } from './bots/Bot';
+import type { Client as SdkClient } from '@colyseus/sdk';
 import { resetStopping, restoreSessions, sessions, setSessionDefaults, shutdownAll } from './sessions/directory';
 import { sessionRoutes } from './sessions/routes';
 import { WorldRoom } from './WorldRoom';
@@ -209,7 +211,6 @@ describe('sessions', () => {
     const byName = new Map(players.map((p) => [p.username ?? p.name, p.id]));
     expect(record.desks).toEqual({ [byName.get('Ann')!]: desks.get('Ann'), [byName.get('Bob')!]: desks.get('Bob') });
     // Ann's plane came home rather than being lost.
-    const { economyWorld } = await import('./services');
     expect((await store.aircraft(await economyWorld(), byName.get('Ann')!)).some((x) => x.type === 'swift')).toBe(true);
     void bob;
     await eventually(() => !roomOf(id));
@@ -259,4 +260,33 @@ describe('sessions', () => {
     const placed = roomOf(crashed).world.baseSave([...roomOf(crashed).world.pilots.keys()][0])!;
     expect(placed.buildings.length).toBe(saved.buildings.length);
   }, 15000);
+
+  it('bots survive a restart: back on their desks with the same base, and no reward paid twice', async () => {
+    setSessionDefaults({ ambient: false, seed: 5 });
+    const bots = ['Alpha', 'Bravo'].map((n) => new Bot(colyseus.sdk as unknown as SdkClient, `${n}_${process.pid % 1000}`, 'swift'));
+    for (const b of bots) await b.join();
+    await eventually(() => bots.every((b) => !!b.priv.base && !!b.priv.territory), 5000);
+    const before = bots.map((b) => ({ desk: b.priv.territory, base: JSON.stringify(b.priv.base?.buildings) }));
+    const id = bots[0].sessionId;
+    await shutdownAll();
+    await eventually(() => !roomOf(id));
+    resetStopping();
+    await restoreSessions(services().store);
+    await eventually(() => bots.every((b) => b.stats.reconnects === 1 && !!b.priv.base && !!b.priv.territory), 10000);
+    bots.forEach((b, i) => {
+      expect(b.sessionId).toBe(id);
+      expect(b.priv.territory).toBe(before[i].desk);
+      expect(JSON.stringify(b.priv.base?.buildings)).toBe(before[i].base);
+    });
+    // Every balance is exactly its ledger: nothing paid twice across the restart.
+    const store = services().store;
+    const worldId = await economyWorld();
+    await wait(300);
+    for (const p of await store.listPlayers()) {
+      const log = await store.transactions(worldId, p.id, 1000);
+      expect(log.filter((t) => t.key.startsWith('start:')).length).toBe(1);
+      expect(await store.balance(worldId, p.id)).toBe(log.reduce((sum, t) => sum + t.amount, 0));
+    }
+    for (const b of bots) await b.leave();
+  }, 25000);
 });
