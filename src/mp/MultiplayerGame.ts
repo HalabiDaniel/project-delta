@@ -27,6 +27,7 @@ import {
   type MeDTO,
   type NetEvent,
   type OwnFlight,
+  type UsernameDTO,
   type WelcomeDTO,
 } from '../net/protocol';
 import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } from '../net/schema';
@@ -175,6 +176,8 @@ export class MultiplayerGame {
   /** When the player last hit each aircraft (ms), to show its health bar. */
   readonly hitAt = new Map<string, number>();
   claimError: string | null = null;
+  /** While we have no username yet: what to offer in the prompt, and why the last one wasn't given. */
+  usernameNeeded: { value: string; note: string | null } | null = null;
   roomTitle = 'Classroom';
 
   private readonly dressings = new Map<string, Dressing>();
@@ -321,6 +324,7 @@ export class MultiplayerGame {
       setCode: (code) => {
         if (game) game.net.code = code;
       },
+      chooseUsername: (name) => game?.net.chooseUsername(name),
       leave: () => void game?.leaveSession(),
       singlePlayer: () => {
         void game?.net.leave();
@@ -426,8 +430,28 @@ export class MultiplayerGame {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
       if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
-      // v0.0.12: the server places our own base on a free desk; we only ask for it.
-      if (!this.home) this.claim('');
+      if (m.username) {
+        this.usernameNeeded = null;
+        this.lobby.setName(m.username);
+        // We asked for another name and didn't get it (taken, or changed too recently): say why.
+        if (m.usernameNote) this.hud.alert('warn', m.usernameNote, null, 'bad', 5);
+        // v0.0.12: the server places our own base on a free desk; we only ask for it.
+        if (!this.home) this.claim('');
+      } else {
+        // A username first (everyone sees players by it), then the base.
+        this.usernameNeeded = { value: this.lobby.name, note: m.usernameNote ?? null };
+        this.lobby.showClaim(this.claimView());
+      }
+    });
+    room.onMessage('username', (m: UsernameDTO) => {
+      if (m.ok && m.username) {
+        this.usernameNeeded = null;
+        this.lobby.setName(m.username);
+        if (!this.home) this.claim('');
+      } else if (this.usernameNeeded) {
+        this.usernameNeeded = { ...this.usernameNeeded, note: m.error };
+      }
+      if (!this.home) this.lobby.showClaim(this.claimView());
     });
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
@@ -809,7 +833,7 @@ export class MultiplayerGame {
     });
     this.lobby.hide();
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
-    this.hud.alert('home', territoryName(territoryId), 'yours', 'good', 3);
+    this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
     // A first-time tip: once per player (the server keeps which tips they have seen).
     if (!this.net.tipsSeen.has('mp-desk')) {
       this.hud.tip('Pick a card, pick a plane (Q/E), fold it (F), launch (Space). Tab shows the scoreboard; Z / C / V are emotes.', ['F', 'Space', 'Tab']);
@@ -1037,12 +1061,13 @@ export class MultiplayerGame {
         const owner = st?.owner || null;
         const p = owner ? s?.players.get(owner) : undefined;
         return {
-          id: t.id, name: territoryName(t.id), threat: st?.threat ?? t.threat, owner, ownerName: p?.name ?? null, colour: p?.colour ?? 0,
+          id: t.id, name: st?.label || territoryName(t.id), threat: st?.threat ?? t.threat, owner, ownerName: p?.name ?? null, colour: p?.colour ?? 0,
           claimable: st?.claimable ?? t.id !== PVP.centre, mine: owner === this.me, connected: p?.connected ?? true,
         };
       }),
       players: players.map(([id, p]) => ({ name: p.name, colour: p.colour, territory: p.territory || null, connected: p.connected, me: id === this.me })),
       error: this.claimError,
+      username: this.usernameNeeded,
     };
   }
 

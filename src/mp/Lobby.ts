@@ -1,5 +1,6 @@
 import { icon } from '../ui/icons';
 import { colourCss, NET } from '../net/protocol';
+import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../net/Username';
 import type { RoomListing } from './NetClient';
 
 export interface LobbyActions {
@@ -10,6 +11,8 @@ export interface LobbyActions {
   claim(territoryId: string): void;
   /** An invite code (first join) or a transfer code (from another computer), for the next join. */
   setCode(code: string | null): void;
+  /** The username the player typed on the claim screen (they had none yet, or it was refused). */
+  chooseUsername(name: string): void;
   leave(): void;
   singlePlayer(): void;
 }
@@ -32,6 +35,8 @@ export interface ClaimView {
   cells: ClaimCell[];
   players: Array<{ name: string; colour: number; territory: string | null; connected: boolean; me: boolean }>;
   error: string | null;
+  /** Shown while the player still needs a username: what to fill in, and why the last one wasn't given. */
+  username: { value: string; note: string | null } | null;
 }
 
 const NAME_KEY = 'paperwars.mp.name';
@@ -50,6 +55,8 @@ export class Lobby {
   private readonly codeInput: HTMLInputElement;
   private screen: 'rooms' | 'claim' | 'hidden' = 'rooms';
   private lastClaimKey = '';
+  /** What the player has typed into the username prompt so far. */
+  private typedUsername: string | null = null;
 
   constructor(parent: HTMLElement, private readonly actions: LobbyActions) {
     this.root = document.createElement('div');
@@ -57,7 +64,7 @@ export class Lobby {
     this.root.innerHTML = /* html */ `
       <div class="mp-card card" data-u="rooms">
         <div class="mp-head"><b class="brand">paperwars<span>.io</span></b><h2>Multiplayer</h2></div>
-        <label class="mp-field"><span>${icon('pencil')}Your name</span><input data-u="name" maxlength="${NET.nameMax}" autocomplete="nickname" spellcheck="false" /></label>
+        <label class="mp-field" title="What everyone sees you as: ${USERNAME.min} to ${USERNAME.max} letters, digits or _. You can change it once a week."><span>${icon('pencil')}Username</span><input data-u="name" maxlength="${USERNAME.max}" autocomplete="nickname" spellcheck="false" placeholder="${USERNAME.min} to ${USERNAME.max} letters, digits or _" /></label>
         <label class="mp-field" title="Only needed the first time on this computer: the invite you were sent, or a transfer code from your other computer"><span>${icon('swap')}Code</span><input data-u="code" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Invite or transfer code (first time only)" /></label>
         <div class="mp-row">
           <button class="btn primary" data-u="quick">${icon('plane')}<span>Quick join</span></button>
@@ -76,7 +83,9 @@ export class Lobby {
     this.status = el('status');
     this.nameInput = el('name') as HTMLInputElement;
     this.titleInput = el('title') as HTMLInputElement;
-    this.nameInput.value = loadName();
+    // A name from before usernames (v0.0.12) is offered as the username, if it would do.
+    const saved = loadName();
+    this.nameInput.value = suggestUsername(saved) ?? saved;
     this.nameInput.addEventListener('change', () => saveName(this.name));
     const codeInput = el('code') as HTMLInputElement;
     codeInput.value = new URLSearchParams(window.location.search).get('invite') ?? '';
@@ -90,8 +99,14 @@ export class Lobby {
   }
 
   get name(): string {
-    const value = this.nameInput.value.trim().slice(0, NET.nameMax);
+    const value = this.nameInput.value.trim().slice(0, USERNAME.max);
     return value || 'Pilot';
+  }
+
+  /** The server confirmed our username: it is what the field shows (and remembers) from now on. */
+  setName(name: string): void {
+    this.nameInput.value = name;
+    saveName(name);
   }
 
   get open(): boolean {
@@ -152,17 +167,42 @@ export class Lobby {
           <span class="mp-cell-id">${c.id}</span><span class="mp-cell-name">${esc(c.name)}</span>${body}</button>`;
       })
       .join('');
+    const username = view.username
+      ? `<div class="mp-username"><label class="mp-field" title="What everyone sees you as. You can change it once a week."><span>${icon('pencil')}Choose a username</span><input data-u="uname" maxlength="${USERNAME.max}" spellcheck="false" autocomplete="nickname" value="${esc(view.username.value)}" placeholder="${USERNAME.min} to ${USERNAME.max} letters, digits or _" /></label><button class="btn primary small" data-u="usename">${icon('ok')}<span>Use this name</span></button>${view.username.note ? `<div class="mp-error">${esc(view.username.note)}</div>` : ''}</div>`
+      : '';
     const players = view.players
       .map((p) => `<span class="mp-player${p.me ? ' me' : ''}${p.connected ? '' : ' away'}"><i style="background:${colourCss(p.colour)}"></i>${esc(p.name)}${p.territory ? ` · ${p.territory}` : ''}</span>`)
       .join('');
     this.claim.innerHTML = /* html */ `
       <div class="mp-head"><b class="brand">paperwars<span>.io</span></b><h2>${esc(view.title)}</h2></div>
-      <p class="mp-hint">${view.error ? 'Your base is waiting.' : 'Placing your base on a free desk…'} Your base is yours: it comes with you to whichever desk you get, exactly as you left it.</p>
+      <p class="mp-hint">${view.username ? 'Pick the name everyone will see you as, and your base is placed.' : view.error ? 'Your base is waiting.' : 'Placing your base on a free desk…'} Your base is yours: it comes with you to whichever desk you get, exactly as you left it.</p>
+      ${username}
       <div class="mp-map">${cells}</div>
       <div class="mp-players">${players}</div>
       ${view.error ? `<div class="mp-error">${esc(view.error)}</div>` : ''}
       <div class="mp-foot">${view.error ? `<button class="btn small" data-u="retry">${icon('swap')}<span>Try again</span></button>` : '<span></span>'}<button class="btn ghost small" data-u="leave">${icon('close')}<span>Leave</span></button></div>`;
     this.claim.querySelector('[data-u="retry"]')?.addEventListener('click', () => this.actions.claim(''));
+    const uname = this.claim.querySelector<HTMLInputElement>('[data-u="uname"]');
+    if (uname) {
+      // Whatever is typed is kept across redraws until it is sent.
+      uname.value = this.typedUsername ?? uname.value;
+      uname.addEventListener('input', () => (this.typedUsername = uname.value));
+      const send = () => {
+        const problem = usernameProblem(uname.value.trim());
+        if (problem) {
+          this.claim.querySelector('.mp-username .mp-error')?.remove();
+          uname.closest('.mp-username')!.insertAdjacentHTML('beforeend', `<div class="mp-error">${esc(USERNAME_PROBLEMS[problem])}</div>`);
+          return;
+        }
+        this.actions.chooseUsername(uname.value.trim());
+      };
+      this.claim.querySelector('[data-u="usename"]')!.addEventListener('click', send);
+      uname.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') send();
+      });
+    } else {
+      this.typedUsername = null;
+    }
     this.claim.querySelector('[data-u="leave"]')!.addEventListener('click', () => this.actions.leave());
   }
 

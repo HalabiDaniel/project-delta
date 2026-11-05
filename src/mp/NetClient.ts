@@ -84,7 +84,7 @@ export class NetClient {
 
   /** What every join sends: the protocol version, the name, and who we are. */
   private joinOptions(name: string, extra: Partial<JoinOptions> = {}): JoinOptions {
-    const options: JoinOptions = { v: PROTOCOL_VERSION, name, ...extra };
+    const options: JoinOptions = { v: PROTOCOL_VERSION, name, username: name, ...extra };
     const token = this.token;
     if (token) options.token = token;
     if (this.code) options.code = this.code;
@@ -110,6 +110,11 @@ export class NetClient {
    */
   onTutorial(listener: (record: unknown) => void): void {
     this.tutorialListeners.push(listener);
+  }
+
+  /** Asks for a username (the first one, or another after one was refused). */
+  chooseUsername(name: string): void {
+    this.room?.send('username', { name });
   }
 
   /** A first-time tip was shown: the server keeps it, so it isn't shown again on any computer. */

@@ -297,7 +297,8 @@ export class MpViews {
     const level = Math.min(3, (turrets > 0 ? 1 : 0) + (launchers > 0 ? 1 : 0) + (radar ? 1 : 0)) as 0 | 1 | 2 | 3;
     const parts = [turrets || launchers ? defenseList(turrets, launchers) : 'no guns', radar ? 'radar' : 'no radar'];
     const icons: IconName[] = [...(turrets ? ['turret' as const] : []), ...(launchers ? ['launcher' as const] : []), ...(radar ? ['radar' as const] : []), 'fighter'];
-    return { level, label: 'Player base', detail: `${territoryName(territoryId)}: ${parts.join(' · ')} · its owner may fly up`, icons };
+    const desk = this.g.room?.state.territories.get(territoryId)?.label || territoryName(territoryId);
+    return { level, label: 'Player base', detail: `${desk}: ${parts.join(' · ')} · its owner may fly up`, icons };
   }
 
   private garageView(mission: Mission): GarageView {

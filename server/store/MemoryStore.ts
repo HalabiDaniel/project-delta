@@ -11,6 +11,8 @@ import {
   type BaseRecord,
   type MissionOutcome,
   type ProgressRecord,
+  type PvpRecord,
+  type UsernameResult,
   type BaseState,
   type EconomyRecord,
   type InviteRecord,
@@ -64,6 +66,7 @@ export class MemoryStore implements Store {
   private readonly progresses = new Map<string, ProgressRecord>();
   private readonly outcomes = new Map<string, MissionOutcome & { at: string }>();
   private readonly tipsOf = new Map<string, string[]>();
+  private readonly pvp: Array<PvpRecord & { worldId: string }> = [];
   /** Tests can make the store "newer" than the code to check refusals. */
   worldFormatOverride: number | null = null;
 
@@ -87,7 +90,7 @@ export class MemoryStore implements Store {
     if ([...this.players.values()].some((p) => p.publicId === player.publicId)) throw new Error('duplicate public id');
     if (this.tokens.has(tokenHash)) throw new Error('duplicate token');
     const now = new Date();
-    const record: PlayerRecord = { ...player, createdAt: now, lastSeenAt: now, revoked: false };
+    const record: PlayerRecord = { ...player, createdAt: now, lastSeenAt: now, revoked: false, username: null, usernameChangedAt: null };
     this.players.set(player.id, record);
     this.tokens.set(tokenHash, { playerId: player.id, origin, revoked: false, lastUsedAt: now });
     return { ...record };
@@ -108,7 +111,8 @@ export class MemoryStore implements Store {
   }
 
   async findPlayers(query: string): Promise<PlayerRecord[]> {
-    return [...this.players.values()].filter((p) => p.id === query || p.publicId === query || p.name === query).map((p) => ({ ...p }));
+    const lower = query.toLowerCase();
+    return [...this.players.values()].filter((p) => p.id === query || p.publicId === query || p.name === query || p.username?.toLowerCase() === lower).map((p) => ({ ...p }));
   }
 
   async listPlayers(): Promise<PlayerRecord[]> {
@@ -266,13 +270,39 @@ export class MemoryStore implements Store {
 
   async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
     if (!this.players.has(playerId)) throw new Error(`no player ${playerId}`);
-    this.progresses.set(`${worldId}/${playerId}`, structuredClone(record));
+    this.progresses.set(`${worldId}/${playerId}`, structuredClone({ ...record, protectUntil: record.protectUntil ?? null, shieldUntil: record.shieldUntil ?? null }));
   }
 
   async recordMission(worldId: string, playerId: string, outcome: MissionOutcome): Promise<boolean> {
     if (this.outcomes.has(outcome.id)) return false;
     this.outcomes.set(outcome.id, { ...structuredClone(outcome), at: `${worldId}/${playerId}` });
     return true;
+  }
+
+  async addPvpRecord(worldId: string, record: PvpRecord): Promise<void> {
+    if (this.pvp.some((r) => r.id === record.id)) return;
+    this.pvp.push({ ...record, at: new Date(record.at), worldId });
+  }
+
+  async pvpRecords(worldId: string, playerId: string, since: Date): Promise<PvpRecord[]> {
+    const pub = (id: string) => this.players.get(id)?.publicId ?? id;
+    return this.pvp
+      .filter((r) => r.worldId === worldId && (r.attacker === playerId || r.victim === playerId) && r.at.getTime() >= since.getTime())
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+      .map((r) => ({ id: r.id, kind: r.kind, attacker: pub(r.attacker), victim: pub(r.victim), success: r.success, at: new Date(r.at) }));
+  }
+
+  async setUsername(playerId: string, username: string, cooldownSeconds: number): Promise<UsernameResult> {
+    const p = this.players.get(playerId);
+    if (!p) throw new Error(`no player ${playerId}`);
+    if (p.username === username) return 'same';
+    const lower = username.toLowerCase();
+    if ([...this.players.values()].some((o) => o.id !== playerId && o.username?.toLowerCase() === lower)) return 'taken';
+    if (p.username !== null && p.usernameChangedAt && Date.now() - p.usernameChangedAt.getTime() < cooldownSeconds * 1000 && p.username.toLowerCase() !== lower) return 'cooldown';
+    p.username = username;
+    p.name = username;
+    p.usernameChangedAt = new Date();
+    return 'ok';
   }
 
   async tips(playerId: string): Promise<string[]> {

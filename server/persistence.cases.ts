@@ -44,7 +44,23 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
     return r;
   }
 
+  /**
+   * Usernames are unique across the game and the PostgreSQL schema lives for the whole file: each
+   * test's "Ann" is its own player, the same one every time that test joins as Ann.
+   */
+  const names = new Map<string, string>();
+  let serial = 0;
+  const unique = (name: string) => {
+    let u = names.get(name);
+    if (!u) {
+      u = `${name}_${process.pid % 1000}${++serial}`;
+      names.set(name, u);
+    }
+    return u;
+  };
+
   async function enter(r: WorldRoom, options: Record<string, unknown>) {
+    if (typeof options.name === 'string') options = { ...options, name: unique(options.name) };
     const client = await colyseus.connectTo(r, { ...join, ...options });
     client.send('hello');
     const welcome = (await client.waitForMessage('welcome')) as WelcomeDTO;
@@ -88,6 +104,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
       let s: Services;
       beforeEach(async () => {
         await colyseus.cleanup();
+        names.clear();
         s = make()!;
         setServices(s);
       });
@@ -188,6 +205,7 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
       let s: Services;
       beforeEach(async () => {
         await colyseus.cleanup();
+        names.clear();
         s = make()!;
         setServices(s);
       });
@@ -243,6 +261,65 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         expect(await s.store.recordMission(worldId, rec.id, { id: missionId, template: 'x', state: 'failed', outcome: null, reward: 0, spec: {} })).toBe(false);
         await expect(s.store.saveAircraft(worldId, rec.id, [{ id: planeId, type: 'swift', status: 'ready', health: 10, loadout: {} }])).rejects.toThrow();
       }, 10000);
+    });
+  }
+
+  for (const [label, make] of stores) {
+    describe.skipIf(label === 'postgres' && !TEST_DATABASE_URL)(`usernames and fairness timers (${label})`, () => {
+      let s: Services;
+      beforeEach(async () => {
+        await colyseus.cleanup();
+        names.clear();
+        s = make()!;
+        setServices(s);
+      });
+
+      it('gives a player the username they typed, and asks the next one with the same name for another', async () => {
+        const r = await room();
+        const ann = await enter(r, { name: 'Ann' });
+        expect(ann.welcome.username).toBe(names.get('Ann'));
+        const twin = await colyseus.connectTo(r, { ...join, name: names.get('Ann')!.toUpperCase() });
+        twin.send('hello');
+        const welcome = (await twin.waitForMessage('welcome')) as WelcomeDTO;
+        expect(welcome.username).toBeNull();
+        expect(welcome.usernameNote).toMatch(/taken/);
+        // No base before a username.
+        twin.send('claim', { t: 'T1' });
+        expect(await twin.waitForMessage('claimed')).toMatchObject({ ok: false, error: expect.stringMatching(/username/i) });
+        twin.send('username', { name: 'admin' });
+        expect(await twin.waitForMessage('username')).toMatchObject({ ok: false, error: expect.stringMatching(/reserved/) });
+        await wait(600);
+        const mine = unique('Twin');
+        twin.send('username', { name: mine });
+        expect(await twin.waitForMessage('username')).toMatchObject({ ok: true, username: mine });
+        expect(r.state.players.get(welcome.id)?.name).toBe(mine);
+        twin.send('claim', { t: 'T1' });
+        expect(await twin.waitForMessage('claimed')).toMatchObject({ ok: true });
+        await twin.waitForNextPatch();
+        const desk = r.world.pilots.get(welcome.id)!.home!.id;
+        expect(r.state.territories.get(desk)?.label).toBe(`${mine}'s desk`);
+      });
+
+      it("keeps a shield across sessions, and never renews a returning player's new-player protection", async () => {
+        const r = await room();
+        const ann = await enter(r, { name: 'Ann' });
+        await placed(ann.client);
+        const p = r.world.pilots.get(ann.id)!;
+        expect(p.protectUntil).toBeGreaterThan(r.world.time + 200);
+        // Raided a moment ago: shielded for a while. Protection over.
+        p.protectUntil = r.world.time - 1;
+        p.shieldUntil = r.world.time + 100;
+        await ann.client.leave();
+        const rec = (await s.store.findPlayers(ann.id))[0];
+        await eventually(async () => (await s.store.base(rec.id))?.placement === null);
+        await eventually(async () => !!(await s.store.progress(await economyWorld(), rec.id))?.shieldUntil);
+        const again = await enter(r, { name: 'Ann', token: ann.welcome.token });
+        await placed(again.client);
+        const q = r.world.pilots.get(ann.id)!;
+        expect(q.protectUntil).toBe(0);
+        expect(q.shieldUntil - r.world.time).toBeGreaterThan(90);
+        expect(q.shieldUntil - r.world.time).toBeLessThanOrEqual(100);
+      });
     });
   }
 }

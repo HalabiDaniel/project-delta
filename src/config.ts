@@ -1544,3 +1544,13 @@ export const PALETTE = {
   threat2: [0.98, 0.5, 0.12],
   threat3: [0.86, 0.15, 0.15],
 } as const;
+
+/**
+ * Names for the desks the AI holds in multiplayer (v0.0.12, approved 2026-11-05), shown as
+ * "{name}'s desk". Picked per session, skipping any name a player in that session uses.
+ */
+export const DESK_NAMES: readonly string[] = [
+  'Billy', 'Tina', 'Big Greg', 'Sticky Sam', 'Pencil Pete', "Lil' Kevin", 'Captain Crayon', 'Gluestick Gary', 'Messy Maya', 'Sir Eraser',
+  'Lunchbox Lou', 'Professor Pip', 'Sleepy Steve', 'Bossy Bea', 'Noodle Ned', 'Paperclip Pam', 'Wobbly Walt', 'Snack Jack', 'Fizzy Fran',
+  'Doodle Dot', 'Nana Ruth', 'Tiny Tim', 'Margo', 'Doug',
+];

@@ -22,7 +22,13 @@ export interface PlayerRecord {
   lastSeenAt: Date;
   /** Revoked players can't join with any token until the developer restores them. */
   revoked: boolean;
+  /** The name everyone sees (v0.0.12): chosen once, unique ignoring case; null until chosen. */
+  username: string | null;
+  usernameChangedAt: Date | null;
 }
+
+/** What became of a request for a username. */
+export type UsernameResult = 'ok' | 'same' | 'taken' | 'cooldown';
 
 /** How a device token came to be. */
 export type TokenOrigin = 'open' | 'invite' | 'transfer';
@@ -134,6 +140,21 @@ export interface ProgressRecord {
   director: unknown;
   /** The garage: the design chosen, the ids of the cards on the board. */
   garage: Record<string, unknown>;
+  /** New-player protection and the raid shield, as clock times (null: none). */
+  protectUntil?: Date | null;
+  shieldUntil?: Date | null;
+}
+
+/** A raid or a kill between two players, for the cooldowns, the repeat rule and the kill-farming window. */
+export interface PvpRecord {
+  /** Unique (a UUID): the same record is never counted twice. */
+  id: string;
+  kind: 'raid' | 'kill';
+  /** Player ids (UUIDs) when written; public ids when read back (what the world knows players by). */
+  attacker: string;
+  victim: string;
+  success: boolean;
+  at: Date;
 }
 
 /** A mission's outcome, written once per card. */
@@ -280,6 +301,15 @@ export interface Store {
   saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void>;
   /** Writes a mission's outcome once: false if that card's outcome was already written. */
   recordMission(worldId: string, playerId: string, outcome: MissionOutcome): Promise<boolean>;
+  /** Records a raid or a kill (ids are player UUIDs). Writing the same record id twice changes nothing. */
+  addPvpRecord(worldId: string, record: PvpRecord): Promise<void>;
+  /** Raids and kills the player took part in (either side) since `since`, oldest first, by public id. */
+  pvpRecords(worldId: string, playerId: string, since: Date): Promise<PvpRecord[]>;
+  /**
+   * Gives the player `username` if nobody else has it (ignoring case) and they haven't changed it
+   * within `cooldownSeconds` (a first username is never held back). The caller checks the rules.
+   */
+  setUsername(playerId: string, username: string, cooldownSeconds: number): Promise<UsernameResult>;
   /** First-time tips the player has seen (ids), across every world and computer. */
   tips(playerId: string): Promise<string[]>;
   setTips(playerId: string, tips: string[]): Promise<void>;

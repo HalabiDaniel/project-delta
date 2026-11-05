@@ -232,7 +232,7 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.progress(world.id, p.id)).toBeNull();
       const record = { stats: { kills: 3, sorties: 9 }, director: { swaps: 2, offers: [] }, garage: { aircraft: 'falcon', board: { safe: randomUUID() } } };
       await store.saveProgress(world.id, p.id, record);
-      expect(await store.progress(world.id, p.id)).toEqual(record);
+      expect(await store.progress(world.id, p.id)).toEqual({ ...record, protectUntil: null, shieldUntil: null });
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 4, sorties: 10 } });
       expect((await store.progress(world.id, p.id))?.stats).toEqual({ kills: 4, sorties: 10 });
       const outcome = { id: randomUUID(), template: 'strike', state: 'completed' as const, outcome: null, reward: 60, spec: { title: 'Strike' } };
@@ -248,6 +248,53 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.tips(p.id)).toEqual([]);
       await store.setTips(p.id, ['mp-desk', 'mp-desk', '<script>', 'raid-card']);
       expect(await store.tips(p.id)).toEqual(['mp-desk', 'raid-card']);
+    });
+
+    it('gives each username to one player only, ignoring case, and lets it change once a week', async () => {
+      const tag = randomUUID().slice(0, 6);
+      const a = await store.createPlayer(player('a'), h(`tok-ua-${tag}`), 'open');
+      const b = await store.createPlayer(player('b'), h(`tok-ub-${tag}`), 'open');
+      expect(await store.setUsername(a.id, `Ace_${tag}`, 3600)).toBe('ok');
+      expect((await store.playerById(a.id))).toMatchObject({ username: `Ace_${tag}`, name: `Ace_${tag}` });
+      expect(await store.setUsername(b.id, `ACE_${tag}`, 3600)).toBe('taken');
+      expect(await store.setUsername(a.id, `Ace_${tag}`, 3600)).toBe('same');
+      // A case-only change is always fine; a new name waits for the cooldown.
+      expect(await store.setUsername(a.id, `ace_${tag}`, 3600)).toBe('ok');
+      expect(await store.setUsername(a.id, `Ace2_${tag}`, 3600)).toBe('cooldown');
+      expect(await store.setUsername(a.id, `Ace2_${tag}`, 0)).toBe('ok');
+      // The old name is free again.
+      expect(await store.setUsername(b.id, `ACE_${tag}`, 3600)).toBe('ok');
+      expect((await store.findPlayers(`ace_${tag}`)).map((p) => p.id)).toEqual([b.id]);
+      // Two players asking for one name at once: one gets it.
+      const c = await store.createPlayer(player('c'), h(`tok-uc-${tag}`), 'open');
+      const d = await store.createPlayer(player('d'), h(`tok-ud-${tag}`), 'open');
+      const both = await Promise.all([store.setUsername(c.id, `Twin_${tag}`, 0), store.setUsername(d.id, `twin_${tag}`, 0)]);
+      expect(both.sort()).toEqual(['ok', 'taken']);
+    });
+
+    it('keeps raids and kills between players, found from either side, each once', async () => {
+      const world = await store.openWorld('pvp');
+      const a = await store.createPlayer(player('Raider'), h('tok-raider'), 'open');
+      const b = await store.createPlayer(player('Target'), h('tok-target'), 'open');
+      const old = { id: randomUUID(), kind: 'raid' as const, attacker: a.id, victim: b.id, success: true, at: new Date(Date.now() - 3_600_000) };
+      const raid = { id: randomUUID(), kind: 'raid' as const, attacker: a.id, victim: b.id, success: true, at: new Date(Date.now() - 60_000) };
+      const kill = { id: randomUUID(), kind: 'kill' as const, attacker: b.id, victim: a.id, success: true, at: new Date(Date.now() - 30_000) };
+      for (const r of [old, raid, raid, kill]) await store.addPvpRecord(world.id, r);
+      const since = new Date(Date.now() - 600_000);
+      const ofA = await store.pvpRecords(world.id, a.id, since);
+      expect(ofA.map((r) => r.id)).toEqual([raid.id, kill.id]);
+      expect(ofA[0]).toMatchObject({ kind: 'raid', attacker: a.publicId, victim: b.publicId, success: true });
+      expect((await store.pvpRecords(world.id, b.id, since)).map((r) => r.id)).toEqual([raid.id, kill.id]);
+    });
+
+    it('keeps protections as clock times with the progress', async () => {
+      const world = await store.openWorld('timers');
+      const p = await store.createPlayer(player('Shielded'), h('tok-shielded'), 'open');
+      const protectUntil = new Date(Date.now() + 120_000);
+      await store.saveProgress(world.id, p.id, { stats: {}, director: null, garage: {}, protectUntil, shieldUntil: null });
+      const back = await store.progress(world.id, p.id);
+      expect(back?.protectUntil?.getTime()).toBe(protectUntil.getTime());
+      expect(back?.shieldUntil).toBeNull();
     });
 
     it("places a new player's base for one room, which saves and packs it; nobody else can meanwhile", async () => {

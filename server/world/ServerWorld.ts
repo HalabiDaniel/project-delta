@@ -10,7 +10,7 @@ import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, PLAYER_ID, PVP, RAIDS, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
@@ -32,6 +32,7 @@ import {
   type Weapon,
 } from '../../src/net/protocol';
 import { ownerOfSide, sharedWorld, territoryName, type SharedWorld } from '../../src/net/World';
+import { deskLabel, sameName } from '../../src/net/Username';
 import type { GameEvent } from '../../src/systems/GameState';
 import { GameState } from '../../src/systems/GameState';
 import { seededRng, type Rng } from '../../src/systems/Random';
@@ -53,6 +54,18 @@ export interface ServerWorldOptions {
   ambient?: boolean;
   /** Seconds of new-player protection (default PVP.newPlayerProtection; lower it to test raids alone). */
   newPlayerProtection?: number;
+  /** The real clock (ms since 1970), for the timers that outlive the world (tests set their own). */
+  clock?: () => number;
+}
+
+/** A raid or a kill as the world reports it for the store: players by public id, the time as a clock time (ms). */
+export interface PvpEvent {
+  id: string;
+  kind: 'raid' | 'kill';
+  attacker: string;
+  victim: string;
+  success: boolean;
+  at: number;
 }
 
 /** What travels with a player besides their buildings, loaded from the store when the base is placed. */
@@ -70,6 +83,11 @@ export interface PlayerCarry {
   board?: Record<string, string>;
   /** Lifetime statistics so far. */
   stats?: Record<string, number>;
+  /**
+   * New-player protection and the raid shield as clock times (ms; null: none). Absent: a brand-new
+   * player, whose new-player protection starts now.
+   */
+  protection?: { protectUntil: number | null; shieldUntil: number | null };
 }
 
 /** A plane as it travels with the player. */
@@ -137,6 +155,7 @@ export class ServerWorld {
   /** Timing of the last steps, for the load test and the server log. */
   readonly perf = { steps: 0, totalMs: 0, maxMs: 0 };
   private readonly rng: Rng;
+  private readonly nameRng: Rng;
   private readonly seed: number;
   /** Wrecked AI installations and when they stand up again. */
   private readonly aiWrecks = new Map<string, number>();
@@ -153,11 +172,19 @@ export class ServerWorld {
   private readonly v2 = new Vec3();
 
   private readonly protection: number;
+  private readonly clock: () => number;
+  /** Raids and kills since the last call, for the store. */
+  private readonly pvpOut: PvpEvent[] = [];
+  /** The AI's name for each desk this session ("Billy" → "Billy's desk"). */
+  private readonly aiNames = new Map<string, string>();
 
   constructor(options: ServerWorldOptions = {}) {
     this.protection = options.newPlayerProtection ?? PVP.newPlayerProtection;
+    this.clock = options.clock ?? Date.now;
     this.seed = options.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = seededRng(this.seed);
+    // Desk names draw from their own sequence, so they never change what the world's rules roll.
+    this.nameRng = seededRng(this.seed + 7177);
     this.shared = sharedWorld();
     this.territories = this.shared.territories;
     this.network = new DefenseNetwork(this.shared.layout.installations, this.rng);
@@ -167,6 +194,69 @@ export class ServerWorld {
     this.air = new AirTraffic(this.territories, nowhere, () => ({ territoryId: 'none', x: 1e5, y: 0, z: 1e5, radius: 1 }), this.rng, options.ambient ?? true);
     // Mission aircraft that get away count as escaped (AirTraffic only reports that while a mission is on).
     this.air.startMission([]);
+    // Every desk the AI holds gets a goofy name for this session.
+    const names = [...DESK_NAMES];
+    for (const t of this.territories) this.aiNames.set(t.id, names.splice(Math.floor(this.nameRng() * names.length), 1)[0] ?? t.id);
+  }
+
+  // ---- Clock times ------------------------------------------------------------------------------
+
+  /** A world time as a clock time (ms). */
+  wallOf(worldTime: number): number {
+    return this.clock() + (worldTime - this.time) * 1000;
+  }
+
+  /** A clock time (ms) as a world time. */
+  worldAt(wall: number): number {
+    return this.time + (wall - this.clock()) / 1000;
+  }
+
+  // ---- Desk names -------------------------------------------------------------------------------
+
+  /** "Daniel's desk" for a player's, "Billy's desk" for the AI's. */
+  deskName(territoryId: string): string {
+    const owner = this.owners.get(territoryId);
+    const p = owner ? this.pilots.get(owner) : undefined;
+    return deskLabel(p?.name ?? this.aiNames.get(territoryId) ?? territoryId);
+  }
+
+  /** An AI desk named like a player in the session takes another name (no two "Billy"s). */
+  private keepNamesApart(): void {
+    const players = [...this.pilots.values()].map((p) => p.name);
+    const used = new Set(this.aiNames.values());
+    for (const [t, name] of this.aiNames) {
+      if (!players.some((n) => sameName(n, name))) continue;
+      const free = DESK_NAMES.filter((n) => !used.has(n) && !players.some((p) => sameName(p, n)));
+      if (free.length === 0) continue;
+      const next = free[Math.floor(this.nameRng() * free.length)];
+      used.delete(name);
+      used.add(next);
+      this.aiNames.set(t, next);
+    }
+  }
+
+  /** The player is known by a new name (they chose their username). */
+  rename(id: string, name: string): void {
+    const p = this.pilots.get(id);
+    if (!p || p.name === name) return;
+    p.name = name;
+    this.keepNamesApart();
+  }
+
+  // ---- Raids and kills that outlive the world ---------------------------------------------------
+
+  /** Raids and kills since the last call (for the store). */
+  takePvp(): PvpEvent[] {
+    return this.pvpOut.splice(0);
+  }
+
+  /** Raids and kills from before (other sessions, before a restart), for the cooldowns and windows. */
+  rememberPvp(events: readonly PvpEvent[]): void {
+    for (const e of events) {
+      const at = this.worldAt(e.at);
+      if (e.kind === 'raid') this.attacks.remember({ id: e.id, attacker: e.attacker, victim: e.victim, at, success: e.success });
+      else this.kills.remember({ id: e.id, killer: e.attacker, victim: e.victim, at });
+    }
   }
 
   // ---- Players ----------------------------------------------------------------------------------
@@ -178,6 +268,7 @@ export class ServerWorld {
     while (used.has(colour)) colour++;
     const pilot = new Pilot(id, name, colour, this.time);
     this.pilots.set(id, pilot);
+    this.keepNamesApart();
     this.news(`${name} joined`, 'info');
     return pilot;
   }
@@ -243,11 +334,18 @@ export class ServerWorld {
     if (carry.director && director.validate()) state.updateOffers(p.cards());
     state.onEvent((e) => this.onGameEvent(p, e));
     base.onEvent((e) => this.onBaseEvent(p, e));
-    p.protectUntil = this.time + this.protection;
+    // Protections are the player's, on the real clock: a new player's starts now; a returning
+    // player's carries on exactly where it was (a restart or a new session changes nothing).
+    if (carry.protection) {
+      p.protectUntil = carry.protection.protectUntil !== null ? this.worldAt(carry.protection.protectUntil) : 0;
+      p.shieldUntil = carry.protection.shieldUntil !== null ? this.worldAt(carry.protection.shieldUntil) : 0;
+    } else {
+      p.protectUntil = this.time + this.protection;
+    }
     p.flight.model.hide();
     this.solidsCache = null;
     this.news(`${p.name} claimed ${territoryName(territoryId)}`, 'good');
-    this.note(p, 'home', save ? 'Your base is here' : 'Your new base', `${territoryName(territoryId)} · ${deskPosition(t, this.territories)}`, 'good');
+    this.note(p, 'home', save ? 'This session' : 'Your new base', `${this.deskName(territoryId)} · ${deskPosition(t, this.territories)}`, 'good');
     return null;
   }
 
@@ -386,7 +484,8 @@ export class ServerWorld {
     for (const [k, v] of Object.entries(st.stats)) add(k, v);
     const board: Record<string, string> = {};
     for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
-    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board } };
+    const clock = (t: number) => (t > this.time ? new Date(Math.round(this.wallOf(t))) : null);
+    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -1180,7 +1279,8 @@ export class ServerWorld {
       }
       this.news(`${attacker?.name ?? 'Someone'} raided ${victim.name}`, 'bad');
     }
-    this.attacks.finish(attack, outcome === 'bombed', this.time);
+    const record = this.attacks.finish(attack, outcome === 'bombed', this.time);
+    this.pvpOut.push({ id: record.id!, kind: 'raid', attacker: record.attacker, victim: record.victim, success: record.success, at: Math.round(this.wallOf(record.at)) });
     const reward = attacker?.state?.mission?.status === 'succeeded' ? attacker.state.mission.reward : 0;
     if (victim) {
       victim.report = {
@@ -1414,6 +1514,8 @@ export class ServerWorld {
       k.addScore(PVP.score.kill);
       const cost = st.emergency ? 0 : plane.cost;
       const bounty = this.kills.record(k.id, p.id, cost, st.emergency, this.time);
+      const kill = this.kills.last!;
+      this.pvpOut.push({ id: kill.id, kind: 'kill', attacker: k.id, victim: p.id, success: true, at: Math.round(this.wallOf(kill.at)) });
       if (bounty > 0) k.state.payBonus(bounty, `Shot down ${p.name}`);
       k.state.aircraftDestroyed(p.plane, role, true);
       this.note(k, 'crumple', `Shot down ${p.name}`, bounty > 0 ? `+${bounty}` : null, 'good');

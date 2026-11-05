@@ -121,6 +121,8 @@ export const TerritoryState = schema(
     alert: t.boolean().default(false),
     /** Players may claim it (the centre never). */
     claimable: t.boolean().default(true),
+    /** "Daniel's desk", or the AI's goofy name for it this session ("Billy's desk"). */
+    label: t.string().default(''),
   },
   'TerritoryState',
 );

@@ -11,6 +11,7 @@ import {
   type JoinOptions,
   type NetEvent,
   type TransferDTO,
+  type UsernameDTO,
   type WelcomeDTO,
 } from '../src/net/protocol';
 import { AiState, InstallationState, PHASES, PLANE_STATUSES, PlaneState, PlayerState, TerritoryState, WorldState, INSTALLATION_STATES } from '../src/net/schema';
@@ -18,7 +19,9 @@ import { foldPose } from '../src/systems/GameState';
 import { parseTutorial } from '../src/progress/Tutorial';
 import { refusal, type Authenticated } from './identity/Identity';
 import { economyWorld, services } from './services';
-import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord } from './store/Store';
+import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRecord } from './store/Store';
+import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
+import { PVP } from '../src/config';
 import { ECONOMY } from '../src/config';
 import type { PaperChange } from './world/Paper';
 import { randomUUID } from 'node:crypto';
@@ -40,6 +43,9 @@ export interface RoomMetadata {
   claimed: number;
   free: number;
 }
+
+/** How far back raids and kills are loaded for a placed player (s): as far as any rule looks. */
+const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow);
 
 /** The longest real time one simulation callback may catch up on (a stalled event loop doesn't snowball). */
 const MAX_CATCH_UP = 0.25;
@@ -100,7 +106,12 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
    * What the next welcome says, per connection: sent when the client says hello (messages sent
    * during onJoin arrive before the client can listen for them).
    */
-  private readonly greetings = new Map<string, { reconnected: boolean; token: string | null }>();
+  private readonly greetings = new Map<string, { reconnected: boolean; token: string | null; note?: string | null }>();
+  /** Why the username a joining player asked for wasn't given, until their welcome. */
+  private readonly usernameNotes = new Map<string, string | null>();
+  private readonly usernameAt = new Map<string, number>();
+  /** Every player this room has known: public id → account id (for raids and kills with someone who left). */
+  private readonly known = new Map<string, string>();
   /** Places, saves and packs this room's bases in the store. */
   private keeper!: BaseKeeper;
   /** Players whose base is being loaded, and the desks held for them meanwhile. */
@@ -154,6 +165,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.onMessage('transfer', (client) => void this.sendTransferCode(client));
     this.onMessage('tutorial', (client, data: unknown) => void this.saveTutorial(client, data));
     this.onMessage('tip', (client, data: unknown) => void this.saveTip(client, data));
+    this.onMessage('username', (client, data: unknown) => void this.setUsername(client, data));
     this.onMessage('*', () => {
       // Unknown message types are ignored.
     });
@@ -164,7 +176,59 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (options?.v !== PROTOCOL_VERSION) throw refusal(`This server speaks protocol ${PROTOCOL_VERSION}; reload the page.`);
     const auth = await services().identity.authenticate({ token: options.token, code: options.code, name: cleanName(options.name) });
     if (!this.world.pilots.has(auth.player.publicId) && this.world.pilots.size >= NET.maxPlayers) throw refusal(`This classroom is full (${NET.maxPlayers} players).`);
+    this.usernameNotes.set(auth.player.publicId, await this.chooseUsername(auth.player, options.username ?? options.name));
     return auth;
+  }
+
+  /**
+   * The username the player asked for, if they may have it: their first one (which they need before
+   * their base is placed), or a change (once a week). Returns why not, or null. A name that breaks
+   * the rules is tried once more cleaned up ("Bo<script>" → "Boscript"), as the lobby would.
+   */
+  private async chooseUsername(player: PlayerRecord, raw: unknown): Promise<string | null> {
+    const typed = typeof raw === 'string' ? raw.trim() : '';
+    if (!typed) return player.username ? null : USERNAME_PROBLEMS.length;
+    const wanted = usernameProblem(typed) === null ? typed : suggestUsername(cleanName(typed, ''));
+    if (!wanted) return player.username ? null : USERNAME_PROBLEMS[usernameProblem(typed) ?? 'characters'];
+    if (player.username === wanted) return null;
+    try {
+      const result = await services().store.setUsername(player.id, wanted, USERNAME.cooldown);
+      if (result === 'ok' || result === 'same') {
+        player.username = wanted;
+        player.name = wanted;
+        return null;
+      }
+      return USERNAME_PROBLEMS[result];
+    } catch (error) {
+      console.warn(`[room ${this.roomId}] could not set the username of ${player.publicId}:`, error);
+      return "Your username couldn't be saved right now. Try again in a moment.";
+    }
+  }
+
+  /** A player choosing their username in the room (they had none yet, or it was refused). */
+  private async setUsername(client: Client, data: unknown): Promise<void> {
+    const id = this.idOf(client);
+    const account = id ? this.accounts.get(id) : undefined;
+    if (!id || !account) return;
+    const typed = (data as { name?: unknown } | null)?.name;
+    const now = performance.now();
+    if (now - (this.usernameAt.get(id) ?? -Infinity) < 500) return;
+    this.usernameAt.set(id, now);
+    const reply = (error: string | null) => client.send('username', { ok: error === null, username: account.username, error } satisfies UsernameDTO);
+    if (typeof typed !== 'string') return reply(USERNAME_PROBLEMS.length);
+    const name = typed.trim();
+    const problem = usernameProblem(name);
+    if (problem) return reply(USERNAME_PROBLEMS[problem]);
+    const error = await this.chooseUsername(account, name);
+    if (!error) this.renamed(id, account);
+    reply(error);
+  }
+
+  /** Everyone sees the player by their (new) username. */
+  private renamed(id: string, account: PlayerRecord): void {
+    this.world.rename(id, account.name);
+    const ps = this.state.players.get(id);
+    if (ps) ps.name = account.name;
   }
 
   onJoin(client: Client, _options: Partial<JoinOptions>, auth: Authenticated): void {
@@ -181,9 +245,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.sessions.set(client.sessionId, id);
     this.current.set(id, client.sessionId);
     this.accounts.set(id, player);
+    this.known.set(id, player.id);
     let ps = this.state.players.get(id);
     if (returning) {
-      returning.name = player.name;
+      this.world.rename(id, player.name);
       this.world.setConnected(id, true);
     } else {
       const pilot = this.world.join(id, player.name);
@@ -195,7 +260,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ps.name = player.name;
       ps.connected = true;
     }
-    this.greetings.set(client.sessionId, { reconnected: !!returning, token: auth.token });
+    this.greetings.set(client.sessionId, { reconnected: !!returning, token: auth.token, note: this.usernameNotes.get(id) ?? null });
+    this.usernameNotes.delete(id);
     console.log(`[room ${this.roomId}] ${player.name} (${id}) joined via ${auth.via}${returning ? ', back to their seat' : ''}`);
   }
 
@@ -232,7 +298,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id) return;
     const greeting = this.greetings.get(client.sessionId);
     this.greetings.delete(client.sessionId);
-    const welcome: WelcomeDTO = { id, name: this.accounts.get(id)?.name ?? '', tick: NET.tickRate, reconnected: greeting?.reconnected ?? true };
+    const account = this.accounts.get(id);
+    const welcome: WelcomeDTO = { id, name: account?.name ?? '', tick: NET.tickRate, reconnected: greeting?.reconnected ?? true, username: account?.username ?? null, usernameNote: greeting?.note ?? null };
     if (greeting?.token) welcome.token = greeting.token;
     client.send('welcome', welcome);
     this.sendPrivate(client, true);
@@ -329,6 +396,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (free.length === 0) return reply(wanted, 'no free desk');
       desk = free[Math.floor(Math.random() * free.length)];
     }
+    // Everyone sees players by their username, so it comes first.
+    if (!account.username) return reply(desk, 'Choose a username first.');
     this.placing.set(id, desk);
     try {
       const worldId = await economyWorld();
@@ -341,9 +410,11 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       let economy: EconomyRecord | null;
       let planes: AircraftRecord[];
       let progress: ProgressRecord | null;
+      let pvp: PvpRecord[];
+      const since = new Date(Date.now() - PVP_MEMORY * 1000);
       try {
-        [economy, planes, progress] = await this.keeper.queue(account.id, (store) =>
-          Promise.all([store.economy(worldId, account.id), store.aircraft(worldId, account.id), store.progress(worldId, account.id)]),
+        [economy, planes, progress, pvp] = await this.keeper.queue(account.id, (store) =>
+          Promise.all([store.economy(worldId, account.id), store.aircraft(worldId, account.id), store.progress(worldId, account.id), store.pvpRecords(worldId, account.id, since)]),
         );
       } catch (error) {
         await this.keeper.release(account.id);
@@ -356,7 +427,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       }
       const save = placed.state ? fromBaseState(placed.state) : null;
       const stint = randomUUID();
-      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint, planes: planesFrom(planes), ...progressFrom(progress) });
+      // The raids and kills the rules still look at (cooldowns, the repeat rule, the kill window).
+      this.world.rememberPvp(pvp.map((r) => ({ id: r.id, kind: r.kind, attacker: r.attacker, victim: r.victim, success: r.success, at: r.at.getTime() })));
+      const protection = progress ? { protectUntil: progress.protectUntil?.getTime() ?? null, shieldUntil: progress.shieldUntil?.getTime() ?? null } : undefined;
+      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint, planes: planesFrom(planes), ...progressFrom(progress), protection });
       if (error) {
         await this.keeper.release(account.id);
         return reply(desk, error);
@@ -388,6 +462,21 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (!account) continue;
       if (changes.length > 0) this.writePaper(id, account.id, this.world.stintOf(id), changes);
       this.writeOutcomes(id, account.id);
+    }
+    this.writePvp();
+  }
+
+  /** Raids and kills between players, kept for the rules that outlive a session. */
+  private writePvp(): void {
+    const worldId = this.worldId;
+    const events = this.world.takePvp();
+    if (!worldId) return;
+    for (const e of events) {
+      const attacker = this.known.get(e.attacker);
+      const victim = this.known.get(e.victim);
+      if (!attacker || !victim) continue;
+      const record: PvpRecord = { id: e.id, kind: e.kind, attacker, victim, success: e.success, at: new Date(e.at) };
+      this.keeper.queue(attacker, (store) => store.addPvpRecord(worldId, record)).catch((error) => console.error(`[room ${this.roomId}] could not record ${e.kind} ${e.id}:`, error));
     }
   }
 
@@ -520,6 +609,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         (error) => console.error(`[room ${this.roomId}] could not pack the base of ${id}:`, error),
       );
     }
+    // A raid or kill in their last moments goes to the store too.
+    this.writePvp();
     this.state.players.delete(id);
     this.state.planes.delete(id);
     this.pings.delete(id);
@@ -703,6 +794,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       const owner = world.owners.get(t.id) ?? '';
       const p = owner ? world.pilots.get(owner) : undefined;
       ts.owner = owner;
+      ts.label = world.deskName(t.id);
       ts.threat = t.threat;
       ts.safe = !!p && (!p.connected || world.time < p.protectUntil || world.time < p.shieldUntil);
       ts.alert = !!owner && !!world.attacks.on(owner);

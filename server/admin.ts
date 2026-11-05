@@ -57,7 +57,7 @@ async function onePlayer(store: Store, query: string | undefined): Promise<Playe
 }
 
 function describe(p: PlayerRecord): string {
-  return `${p.id}  ${p.publicId.padEnd(10)} ${p.name.padEnd(20)} ${p.revoked ? 'REVOKED ' : ''}last seen ${p.lastSeenAt.toISOString()}`;
+  return `${p.id}  ${p.publicId.padEnd(10)} ${(p.username ?? `(${p.name})`).padEnd(20)} ${p.revoked ? 'REVOKED ' : ''}last seen ${p.lastSeenAt.toISOString()}`;
 }
 
 async function main(argv: string[]): Promise<number> {

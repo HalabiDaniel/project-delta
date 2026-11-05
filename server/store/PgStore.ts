@@ -14,6 +14,8 @@ import {
   type BasePlacement,
   type MissionOutcome,
   type ProgressRecord,
+  type PvpRecord,
+  type UsernameResult,
   type BaseRecord,
   type BaseState,
   type EconomyRecord,
@@ -31,7 +33,7 @@ import {
   type WorldRecord,
 } from './Store';
 
-const PLAYER_COLUMNS = 'p.id, p.public_id, p.display_name, p.created_at, p.last_seen_at, p.revoked_at';
+const PLAYER_COLUMNS = 'p.id, p.public_id, p.display_name, p.created_at, p.last_seen_at, p.revoked_at, p.username, p.username_changed_at';
 const INVITE_COLUMNS = 'id, label, max_uses, uses, created_at, expires_at, revoked_at';
 
 /** The store in PostgreSQL. Every multi-step change runs in one transaction. */
@@ -80,7 +82,7 @@ export class PgStore implements Store {
   async findPlayers(query: string): Promise<PlayerRecord[]> {
     const { rows } = await this.db.query(
       `select ${PLAYER_COLUMNS} from players p
-        where ($1::uuid is not null and p.id = $1::uuid) or p.public_id = $2 or p.display_name = $2
+        where ($1::uuid is not null and p.id = $1::uuid) or p.public_id = $2 or p.display_name = $2 or lower(p.username) = lower($2)
         order by p.created_at`,
       [isUuid(query) ? query : null, query],
     );
@@ -285,21 +287,24 @@ export class PgStore implements Store {
 
   async progress(worldId: string, playerId: string): Promise<ProgressRecord | null> {
     if (!isUuid(playerId)) return null;
-    const { rows } = await this.db.query('select stats, director, garage from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
+    const { rows } = await this.db.query('select stats, director, garage, protect_until, shield_until from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
     if (rows.length === 0) return null;
     const director = rows[0].director as Record<string, unknown> | null;
     return {
       stats: (rows[0].stats as Record<string, number>) ?? {},
       director: director && Object.keys(director).length > 0 ? director : null,
       garage: (rows[0].garage as Record<string, unknown>) ?? {},
+      protectUntil: (rows[0].protect_until as Date | null) ?? null,
+      shieldUntil: (rows[0].shield_until as Date | null) ?? null,
     };
   }
 
   async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
     await this.db.query(
-      `insert into progress (world_id, player_id, stats, director, garage) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb)
-       on conflict (world_id, player_id) do update set stats = excluded.stats, director = excluded.director, garage = excluded.garage, updated_at = now()`,
-      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage)],
+      `insert into progress (world_id, player_id, stats, director, garage, protect_until, shield_until) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7)
+       on conflict (world_id, player_id) do update set stats = excluded.stats, director = excluded.director, garage = excluded.garage,
+         protect_until = excluded.protect_until, shield_until = excluded.shield_until, updated_at = now()`,
+      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage), record.protectUntil ?? null, record.shieldUntil ?? null],
     );
   }
 
@@ -310,6 +315,49 @@ export class PgStore implements Store {
       [o.id, worldId, playerId, o.template, o.state, JSON.stringify(o.spec), o.outcome, o.reward],
     );
     return (rowCount ?? 0) > 0;
+  }
+
+  async addPvpRecord(worldId: string, r: PvpRecord): Promise<void> {
+    // The record's id lives in `data`; one already written is left alone.
+    await this.db.query(
+      `insert into pvp_records (world_id, kind, attacker_id, victim_id, success, at, data)
+       select $1, $2, $3, $4, $5, $6, jsonb_build_object('id', $7::text)
+        where not exists (select 1 from pvp_records where world_id = $1 and data ->> 'id' = $7::text)`,
+      [worldId, r.kind, r.attacker, r.victim, r.success, r.at, r.id],
+    );
+  }
+
+  async pvpRecords(worldId: string, playerId: string, since: Date): Promise<PvpRecord[]> {
+    if (!isUuid(playerId)) return [];
+    const { rows } = await this.db.query(
+      `select r.data ->> 'id' as id, r.kind, a.public_id as attacker, v.public_id as victim, r.success, r.at
+         from pvp_records r join players a on a.id = r.attacker_id join players v on v.id = r.victim_id
+        where r.world_id = $1 and (r.attacker_id = $2 or r.victim_id = $2) and r.at >= $3
+        order by r.at, r.id`,
+      [worldId, playerId, since],
+    );
+    return rows.map((r) => ({ id: String(r.id), kind: r.kind as PvpRecord['kind'], attacker: String(r.attacker), victim: String(r.victim), success: r.success === true, at: r.at as Date }));
+  }
+
+  async setUsername(playerId: string, username: string, cooldownSeconds: number): Promise<UsernameResult> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const { rows } = await tx.query('select username, username_changed_at from players where id = $1 for update', [playerId]);
+        if (rows.length === 0) throw new Error(`no player ${playerId}`);
+        const current = rows[0].username as string | null;
+        if (current === username) return 'same' as const;
+        const changed = rows[0].username_changed_at as Date | null;
+        if (current !== null && changed && Date.now() - changed.getTime() < cooldownSeconds * 1000 && current.toLowerCase() !== username.toLowerCase()) return 'cooldown' as const;
+        const taken = await tx.query('select 1 from players where lower(username) = lower($1) and id <> $2', [username, playerId]);
+        if (taken.rows.length > 0) return 'taken' as const;
+        await tx.query('update players set username = $2, display_name = $2, username_changed_at = now() where id = $1', [playerId, username]);
+        return 'ok' as const;
+      });
+    } catch (error) {
+      // Two players asking for the same name at once: the unique index decides.
+      if ((error as { code?: string }).code === '23505') return 'taken';
+      throw error;
+    }
   }
 
   async tips(playerId: string): Promise<string[]> {
@@ -417,6 +465,8 @@ function toPlayer(r: Row): PlayerRecord {
     createdAt: r.created_at as Date,
     lastSeenAt: r.last_seen_at as Date,
     revoked: r.revoked_at !== null,
+    username: r.username === null || r.username === undefined ? null : String(r.username),
+    usernameChangedAt: (r.username_changed_at as Date | null) ?? null,
   };
 }
 

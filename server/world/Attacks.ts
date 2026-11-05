@@ -45,6 +45,8 @@ export interface Attack {
 }
 
 export interface RaidRecord {
+  /** Unique for good (the store keeps it), so a record loaded twice counts once. */
+  id?: string;
   attacker: string;
   victim: string;
   at: number;
@@ -107,14 +109,24 @@ export class AttackBook {
     return attack;
   }
 
-  /** The raid ended. Successful ones count towards the cooldowns and the repeat rule. */
-  finish(attack: Attack, success: boolean, now: number): void {
+  /** The raid ended. Successful ones count towards the cooldowns and the repeat rule. Returns its record. */
+  finish(attack: Attack, success: boolean, now: number): RaidRecord {
     const i = this.active.indexOf(attack);
     if (i >= 0) this.active.splice(i, 1);
-    this.history.push({ attacker: attack.attacker, victim: attack.victim, at: now, success });
+    const record: RaidRecord = { id: attack.uid, attacker: attack.attacker, victim: attack.victim, at: now, success };
+    this.history.push(record);
     // Only what the rules still look at is kept.
     const horizon = Math.max(PVP.farmWindow, PVP.pairCooldown);
     while (this.history.length > 0 && now - this.history[0].at > horizon) this.history.shift();
+    return record;
+  }
+
+  /** A raid from before (another session, before a restart), unless it is already known. */
+  remember(record: RaidRecord): void {
+    if (record.id && this.history.some((r) => r.id === record.id)) return;
+    let i = this.history.length;
+    while (i > 0 && this.history[i - 1].at > record.at) i--;
+    this.history.splice(i, 0, { ...record });
   }
 
   /** The raid on `victim`'s base under way, if any. */
@@ -164,15 +176,26 @@ export function creditFor(log: readonly DamageEntry[], now: number): { killer: s
  * and less each time the same player is shot down by the same hunter within PVP.killWindow.
  */
 export class KillBook {
-  private readonly kills: Array<{ killer: string; victim: string; at: number }> = [];
+  private readonly kills: Array<{ id: string; killer: string; victim: string; at: number }> = [];
+  /** The last kill recorded (for the store). */
+  last: { id: string; killer: string; victim: string; at: number } | null = null;
 
   /** Records the kill and returns the bounty it pays. */
   record(killer: string, victim: string, planeCost: number, emergency: boolean, now: number): number {
     while (this.kills.length > 0 && now - this.kills[0].at > PVP.killWindow) this.kills.shift();
     const before = this.kills.filter((k) => k.killer === killer && k.victim === victim).length;
-    this.kills.push({ killer, victim, at: now });
+    this.last = { id: randomUUID(), killer, victim, at: now };
+    this.kills.push(this.last);
     if (emergency) return 0;
     const factor = PVP.killRepeat[Math.min(before, PVP.killRepeat.length - 1)];
     return Math.round((PVP.killBase + PVP.killShare * planeCost) * factor);
+  }
+
+  /** A kill from before (another session, before a restart), unless it is already known. */
+  remember(kill: { id: string; killer: string; victim: string; at: number }): void {
+    if (this.kills.some((k) => k.id === kill.id)) return;
+    let i = this.kills.length;
+    while (i > 0 && this.kills[i - 1].at > kill.at) i--;
+    this.kills.splice(i, 0, { ...kill });
   }
 }

@@ -52,6 +52,10 @@
 .mp-status[data-tone='bad'] { color: var(--hostile); }
 .mp-hint { margin: 0; font-size: var(--t-s); color: var(--ink-2); }
 .mp-error { color: var(--hostile); font-size: var(--t-s); font-weight: 600; }
+/* Choosing a username before the base is placed (v0.0.12). */
+.mp-username { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; }
+.mp-username .mp-field { flex: 1; min-width: 180px; }
+.mp-username .mp-error { flex-basis: 100%; }
 
 /* The classroom map: three rows of desks, as the world is laid out. */
 .mp-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }

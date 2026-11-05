@@ -127,7 +127,7 @@ describe('the classroom room', () => {
   it('frees the territory of a player who leaves', async () => {
     const r = await room();
     const ann = await colyseus.connectTo(r, { ...join, name: 'Ann' });
-    const bo = await colyseus.connectTo(r, { ...join, name: 'Bo' });
+    const bo = await colyseus.connectTo(r, { ...join, name: 'Bob' });
     ann.send('claim', { t: 'T3' });
     await ann.waitForMessage('claimed');
     await ann.leave();
@@ -259,12 +259,12 @@ describe('player identity in the room', () => {
     await expect(colyseus.connectTo(r, { ...join, name: 'Eve' })).rejects.toThrow(/invite-only/);
     await expect(colyseus.connectTo(r, { ...join, name: 'Eve', token: 'y'.repeat(43) })).rejects.toThrow(/isn't recognised/);
     const { code } = await services.identity.createInvite('for Bo');
-    const bo = await enter(r, { name: 'Bo', code });
+    const bo = await enter(r, { name: 'Bob', code });
     expect(bo.welcome.token).toBeTruthy();
     await expect(colyseus.connectTo(r, { ...join, name: 'Eve', code })).rejects.toThrow(/didn't work/);
     await bo.client.leave();
     // Bo's own token keeps working without the invite.
-    const again = await enter(r, { name: 'Bo', token: bo.welcome.token });
+    const again = await enter(r, { name: 'Bob', token: bo.welcome.token });
     expect(again.id).toBe(bo.id);
   });
 
@@ -310,7 +310,7 @@ describe('portable bases in the room (v0.0.12)', () => {
     randomDesks();
     const r = await room();
     const desks = new Set<string>();
-    for (const name of ['Ann', 'Bo', 'Cy']) {
+    for (const name of ['Ann', 'Bob', 'Cyd']) {
       const p = await enter(r, { name });
       const m = await placed(p.client, 'T1');
       expect(m.ok).toBe(true);

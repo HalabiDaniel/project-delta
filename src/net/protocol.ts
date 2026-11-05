@@ -16,7 +16,7 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
@@ -25,6 +25,8 @@ export const PROTOCOL_VERSION = 2;
 export interface JoinOptions {
   v: number;
   name?: string;
+  /** The username the player wants (v0.0.12): their first, or a change (at most once a week). */
+  username?: string;
   token?: string;
   code?: string;
   title?: string;
@@ -39,6 +41,17 @@ export interface WelcomeDTO {
   reconnected?: boolean;
   /** A new device token, only when one was issued just now: keep it, it is how you come back. */
   token?: string;
+  /** Your username (v0.0.12); null until you have chosen one (you can't place your base before). */
+  username?: string | null;
+  /** Why the username you asked for wasn't given ("That username is taken"), if it wasn't. */
+  usernameNote?: string | null;
+}
+
+/** The answer to a `username` request. */
+export interface UsernameDTO {
+  ok: boolean;
+  username: string | null;
+  error: string | null;
 }
 
 /** A one-time code for moving this player to another computer. */
