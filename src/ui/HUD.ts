@@ -24,6 +24,9 @@ export type { ScreenPoint } from './dom';
 export type * from './views';
 export type { AlertTone } from './Alerts';
 
+/** The fixed zones (see the class comment). */
+export type HudZone = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br' | 'centre';
+
 /**
  * The HUD, laid out in fixed zones so the eye always knows where to look:
  *   top left      paper, production, storage (and the base / logbook / menu buttons at home)
@@ -51,7 +54,7 @@ export class HUD {
   private readonly air: AirHud;
   private readonly dashboard: Dashboard;
   private readonly tutorial: TutorialPanel;
-  private readonly zones: Record<'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br' | 'centre', HTMLElement>;
+  private readonly zones: Record<HudZone, HTMLElement>;
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
   private lastRender = performance.now();
@@ -172,6 +175,14 @@ export class HUD {
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
+  }
+
+  /**
+   * One of the fixed zones, for panels added from outside the HUD (the multiplayer layer, v0.0.15
+   * phase 5): what goes in a zone scales with the HUD size and the window, from that zone's corner.
+   */
+  zone(name: HudZone): HTMLElement {
+    return this.zones[name];
   }
 
   /** HUD size (0.9 / 1 / 1.15): every zone scales from its own corner. */

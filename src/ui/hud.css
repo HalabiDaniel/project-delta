@@ -1020,3 +1020,230 @@ body.pad-mode .econ .econ-safe { display: inline-flex; }
 .rp-paper li[data-tone='bad'] b { color: var(--hostile); }
 .rp-paper .rp-total { border-top: 1px solid var(--edge); padding-top: 2px; font-weight: 800; }
 .rp-next { font-size: var(--t-s); color: var(--ink-2); }
+
+/* ============================================================================================== */
+/* ---- Multiplayer (v0.0.15 phase 5; was src/mp/mp.css) ----------------------------------------- */
+/* The lobby, the feedback form and the multiplayer HUD (src/mp/Lobby.ts, FeedbackForm.ts,        */
+/* MpHud.ts), on the shared tokens and components. Panels sit in the HUD zones (connection and   */
+/* kill feed top left, raid card and alerts top centre, emotes top right, scoreboard centre), so  */
+/* they scale with the HUD size and the window. A player's tape colour comes in as --owner and is */
+/* always paired with a shape (a plane, a crumple, a house) so it is never colour alone.          */
+/* Tokens only. Keep this section at the end of the file.                                         */
+/* ============================================================================================== */
+
+.mp-layer { position: absolute; inset: 0; pointer-events: none; }
+.mp-tags { position: absolute; inset: 0; }
+/* Before a desk is claimed only the lobby shows. */
+.hud.mp-pregame .zone,
+.hud.mp-pregame .world-layer { display: none; }
+.mp-swatch { color: var(--owner, var(--hostile)); }
+[data-ai] > .mp-swatch { color: var(--ink-3); }
+
+/* ---- Overlays: lobby and feedback (follow the HUD size) --------------------------------------- */
+.mp-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: var(--backdrop); pointer-events: auto; }
+.mp-overlay > * { zoom: var(--ui-scale, 1); }
+.mp-lobby { z-index: 20; }
+.mp-feedback { z-index: 30; }
+.mp-overlay .mp-card { width: min(640px, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; padding: var(--s4); user-select: text; }
+.mp-card > .ui-card-body { gap: var(--s3); font-size: var(--t-m); color: var(--ink); }
+.mp-head { display: flex; align-items: baseline; gap: var(--s3); }
+.mp-head h2 { margin: 0; font-size: var(--t-l); color: var(--ink-2); }
+.mp-head .ui-glyph { margin-left: auto; }
+.mp-brand { font: 800 var(--t-l) / 1 var(--num); color: var(--ink); letter-spacing: -0.01em; }
+.mp-brand span { color: var(--friend); }
+.mp-field { display: flex; flex-direction: column; gap: var(--s1); font-size: var(--t-s); font-weight: 700; color: var(--ink-2); }
+.mp-field > span { display: flex; gap: var(--s1); align-items: center; }
+.mp-input {
+  font: 600 var(--t-m) / 1.3 var(--font);
+  color: var(--ink);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-bottom-width: 2px;
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  outline: none;
+  pointer-events: auto;
+  user-select: text;
+}
+textarea.mp-input { resize: vertical; font-weight: 500; }
+.mp-input:focus { border-color: var(--friend); box-shadow: 0 0 0 var(--focus-offset) var(--chip-friend-bg); }
+.mp-input::placeholder { color: var(--ink-3); }
+.mp-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.mp-or, .mp-note { color: var(--ink-3); font-size: var(--t-s); }
+.mp-note { flex: 1; min-width: 10em; }
+.mp-label { font-size: var(--t-s); font-weight: 700; color: var(--ink-2); }
+.mp-list { display: flex; flex-direction: column; gap: var(--s1); max-height: 17em; overflow: auto; }
+.mp-room { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: var(--s3); align-items: center; padding: var(--s2) var(--s3); border-radius: var(--r-s); background: var(--paper-2); }
+.mp-room.full { opacity: 0.6; }
+.mp-room .ui-stat b { font-size: var(--t-m); }
+.mp-room-title { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-empty, .mp-muted { color: var(--ink-3); font-size: var(--t-s); padding: var(--s2); }
+.mp-foot { display: flex; gap: var(--s2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.mp-foot > :first-child { margin-right: auto; }
+.mp-status { font-size: var(--t-s); color: var(--ink-3); }
+.mp-status[data-tone='bad'] { color: var(--hostile); font-weight: 700; }
+.mp-hint { margin: 0; font-size: var(--t-s); color: var(--ink-2); }
+.mp-error { display: flex; align-items: center; gap: var(--s1); margin: 0; padding: var(--s1) var(--s2); border-radius: var(--r-s); background: var(--chip-hostile-bg); color: var(--chip-hostile-fg); font-size: var(--t-s); font-weight: 700; }
+.mp-username { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; }
+.mp-username .mp-field { flex: 1; min-width: 12em; }
+.mp-username .mp-error { flex-basis: 100%; }
+
+/* The classroom map: three rows of desks; each desk state has its own border style and pattern. */
+.mp-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+.mp-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 5.2em;
+  padding: var(--s2);
+  border: 2px solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper-solid);
+  font: 500 var(--t-s) / 1.3 var(--font);
+  color: var(--ink);
+  text-align: left;
+  cursor: default;
+}
+.mp-cell[data-desk='ai'] { background: var(--paper-2); }
+.mp-cell[data-desk='open'] { border-style: dashed; border-color: var(--good); }
+.mp-cell[data-desk='empty'] { border-style: dotted; color: var(--ink-3); }
+.mp-cell.owned { border-color: var(--owner); background: color-mix(in srgb, var(--owner) 12%, var(--paper-solid)); }
+.mp-cell[data-desk='draining'] { background-image: repeating-linear-gradient(135deg, transparent 0 6px, var(--paper-2) 6px 9px); }
+.mp-cell.mine { box-shadow: 0 0 0 2px var(--owner); }
+.mp-cell .icon { margin-right: var(--s1); }
+.mp-cell-id { font-family: var(--num); font-weight: 800; color: var(--ink-3); }
+.mp-cell-name { font-weight: 700; font-size: var(--t-m); }
+.mp-owner { font-weight: 800; color: var(--ink); }
+.mp-free { color: var(--ink-2); }
+.mp-ai { color: var(--ink-3); }
+.mp-players { display: flex; flex-wrap: wrap; gap: var(--s2); font-size: var(--t-s); }
+.mp-player { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: var(--r-pill); background: var(--paper-2); }
+.mp-player small { color: var(--ink-3); }
+.mp-player.me { box-shadow: inset 0 0 0 1px var(--friend); }
+.mp-player[data-presence='away'], .mp-player[data-presence='offline'] { color: var(--ink-3); }
+
+/* Tables: the scoreboard and the session results card. */
+.mp-table { border-collapse: collapse; font-size: var(--t-s); width: 100%; }
+.mp-table thead th { color: var(--ink-3); font-weight: 700; padding: var(--s1) var(--s2); text-align: left; white-space: nowrap; }
+.mp-table td, .mp-table tbody th { padding: var(--s1) var(--s2); border-top: 1px solid var(--edge); text-align: left; font-weight: 600; }
+.mp-table .num { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 800; }
+.mp-table .mp-score { color: var(--ink); font-size: var(--t-m); }
+.mp-table tr[data-me] > * { background: var(--chip-friend-bg); }
+.mp-table tr[data-presence='offline'] > * { color: var(--ink-3); }
+.mp-table tr[data-presence='away'] > * { font-style: italic; }
+.mp-pilot { white-space: nowrap; }
+.mp-pilot .mp-swatch { margin-right: var(--s1); }
+.mp-pilot .ui-chip { margin-left: var(--s1); }
+.mp-phase { color: var(--ink-2); white-space: nowrap; }
+.mp-ping[data-level='worn'] { color: var(--chip-warn-fg); }
+.mp-ping[data-level='critical'] { color: var(--hostile); }
+.mp-place { width: 2.5em; white-space: nowrap; }
+.mp-medal-1 { color: var(--gold); }
+.mp-medal-2 { color: var(--silver); }
+.mp-medal-3 { color: var(--bronze); }
+
+/* ---- Feedback (F8): a dialog with toggles and two text boxes --------------------------------- */
+.mp-feedback .mp-feedback-card { width: min(36em, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; font-size: var(--t-m); }
+.mp-toggles { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.mp-feedback .mp-foot .mp-status { flex: 1; }
+
+/* ---- In the game: top left (connection, kill feed) --------------------------------------------- */
+.mp-net { pointer-events: none; }
+.mp-net .mp-net-card { padding: var(--s1) var(--s3); animation: none; }
+.mp-net-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); font-size: var(--t-s); color: var(--ink); }
+.mp-net .ui-stat b { font-size: var(--t-m); }
+.mp-room-name { color: var(--ink-2); font-weight: 700; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mp-feed { display: flex; flex-direction: column; gap: var(--s1); max-width: 24em; }
+.mp-feed:empty { display: none; }
+.mp-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  align-self: flex-start;
+  padding: var(--s1) var(--s2);
+  border-left: var(--s1) solid var(--edge);
+  border-radius: var(--r-s);
+  background: var(--paper);
+  box-shadow: var(--elev-raised);
+  font-size: var(--t-s);
+  font-weight: 700;
+  animation: ui-slide var(--motion-slide) both;
+  transition: opacity calc(var(--dur-fade) * 4) ease-out;
+}
+.mp-line .mp-who { display: inline-flex; align-items: center; gap: 2px; }
+.mp-line .mp-who b { font-family: var(--font); color: var(--ink); }
+.mp-line .mp-weapon { color: var(--ink-2); width: 1.3em; height: 1.3em; }
+.mp-assist { color: var(--ink-3); font-weight: 600; }
+.mp-line[data-self='killer'] { border-left-color: var(--good); background: var(--chip-good-bg); }
+.mp-line[data-self='victim'] { border-left-color: var(--hostile); background: var(--chip-hostile-bg); }
+.mp-line[data-kind='news'] { font-weight: 600; color: var(--ink-2); }
+.mp-line[data-kind='news'][data-tone='good'] { border-left-color: var(--good); }
+.mp-line[data-kind='news'][data-tone='good'] .mp-news-icon { color: var(--good); }
+.mp-line[data-kind='news'][data-tone='bad'] { border-left-color: var(--hostile); }
+.mp-line[data-kind='news'][data-tone='bad'] .mp-news-icon { color: var(--hostile); }
+.mp-line.fade { opacity: 0; }
+
+/* ---- Top centre: reconnecting, the raid card, "You landed on…" -------------------------------- */
+.mp-connection { display: flex; flex-direction: column; align-items: center; gap: var(--s1); }
+.mp-connection-note { padding: 2px var(--s2); border-radius: var(--r-pill); background: var(--paper); color: var(--ink-2); font-size: var(--t-s); font-weight: 600; }
+.mp-raid { width: min(30em, 100%); }
+.mp-raid-card .ui-card-body { color: var(--ink); font-size: var(--t-s); }
+.mp-raid-card[data-raid='incoming'] .ui-card-head { color: var(--hostile); }
+.mp-raid-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.mp-raid-who .mp-who { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-m); }
+.mp-raid-who .mp-who b { font-family: var(--font); }
+.mp-raid-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s4); }
+.mp-raid-facts .ui-stat b { font-size: var(--t-m); }
+.mp-raid-act { display: flex; justify-content: flex-end; }
+.mp-landed { transition: opacity var(--motion-fade); }
+.mp-landed.fade { opacity: 0; }
+.mp-landed-body { display: flex; align-items: center; gap: var(--s3); }
+.mp-landed-text { display: grid; justify-items: start; gap: 2px; }
+.mp-landed-text small { color: var(--ink-3); font-size: var(--t-s); }
+.mp-landed-text b { font-size: var(--t-l); color: var(--ink); }
+.mp-landed-text span { color: var(--ink-2); font-size: var(--t-s); }
+.mp-landed-map { display: grid; gap: 3px; width: 4.5em; }
+.mp-landed-map i { aspect-ratio: 1; border-radius: 2px; background: var(--neutral); }
+.mp-landed-map i[data-desk='taken'] { background: var(--ink-3); }
+.mp-landed-map i[data-desk='mine'] { background: var(--friend); box-shadow: 0 0 0 2px var(--chip-friend-bg); }
+.mp-landed-map i[data-desk='draining'] { background: repeating-linear-gradient(135deg, var(--ink-3) 0 2px, var(--paper-2) 2px 4px); }
+.mp-landed-map i[data-desk='empty'] { background: transparent; outline: 1px dashed var(--ink-3); }
+.mp-landed-map i[data-desk='open'] { background: var(--paper-2); outline: 1px dashed var(--good); }
+
+/* ---- Top right: the emote bar (in flight) ---------------------------------------------------- */
+.mp-emotes { display: flex; align-items: center; gap: var(--s3); padding: var(--s1) var(--s1) var(--s2); }
+.mp-emotes .ui-icon-button { font-size: var(--t-s); }
+.mp-board-key { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: var(--r-pill); background: var(--paper); box-shadow: var(--elev-raised); color: var(--ink-2); font-size: var(--t-s); }
+
+/* ---- Centre: the scoreboard (held Tab / View) ------------------------------------------------- */
+/* Over whatever else is in the centre (the crash report) while it is held. */
+.mp-board { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; }
+.mp-board, .mp-board .ui-card { pointer-events: none; }
+.mp-board .mp-board-card { max-width: min(60em, 92vw); padding: var(--s3) var(--s4); }
+.mp-board-card .ui-card-body { color: var(--ink); }
+
+/* ---- Tags in the world: other players' planes and desks --------------------------------------- */
+.mp-tag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: calc(-1 * var(--s2)); will-change: transform; }
+.mp-tag-name { display: inline-flex; align-items: center; gap: var(--s1); padding: 1px var(--s2); border-radius: var(--r-pill); background: var(--paper); border: 2px solid var(--owner); box-shadow: var(--elev-raised); color: var(--ink); font: 700 var(--t-xs) / 1.4 var(--font); white-space: nowrap; }
+.mp-tag-name b { font-family: var(--font); }
+.mp-tag-bar { width: 3.5em; }
+.mp-tag-bar .ui-bar { min-width: 0; }
+.mp-tag-emote { position: absolute; top: -2em; color: var(--owner); }
+.mp-tag-emote .icon { width: 1.6em; height: 1.6em; filter: drop-shadow(0 1px 0 var(--paper-solid)); }
+.mp-tag-emote.pop { animation: mp-emote 2.2s var(--ease-out) both; }
+@keyframes mp-emote { 0% { transform: scale(0.2) translateY(6px); opacity: 0; } 15% { transform: scale(1.25); opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
+
+.mp-terr { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: var(--r-s); border-left: var(--s1) solid var(--owner); background: var(--paper); box-shadow: var(--elev-raised); font-size: var(--t-s); white-space: nowrap; will-change: transform; }
+.mp-terr b { font-family: var(--font); }
+.mp-terr small { color: var(--ink-2); font-weight: 700; }
+.mp-terr-presence { display: inline-flex; align-items: center; gap: 2px; padding: 0 var(--s1); border-radius: var(--r-pill); background: var(--paper-2); color: var(--ink-2); }
+.mp-terr[data-presence='away'] { border-left-style: dashed; }
+.mp-terr[data-presence='offline'] { border-left-style: dotted; color: var(--ink-3); }
+.mp-terr[data-presence='protected'] .mp-terr-presence { background: var(--chip-friend-bg); color: var(--chip-friend-fg); }
+.mp-terr[data-alert] { box-shadow: 0 0 0 2px var(--hostile), var(--elev-raised); }
+.mp-terr-raid { color: var(--hostile); }
+/* Rank insignia slot (v0.0.17 fills it): in front of a name on the scoreboard, name tags and kill feed. */
+.mp-insignia { display: inline-flex; align-items: center; width: 1.1em; height: 1.1em; margin-right: 2px; color: var(--ink-2); }
+.mp-insignia-slot:empty { display: none; }
