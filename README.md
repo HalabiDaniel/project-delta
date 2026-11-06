@@ -8,6 +8,9 @@
 > backups to Cloudflare R2 with each one test-restored, the F8 playtest feedback log, and a load
 > test that runs against the deployment. **Start here:** [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
 > See [v0.0.14: going live](#v0014-going-live) and the [plan](docs/roadmap/v0.0.14.md).
+>
+> **v0.0.15 (HUD and UI revamp) has started:** phase 1, the [UI audit](docs/UI_AUDIT.md) and a
+> screenshot baseline (`npm run ui:shots`), is done. See the [plan](docs/roadmap/v0.0.15.md).
 
 
 > **v0.0.13: sessions.** No more forever-world: players meet in timed sessions of up to sixteen,

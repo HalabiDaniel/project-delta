@@ -15,6 +15,7 @@
     "licensed:fetch": "tsx tools/licensed.ts fetch",
     "validate-glb": "tsx tools/validate-glb.ts",
     "measure": "node tools/measure-perf.mjs",
+    "ui:shots": "node tools/ui-baseline.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
