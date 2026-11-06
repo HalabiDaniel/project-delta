@@ -10,7 +10,7 @@
  *
  * Every screen at the 1080p reference size and HUD size M; the desk and flight at every target
  * resolution of plan §7 and at HUD sizes S and L. Software rendering (SwiftShader), so it is slow
- * (a few minutes) but the layout is exact.
+ * (a few minutes) but the layout is exact. At 4K the world is hidden: only the HUD is captured.
  */
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -79,7 +79,11 @@ async function open(size, uiScale = 1) {
   return page;
 }
 
+/** Sizes whose 3D view is too slow to render in software: the HUD alone, the world hidden. */
+const HUD_ONLY = new Set(['4k']);
+
 async function shot(page, name) {
+  if (HUD_ONLY.has(name.split('-')[0])) await page.addStyleTag({ content: '#game { display: none !important; } body { background: #9aa3b5; }' });
   await page.waitForTimeout(900);
   const file = join(OUT, `${name}.jpg`);
   await page.screenshot({ path: file, type: 'jpeg', quality: 85, timeout: 240000 });
