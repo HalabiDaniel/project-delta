@@ -13,8 +13,11 @@ export type MotionMode = 'auto' | 'full' | 'reduced';
 /** Sound captions: while the sound is off (auto), always, or never. */
 export type CaptionMode = 'auto' | 'on' | 'off';
 
-/** Text size: 100 / 115 / 130 %. */
-export const TEXT_SCALES: readonly number[] = [1, 1.15, 1.3];
+/** Text size: 90 / 100 / 115 / 130 %. */
+export const TEXT_SCALES: readonly number[] = [0.9, 1, 1.15, 1.3];
+
+/** Button prompts: follow the device in use (auto), or always one glyph set. */
+export type PromptMode = 'auto' | 'keyboard' | 'xbox' | 'playstation' | 'generic';
 
 export interface AccessSettings {
   /** The style guide's theme: Daylight (default) or Lights out. The palette and contrast apply on top. */
@@ -26,6 +29,8 @@ export interface AccessSettings {
   captions: CaptionMode;
   /** Keep the HUD inside a centred 16:9 area on ultrawide screens. */
   safeArea: boolean;
+  /** Which glyph set the hints use (v0.0.16). */
+  prompts: PromptMode;
 }
 
 export const DEFAULT_ACCESS: Readonly<AccessSettings> = {
@@ -36,6 +41,7 @@ export const DEFAULT_ACCESS: Readonly<AccessSettings> = {
   motion: 'auto',
   captions: 'auto',
   safeArea: true,
+  prompts: 'auto',
 };
 
 const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T => (options.includes(v as T) ? (v as T) : fallback);
@@ -51,6 +57,7 @@ export function normaliseAccess(raw: unknown): AccessSettings {
     motion: oneOf(o.motion, ['auto', 'full', 'reduced'] as const, DEFAULT_ACCESS.motion),
     captions: oneOf(o.captions, ['auto', 'on', 'off'] as const, DEFAULT_ACCESS.captions),
     safeArea: typeof o.safeArea === 'boolean' ? o.safeArea : DEFAULT_ACCESS.safeArea,
+    prompts: oneOf(o.prompts, ['auto', 'keyboard', 'xbox', 'playstation', 'generic'] as const, DEFAULT_ACCESS.prompts),
   };
 }
 

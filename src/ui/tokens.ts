@@ -236,8 +236,11 @@ export const SPACE = { 'space-1': 4, 'space-2': 8, 'space-3': 12, 'space-4': 16,
 /** The style guide's radii; `--r` (cards, buttons) is radius-md, `--r-s` radius-sm. */
 export const RADIUS = { r: '12px', 'r-s': '6px', 'r-pill': '999px', 'radius-sm': '6px', 'radius-md': '12px', 'radius-lg': '20px', 'radius-pill': '999px' } as const;
 
-/** Marker outlines: hairlines and dividers, buttons and chips (2px), cards and panels (3px), focus. */
-export const STROKES = { 'stroke-hair': '1px', 'stroke-line': '2px', 'stroke-card': '3px', 'stroke-focus': '3px' } as const;
+/**
+ * Marker outlines (v0.0.16 UI rebuild): every panel, card, chip and widget is 2px; only the primary
+ * call to action, a selected item and the focus ring are 3px (`stroke-strong`).
+ */
+export const STROKES = { 'stroke-hair': '1px', 'stroke-line': '2px', 'stroke-card': '2px', 'stroke-strong': '3px', 'stroke-focus': '3px' } as const;
 
 /**
  * The style guide's faces, self-hosted (src/ui/fonts.ts): Lilita One for display (titles, plane
@@ -275,10 +278,12 @@ const SHADOWS: Readonly<Record<ThemeName, Record<string, string>>> = {
   daylight: {
     'shadow-press': '0 3px 0 #c98f00', 'shadow-card': '0 3px 0 #d8c7a6', 'shadow-lift': '4px 6px 0 #26242c1f',
     'shadow-hard-sm': '2px 2px 0 #26242c', 'shadow-hard': '4px 4px 0 #26242c', 'shadow-hard-lg': '5px 5px 0 #26242c',
+    'shadow-chip': '3px 3px 0 #26242c',
   },
   lightsOut: {
     'shadow-press': '0 3px 0 #c98f00', 'shadow-card': '0 3px 0 #0f1513', 'shadow-lift': '4px 6px 0 #00000059',
     'shadow-hard-sm': '2px 2px 0 #0b100f', 'shadow-hard': '4px 4px 0 #0b100f', 'shadow-hard-lg': '5px 5px 0 #0b100f',
+    'shadow-chip': '3px 3px 0 #0b100f',
   },
 };
 

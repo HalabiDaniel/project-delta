@@ -33,6 +33,13 @@ export interface SoundCue {
 
 export class Sounds {
   muted = false;
+  /** Master volume, 0–1 (Settings › Sound; this computer's). */
+  private volume = 1;
+
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.out) this.out.gain.value = 0.32 * this.volume;
+  }
   private readonly cueListeners: Array<(name: SoundName, angle: number | null) => void> = [];
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
@@ -53,7 +60,7 @@ export class Sounds {
         if (!Ctor) return;
         this.ctx = new Ctor();
         this.out = this.ctx.createGain();
-        this.out.gain.value = 0.32;
+        this.out.gain.value = 0.32 * this.volume;
         this.out.connect(this.ctx.destination);
         const length = Math.floor(this.ctx.sampleRate * 0.6);
         this.noise = this.ctx.createBuffer(1, length, this.ctx.sampleRate);

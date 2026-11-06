@@ -42,7 +42,13 @@ import { STEER_SECONDS, Tutorial, tutorialEventFor } from './progress/Tutorial';
 import { dashboardView } from './ui/dashboardView';
 import { failureText, nextStepText, paperBreakdown } from './ui/reportText';
 import { PerfMonitor, type PerfSnapshot } from './ui/PerfOverlay';
-import { Logbook, type LogbookView } from './ui/Logbook';
+import { Flow } from './ui/flow';
+import { Frontend, type FrontendHost, type SoloSetup } from './ui/screens/Frontend';
+import { Showcase } from './world/Showcase';
+import { HttpMatchmaking, LocalAccountService, LocalLeaderboard, LocalRoomService } from './net/services';
+import { ACHIEVEMENTS, BEST_LABELS } from './progress/Progress';
+import { clock, count, km, pct } from './ui/format';
+import { T } from './ui/strings';
 import type { GarageView } from './ui/Garage';
 import {
   HUD,
@@ -95,7 +101,6 @@ import {
 } from './render/GraphicsSettings';
 import { setShadowQuality } from './render/lighting';
 import { instanceScenery, type Instancer } from './render/Instancer';
-import { LoadingScreen } from './ui/LoadingScreen';
 import { AssetLibrary } from './assets/AssetLibrary';
 import { TextureBank } from './render/shading/textures';
 import { PaperShading } from './render/shading/PaperShading';
@@ -175,7 +180,18 @@ export class Game {
   /** The plane's health share last frame, for the low-health warning. */
   private lastHealth = 1;
   private alarmKey = '';
-  private readonly logbook: Logbook;
+  /** The screens outside a match and where Back goes (v0.0.16). */
+  flow: Flow;
+  /** The menus: Loading, Login, Main menu, Play solo, Multiplayer, Leaderboard, Achievements, Settings, Credits. */
+  frontend: Frontend | null = null;
+  /** The living desk behind Loading, Login and the main menu. */
+  showcase: Showcase | null = null;
+  /** The account stub (this browser only until accounts are online). */
+  readonly account = new LocalAccountService();
+  /** Plane and building thumbnails for the cards. */
+  private thumbs = new Map<string, string>();
+  /** Master volume (this computer's). */
+  volume = loadVolume();
   private readonly dev: DevPanel;
   /** Base management on T1 (B). */
   readonly baseMode: BaseMode;
@@ -242,7 +258,7 @@ export class Game {
     readonly base: Base,
   ) {
     this.barriers = layout.barriers.map((b) => ({ id: b.id, shapes: b.solids }));
-    this.logbook = new Logbook(hud.root, () => this.logbookView(), () => this.toggleLogbook(false));
+    this.flow = new Flow();
     this.dev = new DevPanel(hud.root, this);
     this.baseMode = new BaseMode(base);
     this.controls = new Controls(input);
@@ -253,7 +269,7 @@ export class Game {
 
   /** What the controller's buttons mean right now. */
   private inputContext(): InputContext {
-    if (this.paused || this.logbook.open || this.welcome || confirmOpen()) return 'menu';
+    if (!this.flow.inMatch || this.paused || confirmOpen() || this.hud.settingsOpen) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -280,9 +296,14 @@ export class Game {
     new PaperShading(device, textures);
     installMaterials(new MaterialLibrary(textures));
     const assets = new AssetLibrary(app);
-    const loading = new LoadingScreen();
-    await assets.preload(undefined, (p) => loading.progress(p));
-    loading.done(assets.failures());
+    // The front end shows from the first frame: Loading on the wooden desk, then the living scene.
+    const flow = new Flow();
+    const front: { ui: Frontend | null; host: FrontendHost | null } = { ui: null, host: null };
+    // Until the game exists the host answers nothing (the boot screen needs none of it).
+    const lazyHost = new Proxy({} as FrontendHost, { get: (_t, k) => (front.host ? (front.host as unknown as Record<string | symbol, unknown>)[k] : () => null) });
+    front.ui = new Frontend(document.body, lazyHost, flow);
+    await assets.preload(undefined, (p) => front.ui!.setProgress(p.done, p.total));
+    if (assets.failures().length > 0) console.warn('paperwars: models that fell back to stand-ins', assets.failures());
     const graphics = loadGraphics(browserStorage());
     const world = buildWorld(app, assets, graphics.detail);
     const targetSpecs = layoutTargetRange(world.territories);
@@ -383,7 +404,10 @@ export class Game {
       resume: () => game?.resume(),
       swap: () => game?.swapCard(),
       abandonOperation: () => game?.abandonOperation(),
-      openLogbook: () => game?.toggleLogbook(true),
+      openLogbook: () => game?.hud.toggleSession(),
+      quitToMenu: () => game?.quitToMenu(),
+      setVolume: (v) => game?.setVolume(v),
+      openAchievements: () => game?.openAchievements(),
       openMenu: () => game?.pause(),
       resetProgress: () => game?.resetProgress(),
       dismissWelcome: () => game?.dismissWelcome(),
@@ -447,6 +471,9 @@ export class Game {
       missionContext,
       base,
     );
+    game.flow = flow;
+    game.frontend = front.ui;
+    front.host = game.frontendHost();
     game.sortiesTotal = Object.values(progress.data.mastery).reduce((sum, m) => sum + (m?.flights ?? 0), 0);
     if (saved) {
       game.sounds.muted = saved.settings.muted;
@@ -457,6 +484,8 @@ export class Game {
       game.access = saved.settings.access;
       for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
+    game.sounds.setVolume(game.volume);
+    game.applyPrompts();
     game.tutorial = Tutorial.fromSave(saved?.tutorial ?? null, game.sortiesTotal > 0);
     game.tutorial.onChange(() => game!.requestSave());
     game.hud.setScale(game.uiScale);
@@ -484,6 +513,7 @@ export class Game {
       game!.perfMonitor?.frame();
     });
     app.start();
+    await game.bootFrontend();
     return game;
   }
 
@@ -674,10 +704,127 @@ export class Game {
     });
   }
 
-  toggleLogbook(open = !this.logbook.open): void {
-    if (open && this.state.phase === 'flying') return;
-    this.logbook.toggle(open);
-    if (open) this.dismissWelcome();
+  // ---- The front end (v0.0.16) ----------------------------------------------------------------
+
+  /** What the menus read and do (src/ui/screens/Frontend.ts). */
+  frontendHost(): FrontendHost {
+    const starters: AircraftId[] = ['dart', 'lightning', 'swift', 'widewing'];
+    const role = (id: AircraftId): string => T.front.roles[AIRCRAFT[id].role] ?? AIRCRAFT[id].roleLabel;
+    return {
+      version: __APP_VERSION__,
+      account: this.account,
+      matchmaking: new HttpMatchmaking(),
+      rooms: new LocalRoomService(),
+      leaderboard: new LocalLeaderboard(),
+      starters: starters.filter((id) => AIRCRAFT[id]).map((id) => ({ id, name: AIRCRAFT[id].name, role: role(id) })),
+      art: (key) => this.thumbs.get(key) ?? null,
+      paper: () => this.resources.paper,
+      achievements: () => ACHIEVEMENTS.map((a) => ({ id: a.id, title: a.title, detail: a.detail, at: this.progress.data.achievements[a.id] ?? null })),
+      records: () => this.records(),
+      me: () => ({ paper: this.ledger.totals.earned ?? 0, kills: this.career.data.aircraftDestroyed, plane: this.career.favorite }),
+      settings: () => this.settingsView(),
+      settingsExtras: () => ({
+        volume: this.volume,
+        saveNote: this.saveNote(),
+        account: this.accountView(),
+        multiplayer: false,
+        device: this.controls.device === 'gamepad' ? 'gamepad' : 'keyboard',
+      }),
+      settingsActions: {
+        setHints: (m) => this.setHints(m),
+        setUiScale: (n) => this.setUiScale(n),
+        setAccess: (p) => this.setAccess(p),
+        setGraphicsPreset: (p) => this.setGraphics(withPreset(this.graphics, p)),
+        toggleSound: () => this.toggleSound(),
+        setVolume: (v) => this.setVolume(v),
+        restartTutorial: () => this.tutorial.restart(),
+        resetProgress: () => this.hud.guarded.resetProgress(),
+      },
+      startSolo: (setup) => this.startSolo(setup),
+      goMultiplayer: (params) => {
+        void this.saveNow().finally(() => {
+          const q = new URLSearchParams({ mp: '', ...params });
+          window.location.href = `${window.location.pathname}?${q.toString().replace(/^mp=&?/, 'mp&')}`;
+        });
+      },
+      scene: (preset) => {
+        // A full sheet covers the screen: nothing 3D needs drawing under it.
+        this.app.autoRender = preset !== null || this.flow.inMatch;
+        const sc = this.showcase;
+        if (!sc) return;
+        sc.setActive(preset !== null && !this.flow.inMatch);
+        if (preset) sc.setPreset(preset);
+      },
+      backToPause: () => this.flow.go('match'),
+    };
+  }
+
+  /** After the first frames: the cards' art, the living scene, then Login or the main menu. */
+  async bootFrontend(): Promise<void> {
+    const ui = this.frontend;
+    if (!ui) return;
+    ui.setProgress(1, 1, T.front.foldingPlain);
+    const shadows = this.graphics.shadows !== 'off';
+    this.showcase = new Showcase(this.app, this.assets!.models, shadows);
+    try {
+      this.thumbs = await this.showcase.thumbnails();
+    } catch (error) {
+      console.warn('paperwars: no thumbnails', error);
+    }
+    this.hud.setArt((key) => this.thumbs.get(key) ?? null);
+    this.showcase.reducedMotion = document.documentElement.dataset.motion === 'reduced';
+    this.showcase.setPreset('login', true);
+    this.showcase.setActive(true);
+    ui.sceneReady();
+    this.flow.booted(this.account.current() !== null);
+  }
+
+  /** Play solo → Start: into the match with the chosen plane (the rest of the setup is kept for later). */
+  startSolo(setup: SoloSetup): void {
+    this.welcome = null;
+    this.showcase?.setActive(false);
+    this.app.autoRender = true;
+    this.flow.go('match');
+    if (this.state.phase === 'desk' && AIRCRAFT[setup.plane] && this.state.aircraft !== setup.plane && !this.state.hangar.has(this.state.aircraft)) this.selectAircraft(setup.plane);
+    else if (this.state.phase === 'desk' && AIRCRAFT[setup.plane]) this.selectAircraft(setup.plane);
+    if (this.paused) this.resume();
+    this.camera.updateDesk(0, this.world.launchPosition, this.world.launchYaw, true);
+  }
+
+  /** Pause → Quit to main menu: the match waits, paused, and the game is saved. */
+  quitToMenu(): void {
+    if (!this.paused) this.pause();
+    this.app.autoRender = true;
+    void this.saveNow();
+    this.flow.go('menu');
+  }
+
+  /** The session drawer's "View all achievements": the screen, and Back returns to the match. */
+  openAchievements(): void {
+    if (!this.paused) this.pause();
+    this.flow.go('achievements', 'match');
+  }
+
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    this.sounds.setVolume(this.volume);
+    saveVolume(this.volume);
+  }
+
+  private accountView(): { name: string | null; guest: boolean; online: boolean } | null {
+    const p = this.account.current();
+    return p ? { name: p.callsign || null, guest: p.guest, online: this.account.online } : null;
+  }
+
+  private settingsView() {
+    return {
+      muted: this.sounds.muted,
+      hints: this.hints,
+      uiScale: this.uiScale,
+      access: this.access,
+      graphics: { preset: matchesPreset(this.graphics) ? this.graphics.preset : null },
+      volume: this.volume,
+    };
   }
 
   dismissWelcome(): void {
@@ -705,7 +852,18 @@ export class Game {
   setAccess(patch: Partial<AccessSettings>): void {
     this.access = normaliseAccess({ ...this.access, ...patch });
     this.hud.setAccess(this.access, this.sounds.muted);
+    this.applyPrompts();
     this.requestSave();
+  }
+
+  /** Button prompts: follow the device (auto), or show one glyph set everywhere. */
+  private promptsApplied: string = 'auto';
+
+  applyPrompts(): void {
+    const p = this.access.prompts;
+    if (p === this.promptsApplied) return;
+    this.promptsApplied = p;
+    this.controls.simulatePad(p === 'xbox' || p === 'playstation' || p === 'generic' ? p : null);
   }
 
   /** Key hints show for the first few sorties (auto), always, or never; H shows them while held. */
@@ -956,8 +1114,18 @@ export class Game {
   private tick(rawDt: number): void {
     const dt = Math.min(rawDt, 0.05);
     this.controls.context = this.inputContext();
-    this.controls.screen = `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.logbook.open}|${!!this.welcome}`;
+    this.controls.screen = this.flow.inMatch ? `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.hud.deskState()}|${this.hud.settingsOpen}` : `front|${this.flow.screen}`;
     this.controls.update(dt);
+    if (!this.flow.inMatch) {
+      // The menus: the game waits; the living desk moves behind Loading, Login and the main menu.
+      this.input.consumeMouse();
+      this.hud.root.hidden = true;
+      if (this.showcase) this.showcase.reducedMotion = document.documentElement.dataset.motion === 'reduced';
+      this.showcase?.update(dt);
+      this.frontend?.update();
+      return;
+    }
+    this.hud.root.hidden = false;
     const mouse = this.input.consumeMouse();
     if (!this.paused) this.simulate(dt, mouse);
     this.hud.render(this.view());
@@ -1843,6 +2011,11 @@ export class Game {
     this.sounds.unlock();
     // A confirm dialog owns Enter / A and Esc / B while it is up; nothing else reaches the game.
     if (confirmOpen()) return;
+    // Outside a match: Esc / B goes back one screen; the rest is the menus' (the focus manager).
+    if (!this.flow.inMatch) {
+      if (action === 'back' || action === 'pause') this.frontend?.back();
+      return;
+    }
     if (this.welcome && action !== 'dev') {
       this.dismissWelcome();
       if (action === 'confirm' || action === 'back' || action === 'pause') return;
@@ -1855,18 +2028,12 @@ export class Game {
         this.requestSave();
         return;
       case 'logbook':
-        return this.toggleLogbook();
-      case 'prevAircraft':
-      case 'nextAircraft':
-        // Q / E switch the logbook's tabs (LB / RB do through the focus manager).
-        if (this.logbook.open) {
-          this.controls.nav.switchTab(action === 'nextAircraft' ? 1 : -1);
-          return;
-        }
-        break;
+        if (this.state.phase !== 'flying' && !this.paused) this.hud.toggleSession();
+        return;
       case 'back':
       case 'pause':
-        if (this.logbook.open) return this.toggleLogbook(false);
+        // Esc backs out of one thing at a time: Settings over the match, a drawer, build mode, then Pause.
+        if (this.hud.back()) return;
         if (action === 'back' && this.baseMode.open && !this.paused) return this.toggleBase(false);
         // The controller's B only backs out of things; pausing is its Menu button.
         if (action === 'back' && device === 'gamepad' && !this.paused) return;
@@ -1875,8 +2042,12 @@ export class Game {
         else this.pause();
         return;
     }
-    if (this.paused || this.logbook.open) return;
+    if (this.paused) return;
     if (action === 'base') return this.toggleBase();
+    if (action === 'hangar' || action === 'missions') {
+      if (this.state.phase === 'desk' || this.state.phase === 'building' || this.state.phase === 'ready') this.hud.openDesk(action);
+      return;
+    }
     if (this.baseMode.open) {
       // Base management: number keys pick slots (0 the store), Enter builds, U upgrades, R repairs, X removes.
       const slot = PICK_TO_SLOT[action];
@@ -1895,7 +2066,10 @@ export class Game {
       return;
     }
     const card = PICK_TO_CARD[action];
-    if (card !== undefined) return this.select(card);
+    if (card !== undefined) {
+      if (this.state.phase === 'desk' || this.state.phase === 'building' || this.state.phase === 'ready') this.hud.openDesk('missions', false);
+      return this.select(card);
+    }
     switch (action) {
       case 'prevMission':
       case 'nextMission': {
@@ -1906,9 +2080,10 @@ export class Game {
       case 'swap':
         return this.swapCard();
       case 'prevAircraft':
-        return this.cycleAircraft(-1);
       case 'nextAircraft':
-        return this.cycleAircraft(1);
+        if (this.state.phase === 'flying') return;
+        this.hud.openDesk('hangar', false);
+        return this.cycleAircraft(action === 'nextAircraft' ? 1 : -1);
       case 'fold':
         return this.build();
       case 'launch':
@@ -2196,7 +2371,7 @@ export class Game {
       if (flying && Math.hypot(t.x - eye.x, t.z - eye.z) < t.size * 0.75) continue;
       if (goal?.territoryId === t.id && target?.onScreen) continue;
       const p = this.projectOnScreen(this.v3.set(t.x, 0.3, t.z));
-      if (p) labels.push({ id: t.id, role: t.isHome ? 'home' : objectiveTerritories.get(t.id) === false ? 'objective' : 'neutral', state: this.events.stateOf(t.id), x: p.x, y: p.y });
+      if (p) labels.push({ id: t.id, role: t.isHome ? 'home' : objectiveTerritories.get(t.id) === false ? 'objective' : 'neutral', state: this.events.stateOf(t.id), x: p.x, y: p.y, distance: Math.hypot(t.x - from.x, t.z - from.z) });
     }
 
     const kind = state.phase === 'desk' ? state.buildKindFor(state.aircraft) : state.buildKind;
@@ -2276,9 +2451,11 @@ export class Game {
           graphics: {
             preset: matchesPreset(this.graphics) ? this.graphics.preset : null,
           },
+          volume: this.volume,
         },
         saveNote: this.saveNote(),
         confirmingReset: false,
+        account: this.accountView(),
       },
       garage: choosing && !baseOpen ? this.garageView() : null,
       cards: choosing ? state.offers.map((m) => this.cardView(m)) : null,
@@ -2318,6 +2495,7 @@ export class Game {
         : null,
       tutorial: this.tutorial.view(tutorialContext),
       dashboard: choosing && !baseOpen ? this.dashboardView(buildCost, kind) : null,
+      pad: choosing && (state.phase === 'ready' || state.hangar.has(state.aircraft)) ? this.projectOnScreen(this.v3.copy(plane.position)) : null,
     };
   }
 
@@ -2350,6 +2528,7 @@ export class Game {
     const slot = offer?.slot ?? 'safe';
     return {
       type: m.spec.type,
+      target: m.spec.objectives.map((o) => ('territoryId' in o ? o.territoryId : null)).find((id) => id && id !== this.world.home.id) ?? null,
       codename: m.spec.codename ?? '',
       title: m.title,
       description: m.spec.description,
@@ -2398,36 +2577,27 @@ export class Game {
     return `Progress is saved in ${where}${ago !== null ? `, last ${ago < 5 ? 'just now' : `${ago} s ago`}` : ''}.`;
   }
 
-  /** The logbook's contents. */
-  private logbookView(): LogbookView {
-    const favorite = this.career.favorite;
-    const base = this.base;
-    return {
-      career: {
-        missionsCompleted: this.career.data.missionsCompleted,
-        planesLost: this.career.data.planesLost,
-        targetsDestroyed: this.career.data.targetsDestroyed,
-        defensesDestroyed: this.career.data.defensesDestroyed,
-        aircraftDestroyed: this.career.data.aircraftDestroyed,
-        favorite: favorite ? AIRCRAFT[favorite].name : null,
-      },
-      base: {
-        stats: base.stats,
-        production: base.production,
-        capacity: base.capacity,
-        protectedPaper: base.protectedPaper,
-        buildings: [...base.buildings.values()].map((b) => ({
-          name: BASE.buildings[b.kind].name, icon: BUILDING_ICONS[b.kind], level: b.level, status: base.status(b.slot), kills: b.kills, bombers: b.bombers, damage: b.damage,
-        })),
-      },
-      progress: this.progress.data,
-      session: sessionView(this.progress.session),
-      ledger: this.ledger,
-      performance: this.director.performance.breakdown,
-      skill: this.director.performance.skill,
-      band: skillBand(this.director.performance.skill),
-      recommended: TIERS[this.director.performance.recommendedTier].label,
-    };
+  /** Personal bests and the career numbers, for Achievements › Records. */
+  private records(): Array<[string, string]> {
+    const b = this.progress.data.bests;
+    const L = T.logbook;
+    const c = this.career.data;
+    const fav = this.career.favorite;
+    return [
+      [BEST_LABELS.fastestBombing, b.fastestBombing ? `${clock(b.fastestBombing.time)} · ${b.fastestBombing.title}` : '—'],
+      [BEST_LABELS.bestBombAccuracy, b.bestBombAccuracy ? L.accuracyOf(pct(b.bestBombAccuracy.accuracy), b.bestBombAccuracy.bombs) : '—'],
+      [BEST_LABELS.longestFlight, b.longestFlight ? `${km(b.longestFlight.distance, 2)} · ${AIRCRAFT[b.longestFlight.aircraft].name}` : '—'],
+      [BEST_LABELS.mostKills, b.mostKills ? count(b.mostKills.count) : '—'],
+      [BEST_LABELS.cleanRun, count(b.cleanRun)],
+      [L.longestStreak, count(this.progress.data.streak.best)],
+      [L.safeLandings, count(this.progress.data.landings)],
+      [L.missionsCompleted, count(c.missionsCompleted)],
+      [L.planesLost, count(c.planesLost)],
+      [L.defensesDestroyed, count(c.defensesDestroyed)],
+      [L.aircraftShotDown, count(c.aircraftDestroyed)],
+      [L.favouritePlane, fav ? AIRCRAFT[fav].name : '—'],
+      [L.suitsYou, `${TIERS[this.director.performance.recommendedTier].label} · ${skillBand(this.director.performance.skill)}`],
+    ];
   }
 
   /**
@@ -3345,4 +3515,23 @@ function shortNote(title: string, detail: string): { icon: IconName; title: stri
 /** Where a slot is on T1, built on or not. */
 function buildingSpecAt(base: Base, slot: string): { x: number; z: number } {
   return slotPoint(base.home, slot) ?? { x: base.home.x, z: base.home.z };
+}
+
+const VOLUME_KEY = 'paperwars.volume';
+
+function loadVolume(): number {
+  try {
+    const v = Number(window.localStorage.getItem(VOLUME_KEY));
+    return window.localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function saveVolume(v: number): void {
+  try {
+    window.localStorage.setItem(VOLUME_KEY, String(v));
+  } catch {
+    /* private mode: this visit only */
+  }
 }

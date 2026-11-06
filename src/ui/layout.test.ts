@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { layoutFor, MIN_FIT, REFERENCE } from './layout';
-import { TYPE } from './tokens';
 
 /** The plan §7A targets, in CSS pixels. */
 const TARGETS = {
@@ -13,52 +12,45 @@ const TARGETS = {
   '16x10': [1920, 1200],
 } as const;
 
-describe('resolution scaling (plan v0.0.15 §7)', () => {
-  it('keeps the 1080p reference layout and scales in proportion above it', () => {
-    expect(layoutFor(1920, 1080).fit).toBe(REFERENCE.fit);
+describe('resolution scaling (v0.0.16: the design canvas frame, 1440 × 900)', () => {
+  it('is 1 at the design frame and scales in proportion above it', () => {
+    expect(REFERENCE).toEqual({ width: 1440, height: 900, fit: 1 });
+    expect(layoutFor(1440, 900).fit).toBe(1);
+    expect(layoutFor(1920, 1080).fit).toBeCloseTo(1.2, 5);
+    expect(layoutFor(2560, 1440).fit).toBeCloseTo(1.6, 5);
+    expect(layoutFor(3840, 2160).fit).toBeCloseTo(2.4, 5);
+    // Overlays (pause, dialogs, tooltips) keep their 1080p reference.
     expect(layoutFor(1920, 1080).overlay).toBe(1);
-    expect(layoutFor(2560, 1440).fit).toBeCloseTo(1.867, 2);
-    expect(layoutFor(3840, 2160).fit).toBeCloseTo(2.8, 5);
     expect(layoutFor(3840, 2160).overlay).toBe(2);
-    expect(layoutFor(2560, 1440).overlay).toBeCloseTo(1.333, 2);
   });
 
-  it('gives every target the same proportions as 1080p (no tiny text at 4K), and 720p stays usable', () => {
+  it('never shrinks the HUD below the design sizes, so 12px stays the smallest text', () => {
     for (const [name, [w, h]] of Object.entries(TARGETS)) {
-      const { fit, safeWidth } = layoutFor(w, h, { safeArea: true });
-      // Body text on the zones, as a share of the 16:9 area that fits the screen, against the reference.
-      const share = (TYPE['t-m'] * fit) / Math.min(h, (safeWidth * 9) / 16);
-      const ref = (TYPE['t-m'] * REFERENCE.fit) / REFERENCE.height;
-      expect(share / ref, name).toBeGreaterThan(0.95);
-      expect(share / ref, name).toBeLessThan(1.42);
-      expect(fit * TYPE['t-s'], `${name}: small text in CSS px`).toBeGreaterThanOrEqual(11);
+      const { fit } = layoutFor(w, h, { safeArea: true });
+      expect(fit * 12, name).toBeGreaterThanOrEqual(12);
     }
-    expect(layoutFor(1280, 720).fit).toBeCloseTo(0.933, 2);
+    expect(layoutFor(1280, 720).fit).toBe(MIN_FIT);
     expect(layoutFor(800, 450).fit).toBe(MIN_FIT);
   });
 
-  it('16:10 follows the width, so nothing clips', () => {
-    expect(layoutFor(1920, 1200).fit).toBe(REFERENCE.fit);
+  it('16:10 follows the shorter side, so nothing clips', () => {
+    expect(layoutFor(1920, 1200).fit).toBeCloseTo(1.333, 2);
     expect(layoutFor(1920, 1200).safeX).toBe(0);
   });
 
   it('keeps the HUD in a centred 16:9 area on ultrawide with the setting on, and uses the whole width without it', () => {
-    expect(layoutFor(2560, 1080, { safeArea: true })).toEqual({ fit: 1.4, overlay: 1, safeX: 320, safeWidth: 1920 });
-    expect(layoutFor(2560, 1080, { safeArea: false })).toEqual({ fit: 1.4, overlay: 1, safeX: 0, safeWidth: 2560 });
+    expect(layoutFor(2560, 1080, { safeArea: true })).toEqual({ fit: 1.2, overlay: 1, safeX: 320, safeWidth: 1920 });
+    expect(layoutFor(2560, 1080, { safeArea: false })).toEqual({ fit: 1.2, overlay: 1, safeX: 0, safeWidth: 2560 });
     const uw = layoutFor(3440, 1440, { safeArea: true });
     expect(uw.safeWidth).toBe(2560);
     expect(uw.safeX).toBe(440);
-    expect(uw.fit).toBeCloseTo(1.867, 2);
-    // A 16:9 or narrower screen has no bars, setting or not.
+    expect(uw.fit).toBeCloseTo(1.6, 2);
     expect(layoutFor(1920, 1080, { safeArea: true }).safeX).toBe(0);
     expect(layoutFor(1920, 1200, { safeArea: true }).safeX).toBe(0);
   });
 
-  it('works in CSS pixels: the device pixel ratio does not change the layout, browser zoom only enlarges', () => {
-    // A 4K screen at 200% system scaling has a 1920 x 1080 CSS viewport: the reference layout, drawn sharp.
+  it('works in CSS pixels: the device pixel ratio does not change the layout', () => {
     expect(layoutFor(1920, 1080)).toEqual(layoutFor(3840 / 2, 2160 / 2));
-    // 150% browser zoom on a 1080p screen: a 1280 x 720 CSS viewport; on screen that is 0.933 × 1.5 = 1.4.
-    expect(layoutFor(1280, 720).fit * 1.5).toBeCloseTo(REFERENCE.fit, 1);
     expect(layoutFor(0, 0).fit).toBe(MIN_FIT);
   });
 });

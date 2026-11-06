@@ -114,7 +114,7 @@ describe('kill feed', () => {
     expect(host.querySelector('.mp-weapon')!.getAttribute('aria-label')).toBe('Crashed');
   });
 
-  it('marks our own lines, keeps five, and fades them', () => {
+  it('marks our own lines, keeps four (v0.0.16 feed), and fades them', () => {
     vi.useFakeTimers();
     const { root, zones: z } = zones();
     const hud = new MpHud(root, z, { emote: () => undefined, intercept: () => undefined });
@@ -129,9 +129,9 @@ describe('kill feed', () => {
     expect((feed.children[1] as HTMLElement).dataset.self).toBe('victim');
     expect((feed.children[2] as HTMLElement).dataset.kind).toBe('news');
     for (let i = 0; i < 6; i++) hud.kill('A', 1, 'B', 2, 'bomb', [], null);
-    expect(feed.children).toHaveLength(5);
+    expect(feed.children).toHaveLength(4);
     vi.advanceTimersByTime(6100);
-    expect(feed.querySelectorAll('.fade').length).toBe(5);
+    expect(feed.querySelectorAll('.fade').length).toBe(4);
     vi.advanceTimersByTime(1000);
     expect(feed.children).toHaveLength(0);
   });

@@ -6,9 +6,9 @@
  * icons are vectors), and browser zoom gives the bigger interface the player asked for, never a
  * smaller one than the 720p layout.
  *
- * - `fit`: the zones' scale (multiplied by the HUD size S / M / L). 1.4 at the 1920 x 1080
- *   reference, as before, and in proportion beyond it (2.8 at 4K, so text is never tiny), down to
- *   0.9 on small windows. It follows the shorter of the height and the safe width, so 16:10
+ * - `fit`: the zones' scale (multiplied by the HUD size S / M / L). 1 at the design canvas's
+ *   1440 x 900 frame (v0.0.16), 1.2 at 1080p and in proportion beyond it (2.4 at 4K, so text is
+ *   never tiny), never under 1, so HUD text never drops below its 12px minimum (720p keeps the design sizes). It follows the shorter of the height and the safe width, so 16:10
  *   and narrow windows don't clip.
  * - `overlay`: the scale of the overlays outside the zones (pause, welcome, logbook, dialogs,
  *   lobby, feedback, the focus tooltip): 1 up to 1080p, then in proportion.
@@ -16,9 +16,11 @@
  *   in a centred 16:9 area (a comfortable reading area on 21:9); otherwise the whole window.
  */
 
-export const REFERENCE = { width: 1920, height: 1080, fit: 1.4 } as const;
+export const REFERENCE = { width: 1440, height: 900, fit: 1 } as const;
+/** The overlays' reference (pause, dialogs, tooltips): 1 up to 1080p, then in proportion. */
+const OVERLAY_REFERENCE = { width: 1920, height: 1080 } as const;
 /** The smallest zone scale (small windows). */
-export const MIN_FIT = 0.9;
+export const MIN_FIT = 1;
 const WIDE = 16 / 9;
 
 export interface LayoutOptions {
@@ -41,9 +43,10 @@ export function layoutFor(width: number, height: number, opts: LayoutOptions = {
   const h = Math.max(1, height);
   const safeWidth = opts.safeArea && w / h > WIDE + 0.01 ? Math.round(h * WIDE) : w;
   const base = Math.min(h / REFERENCE.height, safeWidth / REFERENCE.width);
+  const overlay = Math.min(h / OVERLAY_REFERENCE.height, safeWidth / OVERLAY_REFERENCE.width);
   return {
     fit: round(Math.max(MIN_FIT, REFERENCE.fit * base)),
-    overlay: round(Math.max(1, base)),
+    overlay: round(Math.max(1, overlay)),
     safeX: Math.round((w - safeWidth) / 2),
     safeWidth,
   };

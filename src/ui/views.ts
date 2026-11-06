@@ -50,6 +50,8 @@ export interface TerritoryLabel extends ScreenPoint {
   id: string;
   role: 'home' | 'objective' | 'neutral';
   state: TerritoryState;
+  /** Ground distance from the plane (or the pad at the desk); labels of far desks are left out. */
+  distance?: number;
 }
 
 /** A name, role and health bar floating over a practice target, a damaged prop or a defense. */
@@ -116,6 +118,8 @@ export interface MissionCardView {
   timeLimit: number | null;
   threat: ThreatSummary;
   fits: Array<{ id: AircraftId; name: string; level: SuitabilityLevel; selected: boolean }>;
+  /** The desk it is flown against ("T5"), when it has one. */
+  target?: string | null;
 }
 
 export interface ObjectiveView {
@@ -259,6 +263,8 @@ export interface SettingsView {
     /** The preset, or null once something was changed from it. */
     preset: GraphicsPreset | null;
   };
+  /** Master volume, 0–1 (this computer's). */
+  volume?: number;
 }
 
 export interface MenuView {
@@ -268,6 +274,8 @@ export interface MenuView {
   /** Multiplayer: the transfer code to type on another computer, while it is valid. */
   transfer?: { code: string; minutes: number } | null;
   confirmingReset: boolean;
+  /** Who is playing (Settings › Account). */
+  account?: { name: string | null; guest: boolean; online: boolean } | null;
 }
 
 /**
@@ -483,6 +491,8 @@ export interface HudView {
   tutorial: TutorialView | null;
   /** The home dashboard (at the desk only). */
   dashboard: DashboardView | null;
+  /** The launch pad on screen (the hangar's outline around the plane on the runway). */
+  pad?: ScreenPoint | null;
 }
 
 export interface HudActions {
@@ -502,6 +512,12 @@ export interface HudActions {
   resetProgress(): void;
   /** Multiplayer: ask for a code that moves this player to another computer. */
   moveDevice?(): void;
+  /** Single-player: back to the main menu (the match stays as it is, paused). */
+  quitToMenu?(): void;
+  /** Master volume, 0–1. */
+  setVolume?(v: number): void;
+  /** The achievements screen (single-player). */
+  openAchievements?(): void;
   /** Multiplayer: the playtest feedback form (F8, v0.0.14). */
   openFeedback?(): void;
   dismissWelcome(): void;

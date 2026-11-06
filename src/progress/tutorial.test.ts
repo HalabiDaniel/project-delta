@@ -60,7 +60,7 @@ describe('the tutorial', () => {
     expect(t.view(desk)!.keys).toEqual(['F']);
     setControlLabels({ fold: 'X' });
     expect(t.view(desk)!.keys).toEqual(['X']);
-    expect(t.view(desk)!.text).toMatch(/Press X/);
+    expect(t.view(desk)!.text).toMatch(/with X/);
   });
 
   it('can be skipped and restarted, and tells its listener each time', () => {

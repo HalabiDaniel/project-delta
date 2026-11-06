@@ -451,6 +451,12 @@ export class MultiplayerGame {
       this.attach();
       return;
     }
+    // From the main menu's Multiplayer screen (v0.0.16): a session matchmaking found, or quick play
+    // (with a code typed on the Join tab). The lobby's room list stays for ?mp alone.
+    const q = new URLSearchParams(window.location.search);
+    const session = q.get('session');
+    if (session) return this.enter(() => this.net.join(session, this.lobby.name));
+    if (q.has('quick')) return this.enter(() => this.net.quickJoin(this.lobby.name));
     await this.refreshRooms();
   }
 
@@ -1433,7 +1439,9 @@ export class MultiplayerGame {
       this.lastHud = this.views.hud();
       this.hud.render(this.lastHud);
     }
-    this.mpHud.render(this.mpView());
+    const mv = this.mpView();
+    this.hud.matchStatus = { players: mv.players, maxPlayers: mv.maxPlayers, sessionLeft: mv.sessionLeft };
+    this.mpHud.render(mv);
   }
 
   /** Other aircraft near the aim, for the controller's aim help. */
@@ -1684,7 +1692,7 @@ export class MultiplayerGame {
     const s = this.room?.state;
     const now = performance.now() / 1000;
     const players = s ? [...s.players.entries()] : [];
-    const scoreboard = this.controls.held('scoreboard') && this.room
+    const scoreboard = (this.controls.held('scoreboard') || (this.state?.phase === 'flying' && this.controls.held('missions'))) && this.room
       ? players
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,

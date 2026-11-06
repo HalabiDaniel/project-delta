@@ -144,7 +144,7 @@ export const EMOTES: ReadonlyArray<{ id: Emote; icon: IconName; name: string; ke
   { id: 'heart', icon: 'health', name: T.mpHud.emotes.heart, key: bind('emote3') },
 ];
 const EMOTE_ICON: Record<Emote, IconName> = { waggle: 'plane', confetti: 'level', heart: 'health' };
-const FEED_LINES = 5;
+const FEED_LINES = 4;
 const FEED_SECONDS = 6;
 
 /** A player in their tape colour: a swatch shape (a plane for a pilot, a crumple for one shot down) and the name. */
@@ -260,7 +260,7 @@ export class MpHud {
     this.emotes.hidden = true;
     this.emotes.innerHTML =
       EMOTES.map((e) => iconButton({ icon: e.icon, name: e.name, key: e.key, attrs: { 'data-act': `emote-${e.id}` } })).join('') +
-      `<span class="mp-board-key" data-tip="${esc(H.scoreboardHold)}">${glyph(bind('scoreboard'))}${icon('kills', 'icon', esc(H.scoreboard))}</span>`;
+      `<span class="mp-board-key" data-tip="${esc(H.scoreboardHold)}">${glyph(bind('missions', 'scoreboard'))}${icon('kills', 'icon', esc(H.scoreboard))}</span>`;
     for (const e of EMOTES) bindButton(this.emotes.querySelector<HTMLElement>(`[data-act="emote-${e.id}"]`)!, () => actions.emote(e.id));
     zones.tr.appendChild(this.feed);
     this.board = div(zones.centre, 'mp-board');

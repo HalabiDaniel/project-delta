@@ -21,7 +21,7 @@ export type Action =
   | 'prevAircraft' | 'nextAircraft' | 'prevMission' | 'nextMission'
   | 'pick0' | 'pick1' | 'pick2' | 'pick3' | 'pick4' | 'pick5' | 'pick6' | 'pick7'
   // Screens
-  | 'base' | 'logbook' | 'sound' | 'dev' | 'hints' | 'scoreboard'
+  | 'base' | 'logbook' | 'sound' | 'dev' | 'hints' | 'scoreboard' | 'hangar' | 'missions'
   // Multiplayer
   | 'emote1' | 'emote2' | 'emote3';
 
@@ -35,7 +35,7 @@ export const KEYMAP: Readonly<Record<string, Action>> = {
   Enter: 'confirm', NumpadEnter: 'confirm', Space: 'launch', Escape: 'back',
   KeyF: 'fold', KeyR: 'service', KeyX: 'swap', Delete: 'remove', KeyU: 'upgrade',
   KeyQ: 'prevAircraft', KeyE: 'nextAircraft',
-  KeyB: 'base', KeyL: 'logbook', KeyM: 'sound', Backquote: 'dev', KeyH: 'hints', Tab: 'scoreboard',
+  KeyB: 'base', KeyL: 'logbook', KeyM: 'sound', Backquote: 'dev', KeyH: 'hangar', Tab: 'missions',
   KeyZ: 'emote1', KeyC: 'emote2', KeyV: 'emote3',
   Digit0: 'pick0', Digit1: 'pick1', Digit2: 'pick2', Digit3: 'pick3', Digit4: 'pick4', Digit5: 'pick5', Digit6: 'pick6', Digit7: 'pick7',
   Numpad0: 'pick0', Numpad1: 'pick1', Numpad2: 'pick2', Numpad3: 'pick3', Numpad4: 'pick4', Numpad5: 'pick5', Numpad6: 'pick6', Numpad7: 'pick7',
