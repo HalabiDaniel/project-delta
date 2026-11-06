@@ -11,7 +11,7 @@ import type { WorldRoom } from './WorldRoom';
 /**
  * The minimal admin endpoint (v0.0.14): what the command line can't do on a running server. Every
  * request needs ADMIN_KEY (`Authorization: Bearer <key>`); without ADMIN_KEY set the endpoint
- * doesn't exist. Every action is logged (`admin.*`). The full dashboard is v0.0.23.
+ * doesn't exist. Every action is logged (`admin.*`). The full dashboard is v0.0.25.
  *
  *   GET  /admin/sessions                                   sessions, their players (with ping) and held desks
  *   POST /admin/kick  {"player", "reason"?, "minutes"?}     remove a player now (public id or name);
