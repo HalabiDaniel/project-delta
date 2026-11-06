@@ -1,4 +1,4 @@
-import { AIRCRAFT, BOMB, RATINGS, SUITABILITY, type AircraftSpec } from '../config';
+import { AI, AIRCRAFT, BOMB, PLANE, RATINGS, SUITABILITY, type AircraftId, type AircraftSpec, type AiRole } from '../config';
 import type { MissionSpec, MissionType } from '../missions/Mission';
 
 export type RatingKey = keyof typeof RATINGS;
@@ -151,4 +151,22 @@ function reasonFor(
 /** Every design's suitability for a mission, in garage order. */
 export function suitabilityFor(spec: Pick<MissionSpec, 'type' | 'bombs' | 'objectives'>, catalog: Record<string, AircraftSpec> = AIRCRAFT) {
   return Object.values(catalog).map((aircraft) => ({ aircraft, suitability: assessSuitability(aircraft, spec) }));
+}
+
+/** Seconds to get a plane onto the pad: folding a new one, refitting a recovered one, rolling out a stowed one. */
+export function buildDuration(spec: Pick<AircraftSpec, 'buildTime'>, kind: 'fold' | 'refit' | 'rollout'): number {
+  const fold = spec.buildTime ?? PLANE.buildTime;
+  if (kind === 'fold') return fold;
+  if (kind === 'refit') return PLANE.refitTime * (fold / PLANE.buildTime);
+  return PLANE.rolloutTime;
+}
+
+/** How the AI (and the server's hunt cards and kill credit) sees a design: a bomber or a fighter. */
+export function aiRoleFor(spec: Pick<AircraftSpec, 'role'>): AiRole {
+  return spec.role === 'bomber' ? 'bomber' : 'fighter';
+}
+
+/** The design an AI aircraft flies: the one ordered if its role may fly it (AI.designs), the role's default otherwise. */
+export function aiDesignFor(role: AiRole, requested?: AircraftId): AircraftId {
+  return requested && AI.designs[role].includes(requested) ? requested : AI.roles[role];
 }

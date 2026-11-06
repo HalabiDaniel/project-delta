@@ -69,6 +69,45 @@ describe('FlightModel', () => {
     expect(AIRCRAFT.swift.flight.minSpeed).toBeLessThan(Math.min(AIRCRAFT.falcon.flight.minSpeed, AIRCRAFT.dart.flight.minSpeed));
   });
 
+  it('the Raptor (v0.0.15) wins on energy: faster and a better climber than the Falcon, turning slightly wider', () => {
+    const sprint = (id: AircraftId) => {
+      const m = new FlightModel(AIRCRAFT[id]);
+      m.spawn({ x: 0, y: 40, z: 0 }, 0);
+      for (let t = 0; t < 3; t += DT) m.fly(DT, { ...idle, throttle: 1, aim: { yaw: 0, pitch: 0 } }, territories, []);
+      const level = m.speed;
+      for (let t = 0; t < 0.8; t += DT) m.fly(DT, { ...idle, throttle: 1, boost: true, aim: { yaw: 0, pitch: 0 } }, territories, []);
+      return { level, boosted: m.speed };
+    };
+    // Height gained in a full-throttle climb at the steepest angle, from cruise.
+    const climb = (id: AircraftId) => {
+      const m = new FlightModel(AIRCRAFT[id]);
+      m.spawn({ x: 0, y: 15, z: 0 }, 0);
+      for (let t = 0; t < 2; t += DT) m.fly(DT, { ...idle, throttle: 1, autoLevel: false, aim: { yaw: 0, pitch: PLANE.maxPitch } }, territories, []);
+      return { gained: m.position.y - 15, speed: m.speed };
+    };
+    const turned = (id: AircraftId) => {
+      const m = new FlightModel(AIRCRAFT[id]);
+      m.spawn({ x: 0, y: 40, z: 0 }, 0);
+      for (let t = 0; t < 1.5; t += DT) m.fly(DT, { ...idle, aim: { yaw: m.yaw + 1, pitch: 0 } }, territories, []);
+      return wrapAngle(m.yaw);
+    };
+    const [raptor, falcon, swift] = (['raptor', 'falcon', 'swift'] as const).map((id) => ({ id, sprint: sprint(id), climb: climb(id), turn: turned(id) }));
+    // Top speed, level and boosted.
+    expect(raptor.sprint.level).toBeGreaterThan(falcon.sprint.level + 2);
+    expect(raptor.sprint.boosted).toBeGreaterThan(falcon.sprint.boosted + 2);
+    expect(raptor.sprint.level).toBeGreaterThan(swift.sprint.level);
+    // Climb: more height in the same time, and more speed left at the top of it.
+    expect(raptor.climb.gained).toBeGreaterThan(falcon.climb.gained + 3);
+    expect(raptor.climb.speed).toBeGreaterThan(falcon.climb.speed);
+    expect(raptor.climb.gained).toBeGreaterThan(swift.climb.gained);
+    // Turn: a little wider than the Falcon (within 15 %), still tighter than the starter.
+    expect(raptor.turn).toBeLessThan(falcon.turn);
+    expect(raptor.turn).toBeGreaterThan(falcon.turn * 0.85);
+    expect(raptor.turn).toBeGreaterThan(swift.turn);
+    // Every fighter but the Dart (recon) is slower than it.
+    for (const id of AIRCRAFT_ORDER) if (id !== 'raptor' && id !== 'dart') expect(AIRCRAFT[id].flight.maxSpeed).toBeLessThan(AIRCRAFT.raptor.flight.maxSpeed);
+  });
+
   it('throttle and boost change the speed within the design limits', () => {
     const m = new FlightModel(AIRCRAFT.dart);
     const f = AIRCRAFT.dart.flight;

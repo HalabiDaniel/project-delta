@@ -1,4 +1,5 @@
-import type { AircraftId } from '../../src/config';
+import { buildDuration } from '../../src/aircraft/Aircraft';
+import { AIRCRAFT, type AircraftId } from '../../src/config';
 import { NET, NEUTRAL_FRAME, type InputFrame } from '../../src/net/protocol';
 import type { Pilot } from './Pilot';
 import { ServerWorld, type ServerWorldOptions } from './ServerWorld';
@@ -58,7 +59,7 @@ export function launch(world: ServerWorld, p: Pilot, aircraft: AircraftId = 'fal
     if (world.suits(p, aircraft)) break;
   }
   if (!world.command(p.id, { a: 'build' })) throw new Error(`can't build: ${st.phase}, paper ${p.resources.paper}`);
-  run(world, 2.2);
+  run(world, buildDuration(AIRCRAFT[aircraft], st.buildKind) + 0.2);
   if (!world.command(p.id, { a: 'launch' })) throw new Error(`can't launch: ${st.phase}`);
   // Clear of the launch shield and climbing.
   run(world, 3.5);
