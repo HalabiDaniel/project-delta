@@ -136,7 +136,7 @@ checklist at the end of the plan ([Definition of done](docs/roadmap/v0.0.11.md#1
 
 The mapping follows the plan's section 7C, with one change: throttle had no button there, so it
 is LB + left stick (LB is the plan's "assisted banking modifier"). It may change after the
-playtest; rebinding is v0.0.17. Tests: `src/input/input.test.ts` (dead zones, curves, steering
+playtest; rebinding is v0.0.19. Tests: `src/input/input.test.ts` (dead zones, curves, steering
 against the real flight model, the raw layouts, connection and switching, context mapping,
 navigation, hints).
 
@@ -144,7 +144,7 @@ navigation, hints).
 
 - **Swift** is the starter (first in the garage, cheapest) and the **free emergency plane**
   (`STARTER_AIRCRAFT`, `emergencyPlane()`); **Falcon** is the agile fighter (best turn rate, no
-  bombs, a stealth value that does nothing until v0.0.18); **Dart** is the fast recon plane
+  bombs, a stealth value that does nothing until v0.0.20); **Dart** is the fast recon plane
   (fastest in the game, longest range of the four, no bombs, recon objectives fill 1.5× faster);
   **Widewing** is unchanged. Numbers in the [aircraft table](#aircraft).
 - **Saves migrate** (single-player save format 3): every aircraft id is kept; only "Emergency
@@ -603,7 +603,7 @@ readability on real hardware still need playtesting.
 ### Known limitations
 
 - Sessions live in memory on one server process: no accounts, persistence or campaign yet
-  (persistence from v0.0.10 to v0.0.13, accounts in v0.0.22). A server restart ends every session.
+  (persistence from v0.0.10 to v0.0.13, accounts in v0.0.24). A server restart ends every session.
 - Eight claimable desks in the 3 × 3 classroom; more territory slots come with the world expansion.
 - Homes are dressed without the Home Desk landmark and tall props (the server doesn't know their
   collision shapes); remote planes don't show bomb racks or the fold animation.
@@ -1918,16 +1918,18 @@ The road to the first public release is planned version by version in
 | [v0.0.12](docs/roadmap/v0.0.12.md) | Persistent, portable bases |
 | [v0.0.13](docs/roadmap/v0.0.13.md) | Sessions and the territory lifecycle |
 | [v0.0.14](docs/roadmap/v0.0.14.md) | Going live: the multiplayer server on the internet, with a setup guide |
-| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp |
-| [v0.0.16](docs/roadmap/v0.0.16.md) | Audio and music revamp |
-| [v0.0.17](docs/roadmap/v0.0.17.md) | Menus, settings and branding |
-| [v0.0.18](docs/roadmap/v0.0.18.md) | Economy and content depth |
-| [v0.0.19](docs/roadmap/v0.0.19.md) | Advanced multiplayer |
-| [v0.0.20](docs/roadmap/v0.0.20.md) | World scale and environments |
-| [v0.0.21](docs/roadmap/v0.0.21.md) | Customization and social |
-| [v0.0.22](docs/roadmap/v0.0.22.md) | Public readiness |
-| [v0.0.23](docs/roadmap/v0.0.23.md) | Admin dashboard |
-| [v0.0.24](docs/roadmap/v0.0.24.md) | Release candidate |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp (in progress) |
+| [v0.0.16](docs/roadmap/v0.0.16.md) | Flight maneuvers (added 2026-11-06) |
+| [v0.0.17](docs/roadmap/v0.0.17.md) | Player ranks (added 2026-11-06) |
+| [v0.0.18](docs/roadmap/v0.0.18.md) | Audio and music revamp |
+| [v0.0.19](docs/roadmap/v0.0.19.md) | Menus, settings and branding |
+| [v0.0.20](docs/roadmap/v0.0.20.md) | Economy and content depth |
+| [v0.0.21](docs/roadmap/v0.0.21.md) | Advanced multiplayer |
+| [v0.0.22](docs/roadmap/v0.0.22.md) | World scale and environments |
+| [v0.0.23](docs/roadmap/v0.0.23.md) | Customization and social |
+| [v0.0.24](docs/roadmap/v0.0.24.md) | Public readiness |
+| [v0.0.25](docs/roadmap/v0.0.25.md) | Admin dashboard |
+| [v0.0.26](docs/roadmap/v0.0.26.md) | Release candidate |
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
 The roadmap was reorganised on 2026-11-02 around portable bases and timed sessions (the
