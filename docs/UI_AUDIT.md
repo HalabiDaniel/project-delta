@@ -42,7 +42,7 @@ approximate where noted ("~").
 | Threat HUD | `ThreatHud.ts` | Threat panel (territory, level pips, defense icons, status), threat ring round the centre, rocket lock warning, threat notes, hit arcs | §3B; phase 3 | In flight only (`threat` null otherwise) |
 | Air HUD | `AirHud.ts` | Brackets and tag on AI aircraft, health bar, edge chevrons, lead sight | §3B; phase 3 | When not paused |
 | World labels | `WorldLabels.ts` | Reticles, objective diamond / edge arrow, territory tags, target tags with health, hit X, pop words, damage numbers | §3B; phase 3 | Per frame from view |
-| Mini-map | `MiniMap.ts` | Canvas: territories by role, defenses and reach arcs, zones, rings, practice targets, AI aircraft, raid lines, T1 radar sweep, boundary, plane | §3A; phase 3 (desk states: "Also in this version"; larger maps v0.0.22) | Always (zone-tr); 128 px at home, bigger in flight |
+| Mini-map | `MiniMap.ts` | Canvas: territories by role, defenses and reach arcs, zones, rings, practice targets, AI aircraft, raid lines, T1 radar sweep, boundary, plane | §3A; phase 3 (desk states: "Also in this version"; larger maps v0.0.24) | Always (zone-tr); 128 px at home, bigger in flight |
 | Alerts | `Alerts.ts` (`Alerts`) | Pill: icon, title, one value, ×count; max 3 | §3B; phase 3 | `hud.alert(...)`, times out (default 2.6 s) |
 | Tips | `Alerts.ts` (`Tips`) | Dark first-time tip with keys | §6B; phase 6 | `hud.tip(...)`; click to dismiss, times out |
 | Tutorial panel | `TutorialPanel.ts` | "3 / 10", title, text, key chips, progress, Skip | §6B; phase 6 | While a step is active; hidden paused / result / welcome |
