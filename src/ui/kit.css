@@ -637,3 +637,9 @@ button.pw-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 v
 .paper-pill { display: inline-flex; align-items: center; gap: var(--space-2); height: 52px; padding: 0 var(--space-4) 0 6px; box-sizing: border-box; border: var(--pw-border); border-radius: var(--radius-pill); background: var(--pencil-400); color: var(--graphite); box-shadow: var(--shadow-chip); }
 .paper-pill b { font: 400 var(--f28) / 1 var(--font-display); }
 .paper-pill-icon { display: grid; place-items: center; width: 38px; height: 38px; box-sizing: border-box; border: var(--stroke-line) solid var(--ink); border-radius: 50%; background: var(--paper-solid); }
+
+/* ---- Text on light fills (sticky, pencil) stays graphite in every theme --------------------------- */
+.pw-coach-step, .pw-coach-skip { color: color-mix(in srgb, var(--graphite) 72%, transparent); }
+.pw-dock-btn[aria-pressed='true'], .pw-btn[aria-pressed='true'], .pw-iconbtn[aria-pressed='true'] { color: var(--graphite); }
+.pw-dock-btn[aria-pressed='true'] .pw-key { color: color-mix(in srgb, var(--graphite) 70%, transparent); }
+.paper-pill-icon { color: var(--ink); }
