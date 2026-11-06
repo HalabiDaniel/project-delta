@@ -3,16 +3,20 @@
 **Since:** v0.0.15 phase 2 ([plan](roadmap/v0.0.15.md) §1, §2, §6, §8, §9)
 **Gallery:** open the game with `?ui-gallery` (for example `http://localhost:5173/?ui-gallery`).
 **Inventory it builds on:** [UI_AUDIT.md](UI_AUDIT.md) (phase 1).
+**Look:** the developer's own style guide, the paperwars.io design system and screen mockups
+(2026-11-06), kept in [docs/style-guide/](style-guide/) as the reference; see section 10.
 
 One set of tokens, one set of components and one focus model for every screen, single-player and
 multiplayer. Later phases rebuild each screen on it. A later feature that needs a new component
 adds it here and to the gallery; it does not build one ad hoc.
 
-![The gallery](checkpoints/0.0.15-design-system/01-gallery.jpg)
+![The gallery](checkpoints/0.0.15-style/01-gallery-daylight.jpg)
 
 | File | What it holds |
 |---|---|
-| `src/ui/tokens.ts` | Every token, both palettes, `applyTokens()`, `colour()` |
+| `src/ui/tokens.ts` | Every token, both themes and both palettes, `applyTokens()`, `colour()` |
+| `src/ui/fonts.ts` | The three self-hosted faces (Lilita One, Nunito, Kalam) |
+| `src/ui/icons.ts` | The icons: Lucide 0.460.0 nodes (copied by `tools/lucide-icons.mjs`) and the game's own |
 | `src/ui/components.ts` | The components (HTML string functions) and `ConfirmDialog` |
 | `src/ui/components.css` | Component styles, the focus ring, the focus tooltip, reduced motion. Tokens only |
 | `src/input/FocusNav.ts` | The focus manager (`FocusManager`; `FocusNav` is the old name, kept) |
@@ -28,15 +32,18 @@ adds it here and to the gallery; it does not build one ad hoc.
 on `:root` at boot (`src/main.ts`), so every stylesheet and every element reads the same values,
 also elements outside `#hud` (the focus tooltip, dialogs, the loading screen).
 
-The names from v0.0.7 to v0.0.14 keep their values, so the existing HUD renders exactly as before.
+Since the style guide (section 10) the values are the guide's: its names (`paper-100`, `ink-900`,
+`pencil-400`, …) are tokens, and the names from v0.0.7 to v0.0.14 are aliases onto them, so every
+rule written before keeps working.
 
 ### A. Colour
 
 | Group | Tokens |
 |---|---|
-| Surfaces | `--paper` (card stock), `--paper-solid`, `--paper-2` (recessed), `--edge`, `--backdrop` |
-| Ink | `--ink`, `--ink-2`, `--ink-3`, `--on-colour` (text on a coloured fill) |
-| Meaning | `--friend`, `--hostile`, `--warn`, `--good`, `--off`, `--objective` (orange, new), `--neutral` (grey, new) |
+| Style guide | `--paper-100`, `--paper-50`, `--desk-200`, `--rule-300`, `--margin-red`, `--ink-900`, `--ink-600`, `--graphite`, `--pencil-400`, `--pencil-600`, `--cardboard-400`, `--cardboard-700`, `--eraser-300`, `--sticky-200`, `--tape-100`, `--sky-500`, `--raid-500`, `--win-500`, `--on-signal`, `--team-1` … `--team-8` |
+| Surfaces | `--paper` (= paper-50), `--paper-solid` (= paper-50), `--paper-2` (recessed, = desk-200), `--edge` (= rule-300), `--backdrop` |
+| Ink | `--ink` (= ink-900), `--ink-2`, `--ink-3` (= ink-600), `--on-colour` (= on-signal, text on a coloured fill) |
+| Meaning | `--friend` (= sky-500), `--hostile` (= raid-500), `--warn`, `--good` (= win-500), `--off`, `--objective` (orange), `--neutral` (grey) |
 | Status | `--threat-1` to `--threat-3`, `--tracking`, `--locking`, `--firing`, `--gold`, `--silver`, `--bronze` |
 | Focus | `--focus`, `--focus-glow` |
 | Tinted chips | `--chip-{good,friend,hostile,warn,gold,streak}-bg` and `-fg` |
@@ -48,14 +55,16 @@ Owners follow the art direction: player `--friend` (blue), hostile `--hostile` (
 
 | Group | Tokens | Values |
 |---|---|---|
-| Spacing | `--s1` … `--s8` | 4 px steps: 4, 8, 12, 16, 20, 24, 28, 32 |
-| Radius | `--r` (card), `--r-s` (small), `--r-pill` | 10px, 7px, 999px |
-| Type: faces | `--num` (bold tabular numbers), `--font` (words), `--mono` (key caps) | system faces; no web font yet |
-| Type: sizes | `--t-s`, `--t-m`, `--t-l`, display `--t-xl` (= `--t-display`), fine print `--t-xs` | 12, 15, 21, 30, 11 px × text scale |
-| Elevation | `--elev-flat`, `--elev-raised` (= `--shadow`), `--elev-floating` (= `--shadow-lift`) | tooltips, alerts and dialogs float |
-| Motion | `--dur-fold`, `--dur-pop`, `--dur-fade`, `--dur-slide`, `--dur-tip`; `--ease-pop`, `--ease-out`, `--ease-in` | 160, 220, 180, 200, 120 ms |
+| Spacing | `--s1` … `--s8`; the guide's `--space-1` … `--space-12` | 4 px steps: 4, 8, 12, 16, 20, 24, 28, 32 (and 40, 48) |
+| Radius | `--r` (= radius-md), `--r-s` (= radius-sm), `--r-pill`; `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-pill` | 6, 12, 20, 999 px |
+| Strokes | `--stroke-hair`, `--stroke-line` (buttons, chips), `--stroke-card` (cards, panels), `--stroke-focus` | 1, 2, 3, 3 px |
+| Type: faces | `--font-display` (= `--num`), `--font-body` (= `--font`, `--mono`), `--font-note` | Lilita One, Nunito, Kalam |
+| Type: sizes | `--t-xs` … `--t-xl` (HUD scale, as tuned); the guide's `--t-label` 12, `--t-body-sm` 14, `--t-body` 16, `--t-doodle` 18, `--t-title` 24, `--t-counter` 28, `--t-display-l` 40, `--t-display-xl` 64 | all × text scale |
+| Shadows (hard, no blur) | `--shadow-press`, `--shadow-card`, `--shadow-lift` (the guide's), `--shadow-hard-sm`, `--shadow-hard`, `--shadow-hard-lg` (marker shadows in graphite) | |
+| Elevation | `--elev-flat`, `--elev-raised` (= `--shadow` = shadow-hard), `--elev-floating` (= shadow-hard-lg) | tooltips, alerts and dialogs float |
+| Motion | `--dur-fold`, `--dur-pop`, `--dur-fade`, `--dur-slide`, `--dur-tip`, `--dur-press`, `--dur-calm`; `--ease-pop` (spring), `--ease-out`, `--ease-in` | 220, 220, 180, 200, 120, 90, 120 ms |
 | Motion, ready to use | `--motion-fold`, `--motion-pop`, `--motion-fade`, `--motion-slide`; `--fast` (old name of the fold) | duration + easing |
-| Focus ring | `--focus-width`, `--focus-offset`, `--focus-glow-width` | 3px, 2px, 6px |
+| Focus ring | `--focus-width`, `--focus-offset`, `--focus-glow-width` | 3px, 2px, 0 (no glow) |
 | Scale | `--ui-scale` (HUD size S / M / L), `--fit-scale` (resolution, set by `HUD.ts`), `--text-scale` | |
 
 ### C. Options
@@ -64,9 +73,10 @@ Owners follow the art direction: player `--friend` (blue), hostile `--hostile` (
 
 | Option | Effect |
 |---|---|
+| `theme: 'daylight' \| 'lightsOut'` | The style guide's two themes (sets `data-theme="daylight" \| "lights-out"` on the root). Every name keeps its meaning; the palette and contrast options apply on top |
 | `palette: 'standard' \| 'colourblind'` | Swaps colour values, never names. The colour-blind palette is Okabe–Ito based: blue and vermillion for friend and hostile, bluish green for good, orange for warning, reddish purple for objective and locking; threat levels step in lightness too |
 | `highContrast` | Solid card stock, darker `--ink-2`, `--ink-3`, `--edge`, a darker backdrop |
-| `reducedMotion` | Every duration becomes 0ms. `:root[data-motion='reduced']` also ends every other animation and transition at once (looping pulses included) |
+| `reducedMotion` | Every duration becomes 0ms. `:root[data-motion='reduced']` also ends every other animation and transition at once (looping pulses included); panels, dialogs, alerts and coach marks fade in over `--dur-calm` (120ms) instead of springing |
 | `textScale` | Multiplies every type size; independent of HUD size |
 | `hudScale` | Writes `--ui-scale` (HUD.setScale still sets it on `#hud`, which wins) |
 
@@ -95,12 +105,12 @@ writes `innerHTML` and updates it in place. Styles are in `components.css`, clas
 
 | Component | Function | Role and name | Notes |
 |---|---|---|---|
-| Card | `card({ bodyHtml, title?, icon?, label?, id?, tone?, elevation?, fold?, state? })` | `group`, named by its title | The container for every panel; folded corner, folds in |
+| Card | `card({ bodyHtml, title?, icon?, label?, id?, tone?, elevation?, fold?, state? })` | `group`, named by its title | The container for every panel: paper, 3px ink outline, hard shadow; springs in (`fold` kept for the API, no corner since the style guide) |
 | Chip / tag | `chip({ label, value?, icon?, tone?, tip?, state? })` | text | Tones: `good`, `friend`, `hostile`, `warn`, `gold`, `streak`, `objective` |
 | Button | `button({ label, variant?, icon?, key?, device?, size?, tip?, id?, disabled?, state? })` | `button` | `primary`, `secondary`, `danger`; `key` shows the binding |
 | Icon button | `iconButton({ icon, name, tip?, key?, device?, badge?, state? })` | `button`, `aria-label` = name | Tooltip defaults to the name |
 | Info button | `infoButton({ name, tip, key?, state? })` | `button` | Opens its tooltip (Y / Triangle) |
-| Bar | `bar({ value, label, valueText?, level?, kind?, size?, state? })` | `meter` | Level from `format.level`: over 0.6 ok, over 0.3 worn, else critical. Worn and critical are hatched, so colour is never alone |
+| Bar | `bar({ value, label, valueText?, level?, kind?, size?, segments?, state? })` | `meter` | Segmented (10 by default; `segments: 0` plain; thin and mini plain). Level from `format.level`: over 0.6 ok, over 0.3 worn, else critical. Worn and critical are hatched, so colour is never alone |
 | Stat | `stat({ icon, value, label, delta?, deltaTone?, suffix?, tone?, state? })` | `group`, named by label | Value and delta come formatted (`format.ts`) |
 | Pips | `pips({ filled, total, label, tone?, shape?, state? })` | `img`, named by label | `tone: 'threat'` colours by count |
 | Tooltip | `tooltipAttrs(text, id?)`, `tooltip({ id, text, open? })` | `tooltip` | `data-tip` shows on hover, on focus after 450 ms, and by the info button |
@@ -109,6 +119,19 @@ writes `innerHTML` and updates it in place. Styles are in `components.css`, clas
 | Tabs | `tabs({ id, label, tabs, prev?, next?, device? })`, `tabPanel(...)`, `bindTabs(root, onChange)` | `tablist` / `tab` / `tabpanel`, `aria-selected`, `aria-controls` | Selected is also underlined |
 | Dialog | `dialog({ id, title, body?, confirm, cancel, danger?, device? })` | `dialog`, `aria-modal`, labelled and described | Use `ConfirmDialog` to show one |
 | Glyph | `glyph({ key, pad?, padText?, literal? }, { device?, literal? })` | text in `<kbd>` | See section 4 |
+| Meter | `meter({ label, value, valueText, icon?, kind?, level?, segments? })` | the bar's `meter` | The guide's Meter: label, segmented bar, value as text; low (critical) turns raid and is hatched, progress fills pencil |
+| Paper counter | `paperCounter({ value, label, delta?, icon? })` | `status`, named | Pencil pill, the icon in a white well, the number in the display face |
+| Raid alert | `raidAlert({ title, body?, eta?, icon?, tone? })` | `alert` (raid) or `status` | Badge, title, a line, the ETA; tones raid, info, win |
+| Badge | `badge({ label, kind?, icon?, tip? })` | text | new (eraser), level (pencil), locked (desk), enemy (raid) |
+| Toggle | `toggleSwitch({ label, checked, hideLabel?, disabled? })` | `switch` | Pencil when on |
+| Segmented | `segmented({ label, items, id? })` | `group`; buttons `aria-pressed` | The chosen one is an ink fill (the pause menu's settings) |
+| Coach mark | `coachMark({ text, close, extraHtml?, name? })` | `note` | Sticky note, slight tilt, the hint in Kalam, "Got it". Tips and the tutorial use its look |
+| Mission card | `missionCard({ title, icon, typeLabel?, brief?, reward?, risk?, footHtml?, selected?, interactive? })` | `button` (interactive) or article | Notebook page, red margin line, reward in win with trophy and paper, the risk naming the plane in raid |
+| Plane card | `planeCard({ name, role, roleIcon?, stats?, cost?, risk?, selected?, footHtml? })` | article, named | Name in the display face, role tag, stat pips, cost in cardboard, "Crash and you lose …" |
+| Build slot | `buildSlot({ name, icon?, level?, maxLevel?, status?, meta?, metaIcon? })` | `group`, named | Levels as marks; damaged = raid outline; empty = dashed with a plus |
+| Result dialog | `resultDialog({ title, sub?, tone?, rows?, actionsHtml?, bodyHtml? })` | `group`, labelled | Home safe (win) or crumpled (raid) |
+| Scoreboard | `scoreboard({ label, columns, rows })` | table, named | Ruled table; your row has a sky edge |
+| Team chip | `teamChip({ name, team, desk?, you? })` | text | Team colour with its seat number, never colour alone |
 | Caption | `caption({ text, icon?, direction?, directionLabel?, state? })` | `status` | Sound captions: "[Rocket lock]", icon, an arrow toward the source (radians from the nose). `Captions` in `src/ui/Captions.ts` shows them |
 
 ### A. States
@@ -293,7 +316,8 @@ places them (tokens only; the developer panel and perf readout keep their own co
 - `MiniMap.ts` still has its own colours (phase 5 owns it).
 - Phase 6 and 7: see section 9.
 - The highlight is not browser focus, so screen readers do not follow it yet.
-- No web font is loaded; the faces are system faces until the developer picks fonts (plan §13).
+- The mini-map's zoom buttons work with the mouse only (no key binding yet), and its screen-reader
+  label is fixed text; the guide asks for one that says where you, the target and the raiders are.
 
 ## 9. Responsive layout and accessibility (phases 6 and 7)
 
@@ -307,3 +331,61 @@ places them (tokens only; the developer panel and perf readout keep their own co
 | Colour never alone | Aircraft markers (shape), mini-map aircraft (dart hostile, round friendly), mini-map defenses (wreck crossed, engaged ringed, ours underlined), fit letters (underlined / plain / outlined / struck), mission stripes (solid / dotted / hatched / dashed), bars (hatched), chips (labels), owner tape (with a shape) |
 | Contrast | `src/ui/contrast.test.ts` checks WCAG ratios over the token tables, both palettes, with and without high contrast: 4.5:1 for text, 3:1 for icons and bold pills |
 | Captions | `Sounds.onCue` reports every sound (also muted); `Captions` shows spotted, rocket lock (while the tone beeps), rocket launch, hit, bandit, raid incoming, with the way to the source where known. `play(name, { caption: false })` for a use that means something else (the build blip, our own launch). Multiplayer's lock and raid notes carry a keyed `cue` from the server |
+
+## 10. The developer's style guide (2026-11-06)
+
+The look of every screen is the developer's paperwars.io design system and screen mockups, copied
+into [docs/style-guide/](style-guide/): the brand book ([design-system/README.md](style-guide/design-system/README.md)),
+[tokens.json](style-guide/design-system/tokens.json), the `pw-` component CSS and READMEs
+([components/](style-guide/design-system/components/)) and the screens
+([screens/](style-guide/screens/): FlightHud, DeskHud, Settings, Multiplayer, Achievements,
+Leaderboard, …). The mockups' images are uploads that are not in the repository; the game has its
+own 3D world and models.
+
+| Area | What we adopted |
+|---|---|
+| Look | Neobrutalist paper and marker: flat colour, 2px outlines on buttons and chips, 3px ink outlines and hard 4–6px shadows on cards, panels and dialogs; radius-md cards, radius-lg dialogs and trays, pill counters and chips. No gradients, no glow, no blurred shadows (hard-stop patterns only for meter segments and the colour-never-alone hatching) |
+| Themes | Daylight (default) and Lights out, a setting in the pause menu (Game → Theme), saved in SP `settings.access.theme` and MP `paperwars.mp.settings` `access.theme`. Colour-blind and high contrast apply on top of either |
+| Fonts | Lilita One (titles, plane names, HUD numbers), Nunito 600 / 800 / 900 (body), Kalam (tips, the tutorial, coach marks only; never numbers or controls) |
+| Icons | Lucide 0.460.0 at a 2.5px stroke in `currentColor`; game-specific icons (turret, launcher, plane silhouettes, escort, crumple, damage) kept and drawn to the same weight |
+| Buttons | Primary pencil-400 with graphite text and a pencil-600 edge that drops 2px on press; secondary paper; danger raid; labels uppercase (the guide's `label` style) |
+| Motion | Panels spring in (~220ms, overshoot); buttons drop 2px; reduced motion: 120ms fades, no bounces or shakes |
+| Voice | New labels in the guide's voice, in `STYLE_TEXT` (`src/ui/strings.ts`): "Raid on your desk!", "Mission done", "Home safe" / "Crumpled", "Crash and you lose your Swift", "Got it" |
+
+### A. Layout after the mockups
+
+| Screen | Mockup | What changed |
+|---|---|---|
+| Flight | FlightHud | Paper counter top left with the objective card under it (each step as a line with its icon, the reward with trophy and paper); raid alert top centre in the guide's RaidAlert shape; pause chip top right (multiplayer: connection, players and session clock chips, then the kill feed); hull and range meters bottom left; speed, altitude, boost bottom centre (maneuver slot kept); weapons and the round mini-map bottom right (rim, N, ticks, the desk you are over, zoom) |
+| Desk | DeskHud | A top bar: paper counter, production and storage chips, Base / Logbook / Menu, and Fold / Launch as the primary button top right; mission cards as notebook pages under it; the garage as a tray of plane cards; the home dashboard as a notebook page |
+| Base management | DeskHud | The slot inspector is a card on the right (BuildSlot details: level marks, health meter, stats, actions); the build tray a HUD tray of small paper cards; slot markers in the BuildSlot states |
+| Pause menu | Settings | A sheet with the red margin line, a big title, two columns (Game, Accessibility) of rows: name, a short description, a segmented choice |
+| Logbook | Achievements, Leaderboard | Sheet with the margin line; achievements as cards with a pencil disc (dashed while locked) and a progress bar; tables as the Scoreboard |
+| Lobby | Multiplayer | Sheet with the margin line, big title, 3px fields, rooms and desks as outlined cards (the lobby's redesign is v0.0.19) |
+| Sortie report | ResultDialog | Home safe / crumpled over a big coloured title, numbers in outlined wells, ruled rows |
+| Tips, tutorial | CoachMark | Taped sticky notes in Kalam, "Got it" |
+
+### B. Deviations from the mockups
+
+- The desk keeps the mission cards on the right, so the garage inspector stays bottom left (the
+  mockup's right-side inspector is used for base management, where the cards are hidden).
+- No building or plane renders, art wells, texture swatches or the classroom floor plan in the
+  mini-map: the game shows its 3D world; the mini-map keeps its own drawing (desks, threats, radar),
+  restyled with the tokens (desk-200 floor, outlined desks, thick rim, ticks).
+- Bottom-centre action tiles (Fire / Drop / Boost / Go home) are not added: the weapons card keeps
+  ink and bombs with their keys (bottom right) and the instruments keep speed, altitude and boost.
+- HUD type keeps its tuned sizes (`--t-xs` … `--t-xl`) so the zones still fit at 720p; the guide's
+  sizes are tokens for the overlays.
+- Settings sections are columns on one sheet, not a left navigation: the pause menu holds few settings.
+
+### C. Licences
+
+| Asset | Licence | Where |
+|---|---|---|
+| Lilita One (Juan Montoreano) | SIL Open Font License 1.1 | `@fontsource/lilita-one` 5.3.0, latin 400 |
+| Nunito (Vernon Adams, Cyreal, Jacques Le Bailly) | SIL Open Font License 1.1 | `@fontsource/nunito` 5.3.0, latin 600 / 800 / 900 |
+| Kalam (Indian Type Foundry) | SIL Open Font License 1.1 | `@fontsource/kalam` 5.3.0, latin 400 |
+| Lucide icons 0.460.0 | ISC (portions MIT, Feather) | nodes copied into `src/ui/icons.ts` with the notice; `lucide` is a dev dependency |
+
+The fonts are bundled by Vite (about 83 kB of woff2; woff fallbacks are emitted but not fetched by
+current browsers); nothing is loaded from Google at run time.
