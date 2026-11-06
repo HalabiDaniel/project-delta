@@ -30,5 +30,8 @@ COPY src ./src
 ENV NODE_ENV=production
 # Railway gives the port in PORT; elsewhere the server listens on 2567.
 EXPOSE 2567
-# node directly (not npm), so Railway's SIGTERM reaches the server and the graceful shutdown runs.
-CMD ["node", "--import", "tsx", "server/index.ts"]
+# One image, two programs: the service named "backup" on Railway (or PAPERWARS_ROLE=backup) runs
+# the nightly backup job; anything else runs the game server. Railway's custom start command, if
+# set, still wins. `exec` hands the process to node directly, so Railway's SIGTERM reaches the
+# server and the graceful shutdown runs.
+CMD ["sh", "-c", "if [ \"${PAPERWARS_ROLE:-$RAILWAY_SERVICE_NAME}\" = backup ]; then exec node --import tsx server/db/backup.ts backup; else exec node --import tsx server/index.ts; fi"]

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { log } from '../log';
 import { Database, redactUrl } from './Database';
@@ -206,9 +207,20 @@ function kb(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} kB`;
 }
 
-const mode = process.argv[2];
+/** Run as a program (not imported by a test): `backup` is the default, so a bare start command works too. */
+const entry = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+const given = process.argv[2];
+const mode = given ?? (entry ? 'backup' : undefined);
 const args = process.argv.slice(3);
+if (entry && mode !== 'backup' && mode !== 'restore') {
+  log('error', 'backup.usage', { error: `unknown command "${mode}": use backup or restore (npm run db:backup / npm run db:restore -- <backup>)` });
+  process.exitCode = 1;
+}
 if (mode === 'backup' || mode === 'restore') {
+  if (entry) {
+    const b = bucketFromEnv();
+    log('info', `${mode}.start`, { database: process.env.DATABASE_URL ? redactUrl(process.env.DATABASE_URL) : 'NOT SET', bucket: b ? `${b.bucket} at ${b.endpoint}` : 'NOT SET', drill: process.env.DRILL_DATABASE_URL ? 'on' : 'off', args });
+  }
   try {
     if (mode === 'restore') await restore(args);
     else if (args.includes('--list')) await list();
