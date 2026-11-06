@@ -271,7 +271,7 @@ export class MultiplayerGame {
   private inputContext(): InputContext {
     // A confirm dialog (End sortie, Leave, Remove…) or the server-lost dialog owns the controller:
     // A and B answer it and no other button reaches the game (as in single-player).
-    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen) return 'menu';
+    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen || this.hud.settingsOpen) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -316,7 +316,8 @@ export class MultiplayerGame {
       abandonOperation: () => undefined,
       openLogbook: () => game?.hud.alert('book', T.mpGame.notInMultiplayer, null, 'info', 1.6),
       openMenu: () => game?.pause(),
-      resetProgress: () => game?.leaveSession(),
+      // Pause → Leave match (asked first): off the session and back to the main menu (v0.0.16).
+      resetProgress: () => void game?.leaveSession().then(() => (window.location.search = '')),
       moveDevice: () => game?.net.requestTransfer(),
       openFeedback: () => game?.feedback.show(),
       dismissWelcome: () => undefined,
@@ -837,6 +838,8 @@ export class MultiplayerGame {
     if (!this.room || this.lobby.open) return;
     if (action === 'sound') return this.toggleSound();
     if (action === 'back' || action === 'pause') {
+      // Esc backs out of one thing at a time: Settings over the match, a drawer, build mode, then Pause.
+      if (this.hud.back()) return;
       if (action === 'back' && this.baseMode?.open && !this.paused) return this.toggleBase(false);
       // The controller's B only backs out of things; pausing is its Menu button.
       if (action === 'back' && device === 'gamepad' && !this.paused) return;
@@ -847,6 +850,15 @@ export class MultiplayerGame {
     if (this.paused || !this.state) return;
     const phase = this.state.phase;
     if (action === 'base') return this.toggleBase();
+    const atDesk = phase === 'desk' || phase === 'building' || phase === 'ready';
+    if (action === 'hangar' || action === 'missions') {
+      if (atDesk) this.hud.openDesk(action);
+      return;
+    }
+    if (action === 'logbook') {
+      if (phase !== 'flying') this.hud.toggleSession();
+      return;
+    }
     if (action === 'emote1' || action === 'emote2' || action === 'emote3') {
       this.net.emote(action === 'emote1' ? 'waggle' : action === 'emote2' ? 'confetti' : 'heart');
       return;
@@ -861,7 +873,10 @@ export class MultiplayerGame {
       return;
     }
     const card = /^pick([1-7])$/.exec(action)?.[1];
-    if (card) return this.send({ a: 'select', i: Number(card) - 1 });
+    if (card) {
+      if (atDesk) this.hud.openDesk('missions', false);
+      return this.send({ a: 'select', i: Number(card) - 1 });
+    }
     switch (action) {
       case 'prevMission':
       case 'nextMission': {
@@ -873,6 +888,8 @@ export class MultiplayerGame {
         return this.send({ a: 'swap' });
       case 'prevAircraft':
       case 'nextAircraft': {
+        if (phase === 'flying') return;
+        this.hud.openDesk('hangar', false);
         const i = AIRCRAFT_ORDER.indexOf(this.state.aircraft);
         const next = AIRCRAFT_ORDER[(i + (action === 'nextAircraft' ? 1 : -1) + AIRCRAFT_ORDER.length) % AIRCRAFT_ORDER.length];
         return this.send({ a: 'aircraft', id: next });

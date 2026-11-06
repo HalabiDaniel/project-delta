@@ -51,7 +51,7 @@ interface Preset {
  */
 const PRESETS: Record<ShowcasePreset, Preset> = {
   login: { target: [21, 0, 3], yaw: 0, pitch: 52, distance: 74, fov: 40 },
-  menu: { target: [17, 0, -2], yaw: 180, pitch: 48, distance: 70, fov: 40 },
+  menu: { target: [16, 0, -7], yaw: 180, pitch: 50, distance: 66, fov: 40 },
 };
 
 interface Flyer {

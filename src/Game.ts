@@ -1115,6 +1115,7 @@ export class Game {
     const dt = Math.min(rawDt, 0.05);
     this.controls.context = this.inputContext();
     this.controls.screen = this.flow.inMatch ? `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.hud.deskState()}|${this.hud.settingsOpen}` : `front|${this.flow.screen}`;
+    this.input.tabIsGame = this.flow.inMatch;
     this.controls.update(dt);
     if (!this.flow.inMatch) {
       // The menus: the game waits; the living desk moves behind Loading, Login and the main menu.
