@@ -944,7 +944,7 @@ The whole multiplayer system on the internet (the game on Vercel, the server and
 
 ### Version 0.0.15: HUD and UI Revamp
 
-A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. Pencil outlines removed from the 3D world. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
+**Coded (2026-11-06).** A UI design system after the developer's style guide (Daylight and Lights out themes, Lilita One, Nunito and Kalam, Lucide icons; [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout, accessibility and localisation-ready text. Pencil outlines removed from the 3D world; Medium is the default preset. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
 
 ### Version 0.0.16: Flight Maneuvers
 

@@ -1,4 +1,4 @@
-# paperwars.io: v0.0.14 (going live), on top of v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.15 (HUD and UI revamp), on top of v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
 
 > **v0.0.14: going live (phases 1 to 6 done; next, the developer's setup).** Everything the
 > multiplayer server needs to run on the internet: a `Dockerfile` Railway builds on its own,
@@ -9,8 +9,16 @@
 > test that runs against the deployment. **Start here:** [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
 > See [v0.0.14: going live](#v0014-going-live) and the [plan](docs/roadmap/v0.0.14.md).
 >
-> **v0.0.15 (HUD and UI revamp) has started:** phase 1, the [UI audit](docs/UI_AUDIT.md) and a
-> screenshot baseline (`npm run ui:shots`), is done. See the [plan](docs/roadmap/v0.0.15.md).
+> **v0.0.15: HUD and UI revamp (coded; next, the developer's hands-on checks).** One design system
+> after the developer's style guide: tokens with two themes (Daylight and Lights out), Lilita One,
+> Nunito and Kalam, Lucide icons and a shared component set ([docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md),
+> gallery at `?ui-gallery`). The flight HUD in fixed zones with the centre clear, rebuilt management
+> and multiplayer screens (`mp.css` retired), keyboard and controller focus everywhere with confirm
+> dialogs, live device-aware hints, layouts from 720p to 4K and 21:9, accessibility settings
+> (colour-blind palette, text size, high contrast, reduced motion, sound captions), all interface
+> text in a keyed dictionary with `?pseudo` pseudo-localisation, pencil outlines removed, Medium as
+> the default preset, and the Raptor finalised. See [v0.0.15](#v0015-hud-and-ui-revamp) and the
+> [plan](docs/roadmap/v0.0.15.md).
 
 
 > **v0.0.13: sessions.** No more forever-world: players meet in timed sessions of up to sixteen,
@@ -336,6 +344,31 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.15: HUD and UI revamp
+
+All nine phases of the [plan](docs/roadmap/v0.0.15.md) are coded. Screenshots: the
+[baseline](docs/checkpoints/0.0.15-ui-baseline/), the [style](docs/checkpoints/0.0.15-style/),
+[multiplayer](docs/checkpoints/0.0.15-multiplayer/), [pseudo-localisation](docs/checkpoints/0.0.15-pseudo/)
+and the [after](docs/checkpoints/0.0.15-ui-after/) set (`npm run ui:shots`).
+
+Useful URLs: `?ui-gallery` (every component in every state), `?pseudo` (accented, longer text),
+`?lang=<code>` (a future locale). The theme and accessibility options are in the pause menu.
+
+**For the developer:**
+- the controller and keyboard walkthroughs on real hardware;
+- the two-player playtest;
+- approving the style;
+- the font licence (SIL OFL) and the Lucide icon licence (ISC), recorded in DESIGN_SYSTEM.md §10C;
+- the Raptor's price of 72.
+
+**Known gaps:**
+- game content outside `src/ui` and `src/mp` (aircraft, missions, director, `Game.ts`, server
+  messages) is still English text;
+- the mini-map zoom has no key binding;
+- 4K and 3440 x 1440 were screenshotted as the HUD alone (software rendering is too slow for
+  the 3D world at those sizes);
+- frame time was not measured on real hardware.
 
 ## v0.0.14: going live
 
@@ -1918,7 +1951,7 @@ The road to the first public release is planned version by version in
 | [v0.0.12](docs/roadmap/v0.0.12.md) | Persistent, portable bases |
 | [v0.0.13](docs/roadmap/v0.0.13.md) | Sessions and the territory lifecycle |
 | [v0.0.14](docs/roadmap/v0.0.14.md) | Going live: the multiplayer server on the internet, with a setup guide |
-| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp (in progress) |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp: one design system, rebuilt HUD and screens, accessibility, localisation-ready text |
 | [v0.0.16](docs/roadmap/v0.0.16.md) | Flight maneuvers (added 2026-11-06) |
 | [v0.0.17](docs/roadmap/v0.0.17.md) | Player ranks (added 2026-11-06) |
 | [v0.0.18](docs/roadmap/v0.0.18.md) | Audio and music revamp |
