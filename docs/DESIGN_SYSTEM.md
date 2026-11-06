@@ -254,10 +254,29 @@ stay in node.
 
 ---
 
-## 7. Known gaps (later phases)
+## 7. The screens on the system (phases 3 and 4)
 
-- Screens still use the old `hud.css` and `mp.css` rules; phases 3 to 5 rebuild them on the components.
-- `MiniMap.ts` and `WorldLabels.ts` still have their own colours; phase 3 reads `colour()`.
+The flight HUD and the management screens are built from the components; `src/ui/hud.css` only
+places them (tokens only; the developer panel and perf readout keep their own colours, marked).
+
+| Rule | Where |
+|---|---|
+| Alerts: at most three; critical > warning > good / info, newest first within a level. A lesser alert never pushes out a more important one. Critical: `opts.critical`, or bad news with the raid, rocket, lock, launcher or health icon (so multiplayer's server alerts qualify) | `AlertQueue`, `alertLevel` in `src/ui/Alerts.ts`; `hud.alert(…, seconds, { critical })` |
+| Combat de-emphasis: `combat` (tracked or attacked) and `combat-hot` (under fire or locked) on the HUD root, from the threat and air views. The economy strip, dashboard, tutorial, tips and info alerts step back (opacity, scale); anything `[data-critical]` (low health, lock, raid alert, boundary) never does | `combatLevel`, `applyCombat` in `src/ui/HUD.ts` |
+| Destructive actions ask first: End sortie, Reset progress / Leave classroom (the same menu button), Abandon operation through `guardActions` (the HUD's actions, so single-player and multiplayer get them); Remove building inside `BaseMode.remove()`, so its X shortcut asks too. Shortcuts open the dialog; Enter / A confirms, Esc / B cancels; a held key does not confirm | `src/ui/confirm.ts` (`requestConfirm`, `confirmThen`, `guardActions`), texts in `CONFIRM_TEXT` (`strings.ts`) |
+| Costs show what is missing: the price, and a red chip with the shortfall | `priceHtml` in `src/ui/BaseHud.ts` (tray, inspector, repair all, dashboard) |
+| Resources: paper first, then `EconomyView.resources` as more rows of the same shape | `resourceRows` in `src/ui/EconomyStrip.ts` |
+| Panels opened by code put the highlight on their first sensible control (`data-nav-default`, else `.primary`) and give it back on close: `focusManager()?.openPanel(el)` / `closePanel(el)`. The screen stack (`reset(screen)`) and the panel stack agree: a panel opened or closed since the last screen change decides | Logbook, pause menu, welcome card, base mode, sortie report |
+| Logbook tabs are the Tabs component: Q / E (LB / RB) switch them; achievements and transactions have filters | `src/ui/Logbook.ts` |
+| Extension points for v0.0.16 (flight maneuvers), empty and hidden until then: `.maneuver-slot` (`data-p="maneuvers"`) beside the boost meter for crease charges, the "fast enough" marker, refusal reasons and prompts; `.pc-extra` on each plane card and `[data-i="tricks"]` in the inspector for trick cards. Fill them with components; no layout change | `PlaneHud.ts`, `Garage.ts` |
+| No hover-only information: `data-tip` everywhere (focus, the info button, and hover through `bindHoverTips`, which Controls binds on the page) | |
+
+## 8. Known gaps (later phases)
+
+- `mp.css` and the multiplayer HUD (`src/mp`) are phase 5. Multiplayer's Enter at the end of a
+  landing still ends the sortie without the dialog (its keyboard path is in `MultiplayerGame.ts`);
+  its End sortie button, Leave classroom and Remove do ask.
+- `MiniMap.ts` still has its own colours (phase 5 owns it).
 - Settings for palette, text scale, contrast and reduced motion arrive in phase 7 (today: system preferences).
 - The highlight is not browser focus, so screen readers do not follow it yet.
 - No web font is loaded; the faces are system faces until the developer picks fonts (plan §13).

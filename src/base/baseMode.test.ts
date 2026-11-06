@@ -43,13 +43,22 @@ describe('BaseMode', () => {
     expect(mode.build()).toBe(false);
   });
 
-  it('removing asks twice', () => {
-    const { mode, base } = setup();
+  it('removing asks first with the confirm dialog: cancel keeps it, confirm removes it', async () => {
+    const answers: boolean[] = [false, true];
+    let asked = 0;
+    const base = setup().base;
+    const mode = new BaseMode(base, () => {
+      asked++;
+      return Promise.resolve(answers.shift()!);
+    });
+    mode.enter();
     mode.selectSlot('D1');
-    expect(mode.remove()).toBe(false);
-    expect(base.at('D1')).not.toBeNull();
+    const pending = mode.remove();
     expect(mode.view(project, false, null).inspector).toMatchObject({ type: 'building', confirmingRemove: true });
-    expect(mode.remove()).toBe(true);
+    expect(await pending).toBe(false);
+    expect(base.at('D1')).not.toBeNull();
+    expect(await mode.remove()).toBe(true);
+    expect(asked).toBe(2);
     expect(base.at('D1')).toBeNull();
   });
 

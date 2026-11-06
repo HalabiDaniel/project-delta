@@ -531,6 +531,15 @@ export class ConfirmDialog {
   private resolve: ((ok: boolean) => void) | null = null;
   private restoreTo: HTMLElement | null = null;
   private readonly onKey = (e: KeyboardEvent): void => this.key(e);
+  /**
+   * The browser presses a focused button on Enter (keypress) and Space (keyup). The key that
+   * opened the dialog would otherwise confirm it at once, as focus has just moved to Confirm:
+   * only the dialog's own keydown handling presses its buttons.
+   */
+  private readonly onKeyAfter = (e: KeyboardEvent): void => {
+    if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
+    if (e.type === 'keypress') e.stopImmediatePropagation();
+  };
 
   constructor(private readonly host: HTMLElement | null = typeof document !== 'undefined' ? document.body : null) {}
 
@@ -563,6 +572,8 @@ export class ConfirmDialog {
     });
     wrap.addEventListener('mousedown', (e) => e.stopPropagation());
     doc.defaultView?.addEventListener('keydown', this.onKey, true);
+    doc.defaultView?.addEventListener('keypress', this.onKeyAfter, true);
+    doc.defaultView?.addEventListener('keyup', this.onKeyAfter, true);
     this.buttons()[1]?.focus({ preventScroll: true });
     return new Promise<boolean>((resolve) => (this.resolve = resolve));
   }
@@ -572,6 +583,8 @@ export class ConfirmDialog {
     const el = this.el;
     const doc = el.ownerDocument;
     doc.defaultView?.removeEventListener('keydown', this.onKey, true);
+    doc.defaultView?.removeEventListener('keypress', this.onKeyAfter, true);
+    doc.defaultView?.removeEventListener('keyup', this.onKeyAfter, true);
     this.el = null;
     el.remove();
     const back = this.restoreTo;
@@ -599,6 +612,8 @@ export class ConfirmDialog {
         break;
       case 'Enter':
       case ' ':
+        // A key held down from the shortcut that opened the dialog does not confirm it.
+        if (e.repeat) break;
         if (at === 0) this.close(false);
         else this.close(true);
         break;

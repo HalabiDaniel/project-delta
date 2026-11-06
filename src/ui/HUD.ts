@@ -1,7 +1,8 @@
 import type { RaidReport } from '../base/Raids';
 import { AirHud } from './AirHud';
 import { Alerts, Tips, type AlertOptions, type AlertTone } from './Alerts';
-import { glyph } from './components';
+import { ConfirmDialog, glyph } from './components';
+import { guardActions, installConfirmDialog } from './confirm';
 import { Dashboard } from './Dashboard';
 import { TutorialPanel } from './TutorialPanel';
 import { BaseHud, RaidHud } from './BaseHud';
@@ -24,6 +25,9 @@ import './components.css';
 export type { ScreenPoint } from './dom';
 export type * from './views';
 export type { AlertTone } from './Alerts';
+
+/** The multiplayer game (?mp, ?invite) shares the HUD; Reset becomes Leave classroom there. */
+const MULTIPLAYER = typeof window !== 'undefined' && ['mp', 'invite'].some((k) => new URLSearchParams(window.location.search).has(k));
 
 /**
  * How much of a fight the player is in, from the threat and air views: 0 calm, 1 something is
@@ -77,12 +81,22 @@ export class HUD {
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
   private lastRender = performance.now();
+  private lastView: HudView | null = null;
+  /** The confirm dialog for destructive actions (src/ui/confirm.ts). */
+  readonly confirmDialog: ConfirmDialog;
+  /** The actions with End sortie, Reset / Leave and Abandon behind the confirm dialog (for keyboard shortcuts too). */
+  readonly guarded: HudActions;
 
   constructor(
     readonly root: HTMLElement,
-    actions: HudActions,
+    rawActions: HudActions,
   ) {
     root.classList.add('hud');
+    this.confirmDialog = new ConfirmDialog(document.body);
+    installConfirmDialog(this.confirmDialog);
+    // End sortie, Reset / Leave and Abandon ask first, in single-player and multiplayer alike.
+    const actions = guardActions(rawActions, { multiplayer: MULTIPLAYER, view: () => this.lastView });
+    this.guarded = actions;
     const layer = div(root, 'world-layer');
     this.flash = div(root, 'damage-flash');
     const zone = (name: string) => div(root, `zone zone-${name}`);
@@ -122,6 +136,7 @@ export class HUD {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastRender) / 1000);
     this.lastRender = now;
+    this.lastView = v;
     const flying = v.phase === 'flying' && !v.paused;
     const atHome = v.phase === 'desk' || v.phase === 'building' || v.phase === 'ready' || v.phase === 'landed';
     this.root.classList.toggle('in-flight', flying);

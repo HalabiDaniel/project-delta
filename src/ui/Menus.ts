@@ -1,6 +1,8 @@
+import { attrs, button, card, glyph, stat, tooltipAttrs } from './components';
 import { attr, bindButton, esc, text, toggle } from './dom';
 import { fmt } from './format';
-import { icon, type IconName } from './icons';
+import { icon, ICON_NAMES, type IconName } from './icons';
+import { focusManager } from '../input/FocusNav';
 import { SAY } from './strings';
 import type { GraphicsPreset } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
@@ -49,72 +51,87 @@ const MULTIPLAYER = typeof window !== 'undefined' && ['mp', 'invite'].some((k) =
 
 /** "This session" / "Last time" as icon stats. */
 export function sessionStats(s: SessionView): string {
-  const stat = (iconName: IconName, value: string, label: string) => `<span class="stat" title="${esc(label)}">${icon(iconName)}<b>${value}</b></span>`;
   return `<div class="stats session">${[
-    stat('ok', String(s.missionsCompleted), `Missions completed${s.missionsFailed ? ` (${s.missionsFailed} failed)` : ''}`),
-    stat('paper', `+${fmt(s.paperEarned)}`, 'Paper earned'),
-    stat('paper', `−${fmt(s.paperSpent)}`, 'Paper spent'),
-    stat('crumple', String(s.aircraftLost), 'Aircraft lost'),
-    stat('kills', String(s.enemiesDestroyed), 'Enemies destroyed'),
-    stat('clock', `${s.minutes}m`, 'Time'),
-  ].join('')}</div>${s.best !== '—' ? `<div class="session-best" title="Best performance">${icon('medal')}<span>${esc(s.best)}</span></div>` : ''}`;
+    stat({ icon: 'ok', value: String(s.missionsCompleted), label: `Missions completed${s.missionsFailed ? ` (${s.missionsFailed} failed)` : ''}` }),
+    stat({ icon: 'paper', value: `+${fmt(s.paperEarned)}`, label: 'Paper earned', tone: 'good' }),
+    stat({ icon: 'paper', value: `−${fmt(s.paperSpent)}`, label: 'Paper spent' }),
+    stat({ icon: 'crumple', value: String(s.aircraftLost), label: 'Aircraft lost' }),
+    stat({ icon: 'kills', value: String(s.enemiesDestroyed), label: 'Enemies destroyed' }),
+    stat({ icon: 'clock', value: `${s.minutes}m`, label: 'Time' }),
+  ].join('')}</div>${s.best !== '—' ? `<div class="session-best" ${attrs(tooltipAttrs('Best performance'))}>${icon('medal')}<span>${esc(s.best)}</span></div>` : ''}`;
 }
 
+/** A setting: its name and a segmented choice (aria-pressed; the chosen one is filled and underlined). */
+function setting(id: string, iconName: IconName, label: string, tipText: string, items: Array<[string, string]>): string {
+  return `<div class="setting" ${attrs(tooltipAttrs(tipText))}><span class="setting-name">${icon(iconName)}${esc(label)}</span><span class="seg" role="group" aria-label="${esc(label)}" data-u="${id}">${items
+    .map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="false">${esc(l)}</button>`).join('')}</span></div>`;
+}
+
+const LEVELS: Array<[string, string]> = [['low', 'Low'], ['medium', 'Med'], ['high', 'High']];
+
 /**
- * The pause menu (buttons, settings and a compact controls grid) and the welcome card on
- * arrival. No rules to read: those come as tips the first time they matter.
+ * The pause menu (Resume, the settings, the controls, leave or reset) and the welcome card on
+ * arrival. No rules to read: those come as tips the first time they matter. Each opens with the
+ * highlight on its main button and gives it back to what was highlighted before when it closes.
+ * Reset (single-player) and Leave classroom (multiplayer) ask with the confirm dialog first (the
+ * HUD's guarded actions).
  */
 export class Menus {
   private readonly overlay: HTMLElement;
   private readonly welcome: HTMLElement;
   private readonly el: Record<string, HTMLElement> = {};
+  private pausedShown = false;
+  private welcomeShown = false;
 
   constructor(root: HTMLElement, actions: HudActions) {
     this.overlay = document.createElement('div');
     this.overlay.className = 'overlay';
-    this.overlay.innerHTML = /* html */ `
-      <div class="overlay-card card">
-        <div class="menu-head"><b class="brand">paperwars<span>.io</span></b><small data-u="version"></small><h2 data-u="title"></h2></div>
+    this.overlay.innerHTML = card({
+      className: 'overlay-card', label: SAY.menu, elevation: 'floating', attrs: { role: 'dialog', 'aria-labelledby': 'menu-title' },
+      bodyHtml: /* html */ `
+        <div class="menu-head"><b class="brand">paperwars<span>.io</span></b><small data-u="version"></small><h2 id="menu-title" data-u="title"></h2></div>
         <div class="menu-actions">
-          <button class="btn primary" data-u="resume">${icon('plane')}<span>${SAY.resume}</span><kbd>Esc</kbd></button>
-          <button class="btn" data-u="logbook">${icon('book')}<span>${SAY.logbook}</span><kbd>L</kbd></button>
-          <button class="btn" data-u="sound"></button>
-          <a class="btn" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter')}<span>${MULTIPLAYER ? 'Single-player' : 'Multiplayer'}</span></a>
+          ${button({ label: SAY.resume, icon: 'plane', variant: 'primary', key: { key: 'Esc', pad: 'menu' }, attrs: { 'data-u': 'resume', 'data-nav-default': '' } })}
+          ${button({ label: SAY.logbook, icon: 'book', key: { key: 'L' }, attrs: { 'data-u': 'logbook' } })}
+          ${button({ label: '', icon: 'sound', key: { key: 'M' }, attrs: { 'data-u': 'sound' } })}
+          <a class="ui-button" data-variant="secondary" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter', 'icon ui-icon')}<span class="ui-label">${MULTIPLAYER ? 'Single-player' : 'Multiplayer'}</span></a>
         </div>
-        <div class="settings">
-          <div class="setting" title="Key hints on the HUD"><span>${icon('info')}Hints</span><span class="seg" data-u="hints">
-            <button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button></span></div>
-          <div class="setting" title="HUD size"><span>${icon('distance')}Size</span><span class="seg" data-u="scale">
-            <button data-v="0.9">S</button><button data-v="1">M</button><button data-v="1.15">L</button></span></div>
-          <div class="setting" title="Graphics quality: shadows, decorations and resolution"><span>${icon('graphics')}Graphics</span><span class="seg" data-u="gfx">
-            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
-        </div>
+        <section class="menu-section" aria-labelledby="menu-settings"><h3 id="menu-settings">${icon('graphics')}${SAY.settings}</h3>
+          <div class="settings">
+            ${setting('hints', 'info', 'Hints', 'Key hints on the HUD', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']])}
+            ${setting('scale', 'distance', 'Size', 'HUD size', [['0.9', 'S'], ['1', 'M'], ['1.15', 'L']])}
+            ${setting('gfx', 'graphics', 'Graphics', 'Graphics quality: shadows, decorations and resolution', LEVELS)}
+          </div>
+          <div class="settings pad-only">
+            ${setting('pad-invert', 'heading', 'Invert Y', 'Controller: pull back to climb', [['off', 'Off'], ['on', 'On']])}
+            ${setting('pad-stick', 'plane', 'Stick', 'Controller steering sensitivity', LEVELS)}
+            ${setting('pad-camera', 'distance', 'Camera', 'Controller camera sensitivity', LEVELS)}
+          </div>
+        </section>
         <div data-u="session"></div>
-        <div class="settings pad-only">
-          <div class="setting" title="Controller: pull back to climb"><span>${icon('heading')}Invert Y</span><span class="seg" data-u="pad-invert">
-            <button data-v="off">Off</button><button data-v="on">On</button></span></div>
-          <div class="setting" title="Controller steering sensitivity"><span>${icon('plane')}Stick</span><span class="seg" data-u="pad-stick">
-            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
-          <div class="setting" title="Controller camera sensitivity"><span>${icon('distance')}Camera</span><span class="seg" data-u="pad-camera">
-            <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
-        </div>
-        <div class="controls kbd-only">${CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><kbd>${key}</kbd>${icon(i)}<span>${label}</span></div>`).join('')}</div>
-        <div class="controls pad-only">${PAD_CONTROLS.map(([key, i, label]) => `<div title="${esc(label)}"><b class="pad-key">${key}</b>${icon(i)}<span>${label}</span></div>`).join('')}</div>
+        <div class="controls kbd-only">${CONTROLS.map(([key, i, label]) => `<div ${attrs(tooltipAttrs(label))}>${glyph({ key })}${icon(i)}<span>${esc(label)}</span></div>`).join('')}</div>
+        <div class="controls pad-only">${PAD_CONTROLS.map(([key, i, label]) => `<div ${attrs(tooltipAttrs(label))}><b class="pad-key">${key}</b>${icon(i)}<span>${esc(label)}</span></div>`).join('')}</div>
         <div class="menu-transfer" data-u="transfer" hidden></div>
-        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER ? `<button class="btn ghost small" data-u="feedback" title="Tell the developer about a bug, a frustration or what you enjoyed (F8)">${icon('pencil')}<span>Feedback</span><kbd>F8</kbd></button><button class="btn ghost small" data-u="move" title="Get a one-time code to play as yourself on another computer">${icon('swap')}<span>Another computer</span></button>` : ''}<button class="btn ghost small" data-u="tutorial" title="Show the step-by-step tutorial again">${icon('tip')}<span>Tutorial</span></button><button class="btn ghost danger small" data-u="reset"></button></div>
-      </div>`;
+        <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER
+          ? `${button({ label: 'Feedback', icon: 'pencil', size: 'small', key: { key: 'F8' }, tip: 'Tell the developer about a bug, a frustration or what you enjoyed (F8)', attrs: { 'data-u': 'feedback' } })}${button({ label: 'Another computer', icon: 'swap', size: 'small', tip: 'Get a one-time code to play as yourself on another computer', attrs: { 'data-u': 'move' } })}`
+          : ''}${button({ label: 'Tutorial', icon: 'tip', size: 'small', tip: 'Show the step-by-step tutorial again', attrs: { 'data-u': 'tutorial' } })}${button({
+            label: MULTIPLAYER ? 'Leave classroom' : SAY.reset, icon: MULTIPLAYER ? 'close' : 'remove', size: 'small', variant: 'danger',
+            tip: MULTIPLAYER ? 'Leave this classroom for good: your desk is freed (asks first)' : 'Delete all progress (asks first)', attrs: { 'data-u': 'reset' },
+          })}</div>`,
+    });
     root.appendChild(this.overlay);
     this.welcome = document.createElement('div');
     this.welcome.className = 'welcome';
-    this.welcome.innerHTML = /* html */ `
-      <div class="welcome-card card">
+    this.welcome.innerHTML = card({
+      className: 'welcome-card', label: SAY.welcome, elevation: 'floating', attrs: { role: 'dialog', 'aria-labelledby': 'wc-title' },
+      bodyHtml: /* html */ `
         <b class="brand">paperwars<span>.io</span></b>
-        <h2 data-u="wc-title"></h2>
-        <div class="wc-paper" title="Paper">${icon('paper')}<b data-u="wc-paper"></b></div>
+        <h2 id="wc-title" data-u="wc-title"></h2>
+        <div class="wc-paper" ${attrs(tooltipAttrs('Paper'))}>${icon('paper')}<b class="num" data-u="wc-paper"></b></div>
         <div data-u="wc-session"></div>
-        <button class="btn primary" data-u="wc-go">${icon('home')}<span>${SAY.continue}</span><kbd>Enter</kbd></button>
-        ${MULTIPLAYER ? '' : `<a class="btn ghost small" data-u="wc-mp" href="?mp" title="Play with others in a shared classroom">${icon('fighter')}<span>Multiplayer</span></a>`}
-      </div>`;
+        ${button({ label: SAY.continue, icon: 'home', variant: 'primary', key: { key: 'Enter' }, attrs: { 'data-u': 'wc-go', 'data-nav-default': '' } })}
+        ${MULTIPLAYER ? '' : `<a class="ui-button" data-variant="secondary" data-size="small" data-u="wc-mp" href="?mp" ${attrs(tooltipAttrs('Play with others in a shared classroom'))}>${icon('fighter', 'icon ui-icon')}<span class="ui-label">Multiplayer</span></a>`}`,
+    });
     root.appendChild(this.welcome);
     // Hidden until the first render says otherwise (multiplayer doesn't render the HUD before a desk is claimed).
     this.overlay.hidden = true;
@@ -133,41 +150,57 @@ export class Menus {
     bindButton(this.el['wc-go'], actions.dismissWelcome);
     this.welcome.addEventListener('click', (e) => (e.target as HTMLElement).closest('[data-u="wc-mp"]') || actions.dismissWelcome());
     this.overlay.addEventListener('click', (e) => e.target === this.overlay && actions.resume());
-    for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setHints(b.dataset.v as HintMode));
-    for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setUiScale(Number(b.dataset.v)));
-    for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setGraphicsPreset(b.dataset.v as GraphicsPreset));
-    for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), invertY: b.dataset.v === 'on' }));
-    for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), stick: b.dataset.v as PadLevel }));
-    for (const b of this.el['pad-camera'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), camera: b.dataset.v as PadLevel }));
+    const seg = (id: string, fn: (v: string) => void) => {
+      for (const b of this.el[id].querySelectorAll<HTMLElement>('button')) bindButton(b, () => fn(b.dataset.v!));
+    };
+    seg('hints', (v) => actions.setHints(v as HintMode));
+    seg('scale', (v) => actions.setUiScale(Number(v)));
+    seg('gfx', (v) => actions.setGraphicsPreset(v as GraphicsPreset));
+    seg('pad-invert', (v) => setPadSettings({ ...getPadSettings(), invertY: v === 'on' }));
+    seg('pad-stick', (v) => setPadSettings({ ...getPadSettings(), stick: v as PadLevel }));
+    seg('pad-camera', (v) => setPadSettings({ ...getPadSettings(), camera: v as PadLevel }));
     text(this.el.version, `v${__APP_VERSION__}`);
   }
 
   render(v: HudView): void {
     toggle(this.overlay, v.paused);
+    if (v.paused !== this.pausedShown) {
+      this.pausedShown = v.paused;
+      const panel = this.overlay.firstElementChild as HTMLElement;
+      if (v.paused) focusManager()?.openPanel(panel);
+      else focusManager()?.closePanel(panel);
+    }
     if (v.paused) {
-      text(this.el.title, v.phase === 'flying' ? 'Paused' : SAY.menu);
+      text(this.el.title, v.phase === 'flying' ? SAY.paused : SAY.menu);
       const html = sessionStats(v.menu.session);
       if (this.el.session.dataset.html !== html) {
         this.el.session.dataset.html = html;
         this.el.session.innerHTML = html;
       }
       toggle(this.el.logbook, v.phase !== 'flying');
-      const sKey = String(v.menu.settings.muted);
+      const muted = v.menu.settings.muted;
+      const sKey = String(muted);
       if (this.el.sound.dataset.key !== sKey) {
         this.el.sound.dataset.key = sKey;
-        this.el.sound.innerHTML = `${icon(v.menu.settings.muted ? 'mute' : 'sound')}<span>${v.menu.settings.muted ? 'Off' : 'On'}</span><kbd>M</kbd>`;
+        this.el.sound.querySelector('svg')!.outerHTML = icon(muted ? 'mute' : 'sound', 'icon ui-icon');
+        text(this.el.sound.querySelector<HTMLElement>('.ui-label')!, muted ? 'Off' : 'On');
+        attr(this.el.sound, 'aria-label', `${ICON_NAMES.sound}: ${muted ? 'Off' : 'On'}`);
+        attr(this.el.sound, 'aria-pressed', String(!muted));
       }
-      for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === v.menu.settings.hints);
-      for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === v.menu.settings.uiScale);
-      const g = v.menu.settings.graphics;
-      for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.preset);
+      const pressed = (id: string, on: (value: string) => boolean) => {
+        for (const b of this.el[id].querySelectorAll<HTMLElement>('button')) {
+          const yes = on(b.dataset.v!);
+          b.classList.toggle('on', yes);
+          attr(b, 'aria-pressed', String(yes));
+        }
+      };
+      pressed('hints', (x) => x === v.menu.settings.hints);
+      pressed('scale', (x) => Number(x) === v.menu.settings.uiScale);
+      pressed('gfx', (x) => x === v.menu.settings.graphics.preset);
       const pad = getPadSettings();
-      for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', (b.dataset.v === 'on') === pad.invertY);
-      for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === pad.stick);
-      for (const b of this.el['pad-camera'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === pad.camera);
-      text(this.el.reset, MULTIPLAYER ? 'Leave classroom' : v.menu.confirmingReset ? SAY.confirmReset : SAY.reset);
-      this.el.reset.classList.toggle('confirm', v.menu.confirmingReset);
-      this.el.reset.title = MULTIPLAYER ? 'Leave this classroom for good: your desk is freed' : 'Delete all progress (asks twice)';
+      pressed('pad-invert', (x) => (x === 'on') === pad.invertY);
+      pressed('pad-stick', (x) => x === pad.stick);
+      pressed('pad-camera', (x) => x === pad.camera);
       text(this.el.save, v.menu.saveNote);
       const t = v.menu.transfer ?? null;
       const tKey = t ? `${t.code}/${t.minutes}` : '';
@@ -181,10 +214,16 @@ export class Menus {
     }
     const w = v.welcome;
     toggle(this.welcome, w !== null);
+    if ((w !== null) !== this.welcomeShown) {
+      this.welcomeShown = w !== null;
+      const panel = this.welcome.firstElementChild as HTMLElement;
+      if (w) focusManager()?.openPanel(panel);
+      else focusManager()?.closePanel(panel);
+    }
     if (w) {
       text(this.el['wc-title'], w.restored ? 'Welcome back' : 'Welcome');
       text(this.el['wc-paper'], fmt(w.paper));
-      attr(this.el['wc-title'], 'title', w.problems > 0 ? `${w.problems} damaged save entries were repaired` : '');
+      attr(this.el['wc-title'], 'data-tip', w.problems > 0 ? `${w.problems} damaged save entries were repaired` : '');
       const html = w.session ? sessionStats(w.session) : '';
       if (this.el['wc-session'].dataset.html !== html) {
         this.el['wc-session'].dataset.html = html;

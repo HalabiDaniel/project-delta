@@ -67,6 +67,7 @@ import {
 import { BUILDING_ICONS } from './ui/BaseHud';
 import { compass } from './ui/format';
 import { MISSION_ICONS, SAY } from './ui/strings';
+import { confirmOpen } from './ui/confirm';
 import type { IconName } from './ui/icons';
 import type { MiniMapView } from './ui/MiniMap';
 import { Sounds } from './ui/Sounds';
@@ -169,8 +170,6 @@ export class Game {
   private outcome: SortieOutcome | null = null;
   /** The summary of the previous visit, shown once on arrival (null once dismissed). */
   welcome: { session: SaveData['lastSession']; restored: boolean; problems: string[] } | null = null;
-  /** Abandoning an operation and resetting progress both ask twice. */
-  private confirming: { what: 'abandon' | 'reset'; until: number } | null = null;
   /** The plane's health share last frame, for the low-health warning. */
   private lastHealth = 1;
   private alarmKey = '';
@@ -250,7 +249,7 @@ export class Game {
 
   /** What the controller's buttons mean right now. */
   private inputContext(): InputContext {
-    if (this.paused || this.logbook.open || this.welcome) return 'menu';
+    if (this.paused || this.logbook.open || this.welcome || confirmOpen()) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -647,15 +646,11 @@ export class Game {
     this.requestSave();
   }
 
-  /** Gives up the operation under way (asks twice): what it paid is kept, the bonus is not. */
+  /** Gives up the operation under way (the HUD asks first): what it paid is kept, the bonus is not. */
   abandonOperation(): void {
     const op = this.director.operation;
     if (this.paused || !op || op.status !== 'active') return;
     if (this.state.phase !== 'desk' && this.state.phase !== 'building' && this.state.phase !== 'ready') return;
-    if (!this.confirm('abandon')) {
-      this.alert('close', 'Abandon?', `−${op.bonus}`, 'bad', 3);
-      return;
-    }
     this.director.abandonOperation();
     this.events.hold(null);
     this.state.updateOffers(this.director.missions);
@@ -663,27 +658,12 @@ export class Game {
     this.requestSave();
   }
 
-  /** Deletes all local progress (asks twice), then starts over. */
+  /** Deletes all local progress (the menu asks first with the confirm dialog), then starts over. */
   resetProgress(): void {
-    if (!this.confirm('reset')) {
-      this.alert('remove', 'Reset all?', null, 'bad', 3.5);
-      return;
-    }
     void this.saves.reset().then(() => {
       this.career.clear();
       window.location.reload();
     });
-  }
-
-  /** True on the second ask within a few seconds. */
-  private confirm(what: 'abandon' | 'reset'): boolean {
-    const now = performance.now();
-    if (this.confirming?.what === what && now < this.confirming.until) {
-      this.confirming = null;
-      return true;
-    }
-    this.confirming = { what, until: now + 4000 };
-    return false;
   }
 
   toggleLogbook(open = !this.logbook.open): void {
@@ -794,7 +774,8 @@ export class Game {
         m.repairAll();
         break;
       case 'remove':
-        m.remove();
+        // Asks with the confirm dialog first (BaseMode).
+        void m.remove();
         break;
     }
   }
@@ -1841,6 +1822,8 @@ export class Game {
     const { state } = this;
     // Browsers only allow sound after a key press or click.
     this.sounds.unlock();
+    // A confirm dialog owns Enter / A and Esc / B while it is up; nothing else reaches the game.
+    if (confirmOpen()) return;
     if (this.welcome && action !== 'dev') {
       this.dismissWelcome();
       if (action === 'confirm' || action === 'back' || action === 'pause') return;
@@ -1854,6 +1837,14 @@ export class Game {
         return;
       case 'logbook':
         return this.toggleLogbook();
+      case 'prevAircraft':
+      case 'nextAircraft':
+        // Q / E switch the logbook's tabs (LB / RB do through the focus manager).
+        if (this.logbook.open) {
+          this.controls.nav.switchTab(action === 'nextAircraft' ? 1 : -1);
+          return;
+        }
+        break;
       case 'back':
       case 'pause':
         if (this.logbook.open) return this.toggleLogbook(false);
@@ -1914,7 +1905,8 @@ export class Game {
         return;
       case 'confirm':
         if (device === 'gamepad') return this.padConfirm();
-        if (state.phase === 'landed') this.endSortie();
+        // Enter at the end of a landing asks with the confirm dialog first (Enter again confirms).
+        if (state.phase === 'landed') this.hud.guarded.endSortie();
         else this.continueToDesk();
         return;
     }
@@ -2272,7 +2264,7 @@ export class Game {
           },
         },
         saveNote: this.saveNote(),
-        confirmingReset: this.confirming?.what === 'reset' && performance.now() < this.confirming.until,
+        confirmingReset: false,
       },
       garage: choosing && !baseOpen ? this.garageView() : null,
       cards: choosing ? state.offers.map((m) => this.cardView(m)) : null,
@@ -2370,7 +2362,7 @@ export class Game {
             earned: op.earned,
             remaining: remainingRewards(op),
             active: op.status === 'active',
-            confirming: this.confirming?.what === 'abandon' && performance.now() < this.confirming.until,
+            confirming: false,
           }
         : null,
       bombs: m.spec.bombs,
