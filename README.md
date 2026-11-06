@@ -406,10 +406,30 @@ is [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).**
 - **Tests**: 662 (with PostgreSQL), including the deploy settings and origins, `/health`, every
   admin action, feedback, and a backup to a bucket restored into a fresh database.
 
-Measured locally (8 bots in one session, PostgreSQL, through the invite-only server and the remote
-load test): server step 1.1 ms average, 7.4 database writes a second at 5 ms, a dropped
-connection resumed in about 0.5 s, 180 MB of memory. The measurements on Railway (section 6) are
-recorded here after the deployment.
+**Live since 2026-11-06** on Railway (`https://project-delta-production.up.railway.app`), with
+the game on Vercel, `ACCESS=open` (the developer's choice: no invites for the alpha), nightly
+backups to R2 and an UptimeRobot check. Two fixes came out of the first deployment: the server
+crashed on start under plain Node because of a Vite-only `import.meta.glob` in v0.0.15's
+`src/ui/strings.ts` (now guarded, and `server/start.test.ts` starts the real process), and the
+backup service ran the game server when its start command wasn't saved (the image now picks the
+program by the service's name).
+
+Load test on Railway (`npm run loadtest:remote`, 2026-11-06, 32 bots in two full sessions for
+120 s, over the internet from a cloud machine, saving to the live PostgreSQL):
+
+| Measure | Result |
+|---|---|
+| Bandwidth down per player | 10.9 KB/s |
+| Prediction corrections | 74 of 51,796 reconciles (0.14 %) |
+| Dropped connection resumed | 0.68 to 0.79 s (one attempt fell on the restart below) |
+| Back after a server restart | all 32 players, median 0.83 s, slowest 1.2 s (Railway switched to a new deploy during the run) |
+
+Server-side numbers need `ADMIN_KEY`, which stays with the developer. The same build and load
+locally (32 bots, two sessions, PostgreSQL, production settings, 90 s): server step 0.58 ms and
+0.47 ms average per session (12.4 ms worst) of each 16.7 ms tick, ticks every 16.4 ms (38 ms
+longest gap), 27 database writes a second at 4.8 ms (25 ms worst), 150 to 190 MB of memory, no
+errors. Still to measure on Railway: the server-side numbers and memory over a multi-hour run
+(`--seconds 10800 --sample 300` with `ADMIN_KEY`), and the monthly cost once a month has passed.
 
 ## v0.0.13: sessions
 
