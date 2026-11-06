@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/paperwars/tokens.css">
+<link rel="stylesheet" href="ds/paperwars/components/bundle.css">
+<link rel="stylesheet" href="screens.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@600;700;800;900&amp;family=Kalam:wght@400;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:var(--sky-500)}a:hover{color:var(--ink-900)}
+.wood{background-image:url(/_blob/bc5112efc91fb5bd6d3c8f51abbb8b3b);background-size:128px 32px;}
+</style>
+</helmet>
+<div class="scr wood" data-theme="light">
+<div class="sheet sheet--margin" style="position: absolute; left: 40px; top: 36px; width: 1360px; height: 828px; padding: 32px 40px 32px 76px; display: flex; flex-direction: column; gap: 24px;">
+<header class="topbar">
+<a class="backbtn" href="Main.dc.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> Back</a>
+<div style="margin-left: 8px;"><h1 class="screen-title">Settings</h1></div>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 12px;"></div>
+</header>
+<div style="flex: 1; display: flex; gap: 32px; min-height: 0;">
+<nav aria-label="Settings sections" style="width: 240px; display: flex; flex-direction: column; gap: 6px;">
+<button aria-pressed="true" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid var(--ink-900); border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: var(--ink-900); color: var(--paper-50);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg> Controls</button><button aria-pressed="false" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid transparent; border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: transparent; color: var(--ink-900);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg> Sound</button><button aria-pressed="false" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid transparent; border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: transparent; color: var(--ink-900);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg> Display</button><button aria-pressed="false" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid transparent; border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: transparent; color: var(--ink-900);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg> Accessibility</button><button aria-pressed="false" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid transparent; border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: transparent; color: var(--ink-900);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> Language</button><button aria-pressed="false" style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 0 16px; border: 3px solid transparent; border-radius: var(--radius-md); font-family: var(--font-body); font-size: 16px; font-weight: 900; cursor: pointer; background: transparent; color: var(--ink-900);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> Account</button>
+</nav>
+<section style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;" aria-label="Controls">
+<div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;"><h2 class="disp" style="margin: 0; font-size: 28px;">Controls</h2><div class="seg" role="group" aria-label="Input" style="margin-left: auto;"><button aria-pressed="true">Mouse &amp; keyboard</button><button aria-pressed="false">Controller</button></div></div>
+<div class="kv"><span class="kv__label">Mouse sensitivity</span><span style="display: flex; align-items: center; gap: 14px;"><span class="range" role="slider" aria-label="Mouse sensitivity" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><span class="range__fill" style="width: 62%;"></span><span class="range__knob" style="left: 62%;"></span></span><b class="disp" style="font-size: 18px; width: 40px; text-align: right;">62</b></span></div>
+<div class="kv"><span class="kv__label">Invert up and down<small>Pull back to climb, like a real plane</small></span><label class="pw-toggle" style="min-height: 0;"><input type="checkbox" aria-label="Invert up and down"></label></div>
+<h3 style="margin: 18px 0 4px; font-size: 13px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-600);">Key bindings</h3>
+<div class="kv"><span style="font-size: 15px; font-weight: 800;">Fire</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">LMB</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">RT</span></span></div><div class="kv"><span style="font-size: 15px; font-weight: 800;">Drop bomb</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">Space</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">A</span></span></div><div class="kv"><span style="font-size: 15px; font-weight: 800;">Boost</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">Shift</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">LB</span></span></div><div class="kv"><span style="font-size: 15px; font-weight: 800;">Go home</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">R</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">Y</span></span></div><div class="kv"><span style="font-size: 15px; font-weight: 800;">Build menu</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">B</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">View</span></span></div><div class="kv"><span style="font-size: 15px; font-weight: 800;">Scoreboard</span><span style="display: flex; align-items: center; gap: 8px;"><span class="keycap">Tab</span><span style="color: var(--rule-300); font-weight: 900;">/</span><span class="keycap" style="background: var(--desk-200);">Menu</span></span></div>
+<button class="btn btn--paper" style="align-self: flex-start; margin-top: 12px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> Reset to defaults</button>
+</section>
+<aside class="sheet" aria-label="Quick settings" style="width: 380px; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px; border-radius: var(--radius-md); background: var(--paper-100);">
+<h2 class="disp" style="margin: 0 0 8px; font-size: 24px;">Quick settings</h2>
+<div class="kv"><span class="kv__label">Theme</span><div class="seg" role="group" aria-label="Theme"><button aria-pressed="true">Daylight</button><button aria-pressed="false">Lights out</button></div></div>
+<div class="kv"><span class="kv__label">Raid alerts</span><label class="pw-toggle" style="min-height: 0;"><input type="checkbox" aria-label="Raid alerts" checked></label></div>
+<div class="kv"><span class="kv__label">Reduce motion<small>No bounces, crumples or shakes</small></span><label class="pw-toggle" style="min-height: 0;"><input type="checkbox" aria-label="Reduce motion"></label></div>
+<div class="kv"><span class="kv__label">Controller vibration</span><label class="pw-toggle" style="min-height: 0;"><input type="checkbox" aria-label="Controller vibration" checked></label></div>
+<div class="range" style="display: none;"></div>
+<div style="display: flex; flex-direction: column;">
+<div class="kv" style="min-height: 52px;"><span class="kv__label">Master volume</span><b class="disp" style="font-size: 18px;">80</b></div>
+<div class="range" role="slider" aria-label="Master volume" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" style="width: 100%; margin: 6px 0 10px;"><span class="range__fill" style="width: 80%;"></span><span class="range__knob" style="left: 80%;"></span></div>
+<div class="kv" style="min-height: 52px;"><span class="kv__label">Music</span><b class="disp" style="font-size: 18px;">45</b></div>
+<div class="range" role="slider" aria-label="Music volume" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 100%; margin: 6px 0 4px;"><span class="range__fill" style="width: 45%;"></span><span class="range__knob" style="left: 45%;"></span></div>
+</div>
+<p style="margin: auto 0 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-600);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> Changes save as you go.</p>
+</aside>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

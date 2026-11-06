@@ -1,10 +1,10 @@
 /**
  * Contrast on card stock (plan v0.0.15 §8B): WCAG 2 contrast of the text and icon tokens on the
- * panels, in both palettes and with high contrast. Body text needs 4.5:1; large text, bold pills
+ * panels, in both themes (Daylight, Lights out), both palettes and with high contrast. Body text needs 4.5:1; large text, bold pills
  * and icons 3:1.
  */
 import { describe, expect, it } from 'vitest';
-import { paletteFor, parseColour, type ColourName, type PaletteName } from './tokens';
+import { paletteFor, parseColour, type ColourName, type PaletteName, type ThemeName } from './tokens';
 
 function luminance(c: string): number {
   const [r, g, b] = parseColour(c).slice(0, 3).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -43,14 +43,32 @@ const PAIRS: Array<[ColourName, ColourName, number, string]> = [
   ['locking', 'paper-solid', 3, 'lock icons'],
   ['gold', 'paper-solid', 3, 'medal icons'],
   ['threat-3', 'paper-solid', 3, 'highest threat'],
+  // The style guide's own pairs (docs/style-guide/design-system/README.md, Accessibility).
+  ['ink-900', 'paper-100', 4.5, 'primary text on the page'],
+  ['ink-900', 'paper-50', 4.5, 'primary text on cards'],
+  ['ink-900', 'desk-200', 4.5, 'primary text in wells and the HUD tray'],
+  ['ink-600', 'paper-100', 4.5, 'secondary text on the page'],
+  ['ink-600', 'paper-50', 4.5, 'secondary text on cards'],
+  ['graphite', 'pencil-400', 4.5, 'text on pencil buttons and the paper counter'],
+  ['graphite', 'cardboard-400', 4.5, 'text on cardboard'],
+  ['graphite', 'eraser-300', 4.5, 'text on new badges'],
+  ['graphite', 'sticky-200', 4.5, 'coach mark text'],
+  ['cardboard-700', 'paper-50', 4.5, 'costs and building names on paper'],
+  ['sky-500', 'paper-50', 4.5, 'friendly text and links'],
+  ['raid-500', 'paper-50', 4.5, 'danger text (risk lines, alert titles)'],
+  ['win-500', 'paper-50', 4.5, 'success text (rewards)'],
+  ['on-signal', 'sky-500', 4.5, 'text on sky fills'],
+  ['on-signal', 'raid-500', 4.5, 'text on raid fills'],
+  ['on-signal', 'win-500', 4.5, 'text on win fills'],
+  ['paper-50', 'ink-900', 4.5, 'selected segment (ink fill)'],
 ];
 
-const VARIANTS: Array<{ palette: PaletteName; highContrast: boolean }> = [
-  { palette: 'standard', highContrast: false },
-  { palette: 'colourblind', highContrast: false },
-  { palette: 'standard', highContrast: true },
-  { palette: 'colourblind', highContrast: true },
-];
+const VARIANTS: Array<{ theme: ThemeName; palette: PaletteName; highContrast: boolean }> = (['daylight', 'lightsOut'] as const).flatMap((theme) => [
+  { theme, palette: 'standard' as const, highContrast: false },
+  { theme, palette: 'colourblind' as const, highContrast: false },
+  { theme, palette: 'standard' as const, highContrast: true },
+  { theme, palette: 'colourblind' as const, highContrast: true },
+]);
 
 describe('contrast on card stock', () => {
   it('computes WCAG contrast', () => {
@@ -59,7 +77,7 @@ describe('contrast on card stock', () => {
   });
 
   for (const v of VARIANTS) {
-    it(`meets the minimum ratios: ${v.palette}${v.highContrast ? ', high contrast' : ''}`, () => {
+    it(`meets the minimum ratios: ${v.theme}, ${v.palette}${v.highContrast ? ', high contrast' : ''}`, () => {
       const p = paletteFor(v);
       const fails = PAIRS.filter(([fg, bg, min]) => contrast(p[fg], p[bg]) < min)
         .map(([fg, bg, min, what]) => `${what}: ${fg} on ${bg} = ${contrast(p[fg], p[bg]).toFixed(2)} < ${min}`);

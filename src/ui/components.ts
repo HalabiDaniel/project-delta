@@ -19,6 +19,7 @@ import { esc } from './dom';
 import { level as levelOf } from './format';
 import { icon, type IconName } from './icons';
 import { glyphText, keyTip, type GlyphDevice, type GlyphSpec } from '../input/glyphs';
+import './fonts';
 import './components.css';
 
 // ---- Shared ------------------------------------------------------------------------------------------

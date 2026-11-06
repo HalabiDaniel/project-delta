@@ -21,7 +21,7 @@ describe('multiplayer settings', () => {
   it('saves and loads the HUD size and hints next to the other paperwars.mp keys', () => {
     const store = memory();
     expect(loadMpSettings(store)).toEqual(DEFAULT_MP_SETTINGS);
-    const access = { ...DEFAULT_ACCESS, palette: 'colourblind' as const, textScale: 1.15, highContrast: true, captions: 'on' as const, safeArea: false };
+    const access = { ...DEFAULT_ACCESS, theme: 'lightsOut' as const, palette: 'colourblind' as const, textScale: 1.15, highContrast: true, captions: 'on' as const, safeArea: false };
     saveMpSettings({ hints: 'off', uiScale: 1.15, access }, store);
     expect(MP_SETTINGS_KEY.startsWith('paperwars.mp.')).toBe(true);
     expect(JSON.parse(store.data.get(MP_SETTINGS_KEY)!)).toEqual({ hints: 'off', uiScale: 1.15, access });
@@ -37,6 +37,9 @@ describe('multiplayer settings', () => {
     // A settings record from before phase 7 gets the default accessibility settings; bad fields fall back one by one.
     expect(normaliseMpSettings({ hints: 'on', uiScale: 1, access: { palette: 'neon', textScale: 1.3, motion: 'reduced', safeArea: 'yes' } }).access)
       .toEqual({ ...DEFAULT_ACCESS, textScale: 1.3, motion: 'reduced' });
+    // The theme (Daylight / Lights out) too: unknown values fall back to Daylight.
+    expect(normaliseMpSettings({ hints: 'on', uiScale: 1, access: { theme: 'lightsOut' } }).access.theme).toBe('lightsOut');
+    expect(normaliseMpSettings({ hints: 'on', uiScale: 1, access: { theme: 'neon' } }).access.theme).toBe('daylight');
     expect(loadMpSettings(null)).toEqual(DEFAULT_MP_SETTINGS);
     const broken = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     expect(loadMpSettings(broken)).toEqual(DEFAULT_MP_SETTINGS);

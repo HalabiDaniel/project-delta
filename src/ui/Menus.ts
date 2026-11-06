@@ -129,6 +129,7 @@ export class Menus {
             ${setting('hints', 'info', 'Hints', 'Key hints on the HUD', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']])}
             ${setting('scale', 'distance', 'Size', 'HUD size', [['0.9', 'S'], ['1', 'M'], ['1.15', 'L']])}
             ${setting('gfx', 'graphics', 'Graphics', 'Graphics quality: shadows, decorations and resolution', LEVELS)}
+            ${setting('a-theme', 'sun', ACCESS_TEXT.theme.label, ACCESS_TEXT.theme.tip, [['daylight', ACCESS_TEXT.theme.daylight], ['lightsOut', ACCESS_TEXT.theme.lightsOut]])}
           </div>
           <h3 id="menu-access">${icon('info')}${esc(ACCESS_TEXT.section)}</h3>
           <div class="settings access" role="group" aria-labelledby="menu-access">
@@ -193,6 +194,7 @@ export class Menus {
     seg('hints', (v) => actions.setHints(v as HintMode));
     seg('scale', (v) => actions.setUiScale(Number(v)));
     seg('gfx', (v) => actions.setGraphicsPreset(v as GraphicsPreset));
+    seg('a-theme', (v) => actions.setAccess({ theme: v === 'lightsOut' ? 'lightsOut' : 'daylight' }));
     seg('a-palette', (v) => actions.setAccess({ palette: v === 'colourblind' ? 'colourblind' : 'standard' }));
     seg('a-text', (v) => actions.setAccess({ textScale: Number(v) }));
     seg('a-contrast', (v) => actions.setAccess({ highContrast: v === 'on' }));
@@ -241,6 +243,7 @@ export class Menus {
       pressed('scale', (x) => Number(x) === v.menu.settings.uiScale);
       pressed('gfx', (x) => x === v.menu.settings.graphics.preset);
       const a = v.menu.settings.access;
+      pressed('a-theme', (x) => x === a.theme);
       pressed('a-palette', (x) => x === a.palette);
       pressed('a-text', (x) => Number(x) === a.textScale);
       pressed('a-contrast', (x) => (x === 'on') === a.highContrast);

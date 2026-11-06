@@ -5,16 +5,16 @@ import { applyTokens, tokenOptions } from './tokens';
 
 describe('accessibility settings (plan v0.0.15 §8)', () => {
   it('defaults: standard palette, 100% text, normal panels, motion follows the system, captions while muted, 16:9 HUD', () => {
-    expect(DEFAULT_ACCESS).toEqual({ palette: 'standard', textScale: 1, highContrast: false, motion: 'auto', captions: 'auto', safeArea: true });
+    expect(DEFAULT_ACCESS).toEqual({ theme: 'daylight', palette: 'standard', textScale: 1, highContrast: false, motion: 'auto', captions: 'auto', safeArea: true });
     expect(TEXT_SCALES).toEqual([1, 1.15, 1.3]);
   });
 
   it('normalises field by field', () => {
     expect(normaliseAccess(undefined)).toEqual(DEFAULT_ACCESS);
     expect(normaliseAccess('x')).toEqual(DEFAULT_ACCESS);
-    expect(normaliseAccess({ palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false }))
-      .toEqual({ palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false });
-    expect(normaliseAccess({ palette: 'deuter', textScale: 1.2, highContrast: 1, motion: 'slow', captions: true, safeArea: 'on' })).toEqual(DEFAULT_ACCESS);
+    expect(normaliseAccess({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false }))
+      .toEqual({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false });
+    expect(normaliseAccess({ theme: 'dark', palette: 'deuter', textScale: 1.2, highContrast: 1, motion: 'slow', captions: true, safeArea: 'on' })).toEqual(DEFAULT_ACCESS);
   });
 
   it('reduced motion follows prefers-reduced-motion on auto; the setting overrides it', () => {
@@ -33,7 +33,7 @@ describe('accessibility settings (plan v0.0.15 §8)', () => {
 
   it('applies through the tokens, live', () => {
     const s = { ...DEFAULT_ACCESS, palette: 'colourblind' as const, textScale: 1.3, highContrast: true, motion: 'auto' as const };
-    expect(accessTokens(s, { reducedMotion: true })).toEqual({ palette: 'colourblind', highContrast: true, reducedMotion: true, textScale: 1.3 });
+    expect(accessTokens(s, { reducedMotion: true })).toEqual({ theme: 'daylight', palette: 'colourblind', highContrast: true, reducedMotion: true, textScale: 1.3 });
     const root = document.documentElement;
     applyTokens(root, accessTokens(s, { reducedMotion: false }));
     expect(root.dataset.palette).toBe('colourblind');
@@ -42,5 +42,12 @@ describe('accessibility settings (plan v0.0.15 §8)', () => {
     expect(root.style.getPropertyValue('--t-m')).toBe('19.5px');
     applyTokens(root, accessTokens(DEFAULT_ACCESS, { reducedMotion: false }));
     expect(tokenOptions()).toMatchObject({ palette: 'standard', highContrast: false, textScale: 1 });
+    // The theme applies the same way, and the palette and contrast stay on top of it.
+    applyTokens(root, accessTokens({ ...s, theme: 'lightsOut' }, { reducedMotion: false }));
+    expect(root.dataset.theme).toBe('lights-out');
+    expect(root.dataset.palette).toBe('colourblind');
+    expect(root.dataset.contrast).toBe('high');
+    applyTokens(root, accessTokens(DEFAULT_ACCESS, { reducedMotion: false }));
+    expect(root.dataset.theme).toBe('daylight');
   });
 });

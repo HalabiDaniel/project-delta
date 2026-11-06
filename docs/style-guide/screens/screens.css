@@ -1,0 +1,53 @@
+/* paperwars.io screens — shared layout pieces for every artboard. Colours, type and shapes come from the design system (ds/paperwars). */
+.scr{position:relative;width:1440px;height:900px;box-sizing:border-box;overflow:hidden;font-family:var(--font-body);color:var(--ink-900);background-color:var(--desk-200);}
+.scr *{box-sizing:border-box;}
+.disp{font-family:var(--font-display);font-weight:400;}
+.doodle{font-family:var(--font-note);}
+
+/* A sheet of paper: neobrutalist panel */
+.sheet{background:var(--paper-50);border:3px solid var(--ink-900);border-radius:var(--radius-lg);box-shadow:6px 6px 0 var(--ink-900);}
+.sheet--margin{position:relative;}
+.sheet--margin::before{content:"";position:absolute;top:0;bottom:0;left:40px;width:2px;background:var(--margin-red);}
+
+/* Top bar on menu screens */
+.topbar{display:flex;align-items:center;gap:16px;}
+.backbtn{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 18px;border:3px solid var(--ink-900);border-radius:var(--radius-md);background:var(--paper-50);color:var(--ink-900);font-family:var(--font-body);font-size:13px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;box-shadow:4px 4px 0 var(--ink-900);text-decoration:none;cursor:pointer;}
+.screen-title{margin:0;font-family:var(--font-display);font-weight:400;font-size:48px;line-height:1;}
+
+/* Big menu buttons */
+.mbtn{display:flex;align-items:center;gap:16px;width:100%;min-height:64px;padding:0 22px;border:3px solid var(--ink-900);border-radius:var(--radius-md);background:var(--paper-50);color:var(--ink-900);font-family:var(--font-display);font-size:26px;line-height:1;text-decoration:none;box-shadow:5px 5px 0 var(--ink-900);cursor:pointer;}
+.mbtn--primary{background:var(--pencil-400);color:var(--graphite);border-color:var(--graphite);box-shadow:5px 5px 0 var(--graphite);min-height:80px;font-size:34px;}
+.mbtn__hint{margin-left:auto;font-family:var(--font-body);font-size:13px;font-weight:800;color:var(--ink-600);}
+.mbtn--primary .mbtn__hint{color:var(--graphite);}
+
+/* Chunky buttons, form fields */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 20px;border:3px solid var(--graphite);border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;}
+.btn--primary{background:var(--pencil-400);color:var(--graphite);box-shadow:4px 4px 0 var(--graphite);}
+.btn--paper{background:var(--paper-50);color:var(--ink-900);border-color:var(--ink-900);box-shadow:4px 4px 0 var(--ink-900);}
+.btn--danger{background:var(--raid-500);color:var(--on-signal);border-color:var(--raid-500);}
+.btn--block{width:100%;}
+.field{display:flex;flex-direction:column;gap:6px;}
+.field label{font-size:12px;line-height:16px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-900);}
+.field__box{display:flex;align-items:center;gap:10px;min-height:52px;padding:0 14px;border:3px solid var(--ink-900);border-radius:var(--radius-md);background:var(--paper-100);color:var(--ink-600);}
+.field__box input{flex:1;min-width:0;border:0;background:transparent;font-family:var(--font-body);font-size:16px;font-weight:700;color:var(--ink-900);outline:none;}
+.field__box input::placeholder{color:var(--ink-600);}
+.field__help{font-size:13px;line-height:18px;font-weight:600;color:var(--ink-600);}
+.field--error .field__box{border-color:var(--raid-500);}
+.field--error .field__help{color:var(--raid-500);font-weight:800;}
+
+/* Rows, tables, chips */
+.kv{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px;padding:0 4px;border-bottom:2px solid var(--rule-300);}
+.kv__label{display:flex;flex-direction:column;gap:2px;font-size:16px;font-weight:800;}
+.kv__label small{font-size:13px;font-weight:600;color:var(--ink-600);}
+.seg{display:inline-flex;padding:3px;gap:3px;border:3px solid var(--ink-900);border-radius:var(--radius-md);background:var(--desk-200);}
+.seg button{min-height:38px;padding:0 14px;border:0;border-radius:8px;background:transparent;font-family:var(--font-body);font-size:13px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-600);cursor:pointer;}
+.seg button[aria-pressed="true"]{background:var(--ink-900);color:var(--paper-50);}
+.range{position:relative;width:240px;height:14px;border:3px solid var(--ink-900);border-radius:var(--radius-pill);background:var(--paper-100);}
+.range__fill{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill);background:var(--pencil-400);}
+.range__knob{position:absolute;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:3px solid var(--graphite);border-radius:var(--radius-pill);background:#ffffff;}
+.keycap{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:36px;padding:0 10px;border:2px solid var(--ink-900);border-bottom-width:5px;border-radius:8px;background:var(--paper-50);font-family:var(--font-body);font-size:13px;font-weight:900;color:var(--ink-900);}
+.avatar{display:inline-flex;align-items:center;justify-content:center;flex:none;border:3px solid var(--graphite);border-radius:var(--radius-pill);font-family:var(--font-display);color:var(--graphite);}
+
+/* HUD glass-free panels: paper chips over the game */
+.hud{position:absolute;}
+.hud-chip{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border:3px solid var(--graphite);border-radius:var(--radius-md);background:var(--paper-50);color:var(--ink-900);box-shadow:4px 4px 0 var(--graphite);}

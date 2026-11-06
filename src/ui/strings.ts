@@ -109,6 +109,7 @@ export const TIP_TEXT = {
  */
 export const ACCESS_TEXT = {
   section: 'Accessibility',
+  theme: { label: 'Theme', tip: 'Daylight is notebook paper on a desk; Lights out is a chalkboard for late nights', daylight: 'Daylight', lightsOut: 'Lights out' },
   palette: { label: 'Colours', tip: 'Colour palette: the colour-blind palette is safe for protanopia, deuteranopia and tritanopia', standard: 'Standard', colourblind: 'Colour-blind' },
   text: { label: 'Text', tip: 'Text size, independent of the HUD size' },
   contrast: { label: 'Panels', tip: 'Solid, higher-contrast panels', normal: 'Normal', high: 'High contrast' },

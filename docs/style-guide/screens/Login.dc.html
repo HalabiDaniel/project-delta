@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Login</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/paperwars/tokens.css">
+<link rel="stylesheet" href="ds/paperwars/components/bundle.css">
+<link rel="stylesheet" href="screens.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@600;700;800;900&amp;family=Kalam:wght@400;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:var(--sky-500)}a:hover{color:var(--ink-900)}
+.wood{background-image:url(/_blob/bc5112efc91fb5bd6d3c8f51abbb8b3b);background-size:128px 32px;}
+</style>
+</helmet>
+<div class="scr wood" data-theme="light">
+<div style="position: absolute; left: 60px; top: 60px; display: flex; align-items: center; gap: 14px;"><img src="/_blob/cf9e94adbc9ae3672276172ec19f06e8" alt="" style="width: 64px; height: 64px;"><span class="disp" style="font-size: 44px; color: var(--graphite);">paperwars.io</span></div>
+<div style="position: absolute; left: 80px; top: 300px; width: 640px; height: 360px; border: 3px solid var(--graphite); border-radius: 18px; background: var(--paper-50); box-shadow: 8px 8px 0 var(--graphite); transform: rotate(-3deg);"></div>
+<img src="/_blob/79c960c7b0890f37a001446ff3a33511" alt="" style="position: absolute; left: 130px; top: 360px; width: 260px;">
+<img src="/_blob/10bd55b384d816cd65b29b852c2a57e9" alt="" style="position: absolute; left: 430px; top: 420px; width: 140px;">
+<img src="/_blob/e203d055c14aac6bf88c44aa2735e909" alt="" style="position: absolute; left: 560px; top: 380px; width: 150px;">
+<img src="/_blob/5092175f5f36552df7f859b89f9c5fed" alt="" style="position: absolute; left: 160px; top: 150px; width: 460px; transform: rotate(-6deg);">
+<p class="doodle" style="position: absolute; left: 100px; top: 700px; width: 560px; margin: 0; font-size: 24px; line-height: 30px; color: var(--graphite); transform: rotate(-1deg);">psst… your desk is right where you left it.</p>
+<div class="sheet sheet--margin" style="position: absolute; right: 72px; top: 60px; width: 560px; height: 780px; padding: 40px 48px 36px 84px; display: flex; flex-direction: column; gap: 18px;">
+<h1 class="screen-title">Welcome back</h1>
+<p style="margin: -6px 0 6px; font-size: 16px; font-weight: 700; color: var(--ink-600);">Sign in to keep your desk, planes and paper on any device.</p>
+<div class="field"><label for="email">Email</label><div class="field__box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><input id="email" type="email" placeholder="you@example.com" value=""></div></div>
+<div class="field"><label for="pw">Password</label><div class="field__box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input id="pw" type="password" placeholder="Your password" value=""><button aria-label="Show password" style="display: flex; padding: 4px; border: 0; background: none; color: var(--ink-600); cursor: pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+<div style="display: flex; align-items: center; justify-content: space-between;"><label style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800;"><input type="checkbox" checked style="width: 20px; height: 20px; accent-color: #26242c;"> Keep me signed in</label><a href="#forgot" style="font-size: 14px; font-weight: 900;">Forgot password?</a></div>
+<a class="mbtn mbtn--primary" href="Main.dc.html" style="justify-content: center; margin-top: 6px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg> Sign in</a>
+<div style="display: flex; align-items: center; gap: 12px; color: var(--ink-600); font-size: 13px; font-weight: 900; letter-spacing: .06em;"><span style="flex: 1; height: 2px; background: var(--rule-300);"></span>OR<span style="flex: 1; height: 2px; background: var(--rule-300);"></span></div>
+<a class="mbtn" href="Main.dc.html" style="justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> Play as guest</a>
+<p style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 700; color: var(--ink-600);">Guest progress stays on this device. Make an account any time to keep it.</p>
+<p style="margin: auto 0 0; font-size: 16px; font-weight: 800;">New here? <a href="CreateAccount.dc.html" style="font-weight: 900;">Create an account</a></p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

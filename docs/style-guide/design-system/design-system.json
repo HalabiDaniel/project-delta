@@ -1,0 +1,795 @@
+{
+ "v": 3,
+ "assetGroups": {
+  "Logos": {
+   "name": "Logos",
+   "tile": "l",
+   "order": [
+    "mark.svg",
+    "mark-cardboard.svg",
+    "mark-glyph-graphite.svg",
+    "mark-glyph-chalk.svg"
+   ],
+   "files": {
+    "mark.svg": {
+     "name": "mark.svg",
+     "blob": "2ddb4ede3abaceed0366380821e988ce",
+     "size": 511,
+     "type": "image/svg+xml"
+    },
+    "mark-cardboard.svg": {
+     "name": "mark-cardboard.svg",
+     "blob": "405ef15c91307b8a919ffa6046d7017b",
+     "size": 511,
+     "type": "image/svg+xml"
+    },
+    "mark-glyph-graphite.svg": {
+     "name": "mark-glyph-graphite.svg",
+     "blob": "7d5244946e84c4642d6d1624881af201",
+     "size": 404,
+     "type": "image/svg+xml"
+    },
+    "mark-glyph-chalk.svg": {
+     "name": "mark-glyph-chalk.svg",
+     "blob": "796cb1f222c4735a8f1462d1b7876df3",
+     "size": 404,
+     "type": "image/svg+xml"
+    }
+   }
+  },
+  "Icons": {
+   "name": "Icons",
+   "tile": "s",
+   "order": [
+    "bomber.svg",
+    "clock.svg",
+    "command-center.svg",
+    "controller.svg",
+    "crumple.svg",
+    "desk.svg",
+    "fighter.svg",
+    "helipad.svg",
+    "keyboard-mouse.svg",
+    "level-up.svg",
+    "lock.svg",
+    "mission-bomb.svg",
+    "mission-defend.svg",
+    "mission-dogfight.svg",
+    "mission-scout.svg",
+    "paper.svg",
+    "players.svg",
+    "radar.svg",
+    "raid.svg",
+    "reward.svg",
+    "rocket-launcher.svg",
+    "runway.svg",
+    "scout.svg",
+    "settings.svg",
+    "steal.svg",
+    "storage.svg",
+    "turret.svg",
+    "workshop.svg"
+   ],
+   "files": {
+    "bomber.svg": {
+     "name": "bomber.svg",
+     "blob": "f0e20dc14cbb17be133916ab6d352649",
+     "size": 399,
+     "type": "image/svg+xml"
+    },
+    "clock.svg": {
+     "name": "clock.svg",
+     "blob": "4cda3ed9b1dcbd585f43b3ac521c7815",
+     "size": 486,
+     "type": "image/svg+xml"
+    },
+    "command-center.svg": {
+     "name": "command-center.svg",
+     "blob": "97b331e689c8b8edad291f63886d31fb",
+     "size": 755,
+     "type": "image/svg+xml"
+    },
+    "controller.svg": {
+     "name": "controller.svg",
+     "blob": "7a3473a30ed5915f2e2d7ed461c639cf",
+     "size": 673,
+     "type": "image/svg+xml"
+    },
+    "crumple.svg": {
+     "name": "crumple.svg",
+     "blob": "f04a9a95983bfa68b92f94d95267f83e",
+     "size": 441,
+     "type": "image/svg+xml"
+    },
+    "desk.svg": {
+     "name": "desk.svg",
+     "blob": "5f1fc5fa6540a7ed1d6dc8a3c646c996",
+     "size": 509,
+     "type": "image/svg+xml"
+    },
+    "fighter.svg": {
+     "name": "fighter.svg",
+     "blob": "294810154fbb8f9d0b243153bd6d980b",
+     "size": 385,
+     "type": "image/svg+xml"
+    },
+    "helipad.svg": {
+     "name": "helipad.svg",
+     "blob": "748532134c725649a5c930d6c9577384",
+     "size": 484,
+     "type": "image/svg+xml"
+    },
+    "keyboard-mouse.svg": {
+     "name": "keyboard-mouse.svg",
+     "blob": "33fc5362841982197889c7f925c7c8ca",
+     "size": 641,
+     "type": "image/svg+xml"
+    },
+    "level-up.svg": {
+     "name": "level-up.svg",
+     "blob": "2dcdebf9398393f327067c381c73bf9a",
+     "size": 226,
+     "type": "image/svg+xml"
+    },
+    "lock.svg": {
+     "name": "lock.svg",
+     "blob": "e328db9b5baa164d8ba7b857f5a6fcf3",
+     "size": 503,
+     "type": "image/svg+xml"
+    },
+    "mission-bomb.svg": {
+     "name": "mission-bomb.svg",
+     "blob": "b7aec2b4e4f09f49f11b2a83dcf40db2",
+     "size": 586,
+     "type": "image/svg+xml"
+    },
+    "mission-defend.svg": {
+     "name": "mission-defend.svg",
+     "blob": "65fe10bad8b3a4f5478f39ba2298696b",
+     "size": 374,
+     "type": "image/svg+xml"
+    },
+    "mission-dogfight.svg": {
+     "name": "mission-dogfight.svg",
+     "blob": "748980b4a7413ffdff6c441919b8bf11",
+     "size": 348,
+     "type": "image/svg+xml"
+    },
+    "mission-scout.svg": {
+     "name": "mission-scout.svg",
+     "blob": "37f784ff5378119a10406696f2eb53cd",
+     "size": 722,
+     "type": "image/svg+xml"
+    },
+    "paper.svg": {
+     "name": "paper.svg",
+     "blob": "297875d52d9fd64a27e7b09dd9179daf",
+     "size": 472,
+     "type": "image/svg+xml"
+    },
+    "players.svg": {
+     "name": "players.svg",
+     "blob": "1af5e29486c2769d81a4aa5f7269bcf2",
+     "size": 615,
+     "type": "image/svg+xml"
+    },
+    "radar.svg": {
+     "name": "radar.svg",
+     "blob": "34f0f2f74d92bbf09a0ba2cbf6251a19",
+     "size": 735,
+     "type": "image/svg+xml"
+    },
+    "raid.svg": {
+     "name": "raid.svg",
+     "blob": "4a1066c378c001a4de0c97ac5eb6cf21",
+     "size": 368,
+     "type": "image/svg+xml"
+    },
+    "reward.svg": {
+     "name": "reward.svg",
+     "blob": "15946cdd5afa0d27adaed4c2600acd20",
+     "size": 279,
+     "type": "image/svg+xml"
+    },
+    "rocket-launcher.svg": {
+     "name": "rocket-launcher.svg",
+     "blob": "1207bf3bdb89f1b16c02ae7b92d83f56",
+     "size": 760,
+     "type": "image/svg+xml"
+    },
+    "runway.svg": {
+     "name": "runway.svg",
+     "blob": "f53d7d17f7a6b420af48a54aaf37c3c0",
+     "size": 499,
+     "type": "image/svg+xml"
+    },
+    "scout.svg": {
+     "name": "scout.svg",
+     "blob": "eda67f3b00c7cbbb0a5ae52f0001c5ba",
+     "size": 339,
+     "type": "image/svg+xml"
+    },
+    "settings.svg": {
+     "name": "settings.svg",
+     "blob": "0886bfad273540d2153917abf793237f",
+     "size": 455,
+     "type": "image/svg+xml"
+    },
+    "steal.svg": {
+     "name": "steal.svg",
+     "blob": "b1e62d9fbd0a72b5d179b14b8ad0087d",
+     "size": 605,
+     "type": "image/svg+xml"
+    },
+    "storage.svg": {
+     "name": "storage.svg",
+     "blob": "0c08254b173cbce8270c377b9fdb1195",
+     "size": 498,
+     "type": "image/svg+xml"
+    },
+    "turret.svg": {
+     "name": "turret.svg",
+     "blob": "f71adc8358e4c670810c77f239a1a7fb",
+     "size": 638,
+     "type": "image/svg+xml"
+    },
+    "workshop.svg": {
+     "name": "workshop.svg",
+     "blob": "ca34002d67eb77ee76efaf138b29678f",
+     "size": 526,
+     "type": "image/svg+xml"
+    }
+   }
+  },
+  "Planes": {
+   "name": "Planes",
+   "tile": "m",
+   "order": [
+    "bomber-heavy.svg",
+    "crumpled.svg",
+    "fighter-swift.svg",
+    "scout-dart.svg"
+   ],
+   "files": {
+    "bomber-heavy.svg": {
+     "name": "bomber-heavy.svg",
+     "blob": "e289543d8371d82b53d70698fcf7c5dd",
+     "size": 552,
+     "type": "image/svg+xml"
+    },
+    "crumpled.svg": {
+     "name": "crumpled.svg",
+     "blob": "06d6ade3fa9bd09477053c868b6a1dd4",
+     "size": 573,
+     "type": "image/svg+xml"
+    },
+    "fighter-swift.svg": {
+     "name": "fighter-swift.svg",
+     "blob": "718ee871ddcdf41fd109908ffc834356",
+     "size": 456,
+     "type": "image/svg+xml"
+    },
+    "scout-dart.svg": {
+     "name": "scout-dart.svg",
+     "blob": "3b94d27a8a30575e83af1d2b69352f2c",
+     "size": 311,
+     "type": "image/svg+xml"
+    }
+   }
+  },
+  "Patterns": {
+   "name": "Patterns",
+   "tile": "m",
+   "order": [
+    "cardboard-corrugated.svg",
+    "chalkboard-ruled.svg",
+    "desk-wood.svg",
+    "graph-paper.svg",
+    "ruled-paper.svg"
+   ],
+   "files": {
+    "cardboard-corrugated.svg": {
+     "name": "cardboard-corrugated.svg",
+     "blob": "17db10a11be3d49b0f51aa0891955b6b",
+     "size": 277,
+     "type": "image/svg+xml"
+    },
+    "chalkboard-ruled.svg": {
+     "name": "chalkboard-ruled.svg",
+     "blob": "b35056dcb03d678d56feec9c4ac62bc7",
+     "size": 191,
+     "type": "image/svg+xml"
+    },
+    "desk-wood.svg": {
+     "name": "desk-wood.svg",
+     "blob": "39125b3a2eeb721aefe80017f9c2e69e",
+     "size": 299,
+     "type": "image/svg+xml"
+    },
+    "graph-paper.svg": {
+     "name": "graph-paper.svg",
+     "blob": "95276216d99f6f8cbb23d33a69a65914",
+     "size": 280,
+     "type": "image/svg+xml"
+    },
+    "ruled-paper.svg": {
+     "name": "ruled-paper.svg",
+     "blob": "5ef85f428e5a98971c00a1af43c74606",
+     "size": 191,
+     "type": "image/svg+xml"
+    }
+   }
+  },
+  "Buildings": {
+   "name": "Buildings",
+   "tile": "m",
+   "order": [
+    "command-center-level1.png",
+    "command-center-level2.png",
+    "command-center-level3.png",
+    "hangar-level1.png",
+    "hangar-level2.png",
+    "hangar-level3.png",
+    "helipad.png",
+    "ink-depot-level1.png",
+    "ink-depot-level2.png",
+    "ink-depot-level3.png",
+    "radar-level1.png",
+    "radar-level2.png",
+    "radar-level3.png",
+    "rocket-launcher-level1.png",
+    "rocket-launcher-level2.png",
+    "rocket-launcher-level3.png",
+    "runway-level1.png",
+    "runway-level2.png",
+    "runway-level3.png",
+    "storage-level1.png",
+    "storage-level2.png",
+    "storage-level3.png",
+    "turret-assembly-level1.png",
+    "turret-assembly-level2.png",
+    "turret-assembly-level3.png",
+    "workshop-level1.png",
+    "workshop-level2.png",
+    "workshop-level3.png"
+   ],
+   "files": {
+    "command-center-level1.png": {
+     "name": "command-center-level1.png",
+     "blob": "6a740f3022a87824a8cf8f59062b05dc",
+     "size": 123972,
+     "type": "image/png"
+    },
+    "command-center-level2.png": {
+     "name": "command-center-level2.png",
+     "blob": "87b7166d0d13433260c618d2ae4502ef",
+     "size": 110214,
+     "type": "image/png"
+    },
+    "command-center-level3.png": {
+     "name": "command-center-level3.png",
+     "blob": "3d03e3dd7e251cad757d542bcedabc19",
+     "size": 114850,
+     "type": "image/png"
+    },
+    "hangar-level1.png": {
+     "name": "hangar-level1.png",
+     "blob": "1abbb78ca8bdefe4765d80e94fd3c494",
+     "size": 214256,
+     "type": "image/png"
+    },
+    "hangar-level2.png": {
+     "name": "hangar-level2.png",
+     "blob": "4a45ce0c58e8b14f65934c3a40a8f36e",
+     "size": 183912,
+     "type": "image/png"
+    },
+    "hangar-level3.png": {
+     "name": "hangar-level3.png",
+     "blob": "ddf1dd2bb30c20e3353357c82585a0dc",
+     "size": 132163,
+     "type": "image/png"
+    },
+    "helipad.png": {
+     "name": "helipad.png",
+     "blob": "d6423c53dbf1a8639d25a46067f145f6",
+     "size": 71407,
+     "type": "image/png"
+    },
+    "ink-depot-level1.png": {
+     "name": "ink-depot-level1.png",
+     "blob": "35d6bebb2319598991c5dac62e351756",
+     "size": 133590,
+     "type": "image/png"
+    },
+    "ink-depot-level2.png": {
+     "name": "ink-depot-level2.png",
+     "blob": "03eeb5169a6a8bdf7887a29c1a12e1a1",
+     "size": 139121,
+     "type": "image/png"
+    },
+    "ink-depot-level3.png": {
+     "name": "ink-depot-level3.png",
+     "blob": "a318e8c13aa8c90cf3ac061331af0fd1",
+     "size": 145154,
+     "type": "image/png"
+    },
+    "radar-level1.png": {
+     "name": "radar-level1.png",
+     "blob": "af50a2d4320e5b43ef51946488a14d15",
+     "size": 149646,
+     "type": "image/png"
+    },
+    "radar-level2.png": {
+     "name": "radar-level2.png",
+     "blob": "35d16ccc9e1fe0e86d289b9f3f440157",
+     "size": 142970,
+     "type": "image/png"
+    },
+    "radar-level3.png": {
+     "name": "radar-level3.png",
+     "blob": "56470441b162ce76f0f6289f1c3f421f",
+     "size": 149466,
+     "type": "image/png"
+    },
+    "rocket-launcher-level1.png": {
+     "name": "rocket-launcher-level1.png",
+     "blob": "c32c0b3f6a20eaf7110bc32c48878a99",
+     "size": 96493,
+     "type": "image/png"
+    },
+    "rocket-launcher-level2.png": {
+     "name": "rocket-launcher-level2.png",
+     "blob": "a2bf4a14ae35813c80ec3af22f0dbd44",
+     "size": 95442,
+     "type": "image/png"
+    },
+    "rocket-launcher-level3.png": {
+     "name": "rocket-launcher-level3.png",
+     "blob": "79dc5c96bd40ef9ed7c0481ff2a9bb67",
+     "size": 100145,
+     "type": "image/png"
+    },
+    "runway-level1.png": {
+     "name": "runway-level1.png",
+     "blob": "c2399d0f3c37c32515397df34e73f34b",
+     "size": 30927,
+     "type": "image/png"
+    },
+    "runway-level2.png": {
+     "name": "runway-level2.png",
+     "blob": "db94195df23a607f3e0bd9430b02e09e",
+     "size": 26316,
+     "type": "image/png"
+    },
+    "runway-level3.png": {
+     "name": "runway-level3.png",
+     "blob": "da79c03cb25854a038e892d26f4b72a7",
+     "size": 24328,
+     "type": "image/png"
+    },
+    "storage-level1.png": {
+     "name": "storage-level1.png",
+     "blob": "5d42ee99e1e383cd773ef67b424ba5cc",
+     "size": 158716,
+     "type": "image/png"
+    },
+    "storage-level2.png": {
+     "name": "storage-level2.png",
+     "blob": "5b7372764a1457ee49c072952586e775",
+     "size": 150395,
+     "type": "image/png"
+    },
+    "storage-level3.png": {
+     "name": "storage-level3.png",
+     "blob": "9179b1eec48d21d96132963631834d4a",
+     "size": 133803,
+     "type": "image/png"
+    },
+    "turret-assembly-level1.png": {
+     "name": "turret-assembly-level1.png",
+     "blob": "1897246810e17a018efa3729954ccd41",
+     "size": 83678,
+     "type": "image/png"
+    },
+    "turret-assembly-level2.png": {
+     "name": "turret-assembly-level2.png",
+     "blob": "62fd81744e59382690f4ceef7c28552e",
+     "size": 82394,
+     "type": "image/png"
+    },
+    "turret-assembly-level3.png": {
+     "name": "turret-assembly-level3.png",
+     "blob": "f73f39ad903480ded76a589e07173caf",
+     "size": 90076,
+     "type": "image/png"
+    },
+    "workshop-level1.png": {
+     "name": "workshop-level1.png",
+     "blob": "1470d032ce44cc3edae46a1ba3933ad6",
+     "size": 93094,
+     "type": "image/png"
+    },
+    "workshop-level2.png": {
+     "name": "workshop-level2.png",
+     "blob": "f3e28fb2e8007ed173a6a0095c4d849c",
+     "size": 97938,
+     "type": "image/png"
+    },
+    "workshop-level3.png": {
+     "name": "workshop-level3.png",
+     "blob": "623c1e85843d8961c843cdcb199f14d8",
+     "size": 94656,
+     "type": "image/png"
+    }
+   }
+  },
+  "Aircraft": {
+   "name": "Aircraft",
+   "tile": "m",
+   "order": [
+    "dart-cardboard.png",
+    "dart-grey.png",
+    "dart-paper.png",
+    "falcon-cardboard.png",
+    "falcon-grey.png",
+    "falcon-paper.png",
+    "ghost-cardboard.png",
+    "ghost-grey.png",
+    "ghost-paper.png",
+    "jumper-cardboard.png",
+    "jumper-grey.png",
+    "jumper-paper.png",
+    "lancer-cardboard.png",
+    "lancer-grey.png",
+    "lancer-paper.png",
+    "lightning-cardboard.png",
+    "lightning-grey.png",
+    "lightning-paper.png",
+    "raptor-cardboard.png",
+    "raptor-grey.png",
+    "raptor-paper.png",
+    "specter-cardboard.png",
+    "specter-grey.png",
+    "specter-paper.png",
+    "swift-cardboard.png",
+    "swift-grey.png",
+    "swift-paper.png",
+    "thug-cardboard.png",
+    "thug-grey.png",
+    "thug-paper.png",
+    "widewing-cardboard.png",
+    "widewing-grey.png",
+    "widewing-paper.png"
+   ],
+   "files": {
+    "dart-cardboard.png": {
+     "name": "dart-cardboard.png",
+     "blob": "699caf2aaee50496acde15d1688100f9",
+     "size": 58657,
+     "type": "image/png"
+    },
+    "dart-grey.png": {
+     "name": "dart-grey.png",
+     "blob": "23e51ca9ce602db5d1803f39488f416f",
+     "size": 49783,
+     "type": "image/png"
+    },
+    "dart-paper.png": {
+     "name": "dart-paper.png",
+     "blob": "e416e140d1f2fe4cda9d7fe7cc6f4dcc",
+     "size": 42478,
+     "type": "image/png"
+    },
+    "falcon-cardboard.png": {
+     "name": "falcon-cardboard.png",
+     "blob": "15b5433ee7478b24f3fb63f402038c86",
+     "size": 60498,
+     "type": "image/png"
+    },
+    "falcon-grey.png": {
+     "name": "falcon-grey.png",
+     "blob": "97902900f2ae863ee251499fca69d2ad",
+     "size": 51863,
+     "type": "image/png"
+    },
+    "falcon-paper.png": {
+     "name": "falcon-paper.png",
+     "blob": "a3a71821e09eafe054927d001981eda5",
+     "size": 44294,
+     "type": "image/png"
+    },
+    "ghost-cardboard.png": {
+     "name": "ghost-cardboard.png",
+     "blob": "55493c8eb0d9f9cdf67d527ff20395a0",
+     "size": 36855,
+     "type": "image/png"
+    },
+    "ghost-grey.png": {
+     "name": "ghost-grey.png",
+     "blob": "6b141a2fedf48008953d000ec7ca380b",
+     "size": 31263,
+     "type": "image/png"
+    },
+    "ghost-paper.png": {
+     "name": "ghost-paper.png",
+     "blob": "5576e6c5568af758336861be4e47f78e",
+     "size": 27256,
+     "type": "image/png"
+    },
+    "jumper-cardboard.png": {
+     "name": "jumper-cardboard.png",
+     "blob": "8fe2e979fd9f66b55adbf73e9009242c",
+     "size": 62642,
+     "type": "image/png"
+    },
+    "jumper-grey.png": {
+     "name": "jumper-grey.png",
+     "blob": "94cc4675dfbaa20830d28432b00a935b",
+     "size": 54787,
+     "type": "image/png"
+    },
+    "jumper-paper.png": {
+     "name": "jumper-paper.png",
+     "blob": "7da8c8f11a10475a27ad4829bbd9eb32",
+     "size": 47047,
+     "type": "image/png"
+    },
+    "lancer-cardboard.png": {
+     "name": "lancer-cardboard.png",
+     "blob": "ad41bccac2ae20ff06fb010593aa60e9",
+     "size": 45402,
+     "type": "image/png"
+    },
+    "lancer-grey.png": {
+     "name": "lancer-grey.png",
+     "blob": "f9ab0b7cbe7f842d864ed4b5287e09e4",
+     "size": 39597,
+     "type": "image/png"
+    },
+    "lancer-paper.png": {
+     "name": "lancer-paper.png",
+     "blob": "c8e99e8a65a094fe7e5ec642e7d09da0",
+     "size": 34415,
+     "type": "image/png"
+    },
+    "lightning-cardboard.png": {
+     "name": "lightning-cardboard.png",
+     "blob": "acfdeda55a1bccc348c78154fb261e5a",
+     "size": 72971,
+     "type": "image/png"
+    },
+    "lightning-grey.png": {
+     "name": "lightning-grey.png",
+     "blob": "53c04bb5143277168b353658f030a603",
+     "size": 60659,
+     "type": "image/png"
+    },
+    "lightning-paper.png": {
+     "name": "lightning-paper.png",
+     "blob": "e993414ab1d6875b8b0962ff8f9c8571",
+     "size": 50744,
+     "type": "image/png"
+    },
+    "raptor-cardboard.png": {
+     "name": "raptor-cardboard.png",
+     "blob": "0c2caf7ea30725e15f80fbc7d3ffc5c4",
+     "size": 67308,
+     "type": "image/png"
+    },
+    "raptor-grey.png": {
+     "name": "raptor-grey.png",
+     "blob": "dabe0c6f4a1b86c738e86133d96134c9",
+     "size": 56568,
+     "type": "image/png"
+    },
+    "raptor-paper.png": {
+     "name": "raptor-paper.png",
+     "blob": "9470f8f1f938705749767fd35df29670",
+     "size": 47864,
+     "type": "image/png"
+    },
+    "specter-cardboard.png": {
+     "name": "specter-cardboard.png",
+     "blob": "73accbbe55e308544100de12193f1fc0",
+     "size": 37920,
+     "type": "image/png"
+    },
+    "specter-grey.png": {
+     "name": "specter-grey.png",
+     "blob": "db959dbf974bdd598f344ea214c25abf",
+     "size": 34359,
+     "type": "image/png"
+    },
+    "specter-paper.png": {
+     "name": "specter-paper.png",
+     "blob": "6063df1782d5c33c3f7a662139b69c3c",
+     "size": 30198,
+     "type": "image/png"
+    },
+    "swift-cardboard.png": {
+     "name": "swift-cardboard.png",
+     "blob": "d8d8a77ad580058464f4967f8e427351",
+     "size": 65255,
+     "type": "image/png"
+    },
+    "swift-grey.png": {
+     "name": "swift-grey.png",
+     "blob": "4a74ea8c01e0a455e22d4ec5b57f18ac",
+     "size": 55282,
+     "type": "image/png"
+    },
+    "swift-paper.png": {
+     "name": "swift-paper.png",
+     "blob": "ce40c9b326b192ee42b3631729b1ced4",
+     "size": 47703,
+     "type": "image/png"
+    },
+    "thug-cardboard.png": {
+     "name": "thug-cardboard.png",
+     "blob": "f0ec8e53b68a0ef552f401dd28ef693e",
+     "size": 75794,
+     "type": "image/png"
+    },
+    "thug-grey.png": {
+     "name": "thug-grey.png",
+     "blob": "c119d4f6a27fac994b0f905ae6ab444a",
+     "size": 65930,
+     "type": "image/png"
+    },
+    "thug-paper.png": {
+     "name": "thug-paper.png",
+     "blob": "d870e0b197e20798b5b771ca54d4e60a",
+     "size": 58003,
+     "type": "image/png"
+    },
+    "widewing-cardboard.png": {
+     "name": "widewing-cardboard.png",
+     "blob": "fa8ef1feb261257a6f07475a2051f970",
+     "size": 57185,
+     "type": "image/png"
+    },
+    "widewing-grey.png": {
+     "name": "widewing-grey.png",
+     "blob": "32aa96d9a61a8113ee1608f7a21c6e31",
+     "size": 49616,
+     "type": "image/png"
+    },
+    "widewing-paper.png": {
+     "name": "widewing-paper.png",
+     "blob": "c04e063f4933aabfcd4055898486bd45",
+     "size": 43582,
+     "type": "image/png"
+    }
+   }
+  }
+ },
+ "blobs": {},
+ "createdOnFiles": {
+  "at": "2026-11-05T19:23:37Z",
+  "v": 1
+ },
+ "docs": {
+  "readme": "project/README.md",
+  "sections": []
+ },
+ "groups": [
+  "Logos",
+  "Buildings",
+  "Aircraft",
+  "Icons",
+  "Planes",
+  "Patterns"
+ ],
+ "layout": "files",
+ "libraries": [],
+ "namespace": "PaperWars",
+ "sections": {},
+ "title": "paperwars.io",
+ "lastChange": {
+  "by": "Daniel Halabi",
+  "at": "2026-11-06T03:52:35Z",
+  "via": "Claude",
+  "note": "Added 28 building and 33 plane renders; BuildSlot, PlaneCard and ResultDialog use them."
+ }
+}

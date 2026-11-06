@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  applyTokens, colour, COLOUR_NAMES, cssColour, DEFAULT_TOKEN_OPTIONS, DURATIONS, ownerColour, PALETTES, parseColour, tokenCss, tokenOptions, tokenVars,
+  applyTokens, BASE_COLOUR_NAMES, colour, COLOUR_NAMES, cssColour, DEFAULT_TOKEN_OPTIONS, DURATIONS, ownerColour, PALETTES, parseColour, THEME_PALETTES, THEME_NAMES, tokenCss, tokenOptions, tokenVars,
 } from './tokens';
 
 /** Every custom property the stylesheets (hud.css, mp.css, components.css) used before v0.0.15. */
@@ -16,25 +16,69 @@ afterEach(() => {
 });
 
 describe('design tokens', () => {
-  it('has every colour in both palettes, as a valid colour', () => {
-    for (const name of ['standard', 'colourblind'] as const) {
-      const p = PALETTES[name];
-      expect(Object.keys(p).sort()).toEqual([...COLOUR_NAMES].sort());
-      for (const n of COLOUR_NAMES) expect(() => parseColour(p[n]), `${name} ${n}`).not.toThrow();
+  it('has every colour in both themes and both palettes, as a valid colour', () => {
+    for (const theme of THEME_NAMES) {
+      for (const name of ['standard', 'colourblind'] as const) {
+        const p = THEME_PALETTES[theme][name];
+        expect(Object.keys(p).sort()).toEqual([...COLOUR_NAMES].sort());
+        for (const n of COLOUR_NAMES) expect(() => parseColour(p[n]), `${theme} ${name} ${n}`).not.toThrow();
+      }
     }
+    expect(THEME_PALETTES.daylight).toBe(PALETTES);
   });
 
-  it('keeps the v0.0.7 to v0.0.14 values, so the existing HUD renders the same', () => {
+  it('keeps every v0.0.7 to v0.0.14 name, as an alias onto the style guide values', () => {
     const v = tokenVars();
     for (const name of LEGACY) expect(v[name], name).toBeTruthy();
-    expect(v['--paper']).toBe('rgba(251, 248, 241, 0.93)');
-    expect(v['--friend']).toBe('#2f6fe4');
-    expect(v['--hostile']).toBe('#d6372e');
+    // The developer's style guide (docs/style-guide/design-system/tokens.json), Daylight.
+    expect(v['--paper-100']).toBe('#fbf8f1');
+    expect(v['--ink-900']).toBe('#26242c');
+    expect(v['--pencil-400']).toBe('#f5c23a');
+    expect(v['--sky-500']).toBe('#2f6fc0');
+    expect(v['--team-8']).toBe('#e86fa8');
+    expect(v['--paper']).toBe(v['--paper-50']);
+    expect(v['--ink']).toBe(v['--ink-900']);
+    expect(v['--ink-2']).toBe(v['--ink-600']);
+    expect(v['--friend']).toBe(v['--sky-500']);
+    expect(v['--hostile']).toBe(v['--raid-500']);
+    expect(v['--good']).toBe(v['--win-500']);
+    expect(v['--focus']).toBe(v['--sky-500']);
+    expect(v['--on-colour']).toBe(v['--on-signal']);
     expect(v['--s4']).toBe('16px');
+    expect(v['--space-12']).toBe('48px');
     expect(v['--t-m']).toBe('15px');
-    expect(v['--r']).toBe('10px');
-    expect(v['--fast']).toBe('160ms cubic-bezier(0.2, 0.9, 0.3, 1.2)');
+    expect(v['--r']).toBe('12px');
+    expect(v['--radius-lg']).toBe('20px');
+    expect(v['--stroke-line']).toBe('2px');
+    expect(v['--fast']).toBe('220ms cubic-bezier(0.3, 1.6, 0.5, 1)');
     expect(v['--ui-scale']).toBe('1');
+  });
+
+  it('has the Lights out theme: the dark values of the guide, the same names', () => {
+    const day = tokenVars({ theme: 'daylight' });
+    const night = tokenVars({ theme: 'lightsOut' });
+    expect(Object.keys(night)).toEqual(Object.keys(day));
+    expect(night['--paper-100']).toBe('#1e2926');
+    expect(night['--ink-900']).toBe('#f3efe4');
+    expect(night['--paper']).toBe(night['--paper-50']);
+    expect(night['--friend']).toBe('#7fb0ef');
+    // Graphite and pencil never flip.
+    expect(night['--graphite']).toBe(day['--graphite']);
+    expect(night['--pencil-400']).toBe(day['--pencil-400']);
+    // The colour-blind palette and high contrast apply on top of either theme.
+    expect(tokenVars({ theme: 'lightsOut', palette: 'colourblind' })['--hostile']).not.toBe(night['--hostile']);
+    expect(tokenVars({ theme: 'lightsOut', highContrast: true })['--ink-3']).not.toBe(night['--ink-3']);
+    for (const n of BASE_COLOUR_NAMES) expect(night[`--${n}`], n).toBeTruthy();
+  });
+
+  it('draws shadows hard: offset, no blur, in both themes', () => {
+    for (const theme of THEME_NAMES) {
+      const v = tokenVars({ theme });
+      for (const name of ['--shadow-press', '--shadow-card', '--shadow-lift', '--shadow', '--elev-raised', '--elev-floating', '--shadow-hard']) {
+        // "x y 0 colour": the third length (blur) is 0.
+        expect(v[name], `${theme} ${name}`).toMatch(/^-?\d+(px)? -?\d+px 0 #/);
+      }
+    }
   });
 
   it('adds the plan §1A tokens: objective, neutral, pill radius, flat elevation, motion, focus, chips', () => {
@@ -72,6 +116,8 @@ describe('design tokens', () => {
     const v = tokenVars({ reducedMotion: true });
     for (const name of Object.keys(DURATIONS)) expect(v[`--${name}`]).toBe('0ms');
     expect(v['--fast'].startsWith('0ms')).toBe(true);
+    // Springs give way to a short fade.
+    expect(v['--dur-calm']).toBe('120ms');
     expect(v['--motion-pop'].startsWith('0ms')).toBe(true);
     expect(tokenVars()['--dur-pop']).not.toBe('0ms');
   });
@@ -94,6 +140,7 @@ describe('design tokens', () => {
     const root = document.documentElement;
     applyTokens(root, { palette: 'colourblind' });
     expect(root.dataset.palette).toBe('colourblind');
+    expect(root.dataset.theme).toBe('daylight');
     for (const n of COLOUR_NAMES) expect(root.style.getPropertyValue(`--${n}`).trim(), n).toBe(colour(n));
     expect(colour('friend')).toBe(PALETTES.colourblind.friend);
     // Options not given keep their value.
@@ -102,5 +149,10 @@ describe('design tokens', () => {
     expect(root.dataset.motion).toBe('reduced');
     expect(root.style.getPropertyValue('--dur-fold').trim()).toBe('0ms');
     expect(cssColour('friend')).toBe('var(--friend)');
+    // The theme swaps values and keeps the palette.
+    applyTokens(root, { theme: 'lightsOut' });
+    expect(root.dataset.theme).toBe('lights-out');
+    expect(colour('friend')).toBe(THEME_PALETTES.lightsOut.colourblind.friend);
+    expect(colour('friend', 'standard')).toBe(THEME_PALETTES.lightsOut.standard.friend);
   });
 });
