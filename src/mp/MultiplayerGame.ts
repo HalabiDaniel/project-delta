@@ -39,7 +39,7 @@ import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/
 import { Input } from '../systems/Input';
 import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
 import { ResourceManager } from '../systems/ResourceManager';
-import { HUD } from '../ui/HUD';
+import { HUD, type HintMode } from '../ui/HUD';
 import type { IconName } from '../ui/icons';
 import { Sounds } from '../ui/Sounds';
 import { AircraftModels, type ShownAircraft } from '../world/AircraftModels';
@@ -62,11 +62,16 @@ import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
 import { FeedbackForm } from './FeedbackForm';
 import { Lobby, type ClaimView } from './Lobby';
-import { MpHud, type MpHudView, type ScoreRow } from './MpHud';
+import { MpHud, type IncomingView, type MpHudView, type ScoreRow, type TerritoryTagView } from './MpHud';
+import { loadMpSettings, saveMpSettings, type MpSettings } from './MpSettings';
+import { presenceOf } from './presence';
+import { deskLabel } from '../net/Username';
+import { ConfirmDialog } from '../ui/components';
+import { DIALOG_KEYS } from '../input/glyphs';
+import { UI_SCALES } from '../systems/SaveGame';
 import { NetBase } from './NetBase';
 import { NetClient } from './NetClient';
 import { MpViews } from './MpViews';
-import './mp.css';
 
 const STEP = NET.step;
 /** An emote shows over the plane this long (seconds). */
@@ -184,6 +189,10 @@ export class MultiplayerGame {
   /** While we have no username yet: what to offer in the prompt, and why the last one wasn't given. */
   usernameNeeded: { value: string; note: string | null } | null = null;
   roomTitle = 'Classroom';
+  /** HUD size and key hints, kept in this browser (v0.0.15 phase 5; single-player keeps them in its save). */
+  settings: MpSettings = loadMpSettings();
+  /** "Server lost" (v0.0.15): the standard dialog over the session list. */
+  private readonly lostDialog = new ConfirmDialog();
   /** The last session's results (v0.0.13), shown until the player moves on, and who we were in it. */
   results: SessionResultsDTO | null = null;
   private resultsMe: string | null = null;
@@ -302,8 +311,8 @@ export class MultiplayerGame {
       openFeedback: () => game?.feedback.show(),
       dismissWelcome: () => undefined,
       toggleSound: () => game?.toggleSound(),
-      setHints: () => undefined,
-      setUiScale: (scale) => game?.hud.setScale(scale),
+      setHints: (mode) => game?.setHints(mode),
+      setUiScale: (scale) => game?.setUiScale(scale),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
@@ -321,7 +330,11 @@ export class MultiplayerGame {
         remove: () => game?.baseAction((m) => m.remove()),
       },
     });
-    const mpHud = new MpHud(hudRoot);
+    const mpHud = new MpHud(
+      hudRoot,
+      { tl: hud.zone('tl'), tc: hud.zone('tc'), tr: hud.zone('tr'), centre: hud.zone('centre') },
+      { emote: (e) => game?.net.emote(e), intercept: () => game?.intercept() },
+    );
     const lobby = new Lobby(hudRoot, {
       quick: (name) => void game?.enter(() => game!.net.quickJoin(name)),
       join: (name, id) => void game?.enter(() => game!.net.join(id, name)),
@@ -384,6 +397,7 @@ export class MultiplayerGame {
       game!.feedback.toggle();
     });
     game.setGraphics(game.graphics);
+    hud.setScale(game.settings.uiScale);
     game.bindInput();
     game.tutorial.onChange(() => game!.saveTutorialSoon());
     game.net.onTutorial((record) => {
@@ -539,11 +553,33 @@ export class MultiplayerGame {
           });
           return;
         }
-        if (!this.rejoining) void this.refreshRooms();
+        if (!this.rejoining) {
+          void this.refreshRooms();
+          if (s === 'lost') void this.serverLost();
+        }
       }
     });
     this.lobby.showClaim(this.claimView());
     if (this.resumed) this.hud.alert('ok', 'Back in', null, 'good', 2);
+  }
+
+  /** The server went away mid-session (and is not restarting): a standard dialog over the session list. */
+  private async serverLost(): Promise<void> {
+    if (this.lostDialog.isOpen) return;
+    const again = await this.lostDialog.open({
+      title: 'Server lost',
+      body: `The connection to the game server is gone${this.net.lastError ? ` (${this.net.lastError})` : ''}. Your base, paper and planes are saved on the server.`,
+      confirm: { label: 'Rejoin', icon: 'swap', key: DIALOG_KEYS.confirm },
+      cancel: { label: 'Session list', icon: 'menu', key: DIALOG_KEYS.cancel },
+    });
+    if (!again || this.room) return;
+    this.rejoining = true;
+    const ok = await this.net.rejoin(this.lobby.name);
+    this.rejoining = false;
+    if (ok) {
+      this.attach();
+      this.hud.alert('ok', 'Back in', null, 'good', 2);
+    } else void this.refreshRooms();
   }
 
   claim(territoryId: string): void {
@@ -674,6 +710,47 @@ export class MultiplayerGame {
     }
   }
 
+  setHints(mode: HintMode): void {
+    this.settings = { ...this.settings, hints: mode };
+    saveMpSettings(this.settings);
+  }
+
+  setUiScale(scale: number): void {
+    this.settings = { ...this.settings, uiScale: UI_SCALES.includes(scale) ? scale : 1 };
+    this.hud.setScale(this.settings.uiScale);
+    saveMpSettings(this.settings);
+  }
+
+  /** The interception card (put first by the server while we are raided), if one is on offer. */
+  private interceptOffer(): number {
+    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept');
+  }
+
+  /**
+   * The raid card's one press (and F at the desk while raided): choose the interception card and
+   * fold for it; on the pad, launch; landed, take off.
+   */
+  intercept(): void {
+    const phase = this.state?.phase;
+    if (!this.room || this.paused || !phase) return;
+    if (phase === 'desk') {
+      const i = this.interceptOffer();
+      if (i >= 0 && i !== this.state!.selected) this.send({ a: 'select', i });
+      this.send({ a: 'build' });
+    } else if (phase === 'ready') this.launchPlane();
+    else if (phase === 'landed') this.takeOff();
+  }
+
+  /** What the raid card's one press does now. */
+  private interceptResponse(): IncomingView['response'] {
+    switch (this.state?.phase) {
+      case 'desk': return { key: 'F', label: this.interceptOffer() >= 0 ? 'Intercept' : 'Fold' };
+      case 'ready': return { key: 'Space', label: 'Launch' };
+      case 'landed': return { key: 'Space', label: 'Take off' };
+      default: return null;
+    }
+  }
+
   pause(): void {
     if (this.paused) return;
     this.paused = true;
@@ -770,6 +847,8 @@ export class MultiplayerGame {
         return this.send({ a: 'aircraft', id: next });
       }
       case 'fold':
+        // Raided at the desk: F folds for the interception card the raid card offers.
+        if (phase === 'desk' && this.interceptOffer() >= 0 && (this.priv.attacks ?? []).some((a) => a.victim === this.me)) return this.intercept();
         return this.send({ a: 'build' });
       case 'launch':
         if (phase === 'ready') this.launchPlane();
@@ -903,9 +982,12 @@ export class MultiplayerGame {
     // "You landed on…" (v0.0.13): the desk the server picked, on a little map of the classroom.
     const s = this.room?.state;
     this.mpHud.landed({
-      label: territoryName(territoryId),
+      label: s?.territories.get(territoryId)?.label || (this.me && s?.players.get(this.me) ? deskLabel(s.players.get(this.me)!.name) : territoryName(territoryId)),
       id: territoryId,
-      cells: this.territories.map((t) => ({ id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId })),
+      cells: this.territories.map((t) => ({
+        id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId,
+        state: DESK_STATES[s?.territories.get(t.id)?.state ?? 0] ?? 'ai',
+      })),
     });
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
     this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
@@ -1208,7 +1290,7 @@ export class MultiplayerGame {
         const s = this.room?.state;
         const colourOf = (id: string | null) => (id ? (s?.players.get(id)?.colour ?? null) : null);
         const assists = e.assists.map((id) => s?.players.get(id)?.name ?? '?');
-        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me || e.victim === this.me);
+        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me ? 'killer' : e.victim === this.me ? 'victim' : null);
         if (e.killer === this.me && e.victim) this.sounds.play('kill');
         break;
       }
@@ -1545,6 +1627,23 @@ export class MultiplayerGame {
 
   // ---- Multiplayer HUD ----------------------------------------------------------------------------
 
+  /** The raid card: the attacker, and from the raid alert the ETA, direction, our guns and reward. */
+  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null }): IncomingView {
+    const r = this.views.raidAlertView();
+    return {
+      attacker: a.attackerName,
+      colour: this.room?.state.players.get(a.attacker)?.colour ?? 0,
+      detected: a.detected,
+      distance: a.distance,
+      eta: r && r.eta > 0 ? r.eta : null,
+      direction: r && r.direction !== '?' ? r.direction : null,
+      ready: r?.ready ?? this.base?.readiness.ready ?? 0,
+      total: r?.total ?? this.base?.readiness.total ?? 0,
+      reward: r?.reward ?? 0,
+      response: this.interceptResponse(),
+    };
+  }
+
   private mpView(): MpHudView {
     const s = this.room?.state;
     const now = performance.now() / 1000;
@@ -1555,6 +1654,7 @@ export class MultiplayerGame {
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
             status: ['At desk', 'Folding', 'On the pad', 'Flying', 'Landed', 'Debrief', 'Shot down'][p.phase] ?? '', protect: p.protect, shield: p.shield,
+            presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)
       : null;
@@ -1573,7 +1673,7 @@ export class MultiplayerGame {
         hostile: true, plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null,
       });
     }
-    const territories = [];
+    const territories: TerritoryTagView[] = [];
     for (const [tid, owner] of this.owners) {
       if (owner === this.me) continue; // our own desk has its home label
       const t = this.territories.find((x) => x.id === tid)!;
@@ -1582,7 +1682,10 @@ export class MultiplayerGame {
       const screen = this.views.project(this.v1.set(t.x, 1, t.z));
       if (!screen || !p) continue;
       if (this.state?.phase === 'flying' && Math.hypot(t.x - this.plane.position.x, t.z - this.plane.position.z) < t.size * 0.6) continue;
-      territories.push({ id: tid, x: screen.x, y: screen.y, owner: p.name, colour: p.colour, mine: owner === this.me, safe: !!ts?.safe, alert: !!ts?.alert, away: !p.connected });
+      territories.push({
+        id: tid, x: screen.x, y: screen.y, label: ts?.label || deskLabel(p.name), owner: p.name, colour: p.colour, mine: owner === this.me, safe: !!ts?.safe, alert: !!ts?.alert,
+        presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: DESK_STATES[ts?.state ?? 0] ?? null }),
+      });
     }
     const attacks = this.priv.attacks ?? [];
     const incoming = attacks.find((a) => a.victim === this.me);
@@ -1596,7 +1699,7 @@ export class MultiplayerGame {
       tags,
       territories,
       scoreboard,
-      incoming: incoming ? { attacker: incoming.attackerName, colour: s?.players.get(incoming.attacker)?.colour ?? 0, detected: incoming.detected, distance: incoming.distance } : null,
+      incoming: incoming ? this.incomingView(incoming) : null,
       outgoing: outgoing ? { victim: outgoing.victimName, colour: s?.players.get(outgoing.victim)?.colour ?? 0 } : null,
       protection: this.priv.protection ?? null,
       emoteKeys: this.state?.phase === 'flying',

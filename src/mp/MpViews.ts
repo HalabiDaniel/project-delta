@@ -10,7 +10,9 @@ import type { Installation } from '../defenses/Installation';
 import type { InstallationKind } from '../defenses/Layout';
 import type { Mission, Objective } from '../missions/Mission';
 import { defenseList } from '../missions/MissionGenerator';
-import { planeOwner } from '../net/protocol';
+import { colourCss, DESK_STATES, planeOwner } from '../net/protocol';
+import { hintsShown } from './MpSettings';
+import { presenceOf } from './presence';
 import { ownerOfSide, sideOf, territoryName } from '../net/World';
 import type { AircraftMarkerView, AirView } from '../ui/AirHud';
 import { BUILDING_ICONS } from '../ui/BaseHud';
@@ -163,7 +165,7 @@ export class MpViews {
       phase,
       paused: g.paused,
       baseMode: baseOpen,
-      hints: g.input.isHeld('KeyH') || (st?.phase === 'desk' && (g.room?.state.players.get(g.me ?? '')?.missions ?? 0) < 2),
+      hints: hintsShown(g.settings.hints, g.input.isHeld('KeyH'), st?.phase === 'desk' && (g.room?.state.players.get(g.me ?? '')?.missions ?? 0) < 2),
       economy: {
         paper: eco?.paper ?? 0,
         capacity: eco?.capacity ?? 0,
@@ -191,8 +193,8 @@ export class MpViews {
         session: { missionsCompleted: 0, missionsFailed: 0, paperEarned: 0, paperSpent: 0, aircraftLost: 0, enemiesDestroyed: 0, best: '—', achievements: [], minutes: 0 },
         settings: {
           muted: g.sounds.muted,
-          hints: 'auto',
-          uiScale: 1,
+          hints: g.settings.hints,
+          uiScale: g.settings.uiScale,
           graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null },
         },
         saveNote: 'Multiplayer: your paper, base and planes live on the server. "Leave classroom" frees your desk.',
@@ -227,7 +229,8 @@ export class MpViews {
       minimap: this.minimapView(mission, goal?.point ?? null),
       threat: flying ? this.threatView() : null,
       air: this.airView(flying, aim),
-      raid: this.raidAlert(),
+      // The multiplayer raid card (MpHud) shows a raid on our base, with the attacker and the interception.
+      raid: null,
       base: baseOpen && g.baseMode && g.base ? g.baseMode.view((x, z) => this.project(this.v3.set(x, 1.2, z)), phase === 'ready' || phase === 'landed', g.priv.raid ?? null) : null,
       tutorial: st && g.tutorialReady ? g.tutorial.view(g.tutorialContext()) : null,
       dashboard:
@@ -247,7 +250,7 @@ export class MpViews {
               },
               lostPlane: g.lostPlane,
               onPad: phase !== 'desk',
-              raidInbound: this.raidAlert() !== null,
+              raidInbound: this.raidAlertView() !== null,
               emergency: emergencyNow,
             })
           : null,
@@ -743,7 +746,16 @@ export class MpViews {
       territories: g.territories.map((t) => {
         const done = roles.get(t.id);
         const owned = g.owners.has(t.id);
-        return { id: t.id, x: t.x, z: t.z, half: t.half, threat: owned ? 0 : t.threat, role: t.id === home?.id ? 'home' : done === undefined ? (owned ? 'objective' : 'neutral') : done ? 'done' : 'objective' };
+        // Every desk's lifecycle state and its player's presence, each with its own shape (MiniMap deskStyle).
+        const ts = g.room?.state.territories.get(t.id);
+        const desk = DESK_STATES[ts?.state ?? 0] ?? 'ai';
+        const ownerId = ts?.owner || g.owners.get(t.id) || null;
+        const p = ownerId ? g.room?.state.players.get(ownerId) : undefined;
+        const owner = ownerId
+          ? { colour: colourCss(p?.colour ?? 0), presence: presenceOf({ present: !!p, connected: p?.connected ?? false, protect: p?.protect ?? 0, shield: p?.shield ?? 0, desk }) }
+          : null;
+        const role = t.id === home?.id ? 'home' : done === undefined ? 'neutral' : done ? 'done' : 'objective';
+        return { id: t.id, x: t.x, z: t.z, half: t.half, threat: owned ? 0 : t.threat, role, desk, owner };
       }),
       defenses: g.network.installations.map((i) => {
         const near = showPlane && Math.hypot(i.spec.x - plane.position.x, i.spec.z - plane.position.z) < i.spec.range + DEFENSES.approachMargin * 2;
@@ -913,7 +925,7 @@ export class MpViews {
   }
 
   /** Another player raiding our base: single-player's raid alert, pointed at them. */
-  private raidAlert(): RaidAlertView | null {
+  raidAlertView(): RaidAlertView | null {
     const g = this.g;
     const attack = (g.priv.attacks ?? []).find((a) => a.victim === g.me && a.detected);
     const home = g.home;
