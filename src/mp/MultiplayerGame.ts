@@ -549,7 +549,10 @@ export class MultiplayerGame {
             if (ok) {
               this.attach();
               this.hud.alert('ok', 'Back in', null, 'good', 2);
-            } else void this.refreshRooms();
+            } else {
+              void this.refreshRooms();
+              void this.serverLost();
+            }
           });
           return;
         }
@@ -568,7 +571,7 @@ export class MultiplayerGame {
     if (this.lostDialog.isOpen) return;
     const again = await this.lostDialog.open({
       title: 'Server lost',
-      body: `The connection to the game server is gone${this.net.lastError ? ` (${this.net.lastError})` : ''}. Your base, paper and planes are saved on the server.`,
+      body: `The connection to the game server is gone${this.net.lastError ? ` (${this.net.lastError.replace(/\.$/, '')})` : ''}. Your base, paper and planes are saved on the server.`,
       confirm: { label: 'Rejoin', icon: 'swap', key: DIALOG_KEYS.confirm },
       cancel: { label: 'Session list', icon: 'menu', key: DIALOG_KEYS.cancel },
     });

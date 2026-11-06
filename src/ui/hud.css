@@ -1044,7 +1044,7 @@ body.pad-mode .econ .econ-safe { display: inline-flex; }
 .mp-overlay > * { zoom: var(--ui-scale, 1); }
 .mp-lobby { z-index: 20; }
 .mp-feedback { z-index: 30; }
-.mp-card { width: min(640px, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; padding: var(--s4); user-select: text; }
+.mp-overlay .mp-card { width: min(640px, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; padding: var(--s4); user-select: text; }
 .mp-card > .ui-card-body { gap: var(--s3); font-size: var(--t-m); color: var(--ink); }
 .mp-head { display: flex; align-items: baseline; gap: var(--s3); }
 .mp-head h2 { margin: 0; font-size: var(--t-l); color: var(--ink-2); }
@@ -1144,13 +1144,13 @@ textarea.mp-input { resize: vertical; font-weight: 500; }
 .mp-medal-3 { color: var(--bronze); }
 
 /* ---- Feedback (F8): a dialog with toggles and two text boxes --------------------------------- */
-.mp-feedback-card { width: min(36em, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; font-size: var(--t-m); }
+.mp-feedback .mp-feedback-card { width: min(36em, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; font-size: var(--t-m); }
 .mp-toggles { display: flex; flex-wrap: wrap; gap: var(--s1); }
 .mp-feedback .mp-foot .mp-status { flex: 1; }
 
 /* ---- In the game: top left (connection, kill feed) --------------------------------------------- */
 .mp-net { pointer-events: none; }
-.mp-net-card { padding: var(--s1) var(--s3); animation: none; }
+.mp-net .mp-net-card { padding: var(--s1) var(--s3); animation: none; }
 .mp-net-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); font-size: var(--t-s); color: var(--ink); }
 .mp-net .ui-stat b { font-size: var(--t-m); }
 .mp-room-name { color: var(--ink-2); font-weight: 700; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1218,8 +1218,10 @@ textarea.mp-input { resize: vertical; font-weight: 500; }
 .mp-board-key { display: inline-flex; align-items: center; gap: var(--s1); padding: 2px var(--s2); border-radius: var(--r-pill); background: var(--paper); box-shadow: var(--elev-raised); color: var(--ink-2); font-size: var(--t-s); }
 
 /* ---- Centre: the scoreboard (held Tab / View) ------------------------------------------------- */
+/* Over whatever else is in the centre (the crash report) while it is held. */
+.mp-board { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; }
 .mp-board, .mp-board .ui-card { pointer-events: none; }
-.mp-board-card { max-width: min(60em, 92vw); padding: var(--s3) var(--s4); }
+.mp-board .mp-board-card { max-width: min(60em, 92vw); padding: var(--s3) var(--s4); }
 .mp-board-card .ui-card-body { color: var(--ink); }
 
 /* ---- Tags in the world: other players' planes and desks --------------------------------------- */
@@ -1242,3 +1244,6 @@ textarea.mp-input { resize: vertical; font-weight: 500; }
 .mp-terr[data-presence='protected'] .mp-terr-presence { background: var(--chip-friend-bg); color: var(--chip-friend-fg); }
 .mp-terr[data-alert] { box-shadow: 0 0 0 2px var(--hostile), var(--elev-raised); }
 .mp-terr-raid { color: var(--hostile); }
+/* Rank insignia slot (v0.0.17 fills it): in front of a name on the scoreboard, name tags and kill feed. */
+.mp-insignia { display: inline-flex; align-items: center; width: 1.1em; height: 1.1em; margin-right: 2px; color: var(--ink-2); }
+.mp-insignia-slot:empty { display: none; }

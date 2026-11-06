@@ -196,3 +196,17 @@ describe('connection, raid card, desk tags, emotes', () => {
     expect(emote).toHaveBeenCalledWith('heart');
   });
 });
+
+describe('rank insignia slot (v0.0.17)', () => {
+  it('renders nothing without a rank, and the insignia in front of the name with one', async () => {
+    const { insigniaSlot } = await import('./MpHud');
+    expect(insigniaSlot(null)).toBe('');
+    expect(killLine('Ann', 0, 'Bob', 3, 'ink', [])).not.toContain('mp-insignia');
+    const rank = { id: 'sergeant', label: 'Sergeant', html: '<svg></svg>' };
+    const host = document.createElement('div');
+    host.innerHTML = killLine('Ann', 0, 'Bob', 3, 'ink', [], { killer: rank });
+    expect(host.querySelector('.mp-who .mp-insignia')!.getAttribute('aria-label')).toBe('Sergeant');
+    host.innerHTML = scoreboardHtml([row('a', 'online', { rank })]);
+    expect(host.querySelector('.mp-pilot .mp-insignia + b')!.textContent).toBe('P-a');
+  });
+});

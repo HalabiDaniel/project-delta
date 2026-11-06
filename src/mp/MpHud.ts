@@ -7,9 +7,32 @@ import { colourCss, type DeskState, type Emote, type Weapon } from '../net/proto
 import type { ConnectionStatus } from './NetClient';
 import { PRESENCE_ICONS, PRESENCE_LABELS, PRESENCE_TIPS, PRESENCE_TONES, type Presence } from './presence';
 
+/**
+ * A player's rank insignia (player ranks arrive in v0.0.17). The scoreboard rows, the name tags
+ * over planes and the kill-feed entries keep a slot for it in front of the name: `insigniaSlot()`
+ * renders nothing while the rank is absent (as today), so adding ranks fills the slot without a
+ * layout change. v0.0.17 decides the insignia's look; the slot is an inline element sized by em.
+ */
+export interface InsigniaView {
+  /** The rank's id (data attribute, for styling). */
+  id: string;
+  /** Its name, for the accessible name and the tooltip ("Sergeant"). */
+  label: string;
+  /** The insignia's markup (trusted: an icon from the shared set). */
+  html: string;
+}
+
+/** The insignia slot: empty until a rank is given. */
+export function insigniaSlot(rank: InsigniaView | null | undefined): string {
+  if (!rank) return '';
+  return `<span class="mp-insignia" role="img" data-rank="${esc(rank.id)}" aria-label="${esc(rank.label)}" data-tip="${esc(rank.label)}">${rank.html}</span>`;
+}
+
 export interface NameTagView extends ScreenPoint {
   id: string;
   name: string;
+  /** Rank insignia (v0.0.17); absent today. */
+  rank?: InsigniaView | null;
   colour: number;
   health: number;
   /** 0 near → 1 far: tags shrink and fade with distance. */
@@ -53,6 +76,8 @@ export interface ScoreRow {
   protect: number;
   shield: number;
   presence: Presence;
+  /** Rank insignia (v0.0.17); absent today. */
+  rank?: InsigniaView | null;
 }
 
 /** Another player raiding our base: who, how far, how long, and the one-press response. */
@@ -118,16 +143,20 @@ const FEED_LINES = 5;
 const FEED_SECONDS = 6;
 
 /** A player in their tape colour: a swatch shape (a plane for a pilot, a crumple for one shot down) and the name. */
-function who(name: string, colour: number | null, shape: IconName): string {
+function who(name: string, colour: number | null, shape: IconName, rank?: InsigniaView | null): string {
   const style = colour !== null ? ` style="--owner:${colourCss(colour)}"` : '';
-  return `<span class="mp-who"${style}${colour === null ? ' data-ai' : ''}>${icon(shape, 'icon mp-swatch')}<b>${esc(name)}</b></span>`;
+  return `<span class="mp-who"${style}${colour === null ? ' data-ai' : ''}>${icon(shape, 'icon mp-swatch')}${insigniaSlot(rank)}<b>${esc(name)}</b></span>`;
 }
 
 /** One kill-feed line: killer (plane) + assists, the weapon, the victim (crumpled). Icon-led, short. */
-export function killLine(killer: string | null, killerColour: number | null, victim: string, victimColour: number | null, weapon: Weapon, assists: readonly string[]): string {
+export function killLine(
+  killer: string | null, killerColour: number | null, victim: string, victimColour: number | null, weapon: Weapon, assists: readonly string[],
+  ranks: { killer?: InsigniaView | null; victim?: InsigniaView | null } = {},
+): string {
   const weaponIcon = icon(WEAPON_ICONS[weapon], 'icon mp-weapon', WEAPON_NAMES[weapon]);
   const helpers = assists.length ? `<small class="mp-assist">+${assists.map(esc).join(', ')}</small>` : '';
-  return killer ? `${who(killer, killerColour, 'fighter')}${helpers}${weaponIcon}${who(victim, victimColour, 'crumple')}` : `${weaponIcon}${who(victim, victimColour, 'crumple')}`;
+  const lost = who(victim, victimColour, 'crumple', ranks.victim);
+  return killer ? `${who(killer, killerColour, 'fighter', ranks.killer)}${helpers}${weaponIcon}${lost}` : `${weaponIcon}${lost}`;
 }
 
 /** A presence as a chip: icon, word and tone (never colour alone). */
@@ -143,7 +172,7 @@ export function scoreboardHtml(rows: readonly ScoreRow[]): string {
     .map((r) => {
       const left = r.protect > 0 ? r.protect : r.shield;
       return `<tr data-id="${esc(r.id)}" data-presence="${r.presence}"${r.me ? ' data-me' : ''}>
-        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}<b>${esc(r.name)}</b>${r.me ? chip({ label: 'You', tone: 'friend' }) : ''}</th>
+        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}${insigniaSlot(r.rank)}<b>${esc(r.name)}</b>${r.me ? chip({ label: 'You', tone: 'friend' }) : ''}</th>
         <td>${esc(r.territory || '—')}</td><td class="num mp-score">${r.score}</td><td class="num">${r.kills}</td><td class="num">${r.assists}</td><td class="num">${r.deaths}</td>
         <td class="num">${r.raids}</td><td class="num">${r.defends}</td><td class="num">${r.missions}</td>
         <td class="mp-phase">${esc(r.status)}</td>
@@ -202,7 +231,9 @@ export class MpHud {
   private lastConnection = '';
 
   constructor(root: HTMLElement, zones: MpHudZones, actions: MpHudActions) {
+    // Under the zones, like the HUD's world layer: tags follow the 3D world, panels sit on top.
     const layer = div(root, 'mp-layer');
+    root.prepend(layer);
     this.tagLayer = div(layer, 'mp-tags');
     this.net = div(zones.tl, 'mp-net');
     this.feed = div(zones.tl, 'mp-feed');
@@ -323,13 +354,16 @@ export class MpHud {
       let el = this.tags.get(t.id);
       if (!el) {
         el = div(this.tagLayer, 'mp-tag');
-        el.innerHTML = `<span class="mp-tag-name">${icon('fighter', 'icon mp-swatch')}<b></b></span><span class="mp-tag-bar"></span><span class="mp-tag-emote"></span>`;
+        el.innerHTML = `<span class="mp-tag-name">${icon('fighter', 'icon mp-swatch')}<span class="mp-insignia-slot"></span><b></b></span><span class="mp-tag-bar"></span><span class="mp-tag-emote"></span>`;
         this.tags.set(t.id, el);
       }
       el.style.transform = `translate(${t.x}px, ${t.y}px) translate(-50%, -100%) scale(${1 - t.far * 0.35})`;
       el.style.opacity = String(1 - t.far * 0.5);
       el.style.setProperty('--owner', colourCss(t.colour));
       el.dataset.side = t.hostile ? 'hostile' : 'friend';
+      const slot = el.querySelector<HTMLElement>('.mp-insignia-slot')!;
+      const rankHtml = insigniaSlot(t.rank);
+      if (slot.innerHTML !== rankHtml) slot.innerHTML = rankHtml;
       const name = el.querySelector('b')!;
       const label = `${t.name} · ${t.plane}`;
       if (name.textContent !== label) name.textContent = label;
