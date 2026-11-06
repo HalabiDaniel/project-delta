@@ -1,6 +1,7 @@
 import type { RaidReport } from '../base/Raids';
 import { AirHud } from './AirHud';
-import { Alerts, Tips, type AlertTone } from './Alerts';
+import { Alerts, Tips, type AlertOptions, type AlertTone } from './Alerts';
+import { glyph } from './components';
 import { Dashboard } from './Dashboard';
 import { TutorialPanel } from './TutorialPanel';
 import { BaseHud, RaidHud } from './BaseHud';
@@ -23,6 +24,27 @@ import './components.css';
 export type { ScreenPoint } from './dom';
 export type * from './views';
 export type { AlertTone } from './Alerts';
+
+/**
+ * How much of a fight the player is in, from the threat and air views: 0 calm, 1 something is
+ * tracking or attacking, 2 under fire or locked. In a fight (1+) the less urgent panels step back
+ * (lower opacity, smaller) and return after it (plan v0.0.15 §3C); critical warnings never do.
+ */
+export function combatLevel(v: Pick<HudView, 'phase' | 'paused' | 'threat' | 'air'>): 0 | 1 | 2 {
+  if (v.phase !== 'flying' || v.paused) return 0;
+  const t = v.threat;
+  const firing = !!t && (t.lock !== null || t.panel?.status === 'engaged' || t.ring.some((r) => r.state === 'firing' || r.state === 'incoming' || r.state === 'locking'));
+  if (firing) return 2;
+  const attacked = !!v.air?.markers.some((m) => m.attacking);
+  if (attacked || (t !== null && t.ring.length > 0)) return 1;
+  return 0;
+}
+
+/** Sets the de-emphasis classes on the HUD root: `combat` in any fight, `combat-hot` under fire. */
+export function applyCombat(root: HTMLElement, level: 0 | 1 | 2): void {
+  root.classList.toggle('combat', level > 0);
+  root.classList.toggle('combat-hot', level === 2);
+}
 
 /**
  * The HUD, laid out in fixed zones so the eye always knows where to look:
@@ -80,7 +102,7 @@ export class HUD {
     this.missions = new MissionPanel(this.zones.tr, this.zones.tc, { select: actions.select, swap: actions.swap, abandon: actions.abandonOperation });
     this.zones.tc.prepend(this.zones.tc.querySelector('.objective')!);
     const garageCards = div(this.zones.bc, 'garage-row');
-    const inspector = div(this.zones.bl, 'inspector card');
+    const inspector = div(this.zones.bl, 'inspector ui-card');
     this.garage = new Garage(garageCards, inspector, actions.selectAircraft);
     this.plane = new PlaneHud({ bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
     this.report = new ReportCard(this.zones.centre, actions.continueToDesk);
@@ -92,8 +114,8 @@ export class HUD {
     fit();
     window.addEventListener('resize', fit);
     this.lockHint = div(root, 'hint lock-hint');
-    this.lockHint.innerHTML = '<kbd>Esc</kbd> → click';
-    this.lockHint.title = 'Mouse not captured: press Esc, then click to capture it';
+    this.lockHint.innerHTML = `${glyph({ key: 'Esc' })} → click`;
+    this.lockHint.dataset.tip = 'Mouse not captured: press Esc, then click to capture it';
   }
 
   render(v: HudView): void {
@@ -107,7 +129,7 @@ export class HUD {
     this.root.classList.toggle('hints', v.hints);
     this.root.classList.toggle('paused', v.paused);
     // In a fight, the less urgent parts of the HUD step back.
-    this.root.classList.toggle('combat', flying && !!v.threat && (v.threat.ring.length > 0 || v.threat.lock !== null));
+    applyCombat(this.root, combatLevel(v));
 
     this.economy.render(v.economy, { buttons: atHome && !v.paused && v.result === null, base: v.baseMode, baseAvailable: atHome, full: v.baseMode, repairs: v.economy.repairs });
     this.missions.render(v);
@@ -129,8 +151,8 @@ export class HUD {
   }
 
   /** An alert below the objective: an icon, a few words and at most one number. */
-  alert(iconName: IconName, title: string, value: string | null, tone: AlertTone, seconds?: number): void {
-    this.alerts.show(iconName, title, value, tone, seconds);
+  alert(iconName: IconName, title: string, value: string | null, tone: AlertTone, seconds?: number, opts?: AlertOptions): void {
+    this.alerts.show(iconName, title, value, tone, seconds, opts);
   }
 
   /** A first-time tip. */

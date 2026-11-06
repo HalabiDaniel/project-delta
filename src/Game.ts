@@ -171,6 +171,8 @@ export class Game {
   welcome: { session: SaveData['lastSession']; restored: boolean; problems: string[] } | null = null;
   /** Abandoning an operation and resetting progress both ask twice. */
   private confirming: { what: 'abandon' | 'reset'; until: number } | null = null;
+  /** The plane's health share last frame, for the low-health warning. */
+  private lastHealth = 1;
   private alarmKey = '';
   private readonly logbook: Logbook;
   private readonly dev: DevPanel;
@@ -842,8 +844,8 @@ export class Game {
   }
 
   /** An alert below the objective. */
-  private alert(icon: IconName, title: string, value: string | null, tone: AlertTone, seconds = 2.4): void {
-    this.hud.alert(icon, title, value, tone, seconds);
+  private alert(icon: IconName, title: string, value: string | null, tone: AlertTone, seconds = 2.4, critical = false): void {
+    this.hud.alert(icon, title, value, tone, seconds, { critical });
   }
 
   /** A first-time tip, once per save. */
@@ -973,6 +975,7 @@ export class Game {
     state.tick(dt);
     base.recordIncome(state.income.lastPaid);
     this.progress.session.seconds += dt;
+    this.watchHealth();
     this.updateWorld(dt);
     const atDesk = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready';
     // Base management is only open at home.
@@ -2668,6 +2671,14 @@ export class Game {
       },
       locked: state.phase === 'building',
     };
+  }
+
+  /** Low health is a critical alert, once each time health drops under the critical line in flight. */
+  private watchHealth(): void {
+    const { state } = this;
+    const share = state.phase === 'flying' && state.plane && state.durability ? state.durability.health / state.plane.maxHealth : 1;
+    if (share > 0 && share <= 0.3 && this.lastHealth > 0.3) this.alert('health', SAY.lowHealth, `${Math.round(share * 100)}%`, 'bad', 3.5, true);
+    this.lastHealth = share;
   }
 
   private aircraftStatus(): AircraftStatusView | null {

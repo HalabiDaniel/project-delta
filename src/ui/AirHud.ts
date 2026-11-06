@@ -1,6 +1,8 @@
 import type { Side } from '../config';
+import { bar } from './components';
 import { attr, place, text, toggle, width, type ScreenPoint } from './dom';
-import { icon, type IconName } from './icons';
+import { level } from './format';
+import { icon, ICON_NAMES, type IconName } from './icons';
 
 const STATUS_ICONS: Record<NonNullable<AircraftMarkerView['status']>, IconName> = { attacking: 'kills', bombing: 'bomb', running: 'escape', leaving: 'heading' };
 
@@ -71,11 +73,14 @@ export class AirHud {
       if (!el) {
         el = document.createElement('div');
         el.className = 'air-marker';
+        el.setAttribute('role', 'img');
+        // Owner is colour and shape: square brackets and a hostile notch for enemies, round
+        // brackets for friends (CSS on data-side), so colour is never alone.
         el.innerHTML = `
-          <div class="am-box"></div>
-          <div class="am-tag"><span class="am-icon"></span><span class="am-status"></span><span class="am-dist"></span></div>
-          <span class="am-health"><i></i></span>
-          <div class="am-edge"><span class="am-chev"></span><span class="am-edge-icon"></span><span class="am-edge-dist"></span></div>`;
+          <div class="am-box"><i class="am-notch"></i></div>
+          <div class="am-tag"><span class="am-icon"></span><span class="am-status"></span><span class="am-dist num"></span></div>
+          ${bar({ value: 1, label: ICON_NAMES.health, size: 'mini', className: 'am-health' })}
+          <div class="am-edge"><span class="am-chev"></span><span class="am-edge-icon"></span><span class="am-edge-dist num"></span></div>`;
         this.layer.appendChild(el);
         this.markers.set(m.id, el);
       }
@@ -97,7 +102,7 @@ export class AirHud {
         status.dataset.status = m.status ?? '';
         status.innerHTML = m.status ? icon(STATUS_ICONS[m.status]) : '';
       }
-      el.title = `${m.name} · ${m.detail}`;
+      attr(el, 'aria-label', `${m.name} · ${m.detail}`);
       text(el.querySelector('.am-dist') as HTMLElement, `${Math.round(m.distance)} m`);
       text(el.querySelector('.am-edge-dist') as HTMLElement, `${Math.round(m.distance)} m`);
       (el.querySelector('.am-edge') as HTMLElement).style.transform = `rotate(${m.angle}rad)`;
@@ -105,9 +110,10 @@ export class AirHud {
       (el.querySelector('.am-edge-dist') as HTMLElement).style.transform = `rotate(${-m.angle}rad)`;
       const health = el.querySelector('.am-health') as HTMLElement;
       toggle(health, m.showHealth && m.onScreen);
-      const bar = health.firstElementChild as HTMLElement;
-      width(bar, m.health);
-      attr(bar, 'data-level', m.health > 0.6 ? 'ok' : m.health > 0.3 ? 'worn' : 'critical');
+      if (m.showHealth && m.onScreen) {
+        width(health.firstElementChild as HTMLElement, m.health);
+        attr(health, 'data-level', level(m.health));
+      }
       toggle(el, true);
       seen.add(m.id);
     }

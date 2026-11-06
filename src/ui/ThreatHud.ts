@@ -1,7 +1,9 @@
 import type { ThreatLevel } from '../config';
 import type { InstallationKind } from '../defenses/Layout';
+import { bar, pips } from './components';
 import { attr, text, toggle, width } from './dom';
-import { icon, type IconName } from './icons';
+import { icon, ICON_NAMES, type IconName } from './icons';
+import { SAY } from './strings';
 
 const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
 
@@ -54,15 +56,15 @@ const STATUS: Record<ThreatPanelView['status'], { icon: IconName; label: string 
 };
 
 const PANEL = /* html */ `
-  <div class="threat-panel card" data-threat-panel>
-    <b class="tp-id" data-tp-id></b><span class="pips tp-level" data-tp-level><i></i><i></i><i></i></span>
+  <div class="threat-panel ui-card" role="group" data-fold="none" data-threat-panel>
+    <b class="tp-id" data-tp-id></b><span class="tp-level" data-tp-level></span>
     <span class="tp-icons" data-tp-icons></span><span class="tp-status" data-tp-status></span>
   </div>
-  <div class="lock-warning" data-lock>
+  <div class="lock-warning" role="alert" data-critical data-lock>
     <div class="lw-title" data-lw-title></div>
-    <div class="lw-bar"><i data-lw-bar></i></div>
+    ${bar({ value: 0, label: SAY.rocketLock, kind: 'progress', size: 'thin', className: 'lw-bar', attrs: { 'data-lw-meter': '' } })}
   </div>
-  <div class="threat-note" data-threat-note></div>
+  <div class="threat-note" role="status" data-threat-note></div>
 `;
 
 /**
@@ -99,8 +101,12 @@ export class ThreatHud {
       attr(this.el['threat-panel'], 'data-level', String(panel.level));
       attr(this.el['threat-panel'], 'data-status', panel.status);
       text(this.el['tp-id'], panel.territoryId);
-      this.el['tp-level'].title = panel.label;
-      [...this.el['tp-level'].children].forEach((pip, n) => pip.classList.toggle('on', n < panel.level));
+      attr(this.el['threat-panel'], 'aria-label', `${panel.territoryId} · ${panel.label}`);
+      const levelKey = `${panel.level}:${panel.label}`;
+      if (this.el['tp-level'].dataset.key !== levelKey) {
+        this.el['tp-level'].dataset.key = levelKey;
+        this.el['tp-level'].innerHTML = pips({ filled: panel.level, total: 3, label: panel.label, tone: 'threat', attrs: { 'data-tip': panel.label } });
+      }
       const status = this.el['tp-status'];
       if (status.dataset.status !== panel.status) {
         status.dataset.status = panel.status;
@@ -110,7 +116,7 @@ export class ThreatHud {
       if (key !== this.iconsKey) {
         this.iconsKey = key;
         this.el['tp-icons'].innerHTML = panel.installations
-          .map((i) => `<span class="tp-icon" data-alive="${i.alive}" data-engaged="${i.engaged}">${icon(KIND_ICONS[i.kind], 'icon', i.kind)}</span>`)
+          .map((i) => `<span class="tp-icon" data-alive="${i.alive}" data-engaged="${i.engaged}">${icon(KIND_ICONS[i.kind], 'icon', ICON_NAMES[KIND_ICONS[i.kind]])}</span>`)
           .join('');
       }
     }
@@ -124,7 +130,10 @@ export class ThreatHud {
       } else {
         text(this.el['lw-title'], `ROCKET${lock.count > 1 ? ` ×${lock.count}` : ''} · ${Math.round(lock.distance)} m`);
       }
-      width(this.el['lw-bar'], lock.state === 'locking' ? lock.progress : 1);
+      const meter = this.el['lw-meter'];
+      const fill = lock.state === 'locking' ? lock.progress : 1;
+      width(meter.firstElementChild as HTMLElement, fill);
+      attr(meter, 'aria-valuenow', String(Math.round(fill * 100)));
     }
 
     const seen = new Set<string>();

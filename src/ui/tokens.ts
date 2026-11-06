@@ -26,6 +26,8 @@ export const COLOUR_NAMES = [
   'threat-1', 'threat-2', 'threat-3', 'tracking', 'locking', 'firing', 'gold', 'silver', 'bronze',
   // Focus
   'focus', 'focus-glow',
+  // Over the 3D world: text shadows, dark bar tracks, reticles, comic pop words, the tip's bulb
+  'marker-shadow', 'marker-track', 'reticle', 'pop-good', 'pop-bad', 'tip-glow',
   // Tinted chip pairs: background and text
   'chip-good-bg', 'chip-good-fg', 'chip-friend-bg', 'chip-friend-fg', 'chip-hostile-bg', 'chip-hostile-fg',
   'chip-warn-bg', 'chip-warn-fg', 'chip-gold-bg', 'chip-gold-fg', 'chip-streak-bg', 'chip-streak-fg',
@@ -64,6 +66,12 @@ const STANDARD: Palette = {
   bronze: '#b4703c',
   focus: '#f59e0b',
   'focus-glow': 'rgba(245, 158, 11, 0.25)',
+  'marker-shadow': 'rgba(0, 0, 0, 0.6)',
+  'marker-track': 'rgba(0, 0, 0, 0.3)',
+  reticle: 'rgba(255, 255, 255, 0.9)',
+  'pop-good': '#fde047',
+  'pop-bad': '#fca5a5',
+  'tip-glow': '#fde68a',
   'chip-good-bg': '#d9f2e3',
   'chip-good-fg': '#167a41',
   'chip-friend-bg': '#dbe7fd',
