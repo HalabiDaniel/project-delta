@@ -153,6 +153,11 @@ export class DeskHud {
     const was = this.shownPanel;
     this.shownPanel = shown;
     if (was !== 'idle') fm?.closePanel(was === 'build' ? this.el.tray : this.el.drawer);
+    const enter = shown === 'build' ? this.el.tray : shown !== 'idle' ? this.el.drawer : null;
+    if (enter) {
+      enter.dataset.enter = '';
+      window.setTimeout(() => delete enter.dataset.enter, 260);
+    }
     if (shown === 'build') fm?.openPanel(this.el.tray);
     else if (shown !== 'idle') fm?.openPanel(this.el.drawer);
   }
@@ -254,7 +259,7 @@ export class DeskHud {
     const cards = v.cards ?? [];
     const chosen = cards[v.selected];
     const swappable = !!chosen && chosen.slot !== 'event' && !chosen.operation?.active;
-    const key = JSON.stringify(['m', cards.map((c) => [c.title, c.reward, c.threat.level, c.fits.map((f) => `${f.level}${f.selected}`), c.target, c.operation?.stage, c.expires !== null ? Math.ceil(c.expires) : null]), v.selected, v.swaps, swappable, this.detailsOpen, v.phase]);
+    const key = JSON.stringify(['m', cards.map((c) => [c.title, c.reward, c.threat.level, c.fits.map((f) => `${f.level}${f.selected}`), c.target, c.operation?.stage, c.expires !== null]), v.selected, v.swaps, swappable, this.detailsOpen, v.phase]);
     if (!this.set('drawer', key, () => drawer({
       id: 'missions-drawer',
       title: d.missions,
@@ -264,7 +269,14 @@ export class DeskHud {
       footHtml: kbutton({ label: d.flyMission, icon: 'send', variant: 'primary', size: 'm', block: true, disabled: v.phase === 'desk' && !v.desk.canBuild, attrs: { 'data-act': 'fly', 'data-nav-default': '' } }),
       closeName: T.say.close,
       closeKey: bind('back'),
-    }))) return;
+    }))) {
+      // Countdowns tick in place, so the drawer is not redrawn every second.
+      cards.forEach((c, i) => {
+        const el = this.el.drawer.querySelector(`.m-pick[data-i="${i}"] .m-expires b`);
+        const t = c.expires !== null ? clock(c.expires) : '';
+        if (el && el.textContent !== t) el.textContent = t;
+      });
+    }
   }
 
   private missionCard(c: MissionCardView, i: number, selected: boolean): string {
@@ -284,7 +296,7 @@ export class DeskHud {
       <button type="button" class="m-pick" data-act="pick" data-i="${i}" aria-pressed="${selected}" aria-label="${esc(T.common.dot([c.title, `+${fmt(c.reward)}`]))}">
         <span class="m-head"><span class="m-title">${esc(c.title)}</span>${selected ? kbadge({ label: d.tracking, tone: 'hostile', className: 'm-tracking' }) : glyph({ key: String(i + 1) }, { className: 'pw-key hint-key' })}</span>
         <span class="m-row"><span class="m-target">${c.target ? `<i class="pw-dot" style="--dot:var(--hostile)"></i>${esc(T.common.labelSpaceValue(d.desk, c.target.replace(/^T/, '')))}` : `${icon('offline', 'icon pw-icon')}${esc(d.anywhere)}`}</span>${risk}<b class="m-reward num">+${esc(fmt(c.reward))}${icon('paper', 'icon pw-icon')}</b></span>
-        ${fit ? `<span class="m-fit">${kbadge({ label: fit.label, tone: fit.tone, icon: fit.icon })}${c.expires !== null ? `<span class="m-expires num">${icon('clock', 'icon pw-icon')}${esc(clock(c.expires))}</span>` : ''}</span>` : ''}
+        ${fit ? `<span class="m-fit">${kbadge({ label: fit.label, tone: fit.tone, icon: fit.icon })}${c.expires !== null ? `<span class="m-expires num">${icon('clock', 'icon pw-icon')}<b>${esc(clock(c.expires))}</b></span>` : ''}</span>` : ''}
         ${progress}
       </button>
       ${kbutton({ label: T.say.details, icon: 'more', variant: 'quiet', size: 's', className: `m-more${this.detailsOpen === i ? ' open' : ''}`, attrs: { 'data-act': 'details', 'data-i': String(i), 'aria-expanded': String(this.detailsOpen === i) } })}

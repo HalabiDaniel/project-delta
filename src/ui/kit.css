@@ -34,7 +34,7 @@
 @keyframes pw-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 @keyframes pw-fade { from { opacity: 0; } to { opacity: 1; } }
 /* Reduced motion keeps a short fade (components.css zeroes every animation; these come back as opacity only). */
-:root[data-motion='reduced'] :is(.pw-anim, .pw-drawer, .pw-tray, .pw-toast, .pw-coach, .pw-result) {
+:root[data-motion='reduced'] :is(.pw-anim, [data-enter] > .pw-drawer, [data-enter] > .pw-tray, .pw-toast, .pw-coach, [data-enter] > .pw-result) {
   animation: pw-fade 150ms linear both !important;
   transform: none !important;
 }
@@ -328,8 +328,10 @@ button.pw-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 v
   box-shadow: var(--shadow-hard);
   overflow: hidden;
   pointer-events: auto;
-  animation: pw-in-right var(--pw-dur) var(--pw-ease) both;
 }
+/* Panels slide in once, when they open (not on every redraw). */
+[data-enter] > .pw-drawer { animation: pw-in-right var(--pw-dur) var(--pw-ease) both; }
+[data-enter] > .pw-tray { animation: pw-in var(--pw-dur) var(--pw-ease) both; }
 .pw-drawer-head {
   display: flex;
   align-items: center;
@@ -395,7 +397,6 @@ button.pw-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 v
   background: var(--paper-solid);
   box-shadow: var(--shadow-hard);
   pointer-events: auto;
-  animation: pw-in var(--pw-dur) var(--pw-ease) both;
 }
 .pw-tray-tabs { margin-bottom: var(--space-3); }
 .pw-tray-row { display: flex; gap: var(--space-3); }
@@ -477,11 +478,13 @@ button.pw-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 v
   box-sizing: border-box;
   width: 640px;
   max-width: calc(100vw - 32px);
+  max-height: calc(100vh / var(--fit-scale, 1) - 32px);
+  overflow: hidden;
   padding: var(--space-8) var(--space-8) var(--space-6);
   text-align: center;
   pointer-events: auto;
-  animation: pw-in var(--pw-dur) var(--pw-ease) both;
 }
+[data-enter] > .pw-result { animation: pw-in var(--pw-dur) var(--pw-ease) both; }
 .pw-result-icon { display: grid; place-items: center; width: 56px; height: 56px; box-sizing: border-box; border: var(--pw-border); border-radius: 50%; background: var(--paper-100); }
 .pw-result-icon .pw-icon { width: 28px; height: 28px; }
 .pw-result[data-tone='good'] .pw-result-icon { background: var(--chip-good-bg); color: var(--chip-good-fg); }
@@ -496,7 +499,7 @@ button.pw-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 v
 .pw-tile b { font: 400 var(--f28) / 1 var(--font-display); }
 .pw-tile span { color: var(--ink-3); font: 900 var(--f12) / 1 var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; }
 .pw-result-tip { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 0; color: var(--ink-3); font: 700 var(--f14) / 1.3 var(--font-body); }
-.pw-result-details { width: 100%; max-height: 260px; margin-top: var(--space-3); overflow-y: auto; text-align: left; }
+.pw-result-details { flex: 1 1 auto; width: 100%; min-height: 0; max-height: 260px; margin-top: var(--space-3); overflow-y: auto; text-align: left; }
 .pw-result-foot { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: var(--space-4); padding-top: var(--space-4); border-top: var(--pw-rule); }
 
 /* ---- Coach mark ---------------------------------------------------------------------------------- */

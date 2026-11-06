@@ -107,7 +107,11 @@ export class ResultPanel {
       continueLabel: T.say.continue,
       continueKey: bind('confirm'),
     });
-    if (first) focusManager()?.openPanel(this.el);
+    if (first) {
+      focusManager()?.openPanel(this.el);
+      this.el.dataset.enter = '';
+      window.setTimeout(() => delete this.el.dataset.enter, 260);
+    }
   }
 
   private details(r: ResultView, net: number): string {
