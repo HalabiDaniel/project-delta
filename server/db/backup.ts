@@ -146,7 +146,8 @@ async function drill(liveUrl: string, drillUrl: string, file: string, name: stri
   // Players may have played since the dump: a few more rows live is fine, fewer is not.
   const short = Object.entries(restored.tables).filter(([t, n]) => n === 0 && live.tables[t] > 0 || n > live.tables[t]);
   const same = JSON.stringify(live) === JSON.stringify(restored);
-  const ok = short.length === 0 && restored.tables.players > 0;
+  // A game nobody has joined yet restores as empty, which is right; players lost on the way are not.
+  const ok = short.length === 0 && (restored.tables.players > 0 || live.tables.players === 0);
   log(ok ? 'info' : 'error', 'drill.done', { backup: name, ok, identical: same, live: live.tables, restored: restored.tables, livePaper: live.paper, restoredPaper: restored.paper, restoredPlayer: restored.player, livePlayer: same ? undefined : live.player });
   return ok;
 }
