@@ -4,7 +4,9 @@
  *
  *   npm run ui:shots                      (dev server on a free port, all views and sizes)
  *   npm run ui:shots -- --out docs/checkpoints/0.0.15-ui-baseline
- *   npm run ui:shots -- --url http://localhost:5173/ --only 1080p
+ *   npm run ui:shots -- --url http://localhost:5173/ --only screens,4k-m,1080p-s
+ *
+ * `--only` takes a list: `screens` (every screen at 1080p) and `<size>-<hud size>` entries.
  *
  * Every screen at the 1080p reference size and HUD size M; the desk and flight at every target
  * resolution of plan §7 and at HUD sizes S and L. Software rendering (SwiftShader), so it is slow
@@ -25,7 +27,9 @@ const flag = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 const OUT = resolve(ROOT, flag('out', 'tools/out/ui-shots'));
-const ONLY = flag('only', null);
+const ONLY = flag('only', null)?.split(',') ?? null;
+const wanted = (key) => !ONLY || ONLY.includes(key);
+const failed = [];
 let url = flag('url', null);
 
 const SIZES = {
@@ -91,14 +95,14 @@ async function fly(page) {
     window.paperwars.dismissWelcome();
     window.paperwars.build();
   });
-  await page.waitForFunction(() => window.paperwars.state.phase === 'ready', null, { timeout: 60000 });
+  await page.waitForFunction(() => window.paperwars.state.phase === 'ready', null, { timeout: 300000 });
   await game(page, () => window.paperwars.launch());
   await page.waitForTimeout(3500);
 }
 
 try {
   // Every screen at the reference size.
-  if (!ONLY || ONLY === '1080p') {
+  if (wanted('screens')) {
     console.log('1080p, HUD M: every screen');
     const page = await open('1080p');
     await shot(page, '1080p-01-desk-welcome');
@@ -121,7 +125,7 @@ try {
     await game(page, () => window.paperwars.build());
     await page.waitForTimeout(600);
     await shot(page, '1080p-07-folding');
-    await page.waitForFunction(() => window.paperwars.state.phase === 'ready', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.paperwars.state.phase === 'ready', null, { timeout: 300000 });
     await shot(page, '1080p-08-ready');
     await game(page, () => window.paperwars.launch());
     await page.waitForTimeout(3500);
@@ -147,13 +151,19 @@ try {
     ['1080p', 1.15, 'l'],
   ];
   for (const [size, scale, label] of matrix) {
-    if (ONLY && ONLY !== size) continue;
+    if (!wanted(`${size}-${label}`)) continue;
     console.log(`${size}, HUD ${label.toUpperCase()}`);
+    // One size failing (a slow fold under software rendering) doesn't stop the others.
     const page = await open(size, scale);
-    await game(page, () => window.paperwars.dismissWelcome());
-    await shot(page, `${size}-hud-${label}-desk`);
-    await fly(page);
-    await shot(page, `${size}-hud-${label}-flight`);
+    try {
+      await game(page, () => window.paperwars.dismissWelcome());
+      await shot(page, `${size}-hud-${label}-desk`);
+      await fly(page);
+      await shot(page, `${size}-hud-${label}-flight`);
+    } catch (e) {
+      console.warn(`  FAILED ${size}-${label}: ${e.message.split('\n')[0]}`);
+      failed.push(`${size}-${label}`);
+    }
     await page.close();
   }
 } finally {
@@ -161,3 +171,7 @@ try {
   server?.kill();
 }
 console.log(`${shots.length} screenshots in ${OUT}`);
+if (failed.length) {
+  console.log(`failed: ${failed.join(',')} (re-run with --only ${failed.join(',')})`);
+  process.exitCode = 1;
+}
