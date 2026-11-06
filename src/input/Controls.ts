@@ -10,7 +10,9 @@
  *
  * Which controller button means which action depends on where the player is (`context`): in
  * flight the triggers fire, at home they cycle the mission cards and the D-pad moves the
- * highlight through the HUD's buttons (see FocusNav). The keyboard keeps its v0.0.10 keys.
+ * highlight through the HUD's buttons (the focus manager, FocusNav.ts). The keyboard keeps its
+ * v0.0.10 keys; outside flight the arrow keys also move the highlight (no game key uses them),
+ * and once they have, Enter presses it, Q / E switch tabs and PageUp / PageDown scroll lists.
  * The default controller mapping is in docs/roadmap/v0.0.11.md section 7C; rebinding is v0.0.17.
  */
 
@@ -18,7 +20,7 @@ import {
   NavRepeater, PAD_DEFAULTS, STICK, clamp, padAimAssist, shapeStick, smooth, stickDirection, stickToMouse,
   type AimState, type AssistTarget, type FlightLimits, type NavDirection, type PadTuning, type Stick,
 } from './analog';
-import { FocusNav } from './FocusNav';
+import { FocusManager } from './FocusNav';
 import { GamepadSource, padActive, type PadButton, type PadEvent, type PadFamily } from './Gamepad';
 import { applyGlyphs, padControlLabels } from './glyphs';
 import { setControlLabels } from '../ui/controlLabels';
@@ -70,6 +72,11 @@ export const PAD_HOLD: Readonly<Record<InputContext, Partial<Record<PadButton, A
   flight: { rt: 'firePrimary', rb: 'boost', lb: 'modifier', north: 'hints', view: 'scoreboard' },
   home: { view: 'scoreboard' },
   menu: {},
+};
+
+/** Keys the focus manager owns outside flight (none is in KEYMAP). */
+export const NAV_KEYS: Readonly<Record<string, NavDirection | 'pageUp' | 'pageDown'>> = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', PageUp: 'pageUp', PageDown: 'pageDown',
 };
 
 /** The mouse buttons as actions. */
@@ -128,7 +135,7 @@ export function tuningFor(s: PadSettings): PadTuning {
 
 export class Controls {
   readonly pad: GamepadSource;
-  readonly nav: FocusNav;
+  readonly nav: FocusManager;
   context: InputContext = 'home';
   /** Whether the HUD's buttons can be navigated with the controller right now. */
   navigable = true;
@@ -148,6 +155,8 @@ export class Controls {
   private steerStick: Stick = { x: 0, y: 0 };
   private lookState: Stick = { x: 0, y: 0 };
   private glyphFamily: PadFamily | null = null;
+  /** The arrow keys have moved the highlight since the mouse was last used. */
+  private keyNav = false;
   private glyphsDirty = true;
 
   constructor(
@@ -156,17 +165,22 @@ export class Controls {
     pad?: GamepadSource,
   ) {
     this.pad = pad ?? new GamepadSource();
-    this.nav = new FocusNav(this.hudRoot);
+    this.nav = new FocusManager(this.hudRoot);
     input.onKeyDown((code) => {
       this.use('keyboard');
+      if (this.navKey(code)) return;
       const action = KEYMAP[code];
       if (action) this.emit(action, 'keyboard');
     });
     input.onCanvasClick((button) => {
       this.use('keyboard');
+      this.keyNav = false;
       if (button === MOUSE_RIGHT) this.emit('fireSecondary', 'keyboard');
     });
-    input.onMouseMove(() => this.use('keyboard'));
+    input.onMouseMove(() => {
+      this.use('keyboard');
+      this.keyNav = false;
+    });
     this.pad.onEvent((e) => {
       for (const h of this.padHandlers) h(e);
       if (e.kind === 'disconnected' && this.pad.connected === 0) this.use('keyboard');
@@ -212,18 +226,34 @@ export class Controls {
   update(dt: number): void {
     const s = this.pad.poll();
     if (s && padActive(s)) this.use('gamepad');
-    const navOn = this.dev === 'gamepad' && this.context !== 'flight' && this.navigable;
+    if (this.context === 'flight') this.keyNav = false;
+    const navOn = this.navOn;
     this.nav.setActive(navOn);
     if (this.screen !== this.lastScreen) {
       this.lastScreen = this.screen;
-      this.nav.reset();
+      // Flight starts clean; menus and panels opened from the desk return to their opener.
+      if (this.context === 'flight') this.nav.clearHistory();
+      this.nav.reset(this.screen);
     }
     this.nav.update();
     if (s) {
+      const used = new Set<PadButton>();
+      if (navOn && this.dev === 'gamepad') {
+        // Shoulders switch tabs and triggers scroll long lists where the screen has them; Y shows
+        // the highlighted control's tooltip in menus. Otherwise the buttons keep their meaning.
+        const inMenu = this.context === 'menu';
+        if (this.pad.justPressed('lb') && this.nav.switchTab(-1)) used.add('lb');
+        if (this.pad.justPressed('rb') && this.nav.switchTab(1)) used.add('rb');
+        if (this.pad.justPressed('lt') && this.nav.page(-1, inMenu)) used.add('lt');
+        if (this.pad.justPressed('rt') && this.nav.page(1, inMenu)) used.add('rt');
+        if (inMenu && this.pad.justPressed('north') && this.nav.info()) used.add('north');
+      }
       for (const [button, action] of Object.entries(PAD_PRESS[this.context]) as Array<[PadButton, Action]>) {
-        if (!this.pad.justPressed(button)) continue;
+        if (!this.pad.justPressed(button) || used.has(button)) continue;
         // A presses the highlighted button when there is one; otherwise it is the plain confirm.
         if (action === 'confirm' && this.nav.active && this.nav.press()) continue;
+        // B cancels an open dialog before it means anything to the game.
+        if (action === 'back' && this.nav.back()) continue;
         this.emit(action, 'gamepad');
       }
     }
@@ -252,6 +282,36 @@ export class Controls {
       y: this.lookState.y + (clamp(lookRaw.y * this.tuning.lookSensitivity, -1, 1) - this.lookState.y) * k,
     };
     this.refreshGlyphs();
+  }
+
+  /** Whether the highlight is on: controller, or arrow keys, at a screen outside flight. */
+  get navOn(): boolean {
+    return (this.dev === 'gamepad' || this.keyNav) && this.context !== 'flight' && this.navigable;
+  }
+
+  /**
+   * Keys for the focus manager. Arrows move the highlight (and turn it on); once on, Enter
+   * presses it, Q / E switch tabs where there are tabs and PageUp / PageDown scroll. Returns true
+   * when the key was used up (the game does not see it).
+   */
+  private navKey(code: string): boolean {
+    if (this.context === 'flight' || !this.navigable) return false;
+    const nav = NAV_KEYS[code];
+    if (nav === 'pageUp' || nav === 'pageDown') return this.nav.page(nav === 'pageUp' ? -1 : 1, this.context === 'menu');
+    if (nav) {
+      // The first press shows the highlight on the screen's main control; later ones move it.
+      const showing = this.nav.active && this.nav.focused !== null;
+      this.keyNav = true;
+      this.nav.setActive(true);
+      this.nav.update();
+      if (showing) this.nav.move(nav);
+      return true;
+    }
+    if (!this.keyNav || !this.nav.active) return false;
+    if (code === 'Enter' || code === 'NumpadEnter') return this.nav.press();
+    if (code === 'KeyQ') return this.nav.switchTab(-1);
+    if (code === 'KeyE') return this.nav.switchTab(1);
+    return false;
   }
 
   /** Is the action held on any device? */

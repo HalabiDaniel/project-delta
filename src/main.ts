@@ -1,10 +1,16 @@
 import { Game } from './Game';
+import { applyTokens, systemTokenOptions } from './ui/tokens';
+
+// The design tokens on :root before anything draws (src/ui/tokens.ts, docs/DESIGN_SYSTEM.md).
+applyTokens(document.documentElement, systemTokenOptions());
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hudRoot = document.getElementById('hud') as HTMLElement;
 // Multiplayer: ?mp, or an invite link (…/?invite=CODE) straight into the lobby.
 const query = new URLSearchParams(window.location.search);
 const multiplayer = query.has('mp') || query.has('invite');
+// The design system gallery (?ui-gallery): every component in every state, no game.
+const gallery = query.has('ui-gallery');
 
 function bootError(error: unknown): void {
   console.error(error);
@@ -19,7 +25,12 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureConte
   navigator.serviceWorker.register(`./model-cache.js?v=${encodeURIComponent(__APP_VERSION__)}`).catch(() => {});
 }
 
-if (multiplayer) {
+if (gallery) {
+  canvas.hidden = true;
+  import('./ui/gallery/Gallery')
+    .then(({ mountGallery }) => mountGallery(document.body))
+    .catch((error) => console.error(error));
+} else if (multiplayer) {
   // Multiplayer: the shared classroom, loaded only when asked for.
   import('./mp/MultiplayerGame')
     .then(({ MultiplayerGame }) => MultiplayerGame.create(canvas, hudRoot))

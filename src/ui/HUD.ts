@@ -17,6 +17,8 @@ import { ThreatHud } from './ThreatHud';
 import type { HudActions, HudView } from './views';
 import { WorldLabels } from './WorldLabels';
 import './hud.css';
+// The design system's shared rules: the focus ring, the focus tooltip, reduced motion, components.
+import './components.css';
 
 export type { ScreenPoint } from './dom';
 export type * from './views';

@@ -2,50 +2,15 @@
  * paperwars.io HUD — one style for every screen.
  * Panels are cut card stock with a folded corner, ink-navy icons and tabular numbers. Colours have
  * fixed meanings: blue friendly, red hostile, amber warning, green good, grey off. Everything is
- * built from the tokens below and a few shared components (card, chip, tag, button, bar, stat,
+ * built from the design tokens (src/ui/tokens.ts) and a few shared components (card, chip, tag, button, bar, stat,
  * pips, keycap). Zones scale with the HUD size setting, each from its own corner.
  */
 
-/* ---- Tokens --------------------------------------------------------------------------------- */
+/* ---- Tokens: see src/ui/tokens.ts ------------------------------------------------------------ */
+/* The tokens (colours, spacing, radius, type, elevation, motion, focus) come from src/ui/tokens.ts,
+   written on :root by applyTokens() at boot. --ui-scale (HUD size) is set on .hud by HUD.setScale and
+   --fit-scale (resolution) by HUD.ts; both fall back to 1. See docs/DESIGN_SYSTEM.md. */
 .hud {
-  --paper: rgba(251, 248, 241, 0.93);
-  --paper-solid: #fbf8f1;
-  --paper-2: #efe8d9;
-  --edge: #ddd2bb;
-  --ink: #1d2747;
-  --ink-2: #4a5373;
-  --ink-3: #8a90a6;
-  --friend: #2f6fe4;
-  --hostile: #d6372e;
-  --warn: #df8f14;
-  --good: #1f9d55;
-  --off: #a3a6b1;
-  --gold: #c9940f;
-  --silver: #8a93a6;
-  --bronze: #b4703c;
-  --threat-1: #d7a40b;
-  --threat-2: #e8761a;
-  --threat-3: #d6372e;
-  --tracking: #f59e0b;
-  --locking: #a855f7;
-  --firing: #d6372e;
-  --r: 10px;
-  --r-s: 7px;
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --t-xl: 30px;
-  --t-l: 21px;
-  --t-m: 15px;
-  --t-s: 12px;
-  --shadow: 0 1px 0 rgba(29, 39, 71, 0.05), 0 6px 18px rgba(29, 39, 71, 0.16);
-  --shadow-lift: 0 2px 0 rgba(29, 39, 71, 0.06), 0 10px 26px rgba(29, 39, 71, 0.22);
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --num: ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif;
-  --fast: 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
-  --ui-scale: 1;
-
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -61,7 +26,7 @@
 
 /* ---- Layout: fixed zones -------------------------------------------------------------------- */
 .world-layer { position: absolute; inset: 0; }
-.zone { position: absolute; display: flex; gap: var(--s2); transform: scale(calc(var(--ui-scale) * var(--fit-scale, 1))); }
+.zone { position: absolute; display: flex; gap: var(--s2); transform: scale(calc(var(--ui-scale, 1) * var(--fit-scale, 1))); }
 .zone-tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; transform-origin: top left; }
 .zone-tc { top: 14px; left: 50%; translate: -50% 0; width: min(560px, 44vw); flex-direction: column; align-items: center; transform-origin: top center; }
 .zone-tr { top: 14px; right: 14px; flex-direction: column; align-items: flex-end; transform-origin: top right; }
@@ -1003,7 +968,7 @@
 .perf-overlay { position: fixed; left: 8px; bottom: 8px; z-index: 50; padding: 6px 8px; border-radius: 6px; background: rgba(20, 24, 40, 0.78); color: #e8eefc; font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; pointer-events: none; }
 
 /* ---- Controller (v0.0.11): the highlight, hints that follow the device, and hover info -------- */
-.pad-focus { outline: 3px solid #f59e0b !important; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.25) !important; position: relative; z-index: 2; }
+/* The focus ring (.pad-focus) and the focus tooltip (.pad-tip) are in components.css, from the focus tokens. */
 kbd.pad-hidden { display: none !important; }
 .pad-only { display: none !important; }
 body.pad-mode .controls.pad-only { display: grid !important; grid-template-columns: repeat(3, 1fr); }
@@ -1012,10 +977,6 @@ body.pad-mode .kbd-only { display: none !important; }
 body.pad-mode .econ .econ-safe { display: inline-flex; }
 .econ:focus-within .econ-safe { display: inline-flex; }
 .pad-key { display: inline-block; min-width: 42px; padding: 0 4px; border-radius: 9px; background: #1f2937; color: #fff; font-size: 10px; text-align: center; }
-.pad-tip {
-  position: fixed; z-index: 60; max-width: 260px; padding: 4px 8px; border-radius: 6px; pointer-events: none;
-  background: rgba(31, 41, 55, 0.92); color: #fff; font: 600 12px/1.35 system-ui, sans-serif;
-}
 
 /* ---- v0.0.11: tutorial, home dashboard, clearer reports ------------------------------------- */
 .tutorial { display: grid; gap: 4px; width: min(480px, 42vw); padding: 8px 12px; border-left: 4px solid var(--friend); }
