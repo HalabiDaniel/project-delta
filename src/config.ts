@@ -167,6 +167,11 @@ export interface AircraftSpec {
   cost: number;
   /** Re-creasing (and repairing) one that landed safely. */
   refitCost: number;
+  /**
+   * Seconds to fold a new one; `PLANE.buildTime` if not set. A refit takes `PLANE.refitTime`
+   * scaled the same way (aircraft/Aircraft.ts `buildDuration`). Since v0.0.15.
+   */
+  buildTime?: number;
   tagline: string;
   flight: FlightProfile;
   maxHealth: number;
@@ -321,20 +326,25 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     inspiration: 'B-52 Stratofortress',
     shape: 'widewing',
   },
-  // ---- v0.0.11: the rest of the roster built so far. Stats are first guesses for playtesting. ----
+  // ---- v0.0.15: the Raptor's final role and stats. The strongest pure dogfighter: it wins on
+  // energy (the fastest fighter, the best climb, quickest to pick speed back up) and on guns, and
+  // turns slightly wider than the Falcon, which keeps its agility niche. No bombs. The dearest
+  // fighter (above the Jumper, "VTOL fighter", at 70; the Lightning at 80 is a bomb-carrying
+  // multirole, and bombers stay dearest), and the slowest of the fighters to fold.
   raptor: {
     id: 'raptor',
     name: 'Raptor',
     role: 'fighter',
     roleLabel: 'Air superiority',
-    cost: 70,
-    refitCost: 15,
-    tagline: 'The fastest fighter with the heaviest guns. No bombs: it rules the air.',
+    cost: 72,
+    refitCost: 16,
+    buildTime: 3,
+    tagline: 'The fastest fighter, the best climber and the heaviest guns. No bombs: it rules the air.',
     flight: {
       minSpeed: 11, cruiseSpeed: 23, maxSpeed: 36,
-      throttleAccel: 17, speedResponse: 2.6, pitchSpeedEffect: 8,
-      maxTurnRate: 1.7, maxPitchRate: 1.45, aimGain: 3.4, rollResponse: 8, pitchResponse: 7, maxBank: 62 * DEG,
-      boostSpeed: 15, boostResponse: 5.5, boostDuration: 1.3, boostCooldown: 3.2,
+      throttleAccel: 18, speedResponse: 2.8, pitchSpeedEffect: 6.5,
+      maxTurnRate: 1.75, maxPitchRate: 1.45, aimGain: 3.4, rollResponse: 8, pitchResponse: 7, maxBank: 62 * DEG,
+      boostSpeed: 15, boostResponse: 5.5, boostDuration: 1.4, boostCooldown: 3.2,
       collisionRadius: 0.85,
     },
     maxHealth: 120,
@@ -348,6 +358,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     inspiration: 'F-22',
     shape: 'falcon',
   },
+  // ---- v0.0.11: the rest of the roster built so far. Stats are first guesses for playtesting. ----
   lightning: {
     id: 'lightning',
     name: 'Lightning',
@@ -832,6 +843,7 @@ export interface PilotSkill {
  */
 export const AI: {
   roles: Record<AiRole, AircraftId>;
+  designs: Record<AiRole, readonly AircraftId[]>;
   roleLabels: Record<AiRole, string>;
   skill: Record<Difficulty, PilotSkill>;
   accuracy: { distance: number; speed: number; manoeuvre: number; unsettled: number; settle: number };
@@ -863,6 +875,12 @@ export const AI: {
 } = {
   /** The plan's line-up: Dart scouts, Falcon fighters, Widewing bombers. */
   roles: { scout: 'dart', fighter: 'falcon', bomber: 'widewing' },
+  /**
+   * The designs the mission director may order for each role (`AiOrders.aircraft`); anything else
+   * flies the role's default above. Bombers need a bomb bay, so the Raptor only ever flies as a
+   * fighter (v0.0.15).
+   */
+  designs: { scout: ['dart'], fighter: ['falcon', 'raptor'], bomber: ['widewing'] },
   roleLabels: { scout: 'Scout', fighter: 'Fighter', bomber: 'Bomber' },
   skill: {
     easy: {

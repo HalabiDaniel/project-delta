@@ -1,5 +1,7 @@
+import { bar, button, card, glyph } from './components';
 import { bindButton, esc, toggle } from './dom';
 import { icon } from './icons';
+import { SAY, T } from './strings';
 import type { TutorialView } from './views';
 
 /**
@@ -12,18 +14,14 @@ export class TutorialPanel {
   private key = '';
 
   constructor(host: HTMLElement, onSkip: () => void) {
-    this.el = document.createElement('div');
-    this.el.className = 'tutorial card';
+    host.insertAdjacentHTML('beforeend', card({
+      className: 'tutorial', label: SAY.tutorial, tone: 'friend',
+      bodyHtml: `<div class="tu-body"></div>${button({ label: T.tutorial.skip, size: 'small', className: 'tu-skip', attrs: { 'data-nav': 'tutorial-skip' } })}`,
+    }));
+    this.el = host.lastElementChild as HTMLElement;
     this.el.hidden = true;
-    this.body = document.createElement('div');
-    this.body.className = 'tu-body';
-    const skip = document.createElement('button');
-    skip.className = 'btn tiny ghost tu-skip';
-    skip.dataset.nav = 'tutorial-skip';
-    skip.textContent = 'Skip tutorial';
-    bindButton(skip, onSkip);
-    this.el.append(this.body, skip);
-    host.appendChild(this.el);
+    this.body = this.el.querySelector<HTMLElement>('.tu-body')!;
+    bindButton(this.el.querySelector<HTMLElement>('.tu-skip')!, onSkip);
   }
 
   render(v: TutorialView | null, hidden: boolean): void {
@@ -32,12 +30,13 @@ export class TutorialPanel {
     const key = JSON.stringify(v);
     if (key === this.key) return;
     this.key = key;
-    const keys = v.keys.map((k) => `<kbd>${esc(k)}</kbd>`).join('');
+    // The labels already name the device's controls (controlLabel): shown as written.
+    const keys = v.keys.map((k) => glyph({ key: k }, { literal: true })).join('');
     this.body.innerHTML =
-      `<div class="tu-head">${icon('tip', 'icon tu-icon')}<span class="tu-count">${v.step} / ${v.total}</span><b class="tu-title">${esc(v.title)}</b></div>` +
+      `<div class="tu-head">${icon('tip', 'icon tu-icon')}<span class="tu-count num">${v.step} / ${v.total}</span><b class="tu-title">${esc(v.title)}</b></div>` +
       `<div class="tu-text">${esc(v.text)}</div>` +
       (keys ? `<div class="tu-keys">${keys}</div>` : '') +
-      `<div class="tu-progress"><i style="width:${Math.round(((v.step - 1) / v.total) * 100)}%"></i></div>`;
+      bar({ value: (v.step - 1) / v.total, label: SAY.tutorial, valueText: `${v.step} / ${v.total}`, kind: 'progress', size: 'thin', className: 'tu-progress' });
     this.el.classList.remove('advance');
     void this.el.offsetWidth;
     this.el.classList.add('advance');

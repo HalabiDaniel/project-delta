@@ -508,12 +508,18 @@ export type NetEvent =
   /** The kill feed: a player shot something down, or was shot down. */
   | { t: 'kill'; killer: string | null; killerName: string; victim: string; victimName: string; weapon: Weapon; assists: string[]; bomber: boolean }
   | { t: 'emote'; o: string; e: Emote }
-  /** A note for the HUD's alert strip (private). */
-  | { t: 'note'; icon: string; title: string; value: string | null; tone: 'good' | 'bad' | 'warn' | 'info' }
+  /**
+   * A note for the HUD's alert strip (private). `cue`: the sound (and caption) it stands for, keyed
+   * so the client never reads the wording: a rocket lock, or a raid on the way (v0.0.15 §8D).
+   */
+  | { t: 'note'; icon: string; title: string; value: string | null; tone: 'good' | 'bad' | 'warn' | 'info'; cue?: NoteCue }
   /** Session news for everyone: someone joined, claimed, dropped, came back or left. */
   | { t: 'news'; text: string; tone: 'good' | 'bad' | 'info' }
   /** An installation was wrecked or rebuilt. */
   | { t: 'inst'; id: string; wrecked: boolean };
+
+/** The sounds a note can stand for. */
+export type NoteCue = 'lock' | 'raid';
 
 /** Rounds a vector for the wire (centimetre precision is plenty for effects). */
 export function vec(x: number, y: number, z: number): number[] {

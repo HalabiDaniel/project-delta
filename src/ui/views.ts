@@ -1,4 +1,5 @@
-import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
+import type { GraphicsPreset } from '../render/GraphicsSettings';
+import type { AccessSettings } from './access';
 import type { RatingKey, SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
@@ -252,11 +253,11 @@ export interface SettingsView {
   muted: boolean;
   hints: HintMode;
   uiScale: number;
+  /** Colour palette, text size, contrast, motion, captions, 16:9 safe area (src/ui/access.ts). */
+  access: AccessSettings;
   graphics: {
     /** The preset, or null once something was changed from it. */
     preset: GraphicsPreset | null;
-    outlines: OutlineChoice;
-    intensity: number;
   };
 }
 
@@ -267,6 +268,22 @@ export interface MenuView {
   /** Multiplayer: the transfer code to type on another computer, while it is valid. */
   transfer?: { code: string; minutes: number } | null;
   confirmingReset: boolean;
+}
+
+/**
+ * A resource beyond paper, for the economy strip (v0.0.20 adds ink and rubber balls): one more row
+ * of the same shape, no layout change.
+ */
+export interface ResourceView {
+  id: string;
+  icon: IconName;
+  /** Its name (tooltip, screen readers). */
+  label: string;
+  amount: number;
+  /** Storage limit, or null when there is none. */
+  capacity: number | null;
+  /** Per minute. */
+  rate?: number;
 }
 
 /** Paper, production and storage: the economy strip, top left. */
@@ -282,6 +299,8 @@ export interface EconomyView {
   streak: number;
   /** Structures on T1 that need repairs. */
   repairs: number;
+  /** Further resources, after paper (optional; none yet). */
+  resources?: ResourceView[];
 }
 
 /** The desk's main action: fold, refit or roll out the chosen plane, then launch. */
@@ -489,9 +508,9 @@ export interface HudActions {
   toggleSound(): void;
   setHints(mode: HintMode): void;
   setUiScale(scale: number): void;
+  /** Changes some of the accessibility settings (applied live, saved). */
+  setAccess(patch: Partial<AccessSettings>): void;
   setGraphicsPreset(preset: GraphicsPreset): void;
-  setOutlines(choice: OutlineChoice): void;
-  setOutlineIntensity(intensity: number): void;
   toggleBase(): void;
   /** Ends the tutorial for good (it can be restarted from the menu). */
   skipTutorial(): void;

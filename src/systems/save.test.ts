@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ACCESS } from '../ui/access';
 import { footprint } from '../combat/Collision';
 import { layoutTargetRange } from '../combat/Destructibles';
 import { AIRCRAFT, AIRCRAFT_ORDER, STARTER_AIRCRAFT, type AircraftId } from '../config';
@@ -42,7 +43,7 @@ function sample(): SaveData {
       byAircraft: [['falcon', { sorties: 1, successes: 1, lost: 0, spent: 25, earned: 80 }]],
       byType: [['dogfight', { sorties: 1, successes: 1, lost: 0, spent: 25, earned: 80 }]],
     },
-    settings: { muted: true, dev: false, hints: 'off', uiScale: 1.15, tips: ['desk', 'flight'] },
+    settings: { muted: true, dev: false, hints: 'off', uiScale: 1.15, tips: ['desk', 'flight'], access: { ...DEFAULT_ACCESS, palette: 'colourblind', textScale: 1.3, motion: 'reduced' } },
     lastSession: { ...emptySession(9), missionsCompleted: 3 },
     base: {
       buildings: [
@@ -144,6 +145,15 @@ describe('validateSave', () => {
     expect(problems.length).toBeGreaterThan(4);
   });
 
+  it('keeps the accessibility settings and repairs unknown ones field by field (phase 7)', () => {
+    const raw = JSON.parse(JSON.stringify(sample()));
+    expect(validateSave(raw, [])!.settings.access).toEqual({ ...DEFAULT_ACCESS, palette: 'colourblind', textScale: 1.3, motion: 'reduced' });
+    raw.settings.access = { palette: 'sepia', textScale: 2, highContrast: 'yes', motion: 'full', captions: 'on', safeArea: false };
+    expect(validateSave(raw, [])!.settings.access).toEqual({ ...DEFAULT_ACCESS, motion: 'full', captions: 'on', safeArea: false });
+    raw.settings.access = 'junk';
+    expect(validateSave(raw, [])!.settings.access).toEqual(DEFAULT_ACCESS);
+  });
+
   it("keeps world events' missions in the history and records", () => {
     const raw = JSON.parse(JSON.stringify(sample()));
     raw.director.history.push({ at: 1, kind: 'offered', type: 'shipment', tier: 'medium', title: 'Paper shipment on T3', slot: 'event', source: 'event' });
@@ -177,7 +187,7 @@ describe('validateSave', () => {
     const data = validateSave(migrate(old, problems), problems)!;
     expect(data.version).toBe(SAVE_VERSION);
     expect(data.base!.buildings.map((b) => [b.slot, b.kind, b.level])).toEqual([['D1', 'turret', 1], ['D2', 'turret', 1]]);
-    expect(data.settings).toEqual({ muted: false, dev: false, hints: 'auto', uiScale: 1, tips: [] });
+    expect(data.settings).toEqual({ muted: false, dev: false, hints: 'auto', uiScale: 1, tips: [], access: DEFAULT_ACCESS });
   });
 
   it('a v0.0.10 save (version 2) from before the re-roling loads: ids kept, the emergency Dart becomes the emergency Swift', async () => {

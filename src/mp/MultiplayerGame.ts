@@ -37,9 +37,14 @@ import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } fro
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
 import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/GameState';
 import { Input } from '../systems/Input';
+import { T, TIP_TEXT } from '../ui/strings';
+import { paper } from '../ui/format';
+
+import { confirmOpen } from '../ui/confirm';
+import { normaliseAccess, type AccessSettings } from '../ui/access';
 import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
 import { ResourceManager } from '../systems/ResourceManager';
-import { HUD } from '../ui/HUD';
+import { HUD, type HintMode } from '../ui/HUD';
 import type { IconName } from '../ui/icons';
 import { Sounds } from '../ui/Sounds';
 import { AircraftModels, type ShownAircraft } from '../world/AircraftModels';
@@ -53,21 +58,28 @@ import { territoryFacing, territoryLayout } from '../world/territories/decor';
 import { Dressing, type Ownership } from '../world/territories/Dressing';
 import { buildSharedScene, type SharedScene, type World } from '../world/WorldGenerator';
 import { AssetLibrary } from '../assets/AssetLibrary';
-import { installOutlines, type OutlineRenderer } from '../render/outline/OutlineRenderer';
 import { instanceScenery, type Instancer } from '../render/Instancer';
 import { LoadingScreen } from '../ui/LoadingScreen';
-import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
+import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
 import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
 import { FeedbackForm } from './FeedbackForm';
 import { Lobby, type ClaimView } from './Lobby';
-import { MpHud, type MpHudView, type ScoreRow } from './MpHud';
+import { MpHud, type IncomingView, type MpHudView, type ScoreRow, type TerritoryTagView } from './MpHud';
+import { loadMpSettings, saveMpSettings, type MpSettings } from './MpSettings';
+import { presenceOf } from './presence';
+import { deskLabel } from '../net/Username';
+import { ConfirmDialog } from '../ui/components';
+import { DIALOG_KEYS } from '../input/glyphs';
+import { UI_SCALES } from '../systems/SaveGame';
 import { NetBase } from './NetBase';
 import { NetClient } from './NetClient';
 import { MpViews } from './MpViews';
-import './mp.css';
+
+/** What a player is doing, by the phase number the server sends. */
+const PHASE_WORDS: readonly string[] = (({ desk, building, ready, flying, landed, result, down }) => [desk, building, ready, flying, landed, result, down])(T.mpGame.phase);
 
 const STEP = NET.step;
 /** An emote shows over the plane this long (seconds). */
@@ -184,7 +196,11 @@ export class MultiplayerGame {
   claimError: string | null = null;
   /** While we have no username yet: what to offer in the prompt, and why the last one wasn't given. */
   usernameNeeded: { value: string; note: string | null } | null = null;
-  roomTitle = 'Classroom';
+  roomTitle = T.mpGame.classroom;
+  /** HUD size and key hints, kept in this browser (v0.0.15 phase 5; single-player keeps them in its save). */
+  settings: MpSettings = loadMpSettings();
+  /** "Server lost" (v0.0.15): the standard dialog over the session list. */
+  private readonly lostDialog = new ConfirmDialog();
   /** The last session's results (v0.0.13), shown until the player moves on, and who we were in it. */
   results: SessionResultsDTO | null = null;
   private resultsMe: string | null = null;
@@ -212,7 +228,6 @@ export class MultiplayerGame {
   private lastPhase: GamePhase | null = null;
   private lastPaper = -1;
   private touchTimer = 0;
-  private outlines: OutlineRenderer | null = null;
   private lastStateTime = -1;
   private resumed = false;
   /** The interactive tutorial; its progress lives on the player's record on the server. */
@@ -254,7 +269,9 @@ export class MultiplayerGame {
   readonly controls: Controls;
 
   private inputContext(): InputContext {
-    if (!this.room || this.lobby.open || this.paused || !this.state) return 'menu';
+    // A confirm dialog (End sortie, Leave, Remove…) or the server-lost dialog owns the controller:
+    // A and B answer it and no other button reaches the game (as in single-player).
+    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -274,7 +291,6 @@ export class MultiplayerGame {
     const textures = new TextureBank(device);
     new PaperShading(device, textures);
     installMaterials(new MaterialLibrary(textures));
-    const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
     const loading = new LoadingScreen();
     await assets.preload(undefined, (p) => loading.progress(p));
@@ -298,18 +314,17 @@ export class MultiplayerGame {
       resume: () => game?.resume(),
       swap: () => game?.send({ a: 'swap' }),
       abandonOperation: () => undefined,
-      openLogbook: () => game?.hud.alert('book', 'Not in multiplayer', null, 'info', 1.6),
+      openLogbook: () => game?.hud.alert('book', T.mpGame.notInMultiplayer, null, 'info', 1.6),
       openMenu: () => game?.pause(),
       resetProgress: () => game?.leaveSession(),
       moveDevice: () => game?.net.requestTransfer(),
       openFeedback: () => game?.feedback.show(),
       dismissWelcome: () => undefined,
       toggleSound: () => game?.toggleSound(),
-      setHints: () => undefined,
-      setUiScale: (scale) => game?.hud.setScale(scale),
+      setHints: (mode) => game?.setHints(mode),
+      setUiScale: (scale) => game?.setUiScale(scale),
+      setAccess: (patch) => game?.setAccess(patch),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
-      setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
-      setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
       restartTutorial: () => game?.tutorial.restart(),
@@ -326,7 +341,11 @@ export class MultiplayerGame {
         remove: () => game?.baseAction((m) => m.remove()),
       },
     });
-    const mpHud = new MpHud(hudRoot);
+    const mpHud = new MpHud(
+      hudRoot,
+      { tl: hud.zone('tl'), tc: hud.zone('tc'), tr: hud.zone('tr'), centre: hud.zone('centre') },
+      { emote: (e) => game?.net.emote(e), intercept: () => game?.intercept() },
+    );
     const lobby = new Lobby(hudRoot, {
       quick: (name) => void game?.enter(() => game!.net.quickJoin(name)),
       join: (name, id) => void game?.enter(() => game!.net.join(id, name)),
@@ -371,7 +390,6 @@ export class MultiplayerGame {
       assets,
       network,
     );
-    game.outlines = outlines;
     // The playtest feedback log (v0.0.14): F8, or Feedback in the pause menu.
     let pausedBefore = false;
     game.feedback = new FeedbackForm(hudRoot, {
@@ -390,6 +408,9 @@ export class MultiplayerGame {
       game!.feedback.toggle();
     });
     game.setGraphics(game.graphics);
+    hud.setScale(game.settings.uiScale);
+    // Important sounds get a caption (and an arrow toward their source) when captions are on.
+    game.sounds.onCue((name, angle) => hud.caption(name, angle));
     game.bindInput();
     game.tutorial.onChange(() => game!.saveTutorialSoon());
     game.net.onTutorial((record) => {
@@ -402,7 +423,6 @@ export class MultiplayerGame {
     // After the game has moved everything: repeated scenery drawn instanced (v0.0.11).
     game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
     game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
-    app.on('update', () => outlines.update());
     app.start();
     // A refresh lands back in the session if the server still keeps our place.
     void game.start();
@@ -443,11 +463,11 @@ export class MultiplayerGame {
     }
     try {
       const rooms = await this.net.list();
-      this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info', this.net.rtt);
+      this.lobby.showRooms(rooms, this.net.lastError ? T.mpGame.disconnected(this.net.lastError) : T.mpGame.server(this.net.endpoint), this.net.lastError ? 'bad' : 'info', this.net.rtt);
     } catch {
       // A deployed game (VITE_SERVER_URL) never asks the player to start a server.
       const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.net.endpoint);
-      this.lobby.showRooms([], local ? `No server at ${this.net.endpoint}. Start one with: npm run server` : 'No server: the game server can\'t be reached. It may be restarting; try again in a moment.', 'bad');
+      this.lobby.showRooms([], local ? T.mpGame.noLocalServer(this.net.endpoint, 'npm run server') : T.mpGame.noServer, 'bad');
     }
   }
 
@@ -478,7 +498,7 @@ export class MultiplayerGame {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
       if (m.title) this.roomTitle = m.title;
-      if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
+      if (m.reconnected) this.hud.alert('ok', T.mpGame.reconnected, null, 'good', 2);
       if (m.username) {
         this.usernameNeeded = null;
         this.lobby.setName(m.username);
@@ -513,9 +533,9 @@ export class MultiplayerGame {
     });
     room.onMessage('feedback', (m: FeedbackReplyDTO) => {
       this.feedback.reply(m);
-      if (m.ok) this.hud.alert('ok', 'Feedback sent. Thank you!', null, 'good', 2.4);
+      if (m.ok) this.hud.alert('ok', T.mpGame.feedbackSent, null, 'good', 2.4);
     });
-    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? 'The server is restarting', null, 'bad', 6));
+    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? T.mpGame.restarting, null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
     room.onMessage('ev', (events: NetEvent[]) => {
@@ -523,8 +543,8 @@ export class MultiplayerGame {
     });
     room.onMessage('claimed', (m: { ok: boolean; error: string | null; territory: string }) => {
       // Already placed (a reconnect that raced the welcome) is not an error worth showing.
-      this.claimError = m.ok || m.error === 'already claimed' ? null : `Couldn't place your base: ${m.error}`;
-      if (m.ok) this.sounds.play('spotted');
+      this.claimError = m.ok || m.error === 'already claimed' ? null : T.mpGame.cantPlace(m.error ?? '');
+      if (m.ok) this.sounds.play('spotted', { caption: false });
     });
     room.onStateChange((s) => this.onState(s));
     this.net.onStatus((s) => {
@@ -536,21 +556,46 @@ export class MultiplayerGame {
         if (s === 'lost' && this.net.restarting && !this.rejoining) {
           // The server is restarting (v0.0.13): it reopens our session and holds our desk.
           this.rejoining = true;
-          this.lobby.showRooms(null, 'The server is restarting. Back in a moment…', 'info');
+          this.lobby.showRooms(null, T.mpGame.restartingBack, 'info');
           void this.net.rejoin(this.lobby.name).then((ok) => {
             this.rejoining = false;
             if (ok) {
               this.attach();
-              this.hud.alert('ok', 'Back in', null, 'good', 2);
-            } else void this.refreshRooms();
+              this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
+            } else {
+              void this.refreshRooms();
+              void this.serverLost();
+            }
           });
           return;
         }
-        if (!this.rejoining) void this.refreshRooms();
+        if (!this.rejoining) {
+          void this.refreshRooms();
+          if (s === 'lost') void this.serverLost();
+        }
       }
     });
     this.lobby.showClaim(this.claimView());
-    if (this.resumed) this.hud.alert('ok', 'Back in', null, 'good', 2);
+    if (this.resumed) this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
+  }
+
+  /** The server went away mid-session (and is not restarting): a standard dialog over the session list. */
+  private async serverLost(): Promise<void> {
+    if (this.lostDialog.isOpen) return;
+    const again = await this.lostDialog.open({
+      title: T.mpGame.serverLost,
+      body: T.mpGame.serverLostBody(this.net.lastError ? this.net.lastError.replace(/\.$/, '') : null),
+      confirm: { label: T.mpGame.rejoin, icon: 'swap', key: DIALOG_KEYS.confirm },
+      cancel: { label: T.mpGame.sessionList, icon: 'menu', key: DIALOG_KEYS.cancel },
+    });
+    if (!again || this.room) return;
+    this.rejoining = true;
+    const ok = await this.net.rejoin(this.lobby.name);
+    this.rejoining = false;
+    if (ok) {
+      this.attach();
+      this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
+    } else void this.refreshRooms();
   }
 
   claim(territoryId: string): void {
@@ -629,7 +674,7 @@ export class MultiplayerGame {
   /** At home: everything on the desk repaired without opening base management. */
   quickRepair(): void {
     if (this.paused || !this.base || !this.atHome || this.base.needsRepair.length === 0) return;
-    if (!this.base.repairAll()) this.hud.alert('paper', 'Need paper', `−${Math.max(0, this.base.repairAllCost - this.resources.paper)}`, 'bad', 2);
+    if (!this.base.repairAll()) this.hud.alert('paper', T.mpGame.needPaper, `−${paper(Math.max(0, this.base.repairAllCost - this.resources.paper))}`, 'bad', 2);
   }
 
   /** Landed at home: rearm, then take off as soon as the ground crew is done. */
@@ -668,7 +713,7 @@ export class MultiplayerGame {
   toggleBase(open = !this.baseMode?.open): void {
     if (this.paused || !this.baseMode) return;
     if (open && !this.atHome) {
-      this.hud.alert('home', 'Land first', null, 'info', 1.6);
+      this.hud.alert('home', T.mpGame.landFirst, null, 'info', 1.6);
       return;
     }
     if (open) {
@@ -678,6 +723,54 @@ export class MultiplayerGame {
     } else {
       this.baseMode.exit();
       this.defenseModels.showPreview(null);
+    }
+  }
+
+  setHints(mode: HintMode): void {
+    this.settings = { ...this.settings, hints: mode };
+    saveMpSettings(this.settings);
+  }
+
+  setUiScale(scale: number): void {
+    this.settings = { ...this.settings, uiScale: UI_SCALES.includes(scale) ? scale : 1 };
+    this.hud.setScale(this.settings.uiScale);
+    saveMpSettings(this.settings);
+  }
+
+  /** Accessibility settings: applied at once (and kept in step by the HUD each frame), kept in this browser. */
+  setAccess(patch: Partial<AccessSettings>): void {
+    this.settings = { ...this.settings, access: normaliseAccess({ ...this.settings.access, ...patch }) };
+    this.hud.setAccess(this.settings.access, this.sounds.muted);
+    saveMpSettings(this.settings);
+  }
+
+  /** The interception card (put first by the server while we are raided), if one is on offer. */
+  private interceptOffer(): number {
+    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept');
+  }
+
+  /**
+   * The raid card's one press (and F at the desk while raided): choose the interception card and
+   * fold for it; on the pad, launch; landed, take off.
+   */
+  intercept(): void {
+    const phase = this.state?.phase;
+    if (!this.room || this.paused || !phase) return;
+    if (phase === 'desk') {
+      const i = this.interceptOffer();
+      if (i >= 0 && i !== this.state!.selected) this.send({ a: 'select', i });
+      this.send({ a: 'build' });
+    } else if (phase === 'ready') this.launchPlane();
+    else if (phase === 'landed') this.takeOff();
+  }
+
+  /** What the raid card's one press does now. */
+  private interceptResponse(): IncomingView['response'] {
+    switch (this.state?.phase) {
+      case 'desk': return { key: 'F', label: this.interceptOffer() >= 0 ? T.mpGame.intercept : T.mpGame.fold };
+      case 'ready': return { key: 'Space', label: T.mpGame.launch };
+      case 'landed': return { key: 'Space', label: T.mpGame.takeOff };
+      default: return null;
     }
   }
 
@@ -696,13 +789,12 @@ export class MultiplayerGame {
 
   toggleSound(): void {
     this.sounds.muted = !this.sounds.muted;
-    this.hud.alert(this.sounds.muted ? 'mute' : 'sound', this.sounds.muted ? 'Sound off' : 'Sound on', null, 'info', 1.4);
+    this.hud.alert(this.sounds.muted ? 'mute' : 'sound', this.sounds.muted ? T.mpGame.soundOff : T.mpGame.soundOn, null, 'info', 1.4);
   }
 
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
     saveGraphics(browserStorage(), settings);
-    this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.scene.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.dressings.values()) d.setDetail(settings.detail);
@@ -724,8 +816,8 @@ export class MultiplayerGame {
       if (this.state.phase === 'flying' && !input.pointerLocked && !this.controls.padFlying) input.requestPointerLock();
     });
     this.controls.onPad((e) => {
-      if (e.kind === 'connected') return this.hud.alert('plane', 'Controller connected', null, 'info', 2);
-      this.hud.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      if (e.kind === 'connected') return this.hud.alert('plane', T.mpGame.padConnected, null, 'info', 2);
+      this.hud.alert('warn', T.mpGame.padDisconnected, null, 'warn', 2.6);
       // The plane flies on (the world doesn't stop for one player), but the controls go neutral.
       if (this.state?.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
     });
@@ -734,6 +826,8 @@ export class MultiplayerGame {
   /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
   private onAction(action: Action, device: Device): void {
     this.sounds.unlock();
+    // A confirm dialog owns Enter / A and Esc / B while it is up; nothing else reaches the game.
+    if (confirmOpen() || this.lostDialog.isOpen) return;
     if (!this.room || this.lobby.open) return;
     if (action === 'sound') return this.toggleSound();
     if (action === 'back' || action === 'pause') {
@@ -778,6 +872,8 @@ export class MultiplayerGame {
         return this.send({ a: 'aircraft', id: next });
       }
       case 'fold':
+        // Raided at the desk: F folds for the interception card the raid card offers.
+        if (phase === 'desk' && this.interceptOffer() >= 0 && (this.priv.attacks ?? []).some((a) => a.victim === this.me)) return this.intercept();
         return this.send({ a: 'build' });
       case 'launch':
         if (phase === 'ready') this.launchPlane();
@@ -789,7 +885,7 @@ export class MultiplayerGame {
         return;
       case 'service':
         if (phase === 'landed') this.send({ a: 'rearm' });
-        else if (phase === 'flying') this.hud.alert('home', 'Rearm at home', null, 'info', 1.6);
+        else if (phase === 'flying') this.hud.alert('home', T.mpGame.rearmAtHome, null, 'info', 1.6);
         return;
       case 'confirm':
         if (device === 'gamepad') {
@@ -797,7 +893,11 @@ export class MultiplayerGame {
           if (phase === 'desk') return this.send({ a: 'build' });
           if (phase === 'ready') return this.launchPlane();
           if (phase === 'landed') return this.takeOff();
-        } else if (phase === 'landed') return this.send({ a: 'end' });
+        } else if (phase === 'landed') {
+          // Enter at the end of a landing asks with the confirm dialog first (Enter again confirms), as in single-player.
+          this.hud.guarded.endSortie();
+          return;
+        }
         if (phase === 'debrief' || phase === 'crashed') this.send({ a: 'continue' });
         return;
     }
@@ -897,8 +997,8 @@ export class MultiplayerGame {
     this.base = new NetBase(home, side, (cmd) => this.send(cmd), new ResourceManager());
     this.base.onEvent((e) => {
       if (e.type !== 'refused') return;
-      const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
-      this.hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad', 1.8);
+      const what = T.mpGame.refused[e.reason] ?? e.reason;
+      this.hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${paper(e.missing)}` : null, 'bad', 1.8);
     });
     this.baseMode = new BaseMode(this.base);
     this.state = new GameState(this.resources, () => this.offers);
@@ -911,15 +1011,18 @@ export class MultiplayerGame {
     // "You landed on…" (v0.0.13): the desk the server picked, on a little map of the classroom.
     const s = this.room?.state;
     this.mpHud.landed({
-      label: territoryName(territoryId),
+      label: s?.territories.get(territoryId)?.label || (this.me && s?.players.get(this.me) ? deskLabel(s.players.get(this.me)!.name) : territoryName(territoryId)),
       id: territoryId,
-      cells: this.territories.map((t) => ({ id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId })),
+      cells: this.territories.map((t) => ({
+        id: t.id, x: t.x, z: t.z, mine: t.id === territoryId, taken: !!s?.territories.get(t.id)?.owner && t.id !== territoryId,
+        state: DESK_STATES[s?.territories.get(t.id)?.state ?? 0] ?? 'ai',
+      })),
     });
     this.camera.updateDesk(0, this.launch, this.launchYaw, true);
     this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
     // A first-time tip: once per player (the server keeps which tips they have seen).
     if (!this.net.tipsSeen.has('mp-desk')) {
-      this.hud.tip('Pick a card, pick a plane (Q/E), fold it (F), launch (Space). Tab shows the scoreboard; Z / C / V are emotes.', ['F', 'Space', 'Tab']);
+      this.hud.tip(TIP_TEXT.mpDesk);
       this.net.sawTip('mp-desk');
     }
   }
@@ -951,7 +1054,8 @@ export class MultiplayerGame {
       this.trails.clear();
       this.offset.set(0, 0, 0);
       this.cosmeticCooldown = 0;
-      this.sounds.play('launch');
+      // Our own launch whoosh: not a rocket, no caption.
+      this.sounds.play('launch', { caption: false });
     }
     if (phase === 'desk') {
       this.plane.hide();
@@ -1166,7 +1270,9 @@ export class MultiplayerGame {
           x: e.p[0], y: e.p[1], z: e.p[2], vx: e.v[0], vy: e.v[1], vz: e.v[2], target: e.tg, damage: 0, travel: e.tr, radius: e.r,
         });
         this.fxIds.set(e.id, shot);
-        if (this.near(e.p)) this.sounds.play(e.k === 'rocket' ? 'launch' : 'ink');
+        // A rocket fired at us is captioned, with the way it came from.
+        const atMe = !!this.me && e.tg === `pl:${this.me}`;
+        if (this.near(e.p)) this.sounds.play(e.k === 'rocket' ? 'launch' : 'ink', { caption: atMe, angle: this.views.bearing(e.p[0], e.p[2]) });
         break;
       }
       case 'end': {
@@ -1197,7 +1303,7 @@ export class MultiplayerGame {
         const point = at(e.p);
         this.effects.bombImpact(point, e.on);
         const screen = this.views.project(point);
-        if (screen && e.o === this.me) this.hud.pop(e.on ? 'BOOM!' : 'SPLAT!', e.on ? 'good' : 'bad', screen);
+        if (screen && e.o === this.me) this.hud.pop(e.on ? T.mpGame.boom : T.mpGame.splat, e.on ? 'good' : 'bad', screen);
         break;
       }
       case 'down': {
@@ -1216,7 +1322,7 @@ export class MultiplayerGame {
         const s = this.room?.state;
         const colourOf = (id: string | null) => (id ? (s?.players.get(id)?.colour ?? null) : null);
         const assists = e.assists.map((id) => s?.players.get(id)?.name ?? '?');
-        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me || e.victim === this.me);
+        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me ? 'killer' : e.victim === this.me ? 'victim' : null);
         if (e.killer === this.me && e.victim) this.sounds.play('kill');
         break;
       }
@@ -1231,14 +1337,17 @@ export class MultiplayerGame {
         } else if (e.o === this.me) {
           if (e.e === 'confetti') this.effects.burst(this.v1.copy(this.plane.position), 'fold');
           if (e.e === 'waggle') this.ownWaggle = WAGGLE_TIME;
-          this.hud.alert('plane', e.e === 'heart' ? '♥' : e.e === 'confetti' ? 'Confetti!' : 'Waggle', null, 'info', 1);
+          this.hud.alert('plane', e.e === 'heart' ? T.mpGame.heart : e.e === 'confetti' ? T.mpGame.confetti : T.mpGame.waggle, null, 'info', 1);
         }
         break;
       }
       case 'note':
         this.hud.alert((ICONS.has(e.icon) ? e.icon : 'info') as IconName, e.title, e.value, e.tone, 2.4);
-        if (e.icon === 'raid' && e.tone !== 'good') this.sounds.play('raid');
-        if (e.title === 'Locked on') this.sounds.play('lock');
+        // Keyed by the server (never by the words): a rocket lock, a raid on the way. A raid's outcome
+        // (base hit, raided) keeps its alarm without the "Raid incoming" caption.
+        if (e.cue === 'lock') this.sounds.play('lock');
+        else if (e.cue === 'raid') this.sounds.play('raid');
+        else if (e.icon === 'raid' && e.tone !== 'good') this.sounds.play('raid', { caption: false });
         break;
       case 'news':
         this.mpHud.news(e.text, e.tone);
@@ -1260,8 +1369,8 @@ export class MultiplayerGame {
     const mine = this.me && e.tg === `pl:${this.me}`;
     if (mine) {
       this.hud.damageFlash(e.n);
-      this.sounds.play('hit');
       const from = e.by ? this.remotes.get(e.by)?.model.position : null;
+      this.sounds.play('hit', { angle: from ? this.views.bearing(from.x, from.z) : null });
       if (from) this.hud.damageDirection(this.views.bearing(from.x, from.z), e.n);
       return;
     }
@@ -1548,10 +1657,28 @@ export class MultiplayerGame {
     const attacked = flying && this.ais.size > 0 && this.views.threatened();
     this.sounds.combat(dt, attacked ? 1 : 0);
     const locks = flying ? this.network.installations.filter((i) => i.state === 'locking' && i.alive && this.views.lockingOnMe(i)) : [];
-    this.sounds.lockTone(dt, locks.length > 0 ? Math.max(...locks.map((i) => i.lock)) : null);
+    const nearest = locks.length > 0 ? locks.reduce((a, b) => (b.lock > a.lock ? b : a)) : null;
+    this.sounds.lockTone(dt, nearest ? nearest.lock : null, nearest ? this.views.bearing(nearest.spec.x, nearest.spec.z) : null);
   }
 
   // ---- Multiplayer HUD ----------------------------------------------------------------------------
+
+  /** The raid card: the attacker, and from the raid alert the ETA, direction, our guns and reward. */
+  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null }): IncomingView {
+    const r = this.views.raidAlertView();
+    return {
+      attacker: a.attackerName,
+      colour: this.room?.state.players.get(a.attacker)?.colour ?? 0,
+      detected: a.detected,
+      distance: a.distance,
+      eta: r && r.eta > 0 ? r.eta : null,
+      direction: r && r.direction !== '?' ? r.direction : null,
+      ready: r?.ready ?? this.base?.readiness.ready ?? 0,
+      total: r?.total ?? this.base?.readiness.total ?? 0,
+      reward: r?.reward ?? 0,
+      response: this.interceptResponse(),
+    };
+  }
 
   private mpView(): MpHudView {
     const s = this.room?.state;
@@ -1562,7 +1689,8 @@ export class MultiplayerGame {
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
-            status: ['At desk', 'Folding', 'On the pad', 'Flying', 'Landed', 'Debrief', 'Shot down'][p.phase] ?? '', protect: p.protect, shield: p.shield,
+            status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield,
+            presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)
       : null;
@@ -1581,7 +1709,7 @@ export class MultiplayerGame {
         hostile: true, plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null,
       });
     }
-    const territories = [];
+    const territories: TerritoryTagView[] = [];
     for (const [tid, owner] of this.owners) {
       if (owner === this.me) continue; // our own desk has its home label
       const t = this.territories.find((x) => x.id === tid)!;
@@ -1590,7 +1718,10 @@ export class MultiplayerGame {
       const screen = this.views.project(this.v1.set(t.x, 1, t.z));
       if (!screen || !p) continue;
       if (this.state?.phase === 'flying' && Math.hypot(t.x - this.plane.position.x, t.z - this.plane.position.z) < t.size * 0.6) continue;
-      territories.push({ id: tid, x: screen.x, y: screen.y, owner: p.name, colour: p.colour, mine: owner === this.me, safe: !!ts?.safe, alert: !!ts?.alert, away: !p.connected });
+      territories.push({
+        id: tid, x: screen.x, y: screen.y, label: ts?.label || deskLabel(p.name), owner: p.name, colour: p.colour, mine: owner === this.me, safe: !!ts?.safe, alert: !!ts?.alert,
+        presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: DESK_STATES[ts?.state ?? 0] ?? null }),
+      });
     }
     const attacks = this.priv.attacks ?? [];
     const incoming = attacks.find((a) => a.victim === this.me);
@@ -1604,7 +1735,7 @@ export class MultiplayerGame {
       tags,
       territories,
       scoreboard,
-      incoming: incoming ? { attacker: incoming.attackerName, colour: s?.players.get(incoming.attacker)?.colour ?? 0, detected: incoming.detected, distance: incoming.distance } : null,
+      incoming: incoming ? this.incomingView(incoming) : null,
       outgoing: outgoing ? { victim: outgoing.victimName, colour: s?.players.get(outgoing.victim)?.colour ?? 0 } : null,
       protection: this.priv.protection ?? null,
       emoteKeys: this.state?.phase === 'flying',

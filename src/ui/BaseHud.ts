@@ -1,9 +1,12 @@
 import { BASE, type BuildingKind } from '../config';
+import { bind } from '../input/bindings';
 import type { RaidReport } from '../base/Raids';
+import { attrs, bar, button, card, chip, glyph, iconButton, pips, stat, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
-import { fmt, level, metres, pct } from './format';
+import { count, fmt, level, metres, paper, pct } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
-import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS } from './strings';
+import { focusManager } from '../input/FocusNav';
+import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS, STYLE_TEXT, T } from './strings';
 import type { BaseInspectorView, BaseView, HudActions, PriceView, RaidAlertView, Stat } from './views';
 
 export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
@@ -15,68 +18,116 @@ const STATUS_ICON = { ok: 'ok', damaged: 'warn', destroyed: 'wrecked' } as const
 type TrayCategory = 'defense' | 'radar' | 'economy';
 const TRAY_CATEGORY: Record<BuildingKind, TrayCategory> = { turret: 'defense', launcher: 'defense', radar: 'radar', workshop: 'economy', storage: 'economy' };
 const CATEGORY_ICONS: Record<TrayCategory, IconName> = { defense: 'shield', radar: 'radar', economy: 'paper' };
-const CATEGORY_LABELS: Record<TrayCategory, string> = { defense: 'Defense', radar: 'Detection', economy: 'Economy' };
+const CATEGORY_LABELS: Readonly<Record<TrayCategory, string>> = T.base.category;
+
+const tip = (t: string): string => attrs(tooltipAttrs(t));
+const TONE: Record<NonNullable<Stat['tone']>, Tone> = { good: 'good', bad: 'hostile', warn: 'warn' };
 
 function stats(list: readonly Stat[]): string {
-  return list.map((s) => `<span class="stat" title="${esc(s.label)}"${s.tone ? ` data-tone="${s.tone}"` : ''}>${icon(s.icon)}<b>${esc(s.value)}</b>${s.delta ? `<em>${esc(s.delta)}</em>` : ''}</span>`).join('');
+  return list.map((s) => stat({ icon: s.icon, value: s.value, label: s.label, delta: s.delta, deltaTone: s.delta ? 'good' : undefined, tone: s.tone ? TONE[s.tone] : undefined })).join('');
 }
 
-function price(p: PriceView): string {
-  return p.missing > 0 ? `${icon('paper')}<b>${p.cost}</b><em class="missing">−${p.missing}</em>` : `${icon('paper')}<b>${p.cost}</b>`;
+/**
+ * A price as the paper icon and the cost, and, when the player can't afford it, what is MISSING
+ * as a red chip ("−10", tooltip "Need 10 more paper"): what to earn, not just the total.
+ */
+export function priceHtml(p: PriceView): string {
+  const name = p.missing > 0 ? T.base.priceShort(paper(p.cost), ICON_NAMES.paper, SAY.need, paper(p.missing)) : T.base.price(paper(p.cost), ICON_NAMES.paper);
+  const missing = p.missing > 0
+    ? chip({ label: '', value: `−${paper(p.missing)}`, tone: 'hostile', className: 'missing', tip: T.base.needMore(SAY.need, paper(p.missing), ICON_NAMES.paper), attrs: { 'data-missing': p.missing } })
+    : '';
+  return `<span class="price" role="img" aria-label="${esc(name)}"${p.missing > 0 ? ' data-short' : ''}>${icon('paper')}<b class="num">${paper(p.cost)}</b>${missing}</span>`;
 }
 
 /**
  * Base management on T1, from above: a marker on every construction slot (what stands there, its
  * health, whether the chosen building fits), the base's state across the top, a build tray bottom
- * left, the selected slot's inspector bottom centre, and Repair all / Done bottom right.
+ * left, the selected slot's inspector on the right, and Repair all / Done bottom right. Costs
+ * show what is missing; Remove asks with the confirm dialog (BaseMode).
  */
 export class BaseHud {
   private readonly el: Record<string, HTMLElement> = {};
   private readonly markers = new Map<string, HTMLElement>();
   private trayKey = '';
   private inspKey = '';
+  private shown = false;
 
   constructor(
-    zones: { world: HTMLElement; tc: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement },
+    zones: { world: HTMLElement; tc: HTMLElement; tr?: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement },
     private readonly actions: HudActions,
   ) {
-    const add = (host: HTMLElement, className: string, html: string) => {
-      const node = document.createElement('div');
-      node.className = className;
-      node.innerHTML = html;
-      host.appendChild(node);
+    const add = (host: HTMLElement, html: string): HTMLElement => {
+      host.insertAdjacentHTML('beforeend', html);
+      const node = host.lastElementChild as HTMLElement;
       for (const n of node.querySelectorAll<HTMLElement>('[data-b]')) this.el[n.dataset.b!] = n;
       return node;
     };
-    this.el.markers = add(zones.world, 'slot-markers', '');
-    this.el.overview = add(zones.tc, 'base-overview card', /* html */ `
-      <span class="ov" title="Weapons ready" data-b="ov-ready">${icon('shield')}<b data-b="ready"></b></span>
-      <span class="ov" title="Radar" data-b="ov-radar">${icon('radar')}<b data-b="radar"></b></span>
-      <span class="ov" title="Base condition" data-b="ov-integrity">${icon('base')}<b data-b="integrity"></b></span>`);
-    this.el.tray = add(zones.bl, 'tray card', /* html */ `<div class="tray-items" data-b="tray-items"></div>`);
-    this.el.inspector = add(zones.bc, 'base-insp card', '');
-    this.el.actions = add(zones.br, 'base-actions', /* html */ `
-      <button class="btn" data-b="repair-all" title="Repair everything">${icon('repair')}<span>${SAY.repairAll}</span><span class="price" data-b="repair-all-cost"></span></button>
-      <button class="btn primary big" data-b="done"><kbd>B</kbd><span>${SAY.done}</span></button>`);
+    this.el.markers = add(zones.world, `<div class="slot-markers" role="group" aria-label="${SAY.slot}"></div>`);
+    this.el.overview = add(zones.tc, card({
+      className: 'base-overview', label: SAY.base, fold: true,
+      bodyHtml: /* html */ `
+        <span class="ov" ${tip(T.base.weaponsReady)} data-b="ov-ready">${icon('shield')}<b class="num" data-b="ready"></b></span>
+        <span class="ov" ${tip(T.base.radar)} data-b="ov-radar">${icon('radar')}<b class="num" data-b="radar"></b></span>
+        <span class="ov" ${tip(T.base.baseCondition)} data-b="ov-integrity">${icon('base')}<b class="num" data-b="integrity"></b></span>`,
+    }));
+    this.el.tray = add(zones.bl, card({ className: 'tray', label: SAY.buildTray, bodyHtml: `<div class="tray-items" data-b="tray-items"></div>` }));
+    // The selected slot's inspector: a right-side card (the style guide's DeskHud), bottom centre without a tr zone.
+    this.el.inspector = add(zones.tr ?? zones.bc, card({ className: 'base-insp', label: SAY.slot, bodyHtml: '<div class="bi-body" data-b="insp"></div>' }));
+    this.el.actions = add(zones.br, /* html */ `<div class="base-actions">
+      ${button({ label: SAY.repairAll, icon: 'repair', tip: T.base.repairEverything, attrs: { 'data-b': 'repair-all' } })}
+      ${button({ label: SAY.done, variant: 'primary', size: 'big', key: bind('base'), attrs: { 'data-b': 'done' } })}</div>`);
+    this.el['repair-all'].querySelector('.ui-label')!.insertAdjacentHTML('afterend', '<span class="price-slot" data-b="repair-all-cost"></span>');
+    this.el['repair-all-cost'] = this.el['repair-all'].querySelector<HTMLElement>('[data-b="repair-all-cost"]')!;
     bindButton(this.el['repair-all'], () => actions.base.repairAll());
     bindButton(this.el.done, () => actions.toggleBase());
+    this.el.markers.addEventListener('mousedown', (e) => e.preventDefault());
+    this.el.markers.addEventListener('click', (e) => {
+      const m = (e.target as Element).closest<HTMLElement>('.slot-marker');
+      if (!m) return;
+      e.stopPropagation();
+      this.actions.base.selectSlot(m.dataset.slot!);
+    });
+    this.el['tray-items'].addEventListener('mousedown', (e) => e.preventDefault());
+    this.el['tray-items'].addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('.tray-item');
+      if (!b || b.disabled) return;
+      e.stopPropagation();
+      this.actions.base.choose(b.dataset.kind as BuildingKind);
+    });
+    const insp = this.el.insp;
+    insp.addEventListener('mousedown', (e) => e.preventDefault());
+    insp.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('[data-act]');
+      if (!b || b.disabled) return;
+      e.stopPropagation();
+      const act = b.dataset.act as 'build' | 'upgrade' | 'repair' | 'remove';
+      this.actions.base[act]();
+    });
   }
 
   render(v: BaseView | null, paused: boolean): void {
     const show = v !== null && !paused;
     for (const k of ['overview', 'tray', 'inspector', 'actions', 'markers']) toggle(this.el[k], show);
-    if (!v || !show) return;
-    this.renderMarkers(v);
-    this.renderOverview(v);
-    this.renderTray(v);
-    this.renderInspector(v.inspector);
-    toggle(this.el['repair-all'], v.repairAll.count > 0);
-    (this.el['repair-all'] as HTMLButtonElement).disabled = v.repairAll.missing > 0;
-    const costEl = this.el['repair-all-cost'];
-    const key = `${v.repairAll.cost}:${v.repairAll.missing}`;
-    if (costEl.dataset.key !== key) {
-      costEl.dataset.key = key;
-      costEl.innerHTML = price(v.repairAll);
+    if (v && show) {
+      this.renderMarkers(v);
+      this.renderOverview(v);
+      this.renderTray(v);
+      this.renderInspector(v.inspector);
+      toggle(this.el['repair-all'], v.repairAll.count > 0);
+      (this.el['repair-all'] as HTMLButtonElement).disabled = v.repairAll.missing > 0;
+      const costEl = this.el['repair-all-cost'];
+      const key = `${v.repairAll.cost}:${v.repairAll.missing}`;
+      if (costEl.dataset.key !== key) {
+        costEl.dataset.key = key;
+        costEl.innerHTML = priceHtml(v.repairAll);
+      }
+    }
+    // Opening base mode puts the highlight in the tray; closing returns it to what opened it.
+    const open = v !== null && !paused;
+    if (open !== this.shown) {
+      this.shown = open;
+      if (open) focusManager()?.openPanel(this.el.tray);
+      else focusManager()?.closePanel(this.el.tray);
     }
   }
 
@@ -85,11 +136,8 @@ export class BaseHud {
     for (const s of v.slots) {
       let el = this.markers.get(s.id);
       if (!el) {
-        el = document.createElement('button');
-        el.className = 'slot-marker';
-        el.innerHTML = `<span class="sm-icon"></span><span class="sm-level"></span><span class="sm-health"><i></i></span>`;
-        bindButton(el, () => this.actions.base.selectSlot(s.id));
-        this.el.markers.appendChild(el);
+        this.el.markers.insertAdjacentHTML('beforeend', `<button type="button" class="slot-marker" data-slot="${esc(s.id)}"><span class="sm-icon"></span><span class="sm-level"></span>${bar({ value: 1, label: ICON_NAMES.health, size: 'mini', className: 'sm-health' })}</button>`);
+        el = this.el.markers.lastElementChild as HTMLElement;
         this.markers.set(s.id, el);
       }
       const iconName: IconName = s.building ? BUILDING_ICONS[s.building] : SLOT_KIND_ICONS[s.kind];
@@ -98,16 +146,25 @@ export class BaseHud {
         iconEl.dataset.icon = iconName;
         iconEl.innerHTML = icon(iconName);
       }
-      el.title = s.building === 'store' ? `Paper store · ${pct(s.health)}` : s.building ? `${BASE.buildings[s.building].name} · level ${s.level} · ${pct(s.health)}` : SLOT_KIND_LABELS[s.kind];
+      const name = s.building === 'store' ? T.base.paperStore(pct(s.health)) : s.building ? T.base.building(BASE.buildings[s.building].name, s.level, pct(s.health)) : SLOT_KIND_LABELS[s.kind];
+      attr(el, 'aria-label', name);
+      attr(el, 'data-tip', name);
       attr(el, 'data-state', s.building ? (s.status ?? 'ok') : 'empty');
       attr(el, 'data-fits', s.fits === null ? 'none' : String(s.fits));
+      attr(el, 'aria-pressed', String(s.selected));
       el.classList.toggle('selected', s.selected);
-      text(el.querySelector('.sm-level') as HTMLElement, s.building && s.level > 1 ? '★'.repeat(s.level - 1) : '');
-      const bar = el.querySelector('.sm-health') as HTMLElement;
-      toggle(bar, !!s.building && s.status !== 'ok');
-      width(bar.firstElementChild as HTMLElement, s.health);
-      attr(bar.firstElementChild as HTMLElement, 'data-level', level(s.health));
-      el.style.transform = `translate(${s.x}px, ${s.y}px)`;
+      const lvKey = s.building && s.building !== 'store' && s.level > 1 ? String(s.level) : '';
+      const lv = el.querySelector('.sm-level') as HTMLElement;
+      if (lv.dataset.key !== lvKey) {
+        lv.dataset.key = lvKey;
+        lv.innerHTML = lvKey ? pips({ filled: s.level, total: s.level, label: T.common.labelSpaceValue(ICON_NAMES.level, count(s.level)), tone: 'gold' }) : '';
+      }
+      const meter = el.querySelector('.sm-health') as HTMLElement;
+      toggle(meter, !!s.building && s.status !== 'ok');
+      width(meter.firstElementChild as HTMLElement, s.health);
+      attr(meter, 'data-level', level(s.health));
+      const tr = `translate(${s.x}px, ${s.y}px)`;
+      if (el.style.transform !== tr) el.style.transform = tr;
       toggle(el, s.onScreen);
       seen.add(s.id);
     }
@@ -116,11 +173,11 @@ export class BaseHud {
 
   private renderOverview(v: BaseView): void {
     const o = v.overview;
-    text(this.el.ready, o.total > 0 ? `${o.ready}/${o.total}` : '0');
+    text(this.el.ready, o.total > 0 ? `${count(o.ready)}/${count(o.total)}` : count(0));
     attr(this.el['ov-ready'], 'data-tone', o.total === 0 ? 'warn' : o.ready < o.total ? 'bad' : 'good');
     text(this.el.radar, o.radar === 'none' ? metres(o.detection) : o.radar === 'on' ? metres(o.detection) : SAY.offline);
     attr(this.el['ov-radar'], 'data-tone', o.radar === 'on' ? 'good' : o.radar === 'off' ? 'bad' : 'warn');
-    this.el['ov-radar'].title = o.radar === 'none' ? 'No radar: raids are seen late' : o.radar === 'on' ? 'Radar: early warning range' : 'Radar destroyed';
+    attr(this.el['ov-radar'], 'data-tip', o.radar === 'none' ? T.base.noRadar : o.radar === 'on' ? T.base.radarOn : T.base.radarDestroyed);
     text(this.el.integrity, pct(o.integrity));
     attr(this.el['ov-integrity'], 'data-tone', o.integrity >= 0.99 ? 'good' : o.integrity > 0.6 ? 'warn' : 'bad');
   }
@@ -129,30 +186,26 @@ export class BaseHud {
     const key = v.tray.map((t) => `${t.kind}:${t.missing}:${t.placeable}:${t.chosen}`).join('|');
     if (key === this.trayKey) return;
     this.trayKey = key;
-    const wrap = this.el['tray-items'];
-    wrap.innerHTML = '';
-    // Grouped by category: defense, radar, economy.
-    let group: HTMLElement | null = null;
+    // Grouped by category: defense, radar, economy. The first building that fits takes the highlight on open.
+    const groups: string[] = [];
     let category = '';
+    let items: string[] = [];
+    const firstOpen = v.tray.find((t) => t.placeable)?.kind;
+    const flush = () => {
+      if (category) groups.push(`<div class="tray-group" role="group" aria-label="${esc(CATEGORY_LABELS[category as TrayCategory])}"><span class="tray-cat" role="img" aria-label="${esc(CATEGORY_LABELS[category as TrayCategory])}" ${tip(CATEGORY_LABELS[category as TrayCategory])}>${icon(CATEGORY_ICONS[category as TrayCategory])}</span>${items.join('')}</div>`);
+      items = [];
+    };
     for (const t of v.tray) {
       const cat = TRAY_CATEGORY[t.kind];
       if (cat !== category) {
+        flush();
         category = cat;
-        group = document.createElement('div');
-        group.className = 'tray-group';
-        group.innerHTML = `<span class="tray-cat" title="${CATEGORY_LABELS[cat]}">${icon(CATEGORY_ICONS[cat])}</span>`;
-        wrap.appendChild(group);
       }
-      const b = document.createElement('button');
-      b.className = 'tray-item';
-      b.classList.toggle('chosen', t.chosen);
-      b.classList.toggle('short', t.missing > 0);
-      b.disabled = !t.placeable;
-      b.title = `${t.name}: ${t.purpose}${t.placeable ? '' : ' (no free slot for it)'}`;
-      b.innerHTML = `${icon(BUILDING_ICONS[t.kind], 'icon tray-icon')}<span class="tray-name">${esc(t.short)}</span><span class="price">${price(t)}</span>`;
-      bindButton(b, () => this.actions.base.choose(t.kind));
-      group!.appendChild(b);
+      const tipText = T.base.trayTip(t.name, t.purpose, !t.placeable, t.missing > 0 ? T.common.labelSpaceValue(SAY.need, paper(t.missing)) : null);
+      items.push(`<button type="button" class="tray-item${t.chosen ? ' chosen' : ''}${t.missing > 0 ? ' short' : ''}" data-kind="${t.kind}"${t.placeable ? '' : ' disabled'}${t.kind === firstOpen ? ' data-nav-default' : ''} aria-pressed="${t.chosen}" aria-label="${esc(tipText)}" ${tip(tipText)}>${icon(BUILDING_ICONS[t.kind], 'icon tray-icon')}<span class="tray-name">${esc(t.short)}</span>${priceHtml(t)}</button>`);
     }
+    flush();
+    this.el['tray-items'].innerHTML = groups.join('');
   }
 
   private renderInspector(i: BaseInspectorView | null): void {
@@ -161,32 +214,38 @@ export class BaseHud {
     const key = JSON.stringify(i);
     if (key === this.inspKey) return;
     this.inspKey = key;
-    const host = this.el.inspector;
+    const host = this.el.insp;
     if (i.type === 'empty') {
-      const takes = i.takes.map((k) => `<span title="${esc(BASE.buildings[k].name)}">${icon(BUILDING_ICONS[k])}</span>`).join('');
+      const takes = i.takes.map((k) => `<span role="img" aria-label="${esc(BASE.buildings[k].name)}" ${tip(BASE.buildings[k].name)}>${icon(BUILDING_ICONS[k])}</span>`).join('');
       const c = i.chosen;
+      attr(this.el.inspector, 'aria-label', SLOT_KIND_LABELS[i.slotKind]);
       host.innerHTML = `
         <div class="bi-head">${icon(SLOT_KIND_ICONS[i.slotKind])}<b>${esc(SLOT_KIND_LABELS[i.slotKind])}</b><span class="bi-takes">${takes}</span></div>
         ${c ? `<div class="bi-build"><span class="bi-what">${icon(BUILDING_ICONS[c.kind])}<b>${esc(c.name)}</b></span><span class="stats">${stats(c.effects)}</span></div>
-          <button class="btn primary" data-act="build"${!c.fits || c.price.missing > 0 ? ' disabled' : ''}>${icon('build')}<span>${SAY.build}</span><span class="price">${price(c.price)}</span><kbd>Enter</kbd></button>`
-          : `<div class="bi-pick">${icon('build')}<span>Pick a building</span></div>`}`;
-    } else {
-      const lv = Array.from({ length: i.maxLevel }, (_, n) => `<i class="${n < i.level ? 'on' : ''}"></i>`).join('');
-      host.innerHTML = `
-        <div class="bi-head">${icon(BUILDING_ICONS[i.kind])}<b>${esc(i.name)}</b><span class="lv" title="Level ${i.level}/${i.maxLevel}">${lv}</span>
-          <span class="bi-status" data-state="${i.status}" title="${esc(ICON_NAMES[STATUS_ICON[i.status]])}">${icon(STATUS_ICON[i.status])}</span></div>
-        <div class="meter" title="Health">${icon('health')}<span class="bar"><i data-level="${level(i.health / i.maxHealth)}" style="width:${pct(i.health / i.maxHealth)}"></i></span><b>${fmt(i.health)}/${fmt(i.maxHealth)}</b></div>
-        <div class="stats">${stats(i.stats)}</div>
-        <div class="bi-actions">
-          ${i.upgrade ? `<button class="btn" data-act="upgrade"${i.upgrade.missing > 0 || i.status === 'destroyed' ? ' disabled' : ''} title="${esc(i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '))}">${icon('upgrade')}<span>${SAY.upgrade}</span><span class="price">${price(i.upgrade)}</span><span class="stats gain">${i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="stat" title="${esc(`${s.label}: ${s.value}`)}">${icon(s.icon)}<em>${esc(s.delta!)}</em></span>`).join('')}</span><kbd>U</kbd></button>` : i.kind !== 'store' ? `<span class="tag" title="Fully upgraded">${icon('level')}${SAY.maxLevel}</span>` : ''}
-          ${i.repair ? `<button class="btn" data-act="repair"${i.repair.missing > 0 ? ' disabled' : ''}>${icon('repair')}<span>${SAY.repair}</span><span class="price">${price(i.repair)}</span><kbd>R</kbd></button>` : ''}
-          ${i.refund !== null ? `<button class="btn ghost${i.confirmingRemove ? ' confirm' : ''}" data-act="remove" title="Remove for a partial refund">${icon('remove')}<span>${i.confirmingRemove ? SAY.confirmRemove : ''}</span><span class="price">${icon('refund')}<b>+${i.refund}</b></span><kbd>X</kbd></button>` : ''}
-        </div>`;
+          <div class="bi-actions">${button({ label: SAY.build, icon: 'build', variant: 'primary', key: { key: bind('confirm').key }, disabled: !c.fits || c.price.missing > 0, attrs: { 'data-act': 'build' } })}<span class="bi-price">${priceHtml(c.price)}</span></div>`
+          : `<div class="bi-pick">${icon('build')}<span>${esc(T.base.pickBuilding)}</span></div>`}`;
+      return;
     }
-    for (const b of host.querySelectorAll<HTMLElement>('[data-act]')) {
-      const act = b.dataset.act as 'build' | 'upgrade' | 'repair' | 'remove';
-      bindButton(b, () => this.actions.base[act]());
+    attr(this.el.inspector, 'aria-label', i.name);
+    const lv = pips({ filled: i.level, total: i.maxLevel, label: T.base.level(i.level, i.maxLevel), tone: 'friend', attrs: { 'data-tip': T.base.level(i.level, i.maxLevel) } });
+    const hp = i.maxHealth > 0 ? i.health / i.maxHealth : 0;
+    const actions: string[] = [];
+    if (i.upgrade) {
+      const gains = i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="gain" role="img" aria-label="${esc(T.common.labelValue(s.label, s.value))}" ${tip(T.common.labelValue(s.label, s.value))}>${icon(s.icon)}<em class="num">${esc(s.delta!)}</em></span>`).join('');
+      actions.push(`<div class="bi-action">${button({ label: SAY.upgrade, icon: 'upgrade', key: bind('upgrade'), disabled: i.upgrade.missing > 0 || i.status === 'destroyed', tip: T.common.dot(i.upgrade.next.map((s) => T.common.labelSpaceValue(s.label, s.value))), attrs: { 'data-act': 'upgrade' } })}${priceHtml(i.upgrade)}<span class="stats gain-list">${gains}</span></div>`);
+    } else if (i.kind !== 'store') {
+      actions.push(chip({ label: SAY.maxLevel, icon: 'level', tip: T.base.fullyUpgraded }));
     }
+    if (i.repair) actions.push(`<div class="bi-action">${button({ label: SAY.repair, icon: 'repair', key: bind('service'), disabled: i.repair.missing > 0, attrs: { 'data-act': 'repair' } })}${priceHtml(i.repair)}</div>`);
+    if (i.refund !== null) {
+      actions.push(`<div class="bi-action">${button({ label: SAY.remove, icon: 'remove', variant: 'danger', key: bind('swap'), tip: T.base.removeTip, attrs: { 'data-act': 'remove' } })}<span class="price refund" role="img" aria-label="${esc(T.common.labelSpaceValue(ICON_NAMES.refund, `+${paper(i.refund)}`))}" ${tip(ICON_NAMES.refund)}>${icon('refund')}<b class="num">+${paper(i.refund)}</b></span></div>`);
+    }
+    host.innerHTML = `
+      <div class="bi-head">${icon(BUILDING_ICONS[i.kind])}<b>${esc(i.name)}</b>${lv}
+        <span class="bi-status" data-state="${i.status}" role="img" aria-label="${esc(ICON_NAMES[STATUS_ICON[i.status]])}" ${tip(ICON_NAMES[STATUS_ICON[i.status]])}>${icon(STATUS_ICON[i.status])}</span></div>
+      <div class="meter" ${tip(ICON_NAMES.health)}>${icon('health')}${bar({ value: hp, label: ICON_NAMES.health })}<b class="num">${fmt(i.health)}/${fmt(i.maxHealth)}</b></div>
+      <div class="stats">${stats(i.stats)}</div>
+      <div class="bi-actions">${actions.join('')}</div>`;
   }
 }
 
@@ -201,14 +260,12 @@ export class RaidHud {
   private reportUntil = 0;
 
   constructor(host: HTMLElement) {
-    this.alert = document.createElement('div');
-    this.alert.className = 'raid-alert card';
-    host.appendChild(this.alert);
-    this.report = document.createElement('div');
-    this.report.className = 'raid-report card';
+    host.insertAdjacentHTML('beforeend', `<div class="raid-alert ui-raid" role="alert" aria-label="${esc(SAY.raidInbound)}" data-critical data-tone="hostile"></div>`);
+    this.alert = host.lastElementChild as HTMLElement;
+    host.insertAdjacentHTML('beforeend', card({ className: 'raid-report', label: SAY.defenseReport, elevation: 'floating', bodyHtml: '' }));
+    this.report = host.lastElementChild as HTMLElement;
     this.report.hidden = true;
     this.report.addEventListener('click', () => this.hideReport());
-    host.appendChild(this.report);
   }
 
   render(r: RaidAlertView | null, paused: boolean): void {
@@ -219,32 +276,34 @@ export class RaidHud {
     if (key === this.alertKey) return;
     this.alertKey = key;
     attr(this.alert, 'data-state', r.state);
-    const escort = r.escorted ? `<span title="Escorted">${icon('escort')}</span>` : '';
-    this.alert.innerHTML = `
-      <div class="ra-row">${icon('bomber', 'icon ra-icon')}<b class="ra-title">${r.state === 'released' ? SAY.bombsAway : 'RAID'}</b>
-        <span class="ra-dir" title="Coming from">${icon('heading')}<b>${r.direction}</b></span>
-        ${r.state === 'inbound' ? `<span class="ra-eta" title="Time to target">${icon('clock')}<b>${Math.max(0, Math.ceil(r.eta))}s</b></span>` : ''}${escort}</div>
+    const escort = r.escorted ? `<span role="img" aria-label="${esc(ICON_NAMES.escort)}" ${tip(T.base.escorted)}>${icon('escort')}</span>` : '';
+    // The style guide's RaidAlert: the badge, a title and a line of facts, the time to target large on the right.
+    this.alert.innerHTML = `<span class="ui-raid-badge">${icon('bomber', 'icon ui-icon')}</span>
+      <div class="ui-raid-text"><p class="ui-raid-title ra-title">${esc(r.state === 'released' ? STYLE_TEXT.bombsAway : STYLE_TEXT.raidTitle)}</p>
       <div class="ra-row">
-        <span title="Target: ${esc(r.target)}">${icon(r.targetIcon)}<b>${esc(r.target.split(' ').slice(-1)[0])}</b></span>
-        <span title="Weapons ready" data-tone="${r.total === 0 ? 'warn' : r.ready < r.total ? 'bad' : 'good'}">${icon('shield')}<b>${r.ready}/${r.total}</b></span>
-        ${r.distance !== null ? `<span title="Distance from you">${icon('distance')}<b>${metres(r.distance)}</b></span>` : ''}
-        <span title="${r.mission ? 'Mission reward' : 'Defense reward if you help'}">${icon('paper')}<b>+${r.reward}</b></span>
-        ${r.response ? `<span class="ra-do"><kbd>${esc(r.response.key)}</kbd>${esc(r.response.label)}</span>` : ''}</div>`;
+        <span class="ra-dir" ${tip(T.base.comingFrom)}>${icon('heading')}<b class="num">${r.direction}</b></span>${escort}
+        <span ${tip(T.base.target(r.target))}>${icon(r.targetIcon)}<b>${esc(r.target.split(' ').slice(-1)[0])}</b></span>
+        <span ${tip(T.base.weaponsReady)} data-tone="${r.total === 0 ? 'warn' : r.ready < r.total ? 'bad' : 'good'}">${icon('shield')}<b class="num">${count(r.ready)}/${count(r.total)}</b></span>
+        ${r.distance !== null ? `<span ${tip(T.base.distanceFromYou)}>${icon('distance')}<b class="num">${metres(r.distance)}</b></span>` : ''}
+        <span ${tip(r.mission ? T.base.missionReward : T.base.defenseReward)}>${icon('paper')}<b class="num">+${paper(r.reward)}</b></span>
+        ${r.response ? `<span class="ra-do">${glyph({ key: r.response.key })}${esc(r.response.label)}</span>` : ''}</div></div>
+      ${r.state === 'inbound' ? `<span class="ui-raid-eta ra-eta num" ${tip(T.base.timeToTarget)}>${T.units.seconds(count(Math.max(0, Math.ceil(r.eta))))}</span>` : ''}`;
   }
 
-  /** The defense report: one card, a few numbers, gone after a while or on click. */
+  /** The defense report: one card, a few numbers, gone after a while, on click or with its close button. */
   showReport(r: RaidReport): void {
-    const row = (iconName: IconName, value: string, label: string, tone = '') => `<span class="stat" title="${esc(label)}" data-tone="${tone}">${icon(iconName)}<b>${value}</b></span>`;
-    this.report.dataset.tone = r.repelled ? 'good' : 'bad';
-    this.report.innerHTML = `
-      <div class="rr-head">${icon(r.repelled ? 'shield' : 'raid')}<b>${r.repelled ? SAY.raidRepelled : SAY.baseHit}</b><span class="rr-where">T1</span></div>
+    const row = (iconName: IconName, value: string, label: string, tone?: Tone) => stat({ icon: iconName, value, label, tone });
+    attr(this.report, 'data-tone', r.repelled ? 'good' : 'hostile');
+    const share = r.defenseDamage + r.playerDamage;
+    (this.report.querySelector('.ui-card-body') as HTMLElement).innerHTML = `
+      <div class="rr-head">${icon(r.repelled ? 'shield' : 'raid')}<b>${esc(r.repelled ? SAY.raidRepelled : SAY.baseHit)}</b><span class="rr-where num">${esc(T.base.home)}</span>${iconButton({ icon: 'close', name: SAY.close, className: 'rr-close' })}</div>
       <div class="stats">
-        ${row('bomber', String(r.aircraftDestroyed), `Raiders shot down (defenses ${r.byDefenses}, you ${r.byPlayer})`, r.aircraftDestroyed > 0 ? 'good' : '')}
-        ${row('paper', r.paperLost > 0 ? `−${r.paperLost}` : '0', 'Paper lost', r.paperLost > 0 ? 'bad' : 'good')}
-        ${r.prevented > 0 ? row('shield', `+${r.prevented}`, 'Paper saved', 'good') : ''}
-        ${r.destroyed.length + r.damaged.length > 0 ? row('warn', String(r.destroyed.length + r.damaged.length), `Hit: ${[...r.destroyed, ...r.damaged].join(', ')}`, 'bad') : ''}
-        ${r.repairCost > 0 ? row('repair', String(r.repairCost), 'Repair cost', 'warn') : ''}
-        ${r.defenseDamage + r.playerDamage > 0 ? row('turret', pct(r.defenseDamage / (r.defenseDamage + r.playerDamage)), `Defenses' share of the damage (you: ${pct(r.playerDamage / (r.defenseDamage + r.playerDamage))})`) : ''}
+        ${row('bomber', count(r.aircraftDestroyed), T.base.raidersShotDown(r.byDefenses, r.byPlayer), r.aircraftDestroyed > 0 ? 'good' : undefined)}
+        ${row('paper', r.paperLost > 0 ? `−${paper(r.paperLost)}` : count(0), T.base.paperLost, r.paperLost > 0 ? 'hostile' : 'good')}
+        ${r.prevented > 0 ? row('shield', `+${paper(r.prevented)}`, T.base.paperSaved, 'good') : ''}
+        ${r.destroyed.length + r.damaged.length > 0 ? row('warn', count(r.destroyed.length + r.damaged.length), T.base.hit([...r.destroyed, ...r.damaged]), 'hostile') : ''}
+        ${r.repairCost > 0 ? row('repair', paper(r.repairCost), T.base.repairCost, 'warn') : ''}
+        ${share > 0 ? row('turret', pct(r.defenseDamage / share), T.base.defenseShare(pct(r.playerDamage / share))) : ''}
       </div>
       <div class="rr-line">${esc(r.highlight)}</div>`;
     this.report.hidden = false;
@@ -259,3 +318,4 @@ export class RaidHud {
     this.reportUntil = 0;
   }
 }
+

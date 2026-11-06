@@ -1,4 +1,4 @@
-# paperwars.io: v0.0.14 (going live), on top of v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.15 (HUD and UI revamp), on top of v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
 
 > **v0.0.14: going live (phases 1 to 6 done; next, the developer's setup).** Everything the
 > multiplayer server needs to run on the internet: a `Dockerfile` Railway builds on its own,
@@ -8,6 +8,17 @@
 > backups to Cloudflare R2 with each one test-restored, the F8 playtest feedback log, and a load
 > test that runs against the deployment. **Start here:** [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
 > See [v0.0.14: going live](#v0014-going-live) and the [plan](docs/roadmap/v0.0.14.md).
+>
+> **v0.0.15: HUD and UI revamp (coded; next, the developer's hands-on checks).** One design system
+> after the developer's style guide: tokens with two themes (Daylight and Lights out), Lilita One,
+> Nunito and Kalam, Lucide icons and a shared component set ([docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md),
+> gallery at `?ui-gallery`). The flight HUD in fixed zones with the centre clear, rebuilt management
+> and multiplayer screens (`mp.css` retired), keyboard and controller focus everywhere with confirm
+> dialogs, live device-aware hints, layouts from 720p to 4K and 21:9, accessibility settings
+> (colour-blind palette, text size, high contrast, reduced motion, sound captions), all interface
+> text in a keyed dictionary with `?pseudo` pseudo-localisation, pencil outlines removed, Medium as
+> the default preset, and the Raptor finalised. See [v0.0.15](#v0015-hud-and-ui-revamp) and the
+> [plan](docs/roadmap/v0.0.15.md).
 
 
 > **v0.0.13: sessions.** No more forever-world: players meet in timed sessions of up to sixteen,
@@ -290,7 +301,8 @@ Screenshots are in [docs/checkpoints/0.0.11-assets/](docs/checkpoints/0.0.11-ass
   workshop chimneys smoke. Every home desk has an **aircraft hangar** behind the runway that
   grows from level 1 to 3 with the planes kept in it.
 - **No pencil strokes.** The models are clean low-poly; pencil outlines are off by default (still
-  in the menu). Planes use the Paper skin, buildings cardboard, the classroom its real colours.
+  in the menu; the outlines and their settings were removed in v0.0.15 by the developer's decision
+  of 2026-11-02). Planes use the Paper skin, buildings cardboard, the classroom its real colours.
 
 ### Assets and the export
 
@@ -332,6 +344,31 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.15: HUD and UI revamp
+
+All nine phases of the [plan](docs/roadmap/v0.0.15.md) are coded. Screenshots: the
+[baseline](docs/checkpoints/0.0.15-ui-baseline/), the [style](docs/checkpoints/0.0.15-style/),
+[multiplayer](docs/checkpoints/0.0.15-multiplayer/), [pseudo-localisation](docs/checkpoints/0.0.15-pseudo/)
+and the [after](docs/checkpoints/0.0.15-ui-after/) set (`npm run ui:shots`).
+
+Useful URLs: `?ui-gallery` (every component in every state), `?pseudo` (accented, longer text),
+`?lang=<code>` (a future locale). The theme and accessibility options are in the pause menu.
+
+**For the developer:**
+- the controller and keyboard walkthroughs on real hardware;
+- the two-player playtest;
+- approving the style;
+- the font licence (SIL OFL) and the Lucide icon licence (ISC), recorded in DESIGN_SYSTEM.md §10C;
+- the Raptor's price of 72.
+
+**Known gaps:**
+- game content outside `src/ui` and `src/mp` (aircraft, missions, director, `Game.ts`, server
+  messages) is still English text;
+- the mini-map zoom has no key binding;
+- 4K and 3440 x 1440 were screenshotted as the HUD alone (software rendering is too slow for
+  the 3D world at those sizes);
+- frame time was not measured on real hardware.
 
 ## v0.0.14: going live
 
@@ -627,7 +664,8 @@ the plan asks to be approved before the look is rolled out to the rest of the wo
 
 ### What is in it
 
-- **Pencil-outline renderer** (`src/render/outline/`): graphite strokes along silhouettes, folds
+- **Pencil-outline renderer** (`src/render/outline/`, removed in v0.0.15 by the developer's
+  decision of 2026-11-02): graphite strokes along silhouettes, folds
   and paper edges, built from each mesh's edges and widened on screen by a shader, with per-object
   strength (aircraft and rockets boldest, buildings and targets firm, props lighter, trims
   faintest), distance thinning and fading, and stable hand-drawn irregularity (uneven width,
@@ -1252,7 +1290,7 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 | Specter | Surveillance drone | 30 | 6 | 60 | 3.2 km | 1 light, 30 ink | – | 0.55 | Flies furthest and quietest; nothing to fight with |
 | Thug | Ground attack | 40 | 9 | 150 | 1.5 km | rotary, 220 ink | 3 mini | 1.15 | Slow and tough, shreds turrets on low passes |
 | Jumper | VTOL fighter | 40 | 9 | 100 | 1.5 km | 1, 90 ink | 2 mini | 0.95 | Slowest stall speed with jets; hover comes later |
-| Raptor | Air superiority | 45 | 10 | 120 | 1.8 km | 2 heavy, 140 ink | – | 0.75 | The best gun platform; no bombs |
+| Raptor | Air superiority | 72 | 16 | 120 | 1.8 km | 2 heavy, 140 ink | – | 0.75 | The best gun platform, fastest fighter and best climber; turns a little wider than the Falcon; no bombs; folds in 3 s (v0.0.15) |
 | Lightning | Stealth multirole | 45 | 10 | 110 | 2.0 km | 1, 100 ink | 2 | 0.65 | Hard to spot, good at everything |
 | Lancer | Supersonic bomber | 55 | 12 | 135 | 1.7 km | 1, 50 ink | 3 | 1.1 | Outruns fighters with a bomb load |
 | Ghost | Stealth bomber | 60 | 13 | 140 | 2.3 km | 1, 30 ink | 4 | 0.5 | Defenses barely notice it; no dogfighting |
@@ -1913,7 +1951,7 @@ The road to the first public release is planned version by version in
 | [v0.0.12](docs/roadmap/v0.0.12.md) | Persistent, portable bases |
 | [v0.0.13](docs/roadmap/v0.0.13.md) | Sessions and the territory lifecycle |
 | [v0.0.14](docs/roadmap/v0.0.14.md) | Going live: the multiplayer server on the internet, with a setup guide |
-| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp (in progress) |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp: one design system, rebuilt HUD and screens, accessibility, localisation-ready text |
 | [v0.0.16](docs/roadmap/v0.0.16.md) | Flight maneuvers (added 2026-11-06) |
 | [v0.0.17](docs/roadmap/v0.0.17.md) | Player ranks (added 2026-11-06) |
 | [v0.0.18](docs/roadmap/v0.0.18.md) | Audio and music revamp |

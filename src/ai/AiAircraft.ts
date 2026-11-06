@@ -1,5 +1,6 @@
 import { boundaryDistance } from '../systems/Boundary';
 import { Vec3 } from 'playcanvas';
+import { aiDesignFor } from '../aircraft/Aircraft';
 import { predictImpact } from '../aircraft/Bomb';
 import { FlightModel, wrapAngle, type Collision, type FlightControls } from '../aircraft/FlightModel';
 import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
@@ -45,7 +46,7 @@ export interface AiOrders {
   side: Side;
   role: AiRole;
   skill: Difficulty;
-  /** The design it flies; the role's by default (AI.roles). */
+  /** The design it flies, if its role may fly it (AI.designs); the role's default (AI.roles) otherwise. */
   aircraft?: AircraftId;
   /** Waypoints: it appears at the first, heading for the second. */
   route: Point3[];
@@ -182,7 +183,7 @@ export class AiAircraft {
     readonly orders: AiOrders,
     private readonly rng: Rng,
   ) {
-    this.spec = AIRCRAFT[orders.aircraft ?? AI.roles[orders.role]];
+    this.spec = AIRCRAFT[aiDesignFor(orders.role, orders.aircraft)];
     this.skill = AI.skill[orders.skill];
     this.model = new FlightModel(this.spec);
     this.durability = new Durability(this.spec.maxHealth);

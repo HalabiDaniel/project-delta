@@ -45,7 +45,7 @@ export function eraser(): Model {
 
 /**
  * A wooden ruler along +X with its markings as a separate model (decals: drawn without
- * outlines or shadows).
+ * shadows).
  */
 export function ruler(length = 12, width = 1.1): { body: Model; marks: Model } {
   const body = new Model();

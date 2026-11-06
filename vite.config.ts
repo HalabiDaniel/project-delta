@@ -13,6 +13,8 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
+    // Node for speed; DOM tests (components, focus manager, tokens) opt in per file with a
+    // `// @vitest-environment happy-dom` first line.
     environment: 'node',
   },
 });

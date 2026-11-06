@@ -1,6 +1,6 @@
 import { TERRITORY_LIFECYCLE } from '../../src/config';
 import { describe, expect, it } from 'vitest';
-import { ECONOMY, PVP } from '../../src/config';
+import { AIRCRAFT, ECONOMY, PLANE, PVP } from '../../src/config';
 import { NET, parseCommand, planeId, unpackFrames, packFrames, type NetEvent } from '../../src/net/protocol';
 import { launch, place, player, quietWorld, run } from './testkit';
 
@@ -279,6 +279,76 @@ describe('what clients may send', () => {
     world.join('a', 'Ann');
     expect(world.command('a', { a: 'build' })).toBe(false);
     expect(world.command('a', { a: 'launch' })).toBe(false);
+  });
+});
+
+describe('the Raptor on the server (v0.0.15)', () => {
+  it('accepts the raptor id from clients and nothing like it', () => {
+    expect(parseCommand({ a: 'aircraft', id: 'raptor' })).toEqual({ a: 'aircraft', id: 'raptor' });
+    expect(parseCommand({ a: 'aircraft', id: 'Raptor' })).toBeNull();
+    expect(parseCommand({ a: 'aircraft', id: 'f-22' })).toBeNull();
+  });
+
+  it('folds one for its price in its longer fold time, and refuses it for a card that needs a bomb', () => {
+    const world = quietWorld(4);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const st = a.state!;
+    expect(world.command('a', { a: 'aircraft', id: 'raptor' })).toBe(true);
+    expect(st.chosen.id).toBe('raptor');
+    // A bombing card: no bomb bay, so no build and no charge.
+    const bombing = st.offers.findIndex((m) => m.objectives.some((o) => o.kind === 'bomb'));
+    expect(bombing).toBeGreaterThanOrEqual(0);
+    st.select(bombing);
+    expect(world.suits(a, 'raptor')).toBe(false);
+    const before = a.resources.paper;
+    expect(world.command('a', { a: 'build' })).toBe(false);
+    expect(a.resources.paper).toBe(before);
+    expect(st.phase).toBe('desk');
+    for (let i = 0; i < st.offers.length && !world.suits(a, 'raptor'); i++) st.select(i);
+    expect(world.suits(a, 'raptor')).toBe(true);
+    const paper = a.resources.paper;
+    expect(world.command('a', { a: 'build' })).toBe(true);
+    expect(paper - a.resources.paper).toBe(AIRCRAFT.raptor.cost);
+    // Slower to fold than the Swift and Falcon's two seconds.
+    run(world, PLANE.buildTime + 0.2);
+    expect(st.phase).toBe('building');
+    run(world, AIRCRAFT.raptor.buildTime! - PLANE.buildTime);
+    expect(st.phase).toBe('ready');
+  });
+
+  it('flies with its own guns and health, and a bomb press drops nothing', () => {
+    const world = quietWorld(4);
+    const a = player(world, 'a', 'T1', 'Ann');
+    launch(world, a, 'raptor');
+    const st = a.state!;
+    expect(st.phase).toBe('flying');
+    expect(st.plane!.id).toBe('raptor');
+    expect(st.durability!.health).toBe(AIRCRAFT.raptor.maxHealth);
+    expect(st.bombsLoaded).toBe(0);
+    world.drainEvents();
+    run(world, 1, (id) => (id === 'a' ? { bomb: true } : {}));
+    expect(st.sortie!.bombsDropped).toBe(0);
+    expect(world.drainEvents().some((o) => o.e.t === 'drop')).toBe(false);
+    expect(st.phase).toBe('flying');
+  });
+
+  it('a Raptor shot down is a fighter kill and pays its bounty under the usual rules', () => {
+    const world = quietWorld(7);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const b = player(world, 'b', 'T3', 'Bo');
+    launch(world, a);
+    launch(world, b, 'raptor');
+    place(a, 0, 40, 60, 0);
+    place(b, 0, 40, 40, 0);
+    const paper = a.resources.paper;
+    run(world, 10, (id) => (id === 'a' ? { fire: true } : {}));
+    expect(b.state!.phase).toBe('crashed');
+    expect(a.stats.kills).toBe(1);
+    expect(a.resources.paper).toBeGreaterThan(paper);
+    // The same farming guard as for any plane: a repeat kill soon after pays less.
+    const first = world.kills.record('c', 'd', AIRCRAFT.raptor.cost, false, 100);
+    expect(world.kills.record('c', 'd', AIRCRAFT.raptor.cost, false, 110)).toBeLessThan(first);
+    expect(world.kills.record('c', 'e', 0, true, 110)).toBe(0);
   });
 });
 

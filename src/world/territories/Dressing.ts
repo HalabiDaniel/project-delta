@@ -1,9 +1,7 @@
 import * as pc from 'playcanvas';
 import type { AssetLibrary } from '../../assets/AssetLibrary';
-import { PROPS } from '../../assets/manifest';
 import type { Collider } from '../../combat/Collision';
 import { WORLD } from '../../config';
-import { outline } from '../../render/outline/OutlineRenderer';
 import type { MaterialId } from '../../render/style';
 import type { Place, Vec3 } from '../props/MeshBuilder';
 import { LANDMARKS } from '../props/landmarks';
@@ -27,7 +25,7 @@ const PENNANT: Partial<Record<Ownership, MaterialId>> = { player: 'paper/blue', 
 /**
  * A territory dressed in its theme: the platform's slab and the sheet on top, the owner's tape
  * border and pennants, the landmark and the props. Static decoration is merged per material into a
- * few meshes (and one pencil-stroke mesh per outline tier), so a dressed territory costs a handful
+ * few meshes, so a dressed territory costs a handful
  * of draw calls however many props it has.
  *
  * Its collision shapes come from territories/decor.ts, the same pure function the server uses.
@@ -164,7 +162,6 @@ export class Dressing {
 
     const entity = surface.toEntity(this.device, 'surface', { castShadows: false });
     group.addChild(entity);
-    outline(entity, 'structure', { merge: true });
     if (!decals.isEmpty) group.addChild(decals.toEntity(this.device, 'markings', { castShadows: false }));
   }
 
@@ -237,7 +234,6 @@ export class Dressing {
     const model = new Model().add(landmark.model, place);
     const entity = model.toEntity(this.device, `landmark-${spec.id}`);
     this.root.addChild(entity);
-    outline(entity, 'structure', { merge: true });
     if (!landmark.decals.isEmpty) this.root.addChild(new Model().add(landmark.decals, place).toEntity(this.device, 'landmark-markings', { castShadows: false }));
   }
 
@@ -248,15 +244,13 @@ export class Dressing {
     this.root.addChild(details);
     this.details = details;
     const props = new Model();
-    const structures = new Model();
     const decals = new Model();
     for (const p of this.layout.props) {
       if ((p.detail ?? 1) > this.detail) continue;
-      const def = PROPS[p.prop];
       const place: Place = { at: [p.at[0], 0.02, p.at[1]], rot: [0, p.yaw ?? 0, 0] };
       const made = this.assets.instance(p.prop);
       if (made.kind === 'built') {
-        (def.tier === 'structure' ? structures : props).add(made.build.model, place);
+        props.add(made.build.model, place);
         if (made.build.decals) decals.add(made.build.decals, place);
       } else {
         made.entity.setLocalPosition(place.at![0], place.at![1], place.at![2]);
@@ -264,12 +258,7 @@ export class Dressing {
         details.addChild(made.entity);
       }
     }
-    for (const [model, name, tier] of [[props, 'props', 'prop'], [structures, 'structures', 'structure']] as const) {
-      if (model.isEmpty) continue;
-      const entity = model.toEntity(this.device, name);
-      details.addChild(entity);
-      outline(entity, tier, { merge: true });
-    }
+    if (!props.isEmpty) details.addChild(props.toEntity(this.device, 'props'));
     if (!decals.isEmpty) details.addChild(decals.toEntity(this.device, 'prop-markings', { castShadows: false }));
   }
 }

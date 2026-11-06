@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create account</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/paperwars/tokens.css">
+<link rel="stylesheet" href="ds/paperwars/components/bundle.css">
+<link rel="stylesheet" href="screens.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@600;700;800;900&amp;family=Kalam:wght@400;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:var(--sky-500)}a:hover{color:var(--ink-900)}
+.wood{background-image:url(/_blob/bc5112efc91fb5bd6d3c8f51abbb8b3b);background-size:128px 32px;}
+</style>
+</helmet>
+<div class="scr wood" data-theme="light">
+<div style="position: absolute; left: 60px; top: 60px; display: flex; align-items: center; gap: 14px;"><img src="/_blob/cf9e94adbc9ae3672276172ec19f06e8" alt="" style="width: 64px; height: 64px;"><span class="disp" style="font-size: 44px; color: var(--graphite);">paperwars.io</span></div>
+<div style="position: absolute; left: 80px; top: 300px; width: 640px; height: 360px; border: 3px solid var(--graphite); border-radius: 18px; background: var(--paper-50); box-shadow: 8px 8px 0 var(--graphite); transform: rotate(-3deg);"></div>
+<img src="/_blob/79c960c7b0890f37a001446ff3a33511" alt="" style="position: absolute; left: 130px; top: 360px; width: 260px;">
+<img src="/_blob/10bd55b384d816cd65b29b852c2a57e9" alt="" style="position: absolute; left: 430px; top: 420px; width: 140px;">
+<img src="/_blob/e203d055c14aac6bf88c44aa2735e909" alt="" style="position: absolute; left: 560px; top: 380px; width: 150px;">
+<img src="/_blob/5092175f5f36552df7f859b89f9c5fed" alt="" style="position: absolute; left: 160px; top: 150px; width: 460px; transform: rotate(-6deg);">
+<p class="doodle" style="position: absolute; left: 100px; top: 700px; width: 560px; margin: 0; font-size: 24px; line-height: 30px; color: var(--graphite); transform: rotate(-1deg);">Pick a callsign the whole classroom will fear.</p>
+<div class="sheet sheet--margin" style="position: absolute; right: 72px; top: 60px; width: 560px; height: 780px; padding: 40px 48px 36px 84px; display: flex; flex-direction: column; gap: 18px;">
+<h1 class="screen-title">Make your pilot</h1>
+<p style="margin: -6px 0 2px; font-size: 16px; font-weight: 700; color: var(--ink-600);">Your guest desk and paper come with you.</p>
+<div class="field"><label for="callsign">Callsign</label><div class="field__box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg><input id="callsign" type="text" placeholder="PaperAce" value="PaperAce"><span style="color: var(--win-500); display: flex;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span></div><span class="field__help">Other players see this. 3 to 16 letters or numbers.</span></div>
+<div class="field field--error"><label for="email2">Email</label><div class="field__box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><input id="email2" type="email" placeholder="you@example.com" value="dan@"></div><span class="field__help">That email is missing a domain, like @example.com</span></div>
+<div class="field"><label for="pw2">Password</label><div class="field__box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input id="pw2" type="password" placeholder="At least 8 characters" value="paperplanes"><button aria-label="Show password" style="display: flex; padding: 4px; border: 0; background: none; color: var(--ink-600); cursor: pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></div><div style="display: flex; gap: 4px; margin-top: 2px;"><span style="flex: 1; height: 8px; border: 2px solid var(--ink-900); border-radius: 3px; background: var(--win-500);"></span><span style="flex: 1; height: 8px; border: 2px solid var(--ink-900); border-radius: 3px; background: var(--win-500);"></span><span style="flex: 1; height: 8px; border: 2px solid var(--ink-900); border-radius: 3px; background: var(--win-500);"></span><span style="flex: 1; height: 8px; border: 2px solid var(--ink-900); border-radius: 3px; background: transparent;"></span></div><span class="field__help">Good. Longer is even better.</span></div>
+<div class="field"><label>Team colour</label><div role="group" aria-label="Team colour" style="display: flex; gap: 10px;"><button aria-label="Team 1" aria-pressed="false" class="pw-t1" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 2" aria-pressed="true" class="pw-t2" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; box-shadow: 0 0 0 3px var(--paper-50), 0 0 0 6px var(--ink-900);"></button><button aria-label="Team 3" aria-pressed="false" class="pw-t3" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 4" aria-pressed="false" class="pw-t4" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 5" aria-pressed="false" class="pw-t5" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 6" aria-pressed="false" class="pw-t6" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 7" aria-pressed="false" class="pw-t7" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button><button aria-label="Team 8" aria-pressed="false" class="pw-t8" style="width: 36px; height: 36px; border: 3px solid var(--graphite); border-radius: 999px; cursor: pointer; "></button></div></div>
+<label style="display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 20px; font-weight: 700;"><input type="checkbox" style="width: 20px; height: 20px; margin-top: 1px; flex: none; accent-color: #26242c;"> <span>I agree to the <a href="#terms" style="font-weight: 900;">rules of the classroom</a> and <a href="#privacy" style="font-weight: 900;">privacy notice</a>.</span></label>
+<a class="mbtn mbtn--primary" href="Main.dc.html" style="justify-content: center;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M20 6 9 17l-5-5"/></svg> Create account</a>
+<p style="margin: auto 0 0; font-size: 16px; font-weight: 800;">Already a pilot? <a href="Login.dc.html" style="font-weight: 900;">Sign in</a></p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

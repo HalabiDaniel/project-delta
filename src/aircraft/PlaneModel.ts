@@ -1,7 +1,5 @@
 import * as pc from 'playcanvas';
 import { PALETTE } from '../config';
-import { outlineDynamic, type DynamicOutline } from '../render/outline/OutlineRenderer';
-import type { OutlineTier } from '../render/style';
 import type { PlaneShape, V3 } from './PlaneShapes';
 
 export interface PlaneMaterials {
@@ -70,13 +68,10 @@ export class FoldablePlane {
   private crumple = 0;
   private visibleBlots = 0;
   private readonly size: number;
-  /** Pencil strokes along the paper's edges and folds, re-shaped with the paper. */
-  private readonly strokes: DynamicOutline | null;
 
   /**
    * @param restDrop How far to lower the model while it lies flat, so the sheet rests on the
    * ground instead of floating at the finished plane's height.
-   * @param outlineTier How strongly it is outlined in pencil; null for none (see-through previews).
    */
   constructor(
     device: pc.GraphicsDevice,
@@ -84,7 +79,6 @@ export class FoldablePlane {
     materials: PlaneMaterials,
     private readonly restDrop = 0,
     blotMaterial: pc.Material | null = null,
-    outlineTier: OutlineTier | null = 'hero',
   ) {
     const paper = [...shape.paper.left, ...mirror(shape.paper.left), ...shape.paper.centre];
     const accent = [...shape.accent.left, ...mirror(shape.accent.left), ...shape.accent.centre];
@@ -97,7 +91,6 @@ export class FoldablePlane {
       receiveShadows: false,
     });
     if (blotMaterial) this.createBlots(device, blotMaterial);
-    this.strokes = outlineTier ? outlineDynamic(this.entity, outlineTier, this.parts.map((p) => ({ positions: p.final, doubleSided: true }))) : null;
     this.setFold(1);
   }
 
@@ -153,7 +146,6 @@ export class FoldablePlane {
       part.mesh.setNormals(part.normals);
       part.mesh.update(pc.PRIMITIVE_TRIANGLES);
     }
-    this.parts.forEach((part, i) => this.strokes?.update(i, part.positions));
     this.entity.setLocalPosition(0, -this.restDrop * (1 - rise), 0);
     this.placeBlots();
   }

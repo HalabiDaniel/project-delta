@@ -1,8 +1,33 @@
 import type { AiRole, Side, ThreatLevel } from '../config';
 import type { InstallationKind } from '../defenses/Layout';
+import { colour, FACES, onTokensChange, tokenOptions, withAlpha, type ColourName } from './tokens';
+import { iconButton } from './components';
+import { MAP_TEXT } from './strings';
+
+/**
+ * A desk's place in the multiplayer lifecycle (v0.0.13, protocol DESK_STATES): the AI's, a
+ * player's, draining (its player left; the base stays until a raid on it is settled), empty (bare,
+ * closed for a while) or open (bare, a joining player may land here).
+ */
+export type MapDeskState = 'ai' | 'player' | 'draining' | 'empty' | 'open';
+/** Where a desk's player is (src/mp/presence.ts). */
+export type MapPresence = 'online' | 'away' | 'offline' | 'protected';
+
+export interface MiniMapTerritory {
+  id: string;
+  x: number;
+  z: number;
+  half: number;
+  role: 'home' | 'objective' | 'done' | 'neutral';
+  threat: ThreatLevel;
+  /** Multiplayer: the desk's lifecycle state (single-player leaves it out). */
+  desk?: MapDeskState;
+  /** Multiplayer: the player on it, in their tape colour (an identity colour, not a meaning). */
+  owner?: { colour: string; presence: MapPresence } | null;
+}
 
 export interface MiniMapView {
-  territories: Array<{ id: string; x: number; z: number; half: number; role: 'home' | 'objective' | 'done' | 'neutral'; threat: ThreatLevel }>;
+  territories: MiniMapTerritory[];
   /** Every installation; weapons with `reach` set show how far (and which way) they can shoot. */
   defenses: Array<{
     x: number;
@@ -33,36 +58,118 @@ export interface MiniMapView {
   warning: boolean;
 }
 
-const COLORS = {
-  bg: 'rgba(251, 248, 241, 0.92)',
-  boundary: 'rgba(31, 41, 55, 0.35)',
-  warning: '#dc2626',
-  home: '#2f6fe4',
-  objective: '#ea580c',
-  done: '#4ade80',
-  neutral: '#9ca3af',
-  label: '#ffffff',
-  ring: '#f97316',
-  ringWaiting: '#9ca3af',
-  zone: '#dc2626',
-  precision: '#3730a3',
-  plane: '#1d2747',
-  guide: 'rgba(220, 38, 38, 0.6)',
-  threat: ['', '#eab308', '#f97316', '#dc2626'],
-  defense: '#4d5530',
-  engaged: '#dc2626',
-  wreck: '#9ca3af',
-  reachTurret: 'rgba(220, 38, 38, 0.5)',
-  reachLauncher: 'rgba(147, 51, 234, 0.5)',
-  enemy: '#d6372e',
-  friend: '#2f6fe4',
-  raidLine: 'rgba(185, 28, 28, 0.55)',
-  radar: 'rgba(47, 111, 228, 0.5)',
-  radarFill: 'rgba(47, 111, 228, 0.07)',
-  radarOff: 'rgba(214, 55, 46, 0.45)',
-  sweep: 'rgba(47, 111, 228, 0.35)',
-  friendlyDefense: '#2f6fe4',
-};
+/**
+ * How a desk is drawn: fill, pattern, edge and a mark, so every state differs in shape as well as
+ * colour (plan v0.0.15 §8A). Meaning colours are tokens; a player's desk is filled with their tape
+ * colour ('owner'), their identity.
+ *
+ *   home            friend blue, solid, a house in the corner
+ *   player-held     owner colour, solid; presence adds: away a dashed ink edge, protected an inner
+ *                   ring, offline a slash
+ *   draining        owner colour with paper hatching (and the presence marks)
+ *   empty           no fill, a dashed grey edge
+ *   open            recessed paper with a dashed green edge and a plus
+ *   AI-held         neutral grey, solid (with its threat edge)
+ *   objective       objective orange (a mission's target; also a pulsing outline)
+ *   done            good green with a tick
+ */
+export interface DeskStyle {
+  fill: ColourName | 'owner' | null;
+  pattern: 'solid' | 'hatch';
+  edge: { colour: ColourName; dash: boolean } | null;
+  /** An inner ring (protected). */
+  ring: boolean;
+  mark: 'none' | 'home' | 'tick' | 'plus' | 'slash';
+  /** The desk id's colour. */
+  label: ColourName;
+}
+
+export function deskStyle(t: Pick<MiniMapTerritory, 'role' | 'desk' | 'owner'>): DeskStyle {
+  const base: DeskStyle = { fill: 'neutral', pattern: 'solid', edge: null, ring: false, mark: 'none', label: 'on-colour' };
+  if (t.role === 'home') return { ...base, fill: 'friend', mark: 'home', ring: t.owner?.presence === 'protected' };
+  if (t.role === 'done') return { ...base, fill: 'good', mark: 'tick' };
+  const presence = t.owner?.presence;
+  const marks = (): Partial<DeskStyle> => ({
+    edge: presence === 'away' ? { colour: 'ink', dash: true } : null,
+    ring: presence === 'protected',
+    mark: presence === 'offline' ? 'slash' : 'none',
+  });
+  switch (t.desk) {
+    case 'player':
+      if (t.owner) return { ...base, fill: 'owner', ...marks() };
+      break;
+    case 'draining':
+      return { ...base, fill: t.owner ? 'owner' : 'neutral', pattern: 'hatch', ...marks(), mark: 'slash' };
+    case 'empty':
+      return { ...base, fill: null, edge: { colour: 'ink-3', dash: true }, label: 'ink-3' };
+    case 'open':
+      return { ...base, fill: 'paper-2', edge: { colour: 'good', dash: true }, mark: 'plus', label: 'ink-2' };
+    case 'ai':
+    case undefined:
+      break;
+  }
+  if (t.role === 'objective') return { ...base, fill: 'objective' };
+  return base;
+}
+
+/** The canvas colours, read from the tokens (and again whenever the tokens change). */
+function readColours() {
+  return {
+    // The classroom floor, as the style guide's Minimap: desk-200, the rim in ink with a paper ring.
+    bg: colour('desk-200'),
+    boundary: withAlpha('ink', 0.35),
+    deskEdge: colour('graphite'),
+    rimInk: colour('ink'),
+    rimPaper: colour('paper-solid'),
+    warning: colour('hostile'),
+    home: colour('friend'),
+    objective: colour('objective'),
+    objectivePulse: (a: number) => withAlpha('objective', a),
+    label: colour('on-colour'),
+    ring: colour('objective'),
+    ringWaiting: colour('neutral'),
+    zone: colour('hostile'),
+    precision: colour('ink-2'),
+    plane: colour('ink'),
+    outline: colour('paper-solid'),
+    guide: withAlpha('hostile', 0.6),
+    threat: ['', colour('threat-1'), colour('threat-2'), colour('threat-3')],
+    defense: colour('ink-2'),
+    engaged: colour('hostile'),
+    wreck: colour('off'),
+    reachTurret: withAlpha('hostile', 0.5),
+    reachLauncher: withAlpha('locking', 0.5),
+    enemy: colour('hostile'),
+    friend: colour('friend'),
+    raidLine: withAlpha('hostile', 0.55),
+    radar: withAlpha('friend', 0.5),
+    radarFill: withAlpha('friend', 0.07),
+    radarOff: withAlpha('hostile', 0.45),
+    sweep: withAlpha('friend', 0.35),
+    friendlyDefense: colour('friend'),
+    hatch: withAlpha('paper-solid', 0.75),
+    rim: withAlpha('ink', 0.18),
+    named: (name: ColourName) => colour(name),
+  };
+}
+
+
+/** Zoom steps (the rim's + and − buttons). */
+export const MAP_ZOOMS: readonly number[] = [1, 1.6, 2.4];
+
+/**
+ * The mini-map's frame (the style guide's Minimap): the round canvas, a compass N on the rim, the
+ * desk you are over and zoom buttons. Returns the canvas for MiniMap.
+ */
+export function miniMapFrame(host: HTMLElement): HTMLCanvasElement {
+  host.insertAdjacentHTML('beforeend', `<div class="minimap-wrap" role="img" aria-label="${MAP_TEXT.label}">
+    <canvas class="minimap" aria-hidden="true"></canvas>
+    <span class="mm-n num" aria-hidden="true">${MAP_TEXT.north}</span>
+    <span class="mm-desk num" data-mm="desk" hidden></span>
+    <span class="mm-zoom">${iconButton({ icon: 'plus', name: MAP_TEXT.zoomIn, className: 'pad-skip', attrs: { 'data-mm': 'in' } })}${iconButton({ icon: 'minus', name: MAP_TEXT.zoomOut, className: 'pad-skip', attrs: { 'data-mm': 'out' } })}</span>
+  </div>`);
+  return host.lastElementChild!.querySelector('canvas')!;
+}
 
 /**
  * Compact top-down diagram for navigation. It is a fixed diagram, not a camera: home sits bottom
@@ -73,6 +180,11 @@ export class MiniMap {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly size: number;
   private time = 0;
+  private c = readColours();
+  private last: MiniMapView | null = null;
+  private zoomStep = 0;
+  private readonly deskLabel: HTMLElement | null;
+  private deskShown = '';
 
   constructor(canvas: HTMLCanvasElement, size = 176) {
     this.size = size;
@@ -83,58 +195,72 @@ export class MiniMap {
     canvas.style.height = `${size}px`;
     this.ctx = canvas.getContext('2d')!;
     this.ctx.scale(ratio, ratio);
+    // A palette swap (colour-blind, high contrast) redraws at once in the new colours.
+    onTokensChange(() => {
+      this.c = readColours();
+      if (this.last) this.render(this.last, 0);
+    });
+    const frame = canvas.parentElement;
+    this.deskLabel = frame?.querySelector<HTMLElement>('[data-mm="desk"]') ?? null;
+    frame?.addEventListener('mousedown', (e) => e.preventDefault());
+    frame?.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('[data-mm]');
+      if (b?.dataset.mm === 'in') this.zoom(1);
+      else if (b?.dataset.mm === 'out') this.zoom(-1);
+    });
+  }
+
+  /** One zoom step in (+1) or out (−1); zoomed in, the map follows the plane. */
+  zoom(step: number): number {
+    this.zoomStep = Math.max(0, Math.min(MAP_ZOOMS.length - 1, this.zoomStep + Math.sign(step)));
+    if (this.last) this.render(this.last, 0);
+    return MAP_ZOOMS[this.zoomStep];
+  }
+
+  get zoomLevel(): number {
+    return MAP_ZOOMS[this.zoomStep];
   }
 
   render(v: MiniMapView, dt: number): void {
+    this.last = v;
     this.time += dt;
     const { ctx, size } = this;
     const c = size / 2;
-    const scale = (c - 8) / (v.boundaryRadius * 1.12);
+    const zoom = MAP_ZOOMS[this.zoomStep];
+    const scale = ((c - 10) / (v.boundaryRadius * 1.12)) * zoom;
+    // Zoomed in, the plane is the centre.
+    const fx = zoom > 1 && v.plane ? v.plane.x : 0;
+    const fz = zoom > 1 && v.plane ? v.plane.z : 0;
     // World (x, z) → map: x' = z, y' = -x. Home (−x, −z) lands bottom left.
-    const sx = (_x: number, z: number) => c + z * scale;
-    const sy = (x: number, _z: number) => c - x * scale;
+    const sx = (_x: number, z: number) => c + (z - fz) * scale;
+    const sy = (x: number, _z: number) => c - (x - fx) * scale;
+    this.showDesk(v);
 
     ctx.clearRect(0, 0, size, size);
     ctx.save();
     ctx.beginPath();
     ctx.arc(c, c, c - 1, 0, Math.PI * 2);
-    ctx.fillStyle = COLORS.bg;
+    ctx.fillStyle = this.c.bg;
     ctx.fill();
     ctx.clip();
 
+    // Reduced motion: nothing blinks or pulses; the states keep their shapes.
+    const still = tokenOptions().reducedMotion;
     // The edge of the airspace.
-    const flash = v.warning && Math.sin(this.time * 10) > 0;
+    const flash = v.warning && (still || Math.sin(this.time * 10) > 0);
     ctx.beginPath();
     const edge = v.boundaryRadius * scale;
     ctx.rect(c - edge, c - edge, edge * 2, edge * 2);
     ctx.setLineDash([4, 4]);
     ctx.lineWidth = flash ? 3 : 1.5;
-    ctx.strokeStyle = v.warning ? COLORS.warning : COLORS.boundary;
+    ctx.strokeStyle = v.warning ? this.c.warning : this.c.boundary;
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = '700 9px system-ui, sans-serif';
+    ctx.font = `400 10px ${FACES['font-display']}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    for (const t of v.territories) {
-      const half = t.half * scale;
-      const x = sx(t.x, t.z);
-      const y = sy(t.x, t.z);
-      ctx.fillStyle = COLORS[t.role];
-      ctx.fillRect(x - half, y - half, half * 2, half * 2);
-      if (t.threat > 0) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = COLORS.threat[t.threat];
-        ctx.strokeRect(x - half + 0.75, y - half + 0.75, half * 2 - 1.5, half * 2 - 1.5);
-      }
-      if (t.role === 'objective') {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = `rgba(234, 88, 12, ${0.5 + 0.5 * Math.sin(this.time * 4)})`;
-        ctx.strokeRect(x - half - 2, y - half - 2, half * 2 + 4, half * 2 + 4);
-      }
-      ctx.fillStyle = COLORS.label;
-      ctx.fillText(t.id, x, y);
-    }
+    for (const t of v.territories) this.drawDesk(t, sx(t.x, t.z), sy(t.x, t.z), t.half * scale);
 
     // T1's early-warning radius, with a turning sweep while the radar stands.
     if (v.radar) {
@@ -143,11 +269,11 @@ export class MiniMap {
       const r = v.radar.range * scale;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.radarFill;
+      ctx.fillStyle = this.c.radarFill;
       ctx.fill();
       ctx.setLineDash(v.radar.state === 'on' ? [] : [3, 3]);
       ctx.lineWidth = 1.2;
-      ctx.strokeStyle = v.radar.state === 'off' ? COLORS.radarOff : COLORS.radar;
+      ctx.strokeStyle = v.radar.state === 'off' ? this.c.radarOff : this.c.radar;
       ctx.stroke();
       ctx.setLineDash([]);
       if (v.radar.state === 'on') {
@@ -156,7 +282,7 @@ export class MiniMap {
         ctx.moveTo(x, y);
         ctx.arc(x, y, r, a - 0.5, a);
         ctx.closePath();
-        ctx.fillStyle = COLORS.sweep;
+        ctx.fillStyle = this.c.sweep;
         ctx.fill();
       }
     }
@@ -174,14 +300,14 @@ export class MiniMap {
       if (d.reach.arc !== null) ctx.moveTo(x, y);
       ctx.arc(x, y, d.reach.range * scale, facing - arc, facing + arc);
       if (d.reach.arc !== null) ctx.closePath();
-      ctx.strokeStyle = d.kind === 'launcher' ? COLORS.reachLauncher : COLORS.reachTurret;
+      ctx.strokeStyle = d.kind === 'launcher' ? this.c.reachLauncher : this.c.reachTurret;
       ctx.stroke();
     }
     ctx.setLineDash([]);
     for (const d of v.defenses) {
       const x = sx(d.x, d.z);
       const y = sy(d.x, d.z);
-      ctx.fillStyle = !d.alive ? COLORS.wreck : d.engaged && Math.sin(this.time * 12) > -0.3 ? COLORS.engaged : d.friendly ? COLORS.friendlyDefense : COLORS.defense;
+      ctx.fillStyle = !d.alive ? this.c.wreck : d.engaged && (still || Math.sin(this.time * 12) > -0.3) ? this.c.engaged : d.friendly ? this.c.friendlyDefense : this.c.defense;
       ctx.beginPath();
       switch (d.kind) {
         case 'turret':
@@ -210,12 +336,31 @@ export class MiniMap {
           break;
       }
       ctx.fill();
+      // Never colour alone: a wreck is crossed out, an engaged weapon ringed, ours underlined.
+      if (!d.alive) {
+        ctx.beginPath();
+        ctx.moveTo(x - 2.6, y - 2.6);
+        ctx.lineTo(x + 2.6, y + 2.6);
+        ctx.moveTo(x + 2.6, y - 2.6);
+        ctx.lineTo(x - 2.6, y + 2.6);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.c.defense;
+        ctx.stroke();
+      } else if (d.engaged) {
+        ctx.beginPath();
+        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.c.engaged;
+        ctx.stroke();
+      } else if (d.friendly) {
+        ctx.fillRect(x - 2.4, y + 3, 4.8, 1);
+      }
     }
 
     for (const z of v.zones) {
       ctx.beginPath();
       ctx.arc(sx(z.x, z.z), sy(z.x, z.z), 2.6, 0, Math.PI * 2);
-      ctx.fillStyle = z.precision ? COLORS.precision : COLORS.zone;
+      ctx.fillStyle = z.precision ? this.c.precision : this.c.zone;
       ctx.fill();
     }
 
@@ -228,7 +373,7 @@ export class MiniMap {
       ctx.lineTo(x, y + 3.5);
       ctx.lineTo(x - 3.5, y);
       ctx.closePath();
-      ctx.fillStyle = COLORS.zone;
+      ctx.fillStyle = this.c.zone;
       ctx.fill();
     }
 
@@ -240,7 +385,7 @@ export class MiniMap {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(a + Math.PI / 2);
-      ctx.fillStyle = r.state === 'open' ? COLORS.ring : COLORS.ringWaiting;
+      ctx.fillStyle = r.state === 'open' ? this.c.ring : this.c.ringWaiting;
       ctx.fillRect(-4, -1.5, 8, 3);
       ctx.restore();
     }
@@ -254,12 +399,12 @@ export class MiniMap {
         ctx.lineTo(sx(a.raid.x, a.raid.z), sy(a.raid.x, a.raid.z));
         ctx.setLineDash([2, 3]);
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = COLORS.raidLine;
+        ctx.strokeStyle = this.c.raidLine;
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(x, y, 6 + 2 * Math.sin(this.time * 6), 0, Math.PI * 2);
-        ctx.strokeStyle = COLORS.enemy;
+        ctx.arc(x, y, 6 + (still ? 1 : 2 * Math.sin(this.time * 6)), 0, Math.PI * 2);
+        ctx.strokeStyle = this.c.enemy;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -269,15 +414,25 @@ export class MiniMap {
       ctx.rotate(Math.atan2(Math.sin(a.yaw), -Math.cos(a.yaw)));
       ctx.scale(size, size);
       ctx.beginPath();
-      ctx.moveTo(5, 0);
-      ctx.lineTo(-3.5, -3.5);
-      ctx.lineTo(-1.5, 0);
-      ctx.lineTo(-3.5, 3.5);
-      ctx.closePath();
-      ctx.fillStyle = a.side === 'enemy' ? COLORS.enemy : COLORS.friend;
+      if (a.side === 'enemy') {
+        // Hostile: a sharp dart.
+        ctx.moveTo(5, 0);
+        ctx.lineTo(-3.5, -3.5);
+        ctx.lineTo(-1.5, 0);
+        ctx.lineTo(-3.5, 3.5);
+        ctx.closePath();
+      } else {
+        // Friendly: a round body with a nose, so side never depends on colour alone.
+        ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+        ctx.moveTo(1.5, -1.2);
+        ctx.lineTo(5, 0);
+        ctx.lineTo(1.5, 1.2);
+        ctx.closePath();
+      }
+      ctx.fillStyle = a.side === 'enemy' ? this.c.enemy : this.c.friend;
       ctx.fill();
       if (a.mission) {
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = this.c.outline;
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -290,7 +445,7 @@ export class MiniMap {
       ctx.lineTo(sx(v.objective.x, v.objective.z), sy(v.objective.x, v.objective.z));
       ctx.setLineDash([3, 3]);
       ctx.lineWidth = 1.5;
-      ctx.strokeStyle = COLORS.guide;
+      ctx.strokeStyle = this.c.guide;
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -308,8 +463,8 @@ export class MiniMap {
       ctx.lineTo(-2.5, 0);
       ctx.lineTo(-5, 4.5);
       ctx.closePath();
-      ctx.fillStyle = p.autopilot ? COLORS.warning : COLORS.plane;
-      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = p.autopilot ? this.c.warning : this.c.plane;
+      ctx.strokeStyle = this.c.outline;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.fill();
@@ -317,10 +472,136 @@ export class MiniMap {
     }
     ctx.restore();
 
+    // The rim: a thick ink ring with a paper ring inside, and eight ticks (N is a badge on the frame).
     ctx.beginPath();
-    ctx.arc(c, c, c - 1, 0, Math.PI * 2);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(31, 41, 55, 0.18)';
+    ctx.arc(c, c, c - 2.5, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = this.c.rimInk;
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c, c, c - 6, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = this.c.rimPaper;
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.c.rimInk;
+    ctx.lineCap = 'round';
+    for (let k = 1; k < 8; k++) {
+      const a = (k * Math.PI) / 4 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * (c - 4), c + Math.sin(a) * (c - 4));
+      ctx.lineTo(c + Math.cos(a) * (c - 10), c + Math.sin(a) * (c - 10));
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+
+  /** The desk the plane is over (or home at the desk), on the rim. */
+  private showDesk(v: MiniMapView): void {
+    if (!this.deskLabel) return;
+    const p = v.plane;
+    const over = p ? v.territories.find((t) => Math.abs(p.x - t.x) <= t.half && Math.abs(p.z - t.z) <= t.half) : v.territories.find((t) => t.role === 'home');
+    const label = over?.id ?? '';
+    if (label === this.deskShown) return;
+    this.deskShown = label;
+    this.deskLabel.textContent = label;
+    this.deskLabel.hidden = label === '';
+  }
+
+  /** One desk: its fill, pattern, edge and mark (deskStyle), the threat edge, the objective pulse and its id. */
+  private drawDesk(t: MiniMapTerritory, x: number, y: number, half: number): void {
+    const { ctx } = this;
+    const st = deskStyle(t);
+    const fill = st.fill === 'owner' ? (t.owner?.colour ?? this.c.named('neutral')) : st.fill ? this.c.named(st.fill) : null;
+    const l = x - half;
+    const top = y - half;
+    const w = half * 2;
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fillRect(l, top, w, w);
+      // A marker outline, like every desk on the style guide's map.
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = this.c.deskEdge;
+      ctx.strokeRect(l, top, w, w);
+    }
+    if (st.pattern === 'hatch') {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(l, top, w, w);
+      ctx.clip();
+      ctx.strokeStyle = this.c.hatch;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let d = -w; d < w; d += 3.5) {
+        ctx.moveTo(l + d, top + w);
+        ctx.lineTo(l + d + w, top);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (t.threat > 0 && !t.owner) {
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = this.c.threat[t.threat];
+      ctx.strokeRect(l + 0.75, top + 0.75, w - 1.5, w - 1.5);
+    }
+    if (st.edge) {
+      ctx.setLineDash(st.edge.dash ? [2, 2] : []);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = this.c.named(st.edge.colour);
+      ctx.strokeRect(l + 0.6, top + 0.6, w - 1.2, w - 1.2);
+      ctx.setLineDash([]);
+    }
+    if (st.ring) {
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = this.c.outline;
+      ctx.strokeRect(l + 2, top + 2, w - 4, w - 4);
+    }
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = st.label === 'on-colour' ? this.c.outline : this.c.named(st.label);
+    switch (st.mark) {
+      case 'slash':
+        ctx.beginPath();
+        ctx.moveTo(l + 1.5, top + w - 1.5);
+        ctx.lineTo(l + w - 1.5, top + 1.5);
+        ctx.stroke();
+        break;
+      case 'plus': {
+        const r = Math.max(2, half * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(l + w - r - 2, top + 2);
+        ctx.lineTo(l + w - r - 2, top + 2 + r * 2);
+        ctx.moveTo(l + w - 2 * r - 2, top + 2 + r);
+        ctx.lineTo(l + w - 2, top + 2 + r);
+        ctx.stroke();
+        break;
+      }
+      case 'home': {
+        // A roof over the corner: home reads as a shape too.
+        ctx.beginPath();
+        ctx.moveTo(l - 1, top + 2);
+        ctx.lineTo(x, top - 3);
+        ctx.lineTo(l + w + 1, top + 2);
+        ctx.strokeStyle = this.c.home;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        break;
+      }
+      case 'tick':
+        ctx.beginPath();
+        ctx.moveTo(l + w - 7, top + 4);
+        ctx.lineTo(l + w - 5, top + 6);
+        ctx.lineTo(l + w - 2, top + 2);
+        ctx.stroke();
+        break;
+      case 'none':
+        break;
+    }
+    if (t.role === 'objective') {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.c.objectivePulse(tokenOptions().reducedMotion ? 0.85 : 0.5 + 0.5 * Math.sin(this.time * 4));
+      ctx.strokeRect(l - 2, top - 2, w + 4, w + 4);
+    }
+    ctx.fillStyle = this.c.named(st.label);
+    ctx.fillText(t.id, x, y);
   }
 }

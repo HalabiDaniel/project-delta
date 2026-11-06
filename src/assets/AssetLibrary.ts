@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
 import { materials } from '../render/materials/MaterialLibrary';
-import { outline } from '../render/outline/OutlineRenderer';
 import { CATALOG, IN_GAME_BUILDINGS, ModelStore, SCENERY_MODELS } from './CustomModels';
 import { classroomFiles } from '../world/Classroom';
 import { assetPaths, PROPS, resolveProp, type PropBuild, type PropId, type PropSource } from './manifest';
@@ -52,7 +51,7 @@ export type PropInstance = { kind: 'built'; build: PropBuild } | { kind: 'import
 
 /**
  * Loads the licensed models the manifest asks for and hands out props: imported ones adapted to
- * the game's look (paper shading, matte surfaces, pencil outlines, fitted to size), or the
+ * the game's look (paper shading, matte surfaces, fitted to size), or the
  * game's own builds. A model that fails to load falls back to its placeholder.
  */
 export class AssetLibrary {
@@ -172,7 +171,7 @@ export class AssetLibrary {
   /**
    * An imported model brought into the game's look: matte, non-metallic surfaces under the paper
    * shading (or one library material throughout), scaled to the manifest's height, standing
-   * centred on its base, and outlined in pencil.
+   * centred on its base.
    */
   private adapt(id: PropId, container: pc.ContainerResource): pc.Entity {
     const def = PROPS[id];
@@ -210,7 +209,6 @@ export class AssetLibrary {
       inner.setLocalScale(k, k, k);
       inner.setLocalPosition(-box.center.x * k, -(box.center.y - box.halfExtents.y) * k, -box.center.z * k);
     }
-    outline(root, def.tier, { merge: true });
     return root;
   }
 }

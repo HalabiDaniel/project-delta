@@ -1,0 +1,147 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-06T12:48:28Z"
+ },
+ "title": "paperwars.io screens",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Login.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Login",
+   "is_interactive": true
+  },
+  "CreateAccount.dc.html": {
+   "x": 1520,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Create account",
+   "is_interactive": true
+  },
+  "Main.dc.html": {
+   "x": 3040,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Main menu",
+   "is_interactive": true
+  },
+  "SinglePlayer.dc.html": {
+   "x": 0,
+   "y": 1300,
+   "w": 1440,
+   "h": 900,
+   "title": "Single player setup",
+   "is_interactive": true
+  },
+  "Multiplayer.dc.html": {
+   "x": 1520,
+   "y": 1300,
+   "w": 1440,
+   "h": 900,
+   "title": "Multiplayer lobby",
+   "is_interactive": true
+  },
+  "FlightHud.dc.html": {
+   "x": 3040,
+   "y": 1300,
+   "w": 1440,
+   "h": 900,
+   "title": "HUD \u00b7 In flight",
+   "is_interactive": true
+  },
+  "DeskHud.dc.html": {
+   "x": 4560,
+   "y": 1300,
+   "w": 1440,
+   "h": 900,
+   "title": "HUD \u00b7 On your desk",
+   "is_interactive": true
+  },
+  "Leaderboard.dc.html": {
+   "x": 0,
+   "y": 2600,
+   "w": 1440,
+   "h": 900,
+   "title": "Leaderboard",
+   "is_interactive": true
+  },
+  "Achievements.dc.html": {
+   "x": 1520,
+   "y": 2600,
+   "w": 1440,
+   "h": 900,
+   "title": "Achievements",
+   "is_interactive": true
+  },
+  "Settings.dc.html": {
+   "x": 3040,
+   "y": 2600,
+   "w": 1440,
+   "h": 900,
+   "title": "Settings",
+   "is_interactive": true
+  },
+  "Credits.dc.html": {
+   "x": 4560,
+   "y": 2600,
+   "w": 1440,
+   "h": 900,
+   "title": "Credits",
+   "is_interactive": true
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Login.dc.html",
+  "CreateAccount.dc.html",
+  "SinglePlayer.dc.html",
+  "Multiplayer.dc.html",
+  "FlightHud.dc.html",
+  "DeskHud.dc.html",
+  "Leaderboard.dc.html",
+  "Achievements.dc.html",
+  "Settings.dc.html",
+  "Credits.dc.html"
+ ],
+ "notes": {
+  "start": {
+   "x": 0,
+   "y": -260,
+   "text": "Start",
+   "kind": "title1",
+   "maxW": 4480
+  },
+  "play": {
+   "x": 0,
+   "y": 1040,
+   "text": "Play",
+   "kind": "title1",
+   "maxW": 6000
+  },
+  "around": {
+   "x": 0,
+   "y": 2340,
+   "text": "Around the game",
+   "kind": "title1",
+   "maxW": 6000
+  }
+ },
+ "designSystems": [
+  {
+   "title": "paperwars.io",
+   "namespace": "paperwars",
+   "artifact": "https://claude.ai/artifact/9KQuAmmjzgoND38wkmg66c",
+   "version": "1793937164-d73e",
+   "copiedAt": "2026-11-06T12:48:28Z"
+  }
+ ]
+}

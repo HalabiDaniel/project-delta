@@ -1,4 +1,4 @@
-import { assessSuitability, bombLoad, type Suitability } from '../aircraft/Aircraft';
+import { assessSuitability, bombLoad, buildDuration, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
 import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole } from '../config';
@@ -276,7 +276,7 @@ export class GameState {
     this.sortie.emergency = true;
     this.phase = 'building';
     this.buildProgress = 0;
-    this.buildDuration = PLANE.buildTime;
+    this.buildDuration = buildDuration(spec, 'fold');
     this.emit({ type: 'built', cost: 0, kind: 'fold', aircraft: spec.id });
     return true;
   }
@@ -366,7 +366,7 @@ export class GameState {
     this.sortie = newSortie(spec.id, kind, cost + (kind === 'rollout' ? (waiting?.invested ?? 0) : 0));
     this.phase = 'building';
     this.buildProgress = 0;
-    this.buildDuration = kind === 'fold' ? PLANE.buildTime : kind === 'refit' ? PLANE.refitTime : PLANE.rolloutTime;
+    this.buildDuration = buildDuration(spec, kind);
     if (kind === 'fold') this.stats.planesBuilt++;
     this.emit({ type: 'built', cost, kind, aircraft: spec.id });
     return true;

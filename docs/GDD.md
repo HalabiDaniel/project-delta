@@ -70,9 +70,9 @@ The aesthetic is intentionally not realistic military simulation. The goal is pl
 
 ### 2.1 Art Direction (from v0.0.8)
 
-paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly geometry under soft, flat cartoon shading, hand-drawn graphite outlines, paper grain, folds and cardboard, in colourful miniature classroom scenes. It should look as if a student built the world from paper, cardboard and school supplies, then brought it to life.
+paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly geometry under soft, flat cartoon shading, paper grain, folds and cardboard, in colourful miniature classroom scenes. It should look as if a student built the world from paper, cardboard and school supplies, then brought it to life.
 
-- **Pencil outlines** on everything that matters, boldest on aircraft, lighter on scenery, fading with distance; configurable and optional.
+- **No pencil outlines:** the graphite outlines were removed in v0.0.15 by the developer's decision of 2026-11-02; the game keeps the normal 3D look with paper materials and lighting.
 - **One material library** (paper, notebook and graph paper, cardboard, ink, pencil markings, rubber, wood, plastic) and one lighting model, shared by the game's own models and imported ones.
 - **Custom models where identity matters** (aircraft, cardboard buildings, defenses, landmarks, mission targets); licensed asset packs such as Synty only as environment geometry, always adapted to the shared materials and outlines.
 - **Readable first:** ownership colours (blue player, red hostile, grey neutral, orange objective) with symbols, recognisable landmarks, silhouettes that hold up at speed.
@@ -237,7 +237,7 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.20) |
 | Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
 | Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
-| Raptor | F-22 | Air superiority | 0.0.15 |
+| Raptor | F-22 | Air superiority: the strongest pure dogfighter (fastest fighter, best climber, heaviest guns, turns slightly wider than the Falcon); no bombs | 0.0.15 (provisional since 0.0.11) |
 | Lancer | B-1B Lancer | Supersonic bomber | 0.0.18 |
 | Lightning | F-35 | Stealth multirole | 0.0.20 |
 | Thug | A-10 Thunderbolt II | Ground attack | 0.0.20 |
@@ -793,16 +793,16 @@ Panels are cut card stock with a folded corner and a soft shadow, semi-opaque ov
 
 ### 15.3 Layout
 
-Fixed zones, the same in every state:
+Fixed zones, the same in every state. Placement follows the developer's style guide (2026-11-06; [docs/style-guide/screens/](style-guide/screens/) FlightHud and DeskHud):
 
 | Zone | Flying | At the desk | Base management |
 |---|---|---|---|
-| Top left | Paper, production, storage | Paper, production, storage; Base, Logbook, Menu buttons | Paper / capacity, production, protected paper |
-| Top centre | Objective, threat panel, raid alert, alerts, tips | Alerts, tips | Weapons ready, radar, base condition; alerts |
-| Top right | Mini-map with T1's radar | Mini-map; mission cards below | Mini-map |
-| Bottom left | Health, range | Aircraft inspector | Build tray |
-| Bottom centre | Speed, altitude, boost; landing checks | Garage | Slot inspector |
-| Bottom right | Ink, bombs | Fold / launch | Repair all, Done |
+| Top left | Paper counter, production; the objective card under it (steps, reward) | Top bar: paper counter, production, storage; Base, Logbook, Menu buttons; the home dashboard under it | Paper / capacity, production, protected paper; the buttons |
+| Top centre | Raid alert, threat panel, alerts, tips | Tutorial, alerts, tips (under the top bar) | Weapons ready, radar, base condition; alerts |
+| Top right | Pause chip (multiplayer: connection, players, session clock, then the kill feed) | Fold / Launch (the top bar's primary button); mission cards below | Slot inspector |
+| Bottom left | Hull and range meters | Aircraft inspector | Build tray |
+| Bottom centre | Speed, altitude, boost (and the maneuver slot); landing checks | Garage tray | |
+| Bottom right | Ink, bombs; the mini-map in the corner | Mini-map (small) | Repair all, Done |
 
 The centre stays clear for flying and aiming. A HUD size setting (S / M / L) scales every zone from its own corner.
 
@@ -944,7 +944,7 @@ The whole multiplayer system on the internet (the game on Vercel, the server and
 
 ### Version 0.0.15: HUD and UI Revamp
 
-A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. Pencil outlines removed from the 3D world. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
+**Coded (2026-11-06).** A UI design system after the developer's style guide (Daylight and Lights out themes, Lilita One, Nunito and Kalam, Lucide icons; [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)), a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout, accessibility and localisation-ready text. Pencil outlines removed from the 3D world; Medium is the default preset. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
 
 ### Version 0.0.16: Flight Maneuvers
 

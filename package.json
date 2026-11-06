@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
-  "description": "paperwars.io v0.0.14 - going live",
+  "description": "paperwars.io v0.0.15 - HUD and UI revamp",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "licensed:fetch": "tsx tools/licensed.ts fetch",
     "validate-glb": "tsx tools/validate-glb.ts",
     "measure": "node tools/measure-perf.mjs",
+    "ui:shots": "node tools/ui-baseline.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -33,12 +34,17 @@
     "@colyseus/schema": "^5.0.43",
     "@colyseus/sdk": "^0.18.9",
     "@colyseus/ws-transport": "^0.18.4",
+    "@fontsource/kalam": "5.3.0",
+    "@fontsource/lilita-one": "5.3.0",
+    "@fontsource/nunito": "5.3.0",
     "pg": "^8.23.1",
     "playcanvas": "^2.23.3"
   },
   "devDependencies": {
     "@colyseus/testing": "^0.18.6",
     "@types/pg": "^8.23.1",
+    "happy-dom": "^21.0.4",
+    "lucide": "0.460.0",
     "three": "^0.160.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

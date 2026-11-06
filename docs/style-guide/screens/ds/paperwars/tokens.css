@@ -1,0 +1,92 @@
+/* paperwars.io — generated from tokens.json */
+:root, [data-theme="light"] {
+  --paper-100: #fbf8f1;
+  --paper-50: #ffffff;
+  --desk-200: #eadcc2;
+  --rule-300: #a9c3e4;
+  --margin-red: #e8828a;
+  --ink-900: #26242c;
+  --ink-600: #5c5965;
+  --graphite: #26242c;
+  --pencil-400: #f5c23a;
+  --pencil-600: #c98f00;
+  --cardboard-400: #c8975a;
+  --cardboard-700: #7a5228;
+  --eraser-300: #f29bb0;
+  --sticky-200: #f6e7b4;
+  --tape-100: #fffdf6;
+  --sky-500: #2f6fc0;
+  --raid-500: #c9353e;
+  --win-500: #267a41;
+  --on-signal: #ffffff;
+  --team-1: #e0464e;
+  --team-2: #2f6fc0;
+  --team-3: #f5c23a;
+  --team-4: #2f8a4c;
+  --team-5: #8b5cc7;
+  --team-6: #f08a2c;
+  --team-7: #1fa6a6;
+  --team-8: #e86fa8;
+  --shadow-press: 0 3px 0 #c98f00;
+  --shadow-card: 0 3px 0 #d8c7a6;
+  --shadow-lift: 4px 6px 0 #26242c1f;
+}
+[data-theme="dark"] {
+  --paper-100: #1e2926;
+  --paper-50: #283632;
+  --desk-200: #151d1b;
+  --rule-300: #3d524c;
+  --margin-red: #7a3a3e;
+  --ink-900: #f3efe4;
+  --ink-600: #b3b8ad;
+  --graphite: #26242c;
+  --pencil-400: #f5c23a;
+  --pencil-600: #c98f00;
+  --cardboard-400: #c8975a;
+  --cardboard-700: #e0b47c;
+  --eraser-300: #f29bb0;
+  --sticky-200: #e9d9a2;
+  --tape-100: #cfd5cc;
+  --sky-500: #7fb0ef;
+  --raid-500: #ff7a7f;
+  --win-500: #6fcf8a;
+  --on-signal: #1b1a20;
+  --team-1: #e0464e;
+  --team-2: #5b93dc;
+  --team-3: #f5c23a;
+  --team-4: #4fb06c;
+  --team-5: #a57ddc;
+  --team-6: #f08a2c;
+  --team-7: #2fc0c0;
+  --team-8: #e86fa8;
+  --shadow-press: 0 3px 0 #c98f00;
+  --shadow-card: 0 3px 0 #0f1513;
+  --shadow-lift: 4px 6px 0 #00000059;
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --stroke-hair: 1px;
+  --stroke-line: 2px;
+  --stroke-focus: 3px;
+  --font-display: "Lilita One", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: Nunito, ui-rounded, system-ui, sans-serif;
+  --font-note: Kalam, "Comic Neue", "Segoe Print", cursive;
+}
+.display-xl { font-family: var(--font-display); font-size: 64px; line-height: 0.95; font-weight: 400; }
+.display { font-family: var(--font-display); font-size: 40px; line-height: 1; font-weight: 400; }
+.title { font-family: var(--font-display); font-size: 24px; line-height: 1.1; font-weight: 400; }
+.counter { font-family: var(--font-display); font-size: 28px; line-height: 1; font-weight: 400; }
+.body { font-family: var(--font-body); font-size: 16px; line-height: 24px; font-weight: 600; }
+.body-sm { font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 600; }
+.label { font-family: var(--font-body); font-size: 12px; line-height: 16px; font-weight: 800; letter-spacing: 0.06em; }
+.doodle { font-family: var(--font-note); font-size: 18px; line-height: 24px; font-weight: 400; }

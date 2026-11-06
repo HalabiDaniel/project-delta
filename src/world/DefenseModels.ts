@@ -4,7 +4,6 @@ import { Installation, type DefenseNetwork } from '../defenses/Installation';
 import type { DefenseLayout, InstallationSpec } from '../defenses/Layout';
 import { flatMaterial, type World } from './WorldGenerator';
 import { materials } from '../render/materials/MaterialLibrary';
-import { outline } from '../render/outline/OutlineRenderer';
 import { MATERIALS } from '../render/style';
 import { paperStore } from './props/buildings';
 import { BuildingRig } from './BuildingRig';
@@ -139,8 +138,7 @@ export class DefenseModels {
     const root = new pc.Entity('defenses');
     this.root = root;
     app.root.addChild(root);
-    // Walls, flags and trims never move: their pencil strokes are merged into one mesh per tier
-    // and territory.
+    // Walls, flags and trims are grouped per territory, so they can be shown or hidden together.
     const group = (territoryId: string) => {
       let g = this.statics.get(territoryId);
       if (!g) {
@@ -173,10 +171,6 @@ export class DefenseModels {
       flag.addChild(part('box', this.mat.threat[f.level as Exclude<ThreatLevel, 0>], 0.75, 3.85, 0, 1.4, 0.9, 0.04));
       flag.setEulerAngles(0, Math.atan2(f.x - centre.x, f.z - centre.z) * RAD_TO_DEG, 0);
       statics.addChild(flag);
-    }
-    for (const g of this.statics.values()) {
-      outline(g.children[0] as pc.Entity, 'structure', { merge: true });
-      outline(g.children[1] as pc.Entity, 'background', { merge: true });
     }
   }
 
@@ -343,7 +337,6 @@ export class DefenseModels {
   private addView(inst: Installation, fresh: boolean): void {
     const view = this.build(inst);
     this.root.addChild(view.root);
-    this.outlineView(view);
     if (view.ring) this.root.addChild(view.ring.entity);
     this.views.push(view);
     this.byId.set(inst.id, view);
@@ -351,20 +344,6 @@ export class DefenseModels {
       view.assemble = 0;
       this.poseAssemble(view);
     }
-  }
-
-  /**
-   * Pencil strokes for an installation, merged per rigid part: the body, the part that turns, the
-   * part that elevates, and each rocket (they come and go as the launcher reloads).
-   */
-  private outlineView(v: View): void {
-    // The Model Lab models are clean low-poly: no pencil strokes.
-    if (v.rig) return;
-    const moving = [v.turn, v.elevate, v.flash, ...v.rockets].filter((e): e is pc.Entity => e !== null);
-    outline(v.body, 'structure', { merge: true, exclude: moving });
-    if (v.turn) outline(v.turn, 'structure', { merge: true, exclude: moving.filter((e) => e !== v.turn) });
-    if (v.elevate) outline(v.elevate, 'structure', { merge: true, exclude: moving.filter((e) => e !== v.elevate) });
-    for (const r of v.rockets) outline(r, 'structure', { merge: true });
   }
 
   private removeView(v: View): void {

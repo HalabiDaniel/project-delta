@@ -1,5 +1,5 @@
 import type { Shape } from '../combat/Collision';
-import type { MaterialId, OutlineTier } from '../render/style';
+import type { MaterialId, PropTier } from '../render/style';
 import { MeshBuilder } from '../world/props/MeshBuilder';
 import { Model } from '../world/props/Model';
 import { SYNTY_PROPS, type SyntyCategory, type SyntyPropId } from './synty';
@@ -43,7 +43,7 @@ export type PropId =
 
 export interface PropBuild {
   model: Model;
-  /** Flat markings: no outlines, no shadows. */
+  /** Flat markings: no shadows. */
   decals?: Model;
 }
 
@@ -69,7 +69,7 @@ export interface PropDef {
    * under the paper shading, or replace them all with one library material.
    */
   materials?: 'keep' | MaterialId;
-  tier: OutlineTier;
+  tier: PropTier;
   /** Simple collision shapes in the prop's own space, for props tall enough to fly into. */
   colliders?: readonly Shape[];
   /** What a licensed slot is for (classroom furniture, architecture, props, obstacles). */

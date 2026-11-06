@@ -17,7 +17,12 @@ const GAME_KEYS = new Set([
   'KeyZ', 'KeyC', 'KeyV', 'Tab',
   'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7',
+  // Menu navigation (the focus manager, outside flight): arrows move the highlight, page keys scroll.
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown',
 ]);
+
+/** Keys that repeat while held (moving the menu highlight); every other key fires once per press. */
+const REPEATING_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown']);
 
 /** Mouse buttons as reported by MouseEvent.button. */
 export const MOUSE_LEFT = 0;
@@ -46,7 +51,7 @@ export class Input {
       if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scrolling, button activation or focus moves
       this.held.add(e.code);
-      if (!e.repeat) for (const handler of this.keyHandlers) handler(e.code);
+      if (!e.repeat || REPEATING_KEYS.has(e.code)) for (const handler of this.keyHandlers) handler(e.code);
     });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
     window.addEventListener('blur', () => {

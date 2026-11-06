@@ -7,6 +7,9 @@
  * device, and every hint follows on the next frame.
  */
 
+import { keyFor } from '../input/bindings';
+import { T } from './strings';
+
 export type ControlAction =
   | 'selectCard'
   | 'prevPlane'
@@ -30,28 +33,29 @@ export type ControlAction =
   | 'back'
   | 'pause';
 
+/** The keyboard and mouse names, from the bindings (src/input/bindings.ts). */
 export const KEYBOARD_LABELS: Readonly<Record<ControlAction, string>> = {
-  selectCard: '1 – 3',
-  prevPlane: 'Q',
-  nextPlane: 'E',
-  fold: 'F',
-  launch: 'Space',
-  steer: 'Mouse',
-  fire: 'Left click',
-  bomb: 'Right click',
-  boost: 'Shift',
-  throttle: 'W / S',
-  bank: 'A / D',
-  rearm: 'R',
-  takeOff: 'Space',
-  endSortie: 'Enter',
-  continue: 'Enter',
-  base: 'B',
-  repairAll: 'B → Repair all',
-  quickRebuild: 'F',
-  skipTutorial: 'Skip',
-  back: 'Esc',
-  pause: 'Esc',
+  selectCard: `${keyFor('pick1')} – ${keyFor('pick3')}`,
+  prevPlane: keyFor('prevAircraft'),
+  nextPlane: keyFor('nextAircraft'),
+  fold: keyFor('fold'),
+  launch: keyFor('launch'),
+  steer: T.keys.mouse,
+  fire: T.keys.leftClick,
+  bomb: T.keys.rightClick,
+  boost: keyFor('boost'),
+  throttle: `${keyFor('throttleUp')} / ${keyFor('throttleDown')}`,
+  bank: `${keyFor('bankLeft')} / ${keyFor('bankRight')}`,
+  rearm: keyFor('service'),
+  takeOff: keyFor('launch'),
+  endSortie: keyFor('confirm'),
+  continue: keyFor('confirm'),
+  base: keyFor('base'),
+  repairAll: T.controls.repairAll(keyFor('base')),
+  quickRebuild: keyFor('fold'),
+  skipTutorial: T.controls.skip,
+  back: keyFor('back'),
+  pause: keyFor('back'),
 };
 
 type Labeler = (action: ControlAction) => string;

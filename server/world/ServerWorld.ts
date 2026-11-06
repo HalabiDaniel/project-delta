@@ -1,7 +1,7 @@
 import { Vec3 } from 'playcanvas';
 import type { Collision } from '../../src/aircraft/FlightModel';
 import { PLANE_SHAPES } from '../../src/aircraft/PlaneShapes';
-import { assessSuitability } from '../../src/aircraft/Aircraft';
+import { aiRoleFor, assessSuitability } from '../../src/aircraft/Aircraft';
 import type { ZoneRef } from '../../src/aircraft/Bomb';
 import type { AiOrders, Contact } from '../../src/ai/AiAircraft';
 import { AirTraffic, type AirEvent, type AirSpawn } from '../../src/ai/AirTraffic';
@@ -28,6 +28,7 @@ import {
   type InputFrame,
   type MeDTO,
   type NetEvent,
+  type NoteCue,
   type DeskState,
   type OwnFlight,
   type Weapon,
@@ -1119,7 +1120,7 @@ export class ServerWorld {
     }
     const target = this.pilotOfPlane('target' in e ? e.target : '');
     if (!target) return;
-    if (e.type === 'lock') this.note(target, 'launcher', 'Locked on', null, 'bad');
+    if (e.type === 'lock') this.note(target, 'launcher', 'Locked on', null, 'bad', 'lock');
     else if (e.type === 'lock-broken') this.note(target, 'launcher', 'Lock broken', null, 'good');
   }
 
@@ -1413,7 +1414,7 @@ export class ServerWorld {
     attack.detected = true;
     const victim = this.pilots.get(attack.victim);
     const raider = this.pilots.get(attack.attacker);
-    if (victim && raider) this.note(victim, 'raid', `${how}: ${raider.name}`, 'inbound', 'warn');
+    if (victim && raider) this.note(victim, 'raid', `${how}: ${raider.name}`, 'inbound', 'warn', 'raid');
   }
 
   /** A raid ended: the outcome for both sides, the paper, the shield, the reports. */
@@ -1499,7 +1500,7 @@ export class ServerWorld {
     const currentHunt = p.pvp.find((c) => c.tag.kind === 'hunt' && airborne.some((o) => o.id === c.tag.target));
     const prey = currentHunt ? this.pilots.get(currentHunt.tag.target)! : airborne.length > 0 ? airborne[Math.floor(this.rng() * airborne.length)] : null;
     if (prey) {
-      const role = prey.state?.plane?.role === 'bomber' ? 'bomber' : 'fighter';
+      const role = prey.state?.plane ? aiRoleFor(prey.state.plane) : 'fighter';
       offered.push(() => add(`hunt:${prey.id}`, () => ({ spec: huntMission(prey.id, prey.name, prey.home, role), tag: { kind: 'hunt', target: prey.id, name: prey.name, territoryId: prey.home?.id ?? null } })));
     }
     // Recon: any other base.
@@ -1645,7 +1646,7 @@ export class ServerWorld {
     this.attacks.start(p.id, victim.id, victim.home.id, target, this.time);
     // Raiding someone ends your own new-player protection.
     p.protectUntil = 0;
-    this.note(victim, 'raid', `${p.name} is coming`, territoryName(victim.home.id), 'warn');
+    this.note(victim, 'raid', `${p.name} is coming`, territoryName(victim.home.id), 'warn', 'raid');
     this.refreshPvp(victim, false);
   }
 
@@ -1664,7 +1665,7 @@ export class ServerWorld {
     const { killer, assists } = p.forfeit ? { killer: null, assists: [] as string[] } : creditFor(p.damageLog, this.time);
     const k = killer ? this.pilots.get(killer) : undefined;
     const plane = st.plane!;
-    const role = plane.role === 'bomber' ? 'bomber' : 'fighter';
+    const role = aiRoleFor(plane);
     if (k?.state) {
       k.stats.kills++;
       k.addScore(PVP.score.kill);
@@ -1848,8 +1849,8 @@ export class ServerWorld {
     this.events.push({ ...opts, e });
   }
 
-  note(p: Pilot, icon: string, title: string, value: string | null, tone: 'good' | 'bad' | 'warn' | 'info'): void {
-    this.emit({ t: 'note', icon, title, value, tone }, { to: p.id });
+  note(p: Pilot, icon: string, title: string, value: string | null, tone: 'good' | 'bad' | 'warn' | 'info', cue?: NoteCue): void {
+    this.emit(cue ? { t: 'note', icon, title, value, tone, cue } : { t: 'note', icon, title, value, tone }, { to: p.id });
   }
 
   private news(text: string, tone: 'good' | 'bad' | 'info'): void {

@@ -1,5 +1,5 @@
 /**
- * Art direction in numbers: the pencil outlines, the paper shading, the light and the material
+ * Art direction in numbers: the paper shading, the light and the material
  * library. Rendering only; gameplay tuning stays in ../config.ts. Colours are sRGB 0–1.
  *
  * Changing the look of the whole game should mostly mean changing this file. See
@@ -8,52 +8,15 @@
 
 export type Rgb = readonly [number, number, number];
 
-// ---- Pencil outlines -----------------------------------------------------------------------
+// ---- Prop tiers ------------------------------------------------------------------------------
 
 /**
- * How important an object is decides how strongly it is drawn:
- * - hero: aircraft, the things the player watches most closely;
- * - structure: buildings, defenses, targets, landmarks, the platforms' edges;
- * - prop: decorations on the territories;
- * - background: scenery far from the action.
+ * Where a model belongs (the pencil outlines that once used it were removed in v0.0.15):
+ * - structure: buildings, obstacles, flags, landmarks;
+ * - prop: decorations placed on the territories (tall ones need colliders);
+ * - background: room furniture and fittings, never on a territory.
  */
-export type OutlineTier = 'hero' | 'structure' | 'prop' | 'background';
-export const OUTLINE_TIERS: readonly OutlineTier[] = ['hero', 'structure', 'prop', 'background'];
-
-export interface StrokeStyle {
-  /** Line width in CSS pixels up close. */
-  width: number;
-  /** Line opacity up close (before the player's intensity setting). */
-  opacity: number;
-  /** A fold sharper than this (degrees between the two faces' normals) is drawn as a crease. */
-  creaseAngle: number;
-  /** How far strokes run past the corners, in pixels, like quick pencil lines. */
-  overshoot: number;
-  /** Full width out to this distance (m); further away lines thin in proportion… */
-  fullWidthDistance: number;
-  /** …down to this share of the width. */
-  minWidthScale: number;
-  /** Lines fade out between these distances (m), so far scenery doesn't turn to scribble. */
-  fadeStart: number;
-  fadeEnd: number;
-}
-
-export const OUTLINE = {
-  /** Dark graphite, a little blue: never pure black. */
-  color: [0.16, 0.16, 0.2] as Rgb,
-  /** Strokes are pulled this share of their distance towards the camera, so they win against their own faces. */
-  depthBias: 0.0025,
-  /** Sideways wobble of each stroke end, pixels (at Medium quality). */
-  wobble: 0.45,
-  /** Strokes shorter than this on screen (px) fade away: tiny details at distance stay clean. */
-  minLength: 2.5,
-  tiers: {
-    hero: { width: 3.2, opacity: 0.95, creaseAngle: 32, overshoot: 2.5, fullWidthDistance: 16, minWidthScale: 0.5, fadeStart: 170, fadeEnd: 320 },
-    structure: { width: 2.7, opacity: 0.9, creaseAngle: 35, overshoot: 3, fullWidthDistance: 22, minWidthScale: 0.42, fadeStart: 150, fadeEnd: 300 },
-    prop: { width: 2.1, opacity: 0.78, creaseAngle: 38, overshoot: 2.2, fullWidthDistance: 18, minWidthScale: 0.38, fadeStart: 80, fadeEnd: 190 },
-    background: { width: 1.5, opacity: 0.5, creaseAngle: 45, overshoot: 1.5, fullWidthDistance: 30, minWidthScale: 0.3, fadeStart: 140, fadeEnd: 280 },
-  } satisfies Record<OutlineTier, StrokeStyle>,
-} as const;
+export type PropTier = 'structure' | 'prop' | 'background';
 
 // ---- Paper shading ---------------------------------------------------------------------------
 

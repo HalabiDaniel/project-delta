@@ -1,6 +1,9 @@
-import { bindButton, esc, toggle } from './dom';
-import { pct } from './format';
+import { button, card, chip, glyph } from './components';
+import { esc, toggle } from './dom';
+import { count, num, paper, pct } from './format';
 import { icon } from './icons';
+import { priceHtml } from './BaseHud';
+import { SAY, T } from './strings';
 import type { DashboardView } from './views';
 
 export interface DashboardActions {
@@ -9,44 +12,36 @@ export interface DashboardActions {
   toggleBase(): void;
 }
 
-const FIT_LABEL: Record<string, string> = { recommended: 'recommended', good: 'good fit', possible: 'possible', unsuitable: "can't do it" };
+const FIT_LABEL: Readonly<Record<string, string>> = T.dashboard.fit;
+const FIT_TONE = { recommended: 'good', good: 'good', possible: 'plain', unsuitable: 'hostile' } as const;
 
 /**
  * The home dashboard, under the economy strip at the desk: the base's condition, the hangar, the
  * chosen mission and plane, and the next steps, with the quick actions (rebuild the lost plane,
- * repair everything, open the base). One panel instead of hunting through four.
+ * repair everything, open the base). Costs show what is missing. One panel instead of hunting
+ * through four.
  */
 export class Dashboard {
   private readonly el: HTMLElement;
   private readonly body: HTMLElement;
-  private readonly rebuild: HTMLButtonElement;
-  private readonly repair: HTMLButtonElement;
+  private readonly row: HTMLElement;
   private key = '';
 
   constructor(host: HTMLElement, actions: DashboardActions) {
-    this.el = document.createElement('div');
-    this.el.className = 'dashboard card';
+    host.insertAdjacentHTML('beforeend', card({ className: 'dashboard', label: T.dashboard.homeDesk, bodyHtml: '<div class="db-body"></div><div class="db-actions"></div>' }));
+    this.el = host.lastElementChild as HTMLElement;
     this.el.hidden = true;
-    this.body = document.createElement('div');
-    this.body.className = 'db-body';
-    const row = document.createElement('div');
-    row.className = 'db-actions';
-    const button = (nav: string, cls: string) => {
-      const b = document.createElement('button');
-      b.className = `btn small ${cls}`;
-      b.dataset.nav = nav;
-      row.appendChild(b);
-      return b;
-    };
-    this.rebuild = button('dash-rebuild', 'primary');
-    this.repair = button('dash-repair', '');
-    const base = button('dash-base', 'ghost');
-    base.innerHTML = `${icon('base')}<span>Base</span>`;
-    bindButton(this.rebuild, actions.quickRebuild);
-    bindButton(this.repair, actions.quickRepair);
-    bindButton(base, actions.toggleBase);
-    this.el.append(this.body, row);
-    host.appendChild(this.el);
+    this.body = this.el.querySelector<HTMLElement>('.db-body')!;
+    this.row = this.el.querySelector<HTMLElement>('.db-actions')!;
+    this.row.addEventListener('mousedown', (e) => e.preventDefault());
+    this.row.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('[data-nav]');
+      if (!b || b.disabled) return;
+      e.stopPropagation();
+      if (b.dataset.nav === 'dash-rebuild') actions.quickRebuild();
+      else if (b.dataset.nav === 'dash-repair') actions.quickRepair();
+      else if (b.dataset.nav === 'dash-base') actions.toggleBase();
+    });
   }
 
   render(v: DashboardView | null): void {
@@ -56,31 +51,39 @@ export class Dashboard {
     if (key === this.key) return;
     this.key = key;
     const b = v.base;
-    const radar = b.radar === 'none' ? 'no radar' : b.radar === 'on' ? 'radar on' : 'radar down';
+    const radar = b.radar === 'none' ? T.dashboard.noRadar : b.radar === 'on' ? T.dashboard.radarOn : T.dashboard.radarDown;
     const hangar = v.hangar.length
-      ? v.hangar
-          .map((h) => `<span class="chip" title="${esc(h.condition === 'ready' ? 'Ready to roll out, free' : 'Needs a refit')}">${icon('plane')}${esc(h.name)} <b>${pct(h.health)}</b></span>`)
-          .join('')
-      : '<span class="db-muted">empty</span>';
+      ? v.hangar.map((h) => chip({ label: h.name, icon: 'plane', value: pct(h.health), tip: h.condition === 'ready' ? T.dashboard.readyToRoll : T.dashboard.needsRefit })).join('')
+      : `<span class="db-muted">${esc(T.dashboard.empty)}</span>`;
     const mission = v.mission
-      ? `<div class="db-row">${icon('ok')}<span><b>${esc(v.mission.title)}</b> · +${v.mission.reward} · ${esc(v.mission.plane)} <span class="db-fit" data-fit="${v.mission.fit}">${esc(FIT_LABEL[v.mission.fit] ?? v.mission.fit)}</span></span></div>`
+      ? `<div class="db-row">${icon('ok')}<span><b>${esc(v.mission.title)}</b> · +${paper(v.mission.reward)} · ${esc(v.mission.plane)} ${chip({ label: FIT_LABEL[v.mission.fit] ?? v.mission.fit, tone: FIT_TONE[v.mission.fit], className: 'db-fit', attrs: { 'data-fit': v.mission.fit } })}</span></div>`
       : '';
-    const next = v.next.map((n) => `<li data-tone="${n.tone}"><span>${esc(n.text)}</span>${n.key ? `<kbd>${esc(n.key)}</kbd>` : ''}</li>`).join('');
+    const next = v.next.map((n) => `<li data-tone="${n.tone}"><span>${esc(n.text)}</span>${n.key ? glyph({ key: n.key }, { literal: true }) : ''}</li>`).join('');
     this.body.innerHTML =
-      `<div class="db-title">${icon('home')}<b>Home desk</b><span class="db-muted">${v.rate}/min · ${v.paper}/${v.capacity} · ${v.protectedPaper} safe</span></div>` +
-      `<div class="db-row" data-tone="${b.repairs > 0 ? 'warn' : ''}">${icon('shield')}<span>Defenses <b>${b.ready}/${b.total}</b> · ${radar} · condition <b>${pct(b.integrity)}</b>${b.repairs > 0 ? ` · ${b.repairs} to repair` : ''}</span></div>` +
-      `<div class="db-row db-hangar">${icon('base')}<span>Hangar</span>${hangar}</div>` +
+      `<div class="db-title">${icon('home')}<b>${esc(T.dashboard.homeDesk)}</b><span class="db-muted">${esc(T.dashboard.economy(num(v.rate, 2), paper(v.paper), paper(v.capacity), paper(v.protectedPaper)))}</span></div>` +
+      `<div class="db-row" data-tone="${b.repairs > 0 ? 'warn' : ''}">${icon('shield')}<span>${esc(T.dashboard.defenses)} <b class="num">${count(b.ready)}/${count(b.total)}</b> · ${esc(radar)} · ${esc(T.dashboard.condition)} <b class="num">${pct(b.integrity)}</b>${b.repairs > 0 ? ` · ${esc(T.dashboard.toRepair(b.repairs))}` : ''}</span></div>` +
+      `<div class="db-row db-hangar">${icon('base')}<span>${esc(T.dashboard.hangar)}</span>${hangar}</div>` +
       mission +
       (next ? `<ul class="db-next">${next}</ul>` : '');
-    toggle(this.rebuild, v.rebuild !== null);
+    const buttons: string[] = [];
     if (v.rebuild) {
-      this.rebuild.disabled = !v.rebuild.canAfford;
-      this.rebuild.innerHTML = `${icon('build')}<span>Rebuild ${esc(v.rebuild.name)}</span><span class="cost">${icon('paper')}${v.rebuild.cost}</span>${v.rebuild.key ? `<kbd>${esc(v.rebuild.key)}</kbd>` : ''}`;
-      this.rebuild.title = v.rebuild.canAfford ? 'Choose the plane you lost and fold it again' : 'Not enough paper yet';
+      const r = v.rebuild;
+      buttons.push(button({
+        label: T.dashboard.rebuild(r.name), icon: 'build', size: 'small', variant: 'primary', disabled: !r.canAfford,
+        key: r.key ? { key: r.key, literal: true } : undefined,
+        tip: r.canAfford ? T.dashboard.rebuildTip : T.dashboard.notEnoughPaper,
+        attrs: { 'data-nav': 'dash-rebuild' },
+      }).replace('</button>', `${priceHtml({ cost: r.cost, missing: r.canAfford ? 0 : Math.max(0, r.cost - v.paper) })}</button>`));
     }
-    toggle(this.repair, b.repairs > 0);
-    this.repair.disabled = !b.canRepair;
-    this.repair.innerHTML = `${icon('repair')}<span>Repair all</span><span class="cost">${icon('paper')}${b.repairCost}</span>`;
-    this.repair.title = b.canRepair ? 'Repair everything on the home desk' : 'Not enough paper to repair everything';
+    if (b.repairs > 0) {
+      buttons.push(button({
+        label: SAY.repairAll, icon: 'repair', size: 'small', disabled: !b.canRepair,
+        tip: b.canRepair ? T.dashboard.repairTip : T.dashboard.repairShort,
+        attrs: { 'data-nav': 'dash-repair' },
+      }).replace('</button>', `${priceHtml({ cost: b.repairCost, missing: b.canRepair ? 0 : Math.max(0, b.repairCost - v.paper) })}</button>`));
+    }
+    buttons.push(button({ label: SAY.base, icon: 'base', size: 'small', attrs: { 'data-nav': 'dash-base' } }));
+    this.row.innerHTML = buttons.join('');
   }
 }
+
