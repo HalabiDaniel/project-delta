@@ -16,7 +16,8 @@ import { presenceOf } from './presence';
 import { ownerOfSide, sideOf, territoryName } from '../net/World';
 import type { AircraftMarkerView, AirView } from '../ui/AirHud';
 import { BUILDING_ICONS } from '../ui/BaseHud';
-import { compass } from '../ui/format';
+import { compass, count, fixed, km, num, paper, seconds } from '../ui/format';
+import { T } from '../ui/strings';
 import type { GarageView } from '../ui/Garage';
 import type {
   AircraftStatusView,
@@ -38,6 +39,12 @@ import type { MiniMapView } from '../ui/MiniMap';
 import type { ThreatRingItem, ThreatView } from '../ui/ThreatHud';
 import { matchesPreset } from '../render/GraphicsSettings';
 import type { MultiplayerGame, RemoteAircraft } from './MultiplayerGame';
+
+const V = T.mpViews;
+const O = V.objective;
+const I = V.hint;
+/** A height or distance in metres, as the objectives write it ("120 m"). */
+const m = (n: number): string => T.units.metres(num(n));
 
 const RETICLE_RANGE = 60;
 const MAX_TARGET_LABELS = 8;
@@ -134,22 +141,22 @@ export class MpViews {
       if (fit.level === 'unsuitable') {
         noteTone = 'bad';
         tag = '✗';
-        note = `The ${name} can't fly this mission: ${fit.reason}. Choose another plane (Q/E) or mission.`;
+        note = V.unsuitable(name, fit.reason, 'Q/E');
       } else if (phase === 'desk' && g.priv.garage?.emergency) {
         noteTone = 'bad';
-        tag = 'Scrap';
-        note = `You can't afford any plane: a free emergency Swift has half the ink, no bomb, for one sortie.${mission.spec.bombs > 0 ? ' Pick a mission without bombs for it.' : ''}`;
+        tag = V.scrap;
+        note = V.emergency(mission.spec.bombs > 0);
       } else if (phase === 'desk' && !g.resources.canAfford(buildCost)) {
         const wait = st.income.timeToAfford(g.resources.paper, buildCost);
         noteTone = 'bad';
-        tag = `−${buildCost - g.resources.paper}`;
-        note = `Need ${buildCost} paper, you have ${g.resources.paper}.${wait !== null ? ` Ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.'}`;
+        tag = `−${paper(buildCost - g.resources.paper)}`;
+        note = V.needPaper(paper(buildCost), paper(g.resources.paper), wait !== null ? seconds(Math.ceil(wait)) : null);
       }
     }
     const card = mission ? g.cards.get(mission) : undefined;
     if (!note && card?.pvp && choosing) {
       note = pvpNote(card.pvp.kind, card.pvp.name);
-      tag = 'Rival';
+      tag = V.rival;
     }
 
     const m = plane.motion;
@@ -198,7 +205,7 @@ export class MpViews {
           access: g.settings.access,
           graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null },
         },
-        saveNote: 'Multiplayer: your paper, base and planes live on the server. "Leave classroom" frees your desk.',
+        saveNote: V.saveNote(T.menus.leaveClassroom),
         transfer: this.transferView(),
         confirmingReset: false,
       },
@@ -273,13 +280,13 @@ export class MpViews {
       title: m.title,
       description: m.spec.description,
       slot,
-      slotLabel: card?.pvp ? `Rival · ${card.pvp.name}` : (card?.slotLabel ?? 'Safe'),
+      slotLabel: card?.pvp ? V.rivalSlot(card.pvp.name) : (card?.slotLabel ?? V.safe),
       tier: m.tier,
       tierLabel: tier.label,
       stars: tier.stars,
       multiplier: tier.multiplier,
       reward: m.reward,
-      rewardNote: parts ? `Reward = B ${Math.round(parts.base)} × D ${parts.difficulty} × M ${parts.modifier.toFixed(2)}${parts.floor ? ` (at least ${parts.floor})` : ''}` : card?.pvp ? 'Paid by the game, not taken from your rival' : '',
+      rewardNote: parts ? V.rewardNote(count(parts.base), num(parts.difficulty, 2), fixed(parts.modifier, 2), parts.floor ? paper(parts.floor) : null) : card?.pvp ? V.pvpReward : '',
       modifiers: (m.spec.modifiers ?? []).map((id) => ({ id, label: DIRECTOR.modifiers[id].label, detail: DIRECTOR.modifiers[id].detail })),
       recommended: false,
       expires: null,
@@ -293,16 +300,16 @@ export class MpViews {
 
   /** The danger on a rival's base: their weapons and radar as the server reports them. */
   private pvpThreat(territoryId: string | null): ThreatSummary {
-    if (!territoryId) return { level: 2, label: 'Rival pilot', detail: 'A player who shoots back', icons: ['fighter'] };
+    if (!territoryId) return { level: 2, label: V.rivalPilot, detail: V.shootsBack, icons: ['fighter'] };
     const on = this.g.network.on(territoryId).filter((i) => i.alive);
     const turrets = on.filter((i) => i.spec.kind === 'turret').length;
     const launchers = on.filter((i) => i.spec.kind === 'launcher').length;
     const radar = on.some((i) => i.spec.kind === 'radar');
     const level = Math.min(3, (turrets > 0 ? 1 : 0) + (launchers > 0 ? 1 : 0) + (radar ? 1 : 0)) as 0 | 1 | 2 | 3;
-    const parts = [turrets || launchers ? defenseList(turrets, launchers) : 'no guns', radar ? 'radar' : 'no radar'];
+    const parts = [turrets || launchers ? defenseList(turrets, launchers) : V.noGuns, radar ? V.radar : V.noRadar];
     const icons: IconName[] = [...(turrets ? ['turret' as const] : []), ...(launchers ? ['launcher' as const] : []), ...(radar ? ['radar' as const] : []), 'fighter'];
     const desk = this.g.room?.state.territories.get(territoryId)?.label || territoryName(territoryId);
-    return { level, label: 'Player base', detail: `${desk}: ${parts.join(' · ')} · its owner may fly up`, icons };
+    return { level, label: V.playerBase, detail: V.playerBaseDetail(desk, parts), icons };
   }
 
   private garageView(mission: Mission): GarageView {
@@ -330,10 +337,10 @@ export class MpViews {
         tagline: chosen.tagline,
         ratings: RATING_KEYS.map((key) => ({ key, label: RATING_LABELS[key], value: ratings[key] })),
         loadout: [
-          { icon: 'ink', value: String(chosen.gun.ammo), label: `${chosen.gunLabel} · ink` },
-          { icon: 'bombload', value: String(chosen.bombs.capacity), label: bombKind.label + (chosen.bombs.capacity === 1 ? '' : 's') },
-          { icon: 'health', value: String(chosen.maxHealth), label: 'Health' },
-          { icon: 'range', value: `${(chosen.range / 1000).toFixed(1)} km`, label: 'Range' },
+          { icon: 'ink', value: count(chosen.gun.ammo), label: V.gunInk(chosen.gunLabel) },
+          { icon: 'bombload', value: count(chosen.bombs.capacity), label: V.bombs(bombKind.label, chosen.bombs.capacity) },
+          { icon: 'health', value: count(chosen.maxHealth), label: V.health },
+          { icon: 'range', value: km(chosen.range, 1), label: V.range },
         ],
         record: null,
         suitability: { level: fit.level, reason: fit.reason, missionTitle: mission.title },
@@ -388,15 +395,7 @@ export class MpViews {
     const r = g.priv.result;
     if (!st || !r || (st.phase !== 'debrief' && st.phase !== 'crashed')) return null;
     if (st.phase === 'crashed' && performance.now() - g.crashedAt < CRASH_REPORT_DELAY) return null;
-    const failure: Record<string, string> = {
-      missed: 'Failed: out of bombs',
-      'out-of-time': 'Failed: out of time',
-      'aircraft-lost': 'Failed: plane lost',
-      abandoned: 'Failed: landed before finishing',
-      'target-escaped': 'Failed: it got away',
-      'target-bombed': 'Failed: the bomb was released',
-      'escort-lost': 'Failed: your bomber was lost',
-    };
+    const failure = V.failed;
     const spec = AIRCRAFT[r.sortie.aircraft];
     const s = r.sortie;
     const succeeded = r.status === 'succeeded';
@@ -404,12 +403,12 @@ export class MpViews {
     const report = g.priv.report;
     return {
       recovered: r.recovered,
-      headline: r.recovered ? 'Plane recovered' : killedBy ? 'Shot down' : 'Plane destroyed',
-      aircraftName: s.emergency ? `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}` : spec.name,
+      headline: r.recovered ? V.recovered : killedBy ? V.shotDown : V.destroyed,
+      aircraftName: s.emergency ? V.emergencyPlane(AIRCRAFT[STARTER_AIRCRAFT].name) : spec.name,
       missionTitle: r.missionTitle,
-      missionLine: succeeded ? `Complete · +${r.reward}` : failure[r.failure ?? 'abandoned'],
+      missionLine: succeeded ? V.complete(paper(r.reward)) : failure[r.failure ?? 'abandoned'],
       missionTone: succeeded ? 'good' : 'bad',
-      planeLine: r.recovered ? `in the hangar, refit ${spec.refitCost}` : `destroyed, next costs ${spec.cost}`,
+      planeLine: r.recovered ? V.planeHangar(paper(spec.refitCost)) : V.planeDestroyed(paper(spec.cost)),
       time: r.elapsed,
       damageDealt: s.damageDealt,
       damageTaken: s.damageTaken,
@@ -426,7 +425,7 @@ export class MpViews {
       objectivesProtected: s.objectivesProtected,
       paperLost: s.paperLost,
       paperOverflow: s.paperOverflow,
-      survival: r.recovered ? 'Survived' : killedBy ? `Shot down by ${killedBy}` : 'Lost: crashed',
+      survival: r.recovered ? V.survived : killedBy ? V.shotDownBy(killedBy) : V.crashed,
       survived: r.recovered,
       health: r.recovered ? (st.durability?.fraction ?? 1) : 0,
       paperSpent: s.paperSpent,
@@ -440,7 +439,7 @@ export class MpViews {
       failure: succeeded ? null : failureText(r.failure ?? null),
       paper: paperBreakdown({ reward: succeeded ? r.reward : 0, missionTitle: r.missionTitle, bonuses: [], earned: s.paperEarned, spent: s.paperSpent, lost: s.paperLost, overflow: s.paperOverflow }),
       next: nextStepText({ succeeded, recovered: r.recovered, aircraftName: s.emergency ? emergencyPlane().name : spec.name, refitCost: spec.refitCost, cost: spec.cost, repairs: g.base?.needsRepair.length ?? 0 }),
-      operation: report && report.role === 'attacker' ? `Raid on ${report.other}: ${report.outcome === 'bombed' ? `got through${report.paperLost > 0 ? `, they lost ${report.paperLost} paper` : ''}` : report.outcome === 'repelled' ? 'repelled' : 'called off'}` : null,
+      operation: report && report.role === 'attacker' ? V.raidReport(report.other, report.outcome === 'bombed' ? 'bombed' : report.outcome === 'repelled' ? 'repelled' : 'off', report.paperLost > 0 ? paper(report.paperLost) : null) : null,
     };
   }
 
@@ -453,7 +452,7 @@ export class MpViews {
     if (st.phase === 'debrief' || st.phase === 'crashed' || !mission || !home) return null;
     if ((st.phase === 'flying' || st.phase === 'landed') && !mission.isActive) {
       if (st.phase === 'landed') return null;
-      return { point: new pc.Vec3(home.x, 0.5, home.z), label: `${home.id} · Land`, tone: 'home', icon: 'land', solid: false, territoryId: home.id };
+      return { point: new pc.Vec3(home.x, 0.5, home.z), label: V.land(home.id), tone: 'home', icon: 'land', solid: false, territoryId: home.id };
     }
     let best: Goal | null = null;
     let bestDistance = Infinity;
@@ -471,7 +470,7 @@ export class MpViews {
           bestDistance = d;
           const name = this.aircraftName(a);
           best = o.kind === 'escort'
-            ? { point: new pc.Vec3().copy(a.model.position), label: `Your ${AIRCRAFT[a.spec.id].name}`, tone: 'home', icon: 'escort', solid: true, territoryId: null, targetId: a.id }
+            ? { point: new pc.Vec3().copy(a.model.position), label: V.yourPlane(AIRCRAFT[a.spec.id].name), tone: 'home', icon: 'escort', solid: true, territoryId: null, targetId: a.id }
             : { point: new pc.Vec3().copy(a.model.position), label: name, tone: 'target', icon: (a.role as IconName) ?? 'fighter', solid: true, territoryId: null, targetId: a.id };
         }
         if (flying) continue;
@@ -494,18 +493,18 @@ export class MpViews {
       if (d >= bestDistance) continue;
       bestDistance = d;
       const owner = 'territoryId' in o ? this.ownerName(o.territoryId) : null;
-      const where = 'territoryId' in o ? (owner ? `${owner}'s base` : o.territoryId) : '';
+      const where = 'territoryId' in o ? (owner ? V.ownersBase(owner) : o.territoryId) : '';
       switch (o.kind) {
-        case 'bomb': best = { point: p, label: o.precision ? `${where} spot` : where, tone: 'target', icon: 'bomb', solid: false, territoryId: o.territoryId }; break;
+        case 'bomb': best = { point: p, label: o.precision ? V.spot(where) : where, tone: 'target', icon: 'bomb', solid: false, territoryId: o.territoryId }; break;
         case 'recon': best = { point: p, label: where, tone: 'target', icon: 'recon', solid: false, territoryId: o.territoryId }; break;
         case 'reach': best = { point: p, label: where, tone: 'target', icon: 'reach', solid: false, territoryId: o.territoryId }; break;
-        case 'survive': best = { point: p, label: `Hold out over ${where}`, tone: 'target', icon: 'survive', solid: false, territoryId: o.territoryId }; break;
-        case 'escape': best = { point: p, label: 'Escape', tone: 'home', icon: 'escape', solid: false, territoryId: null }; break;
-        case 'ring': best = { point: p, label: `Ring ${o.number}/${mission.objectives.length}`, tone: 'ring', icon: 'ring', solid: true, territoryId: null }; break;
-        case 'land': best = { point: p, label: `${home.id} · Land`, tone: 'home', icon: 'land', solid: false, territoryId: home.id }; break;
+        case 'survive': best = { point: p, label: V.holdOut(where), tone: 'target', icon: 'survive', solid: false, territoryId: o.territoryId }; break;
+        case 'escape': best = { point: p, label: V.escape, tone: 'home', icon: 'escape', solid: false, territoryId: null }; break;
+        case 'ring': best = { point: p, label: V.ring(o.number, mission.objectives.length), tone: 'ring', icon: 'ring', solid: true, territoryId: null }; break;
+        case 'land': best = { point: p, label: V.land(home.id), tone: 'home', icon: 'land', solid: false, territoryId: home.id }; break;
         case 'intercept': best = { point: p, label: where, tone: 'target', icon: o.what === 'aircraft' ? 'fighter' : o.what === 'convoy' ? 'bomber' : o.what, solid: false, territoryId: o.territoryId }; break;
-        case 'escort': best = { point: p, label: `${where} · bomber's target`, tone: 'target', icon: 'bomb', solid: false, territoryId: o.territoryId }; break;
-        case 'patrol': best = { point: p, label: `Patrol over ${where}`, tone: 'target', icon: 'patrol', solid: false, territoryId: o.territoryId }; break;
+        case 'escort': best = { point: p, label: V.bombersTarget(where), tone: 'target', icon: 'bomb', solid: false, territoryId: o.territoryId }; break;
+        case 'patrol': best = { point: p, label: V.patrolOver(where), tone: 'target', icon: 'patrol', solid: false, territoryId: o.territoryId }; break;
       }
     }
     return best;
@@ -550,38 +549,38 @@ export class MpViews {
     const where = (id: string) => this.ownerName(id) ?? id;
     switch (o.kind) {
       case 'bomb':
-        if (o.approach) return `Low bomb ${where(o.territoryId)} <${o.approach.ceiling} m`;
-        return o.precision ? `Ink spot ${where(o.territoryId)}` : `Bomb ${where(o.territoryId)}`;
-      case 'recon': return `Scout ${where(o.territoryId)} <${o.airspace.ceiling} m`;
-      case 'reach': return `Reach ${where(o.territoryId)}`;
-      case 'ring': return `Ring ${o.number}/${mission.objectives.length}`;
-      case 'land': return `Land ${o.territoryId}`;
-      case 'survive': return `Hold ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
-      case 'escape': return `Escape ${o.territoryId} ${o.distance} m`;
+        if (o.approach) return O.lowBomb(where(o.territoryId), m(o.approach.ceiling));
+        return o.precision ? O.inkSpot(where(o.territoryId)) : O.bomb(where(o.territoryId));
+      case 'recon': return O.scout(where(o.territoryId), m(o.airspace.ceiling));
+      case 'reach': return O.reach(where(o.territoryId));
+      case 'ring': return V.ring(o.number, mission.objectives.length);
+      case 'land': return O.land(o.territoryId);
+      case 'survive': return O.hold(o.territoryId, Math.floor(mission.progress[index] * o.duration), T.units.seconds(num(o.duration)));
+      case 'escape': return O.escape(o.territoryId, m(o.distance));
       case 'destroy': {
         const n = Math.round(mission.progress[index] * o.count);
         switch (o.what) {
-          case 'radar': return `Radar ${o.territoryId}`;
-          case 'supply': return `Depot ${o.territoryId}`;
-          case 'defense': return `Defenses ${o.territoryId} ${n}/${o.count}`;
-          case 'shipment': return `Shipment ${o.territoryId}`;
-          default: return `Practice ${o.territoryId} ${n}/${o.count}`;
+          case 'radar': return O.radar(o.territoryId);
+          case 'supply': return O.depot(o.territoryId);
+          case 'defense': return O.defenses(o.territoryId, n, o.count);
+          case 'shipment': return O.shipment(o.territoryId);
+          default: return O.practice(o.territoryId, n, o.count);
         }
       }
       case 'intercept': {
         const rival = o.targets.map((id) => planeOwner(id)).find((id) => id !== null);
-        if (rival) return `Down ${this.g.room?.state.players.get(rival)?.name ?? 'rival'}`;
+        if (rival) return O.down(this.g.room?.state.players.get(rival)?.name ?? O.rival);
         const n = Math.round(mission.progress[index] * o.count);
         switch (o.what) {
-          case 'bomber': return 'Bomber';
-          case 'scout': return 'Scout';
-          case 'fighter': return o.count > 1 ? `Fighters ${o.territoryId} ${n}/${o.count}` : `Fighter ${o.territoryId}`;
-          case 'convoy': return 'Convoy';
-          default: return `Intruders ${n}/${o.count}`;
+          case 'bomber': return O.bomber;
+          case 'scout': return O.scoutPlane;
+          case 'fighter': return o.count > 1 ? O.fighters(o.territoryId, n, o.count) : O.fighter(o.territoryId);
+          case 'convoy': return O.convoy;
+          default: return O.intruders(n, o.count);
         }
       }
-      case 'escort': return `Escort to ${o.territoryId}`;
-      case 'patrol': return `Patrol ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
+      case 'escort': return O.escort(o.territoryId);
+      case 'patrol': return O.patrol(o.territoryId, Math.floor(mission.progress[index] * o.duration), T.units.seconds(num(o.duration)));
     }
   }
 
@@ -604,7 +603,7 @@ export class MpViews {
       const next = mission.openObjectives()[0];
       const gate = next !== undefined ? mission.objectives[next] : null;
       objectives.push({
-        label: `Rings ${done}/${rings.length}`, icon: 'ring', done: mission.allDone, open: !mission.allDone, progress: done / rings.length,
+        label: O.rings(done, rings.length), icon: 'ring', done: mission.allDone, open: !mission.allDone, progress: done / rings.length,
         distance: gate?.kind === 'ring' ? Math.hypot(gate.gate.x - from.x, gate.gate.y - from.y, gate.gate.z - from.z) : null,
       });
     } else {
@@ -645,28 +644,28 @@ export class MpViews {
     const st = this.g.state!;
     const phase = st.phase;
     if (phase === 'debrief' || phase === 'crashed') return '';
-    const home = this.g.home?.id ?? 'home';
+    const home = this.g.home?.id ?? V.home;
     const spec = st.plane;
     if (mission.status === 'succeeded') {
-      return phase === 'landed' ? 'Rearm (R) and take off (Space), or end the sortie (Enter).' : `Now land on ${home} to recover your plane: a refit costs ${spec?.refitCost ?? 0} instead of ${spec?.cost ?? 0}.`;
+      return phase === 'landed' ? I.landedDone('R', 'Space', 'Enter') : I.landNow(home, paper(spec?.refitCost ?? 0), paper(spec?.cost ?? 0));
     }
-    if (mission.status === 'failed') return `The mission is lost. Land on ${home} to recover the plane anyway.`;
-    if (phase === 'landed') return 'R rearms ink and range for free. Space takes off again.';
+    if (mission.status === 'failed') return I.lost(home);
+    if (phase === 'landed') return I.landed('R', 'Space');
     const card = this.g.cards.get(mission);
     if (card?.pvp) return pvpNote(card.pvp.kind, card.pvp.name);
     const next = mission.objectives[mission.openObjectives()[0]];
     switch (next?.kind) {
-      case 'bomb': return 'Line up on the target and right-click (or Space) to drop. The ball keeps your speed, so release before you are over it.';
-      case 'recon': return `Stay low over ${next.territoryId}: time only counts inside the zone, below ${next.airspace.ceiling} m.`;
-      case 'reach': return `Get into ${next.territoryId}'s airspace before the clock runs out. Shift boosts.`;
-      case 'ring': return 'Fly through the orange ring. The next one lights up when you pass.';
-      case 'land': return `Slow down (S), line up with ${home} and descend gently.`;
-      case 'survive': return `Stay inside the zone over ${next.territoryId}, below ${next.airspace.ceiling} m. Keep turning.`;
-      case 'escape': return `Get out past the line, more than ${next.distance} m from ${next.territoryId}.`;
-      case 'destroy': return 'Shoot or bomb the ringed targets.';
-      case 'intercept': return 'Find them, get behind them and keep firing. Aim at the small circle to lead your shots.';
-      case 'escort': return 'Stay close to your bomber and shoot down the fighters that go for it.';
-      case 'patrol': return `Stay over ${next.territoryId}, below ${next.airspace.ceiling} m. Intruders turn up while you patrol.`;
+      case 'bomb': return I.bomb;
+      case 'recon': return I.recon(next.territoryId, m(next.airspace.ceiling));
+      case 'reach': return I.reach(next.territoryId, 'Shift');
+      case 'ring': return I.ring;
+      case 'land': return I.land(home, 'S');
+      case 'survive': return I.survive(next.territoryId, m(next.airspace.ceiling));
+      case 'escape': return I.escape(m(next.distance), next.territoryId);
+      case 'destroy': return I.destroy;
+      case 'intercept': return I.intercept;
+      case 'escort': return I.escort;
+      case 'patrol': return I.patrol(next.territoryId, m(next.airspace.ceiling));
       default: return '';
     }
   }
@@ -692,7 +691,7 @@ export class MpViews {
       if (own && i.durability.fraction >= 1 && !i.engaged) continue;
       const state: TargetLabelView['state'] = !i.isWeapon ? null : i.targetId === this.myPlane && i.state !== 'destroyed' ? i.state : 'idle';
       const owner = ownerOfSide(i.side);
-      const role = own && i.engaged ? 'Firing at intruders' : owner && !own ? `${g.room?.state.players.get(owner)?.name ?? 'Rival'}'s` : i.spec.role;
+      const role = own && i.engaged ? V.firingAtIntruders : owner && !own ? V.owners(g.room?.state.players.get(owner)?.name ?? V.rival) : i.spec.role;
       near.push({ id: i.id, name: i.spec.name, role, health: i.durability.fraction, icon: KIND_ICONS[i.spec.kind], state, side: own ? 'player' : 'enemy', point, distance });
     }
     near.sort((a, b) => Number(wanted.has(b.id)) - Number(wanted.has(a.id)) || a.distance - b.distance);
@@ -810,7 +809,7 @@ export class MpViews {
       panel = {
         territoryId: t.id,
         level,
-        label: owned ? `${g.room?.state.players.get(owned)?.name ?? 'Rival'}'s base` : THREAT.levels[t.threat].label,
+        label: owned ? V.ownersBase(g.room?.state.players.get(owned)?.name ?? V.rival) : THREAT.levels[t.threat].label,
         status: weapons.every((w) => !w.alive) ? 'neutralised' : engaged ? 'engaged' : weapons.some((w) => w.targetId === this.myPlane) ? 'spotted' : 'clear',
         installations: all.map((i) => ({ id: i.id, kind: i.spec.kind, alive: i.alive, engaged: i.alive && i.engaged })),
       };
@@ -896,7 +895,7 @@ export class MpViews {
         markers.push({
           id: a.id, x: at.x, y: at.y, onScreen: at.onScreen, angle: at.angle,
           side: friendly ? 'player' : 'enemy', icon, name: this.aircraftName(a),
-          detail: player ? `Rival · ${AIRCRAFT[a.spec.id].name}` : attackingMe ? 'Attacking you!' : a.leaving ? 'Heading home' : `${AI.roleLabels[a.role as AiRole] ?? 'Aircraft'}`,
+          detail: player ? V.rivalSlot(AIRCRAFT[a.spec.id].name) : attackingMe ? V.attackingYou : a.leaving ? V.headingHome : (AI.roleLabels[a.role as AiRole] ?? V.aircraft),
           status: attackingMe ? 'attacking' : a.leaving ? 'leaving' : null,
           distance: d, health: a.durability.fraction, showHealth: recentlyHit || aimedAt || d < 45 || wanted.has(a.id) || !!player,
           far: clamp((d - 40) / 160, 0, 1), mission: wanted.has(a.id), attacking: attackingMe, compact: false,
@@ -934,7 +933,7 @@ export class MpViews {
     const raider = g.remotes.get(attack.attacker);
     const r = g.base.readiness;
     const phase = g.state?.phase;
-    const response = phase === 'flying' ? null : phase === 'landed' ? { key: 'Space', label: 'Take off' } : phase === 'ready' ? { key: 'Space', label: 'Launch' } : phase === 'desk' ? { key: 'F', label: 'Fold' } : null;
+    const response = phase === 'flying' ? null : phase === 'landed' ? { key: 'Space', label: V.takeOff } : phase === 'ready' ? { key: 'Space', label: V.launch } : phase === 'desk' ? { key: 'F', label: V.fold } : null;
     const pos = raider?.model.position;
     return {
       state: 'inbound',
@@ -977,12 +976,12 @@ export class MpViews {
 
   private aircraftName(a: RemoteAircraft): string {
     const owner = planeOwner(a.id);
-    if (owner) return this.g.room?.state.players.get(owner)?.name ?? 'Rival';
+    if (owner) return this.g.room?.state.players.get(owner)?.name ?? V.rival;
     const mine = a.side === sideOf(this.g.me ?? '');
     const sideOwner = ownerOfSide(a.side);
-    if (mine) return `Your ${AIRCRAFT[a.spec.id].name}`;
-    if (sideOwner) return `${this.g.room?.state.players.get(sideOwner)?.name ?? 'Rival'}'s ${AIRCRAFT[a.spec.id].name}`;
-    return `Enemy ${AIRCRAFT[a.spec.id].name}`;
+    if (mine) return V.yourPlane(AIRCRAFT[a.spec.id].name);
+    if (sideOwner) return V.ownersPlane(this.g.room?.state.players.get(sideOwner)?.name ?? V.rival, AIRCRAFT[a.spec.id].name);
+    return V.enemyPlane(AIRCRAFT[a.spec.id].name);
   }
 
   private ownerName(territoryId: string): string | null {
@@ -1039,30 +1038,25 @@ export class MpViews {
 
 /** What a card against another player is about, in a sentence. */
 function pvpNote(kind: 'raid' | 'recon' | 'hunt' | 'intercept', name: string): string {
-  switch (kind) {
-    case 'raid': return `Bomb ${name}'s marked building. Their guns are awake and they can come up to stop you. If it gets through they lose a little paper (never their reserve); your reward is paid by the game.`;
-    case 'recon': return `Fly low over ${name}'s base for a while. Their guns will notice.`;
-    case 'hunt': return `${name} is in the air. Shoot them down before the clock runs out.`;
-    case 'intercept': return `${name} is raiding your base. Get up there and shoot them down; your guns help over home.`;
-  }
+  return V.pvp[kind](name);
 }
 
 /** The danger on a mission card (single-player's). */
 function threatSummary(m: Mission): ThreatSummary {
   const t = m.spec.threat;
   const airIcons: IconName[] = t?.air ? [...(t.air.fighters ? ['fighter' as const] : []), ...(t.air.scouts ? ['scout' as const] : []), ...(t.air.bombers ? ['bomber' as const] : [])] : [];
-  const air = t?.air ? `Air: ${[t.air.fighters ? `${t.air.fighters} fighter${t.air.fighters > 1 ? 's' : ''}` : '', t.air.scouts ? `${t.air.scouts} scout${t.air.scouts > 1 ? 's' : ''}` : '', t.air.bombers ? `${t.air.bombers} bomber${t.air.bombers > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} (${AI.skill[t.air.skill].label.toLowerCase()})` : null;
+  const air = t?.air ? V.air(t.air.fighters, t.air.scouts, t.air.bombers, AI.skill[t.air.skill].label) : null;
   if (t?.air && t.level === 0) {
     const level = ({ easy: 1, medium: 2, hard: 3 } as const)[t.air.skill];
-    return { level, label: 'Air threat', detail: `No ground defenses · ${air}`, icons: airIcons };
+    return { level, label: V.airThreat, detail: V.noGround(air ?? ''), icons: airIcons };
   }
-  if (!t || t.level === 0) return { level: 0, label: THREAT.levels[0].label, detail: m.spec.type === 'rings' ? 'Course clear of defenses' : 'No known defenses', icons: [] };
+  if (!t || t.level === 0) return { level: 0, label: THREAT.levels[0].label, detail: m.spec.type === 'rings' ? V.courseClear : V.noDefenses, icons: [] };
   const parts: string[] = [];
   if (t.turrets || t.launchers) parts.push(defenseList(t.turrets, t.launchers));
-  if (t.radars) parts.push(t.radars === 1 ? 'radar' : `${t.radars} radars`);
+  if (t.radars) parts.push(V.radars(t.radars));
   if (air) parts.push(air);
   const icons: IconName[] = [...(t.turrets ? ['turret' as const] : []), ...(t.launchers ? ['launcher' as const] : []), ...(t.radars ? ['radar' as const] : []), ...airIcons];
-  return { level: t.level, label: THREAT.levels[t.level].label, detail: `${t.territories.join(' + ')}: ${parts.join(' · ')}`, icons };
+  return { level: t.level, label: THREAT.levels[t.level].label, detail: V.threatDetail(t.territories, parts), icons };
 }
 
 function css(color: readonly [number, number, number]): string {

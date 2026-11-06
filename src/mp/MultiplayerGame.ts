@@ -37,7 +37,9 @@ import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } fro
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
 import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/GameState';
 import { Input } from '../systems/Input';
-import { TIP_TEXT } from '../ui/strings';
+import { T, TIP_TEXT } from '../ui/strings';
+import { paper } from '../ui/format';
+
 import { confirmOpen } from '../ui/confirm';
 import { normaliseAccess, type AccessSettings } from '../ui/access';
 import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
@@ -75,6 +77,9 @@ import { UI_SCALES } from '../systems/SaveGame';
 import { NetBase } from './NetBase';
 import { NetClient } from './NetClient';
 import { MpViews } from './MpViews';
+
+/** What a player is doing, by the phase number the server sends. */
+const PHASE_WORDS: readonly string[] = (({ desk, building, ready, flying, landed, result, down }) => [desk, building, ready, flying, landed, result, down])(T.mpGame.phase);
 
 const STEP = NET.step;
 /** An emote shows over the plane this long (seconds). */
@@ -191,7 +196,7 @@ export class MultiplayerGame {
   claimError: string | null = null;
   /** While we have no username yet: what to offer in the prompt, and why the last one wasn't given. */
   usernameNeeded: { value: string; note: string | null } | null = null;
-  roomTitle = 'Classroom';
+  roomTitle = T.mpGame.classroom;
   /** HUD size and key hints, kept in this browser (v0.0.15 phase 5; single-player keeps them in its save). */
   settings: MpSettings = loadMpSettings();
   /** "Server lost" (v0.0.15): the standard dialog over the session list. */
@@ -309,7 +314,7 @@ export class MultiplayerGame {
       resume: () => game?.resume(),
       swap: () => game?.send({ a: 'swap' }),
       abandonOperation: () => undefined,
-      openLogbook: () => game?.hud.alert('book', 'Not in multiplayer', null, 'info', 1.6),
+      openLogbook: () => game?.hud.alert('book', T.mpGame.notInMultiplayer, null, 'info', 1.6),
       openMenu: () => game?.pause(),
       resetProgress: () => game?.leaveSession(),
       moveDevice: () => game?.net.requestTransfer(),
@@ -458,11 +463,11 @@ export class MultiplayerGame {
     }
     try {
       const rooms = await this.net.list();
-      this.lobby.showRooms(rooms, this.net.lastError ? `Disconnected: ${this.net.lastError}` : `Server: ${this.net.endpoint}`, this.net.lastError ? 'bad' : 'info', this.net.rtt);
+      this.lobby.showRooms(rooms, this.net.lastError ? T.mpGame.disconnected(this.net.lastError) : T.mpGame.server(this.net.endpoint), this.net.lastError ? 'bad' : 'info', this.net.rtt);
     } catch {
       // A deployed game (VITE_SERVER_URL) never asks the player to start a server.
       const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.net.endpoint);
-      this.lobby.showRooms([], local ? `No server at ${this.net.endpoint}. Start one with: npm run server` : 'No server: the game server can\'t be reached. It may be restarting; try again in a moment.', 'bad');
+      this.lobby.showRooms([], local ? T.mpGame.noLocalServer(this.net.endpoint) : T.mpGame.noServer, 'bad');
     }
   }
 
@@ -493,7 +498,7 @@ export class MultiplayerGame {
     room.onMessage('welcome', (m: WelcomeDTO) => {
       this.me = m.id;
       if (m.title) this.roomTitle = m.title;
-      if (m.reconnected) this.hud.alert('ok', 'Reconnected', null, 'good', 2);
+      if (m.reconnected) this.hud.alert('ok', T.mpGame.reconnected, null, 'good', 2);
       if (m.username) {
         this.usernameNeeded = null;
         this.lobby.setName(m.username);
@@ -528,9 +533,9 @@ export class MultiplayerGame {
     });
     room.onMessage('feedback', (m: FeedbackReplyDTO) => {
       this.feedback.reply(m);
-      if (m.ok) this.hud.alert('ok', 'Feedback sent. Thank you!', null, 'good', 2.4);
+      if (m.ok) this.hud.alert('ok', T.mpGame.feedbackSent, null, 'good', 2.4);
     });
-    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? 'The server is restarting', null, 'bad', 6));
+    room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? T.mpGame.restarting, null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
     room.onMessage('ev', (events: NetEvent[]) => {
@@ -538,7 +543,7 @@ export class MultiplayerGame {
     });
     room.onMessage('claimed', (m: { ok: boolean; error: string | null; territory: string }) => {
       // Already placed (a reconnect that raced the welcome) is not an error worth showing.
-      this.claimError = m.ok || m.error === 'already claimed' ? null : `Couldn't place your base: ${m.error}`;
+      this.claimError = m.ok || m.error === 'already claimed' ? null : T.mpGame.cantPlace(m.error ?? '');
       if (m.ok) this.sounds.play('spotted', { caption: false });
     });
     room.onStateChange((s) => this.onState(s));
@@ -551,12 +556,12 @@ export class MultiplayerGame {
         if (s === 'lost' && this.net.restarting && !this.rejoining) {
           // The server is restarting (v0.0.13): it reopens our session and holds our desk.
           this.rejoining = true;
-          this.lobby.showRooms(null, 'The server is restarting. Back in a moment…', 'info');
+          this.lobby.showRooms(null, T.mpGame.restartingBack, 'info');
           void this.net.rejoin(this.lobby.name).then((ok) => {
             this.rejoining = false;
             if (ok) {
               this.attach();
-              this.hud.alert('ok', 'Back in', null, 'good', 2);
+              this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
             } else {
               void this.refreshRooms();
               void this.serverLost();
@@ -571,17 +576,17 @@ export class MultiplayerGame {
       }
     });
     this.lobby.showClaim(this.claimView());
-    if (this.resumed) this.hud.alert('ok', 'Back in', null, 'good', 2);
+    if (this.resumed) this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
   }
 
   /** The server went away mid-session (and is not restarting): a standard dialog over the session list. */
   private async serverLost(): Promise<void> {
     if (this.lostDialog.isOpen) return;
     const again = await this.lostDialog.open({
-      title: 'Server lost',
-      body: `The connection to the game server is gone${this.net.lastError ? ` (${this.net.lastError.replace(/\.$/, '')})` : ''}. Your base, paper and planes are saved on the server.`,
-      confirm: { label: 'Rejoin', icon: 'swap', key: DIALOG_KEYS.confirm },
-      cancel: { label: 'Session list', icon: 'menu', key: DIALOG_KEYS.cancel },
+      title: T.mpGame.serverLost,
+      body: T.mpGame.serverLostBody(this.net.lastError ? this.net.lastError.replace(/\.$/, '') : null),
+      confirm: { label: T.mpGame.rejoin, icon: 'swap', key: DIALOG_KEYS.confirm },
+      cancel: { label: T.mpGame.sessionList, icon: 'menu', key: DIALOG_KEYS.cancel },
     });
     if (!again || this.room) return;
     this.rejoining = true;
@@ -589,7 +594,7 @@ export class MultiplayerGame {
     this.rejoining = false;
     if (ok) {
       this.attach();
-      this.hud.alert('ok', 'Back in', null, 'good', 2);
+      this.hud.alert('ok', T.mpGame.backIn, null, 'good', 2);
     } else void this.refreshRooms();
   }
 
@@ -669,7 +674,7 @@ export class MultiplayerGame {
   /** At home: everything on the desk repaired without opening base management. */
   quickRepair(): void {
     if (this.paused || !this.base || !this.atHome || this.base.needsRepair.length === 0) return;
-    if (!this.base.repairAll()) this.hud.alert('paper', 'Need paper', `−${Math.max(0, this.base.repairAllCost - this.resources.paper)}`, 'bad', 2);
+    if (!this.base.repairAll()) this.hud.alert('paper', T.mpGame.needPaper, `−${paper(Math.max(0, this.base.repairAllCost - this.resources.paper))}`, 'bad', 2);
   }
 
   /** Landed at home: rearm, then take off as soon as the ground crew is done. */
@@ -708,7 +713,7 @@ export class MultiplayerGame {
   toggleBase(open = !this.baseMode?.open): void {
     if (this.paused || !this.baseMode) return;
     if (open && !this.atHome) {
-      this.hud.alert('home', 'Land first', null, 'info', 1.6);
+      this.hud.alert('home', T.mpGame.landFirst, null, 'info', 1.6);
       return;
     }
     if (open) {
@@ -762,9 +767,9 @@ export class MultiplayerGame {
   /** What the raid card's one press does now. */
   private interceptResponse(): IncomingView['response'] {
     switch (this.state?.phase) {
-      case 'desk': return { key: 'F', label: this.interceptOffer() >= 0 ? 'Intercept' : 'Fold' };
-      case 'ready': return { key: 'Space', label: 'Launch' };
-      case 'landed': return { key: 'Space', label: 'Take off' };
+      case 'desk': return { key: 'F', label: this.interceptOffer() >= 0 ? T.mpGame.intercept : T.mpGame.fold };
+      case 'ready': return { key: 'Space', label: T.mpGame.launch };
+      case 'landed': return { key: 'Space', label: T.mpGame.takeOff };
       default: return null;
     }
   }
@@ -784,7 +789,7 @@ export class MultiplayerGame {
 
   toggleSound(): void {
     this.sounds.muted = !this.sounds.muted;
-    this.hud.alert(this.sounds.muted ? 'mute' : 'sound', this.sounds.muted ? 'Sound off' : 'Sound on', null, 'info', 1.4);
+    this.hud.alert(this.sounds.muted ? 'mute' : 'sound', this.sounds.muted ? T.mpGame.soundOff : T.mpGame.soundOn, null, 'info', 1.4);
   }
 
   setGraphics(settings: GraphicsSettings): void {
@@ -811,8 +816,8 @@ export class MultiplayerGame {
       if (this.state.phase === 'flying' && !input.pointerLocked && !this.controls.padFlying) input.requestPointerLock();
     });
     this.controls.onPad((e) => {
-      if (e.kind === 'connected') return this.hud.alert('plane', 'Controller connected', null, 'info', 2);
-      this.hud.alert('warn', 'Controller disconnected', null, 'warn', 2.6);
+      if (e.kind === 'connected') return this.hud.alert('plane', T.mpGame.padConnected, null, 'info', 2);
+      this.hud.alert('warn', T.mpGame.padDisconnected, null, 'warn', 2.6);
       // The plane flies on (the world doesn't stop for one player), but the controls go neutral.
       if (this.state?.phase === 'flying' && !this.paused && this.controls.device === 'gamepad') this.pause();
     });
@@ -880,7 +885,7 @@ export class MultiplayerGame {
         return;
       case 'service':
         if (phase === 'landed') this.send({ a: 'rearm' });
-        else if (phase === 'flying') this.hud.alert('home', 'Rearm at home', null, 'info', 1.6);
+        else if (phase === 'flying') this.hud.alert('home', T.mpGame.rearmAtHome, null, 'info', 1.6);
         return;
       case 'confirm':
         if (device === 'gamepad') {
@@ -992,8 +997,8 @@ export class MultiplayerGame {
     this.base = new NetBase(home, side, (cmd) => this.send(cmd), new ResourceManager());
     this.base.onEvent((e) => {
       if (e.type !== 'refused') return;
-      const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
-      this.hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad', 1.8);
+      const what = T.mpGame.refused[e.reason] ?? e.reason;
+      this.hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${paper(e.missing)}` : null, 'bad', 1.8);
     });
     this.baseMode = new BaseMode(this.base);
     this.state = new GameState(this.resources, () => this.offers);
@@ -1298,7 +1303,7 @@ export class MultiplayerGame {
         const point = at(e.p);
         this.effects.bombImpact(point, e.on);
         const screen = this.views.project(point);
-        if (screen && e.o === this.me) this.hud.pop(e.on ? 'BOOM!' : 'SPLAT!', e.on ? 'good' : 'bad', screen);
+        if (screen && e.o === this.me) this.hud.pop(e.on ? T.mpGame.boom : T.mpGame.splat, e.on ? 'good' : 'bad', screen);
         break;
       }
       case 'down': {
@@ -1332,7 +1337,7 @@ export class MultiplayerGame {
         } else if (e.o === this.me) {
           if (e.e === 'confetti') this.effects.burst(this.v1.copy(this.plane.position), 'fold');
           if (e.e === 'waggle') this.ownWaggle = WAGGLE_TIME;
-          this.hud.alert('plane', e.e === 'heart' ? '♥' : e.e === 'confetti' ? 'Confetti!' : 'Waggle', null, 'info', 1);
+          this.hud.alert('plane', e.e === 'heart' ? T.mpGame.heart : e.e === 'confetti' ? T.mpGame.confetti : T.mpGame.waggle, null, 'info', 1);
         }
         break;
       }
@@ -1684,7 +1689,7 @@ export class MultiplayerGame {
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
-            status: ['At desk', 'Folding', 'On the pad', 'Flying', 'Landed', 'Debrief', 'Shot down'][p.phase] ?? '', protect: p.protect, shield: p.shield,
+            status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield,
             presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)

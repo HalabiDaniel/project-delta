@@ -1,6 +1,9 @@
 import { FEEDBACK_CATEGORIES, FEEDBACK_LIMITS, type FeedbackCategory, type FeedbackDTO, type FeedbackReplyDTO } from '../net/protocol';
 import { button, glyph } from '../ui/components';
 import { icon } from '../ui/icons';
+import { esc } from '../ui/dom';
+import { count } from '../ui/format';
+import { T } from '../ui/strings';
 
 /**
  * The playtest feedback log (v0.0.14): F8, or the pause menu's Feedback button. A category, what
@@ -9,25 +12,9 @@ import { icon } from '../ui/icons';
  * Entries go to the `feedback` table; `npm run admin -- feedback export` reads them.
  */
 
-const NAMES: Record<FeedbackCategory, string> = {
-  bug: 'Bug',
-  frustration: 'Frustrating',
-  interface: 'Confusing',
-  performance: 'Slow / laggy',
-  balance: 'Balance',
-  missing: 'Missing',
-  enjoyment: 'Enjoyment',
-};
-
-const HINTS: Record<FeedbackCategory, string> = {
-  bug: 'Something broke or behaved wrongly',
-  frustration: 'Gameplay that felt unfair or annoying',
-  interface: 'Something on screen that was hard to understand',
-  performance: 'Stutter, low frame rate, lag',
-  balance: 'Too strong, too weak, too expensive, too slow',
-  missing: 'Something you wanted to do and couldn\'t',
-  enjoyment: 'How it feels overall, what you liked',
-};
+const F = T.feedback;
+const NAMES: Readonly<Record<FeedbackCategory, string>> = F.names;
+const HINTS: Readonly<Record<FeedbackCategory, string>> = F.hints;
 
 export interface FeedbackHost {
   /** Sends the entry to the server (false: not connected). */
@@ -61,12 +48,12 @@ export class FeedbackForm {
     const toggleButton = (v: string, label: string, tip?: string): string => button({ label, size: 'small', tip, attrs: { 'data-v': v, 'aria-pressed': 'false' } });
     this.root.innerHTML = /* html */ `
       <div class="ui-dialog mp-card mp-feedback-card" role="dialog" aria-modal="true" aria-labelledby="mp-feedback-title">
-        <div class="mp-head"><b class="mp-brand">paperwars<span>.io</span></b><h2 id="mp-feedback-title">Feedback</h2>${glyph({ key: 'F8' })}</div>
-        <div class="mp-field"><span>${icon('info')}What is it about?</span><div class="mp-toggles" role="group" aria-label="What is it about?" data-u="cats">${FEEDBACK_CATEGORIES.map((c) => toggleButton(c, NAMES[c], HINTS[c])).join('')}</div></div>
-        <label class="mp-field"><span>${icon('pencil')}What happened?</span><textarea class="mp-input" data-u="text" data-nav-default rows="4" maxlength="${FEEDBACK_LIMITS.text}" placeholder="As much or as little as you like"></textarea></label>
-        <label class="mp-field"><span>${icon('book')}Steps to reproduce (optional)</span><textarea class="mp-input" data-u="repro" rows="2" maxlength="${FEEDBACK_LIMITS.repro}" placeholder="1. … 2. … 3. …"></textarea></label>
-        <div class="mp-row"><span class="mp-label">Enjoyment</span><span class="mp-toggles" role="group" aria-label="Enjoyment" data-u="rating">${[1, 2, 3, 4, 5].map((n) => toggleButton(String(n), String(n))).join('')}</span><small class="mp-note">Version, session, position, ping, frame rate and browser are attached.</small></div>
-        <div class="ui-dialog-actions mp-foot"><span class="mp-status" data-u="status" role="status"></span>${button({ label: 'Cancel', icon: 'close', key: { key: 'Esc' }, attrs: { 'data-u': 'cancel', 'data-dialog-cancel': '' } })}${button({ label: 'Send', icon: 'ok', variant: 'primary', key: { key: 'Ctrl+Enter' }, attrs: { 'data-u': 'send' } })}</div>
+        <div class="mp-head"><b class="mp-brand">paperwars<span>.io</span></b><h2 id="mp-feedback-title">${esc(F.title)}</h2>${glyph({ key: 'F8' })}</div>
+        <div class="mp-field"><span>${icon('info')}${esc(F.about)}</span><div class="mp-toggles" role="group" aria-label="${esc(F.about)}" data-u="cats">${FEEDBACK_CATEGORIES.map((c) => toggleButton(c, NAMES[c], HINTS[c])).join('')}</div></div>
+        <label class="mp-field"><span>${icon('pencil')}${esc(F.happened)}</span><textarea class="mp-input" data-u="text" data-nav-default rows="4" maxlength="${FEEDBACK_LIMITS.text}" placeholder="${esc(F.happenedPlaceholder)}"></textarea></label>
+        <label class="mp-field"><span>${icon('book')}${esc(F.repro)}</span><textarea class="mp-input" data-u="repro" rows="2" maxlength="${FEEDBACK_LIMITS.repro}" placeholder="${esc(F.reproPlaceholder)}"></textarea></label>
+        <div class="mp-row"><span class="mp-label">${esc(F.enjoyment)}</span><span class="mp-toggles" role="group" aria-label="${esc(F.enjoyment)}" data-u="rating">${[1, 2, 3, 4, 5].map((n) => toggleButton(String(n), count(n))).join('')}</span><small class="mp-note">${esc(F.attached)}</small></div>
+        <div class="ui-dialog-actions mp-foot"><span class="mp-status" data-u="status" role="status"></span>${button({ label: F.cancel, icon: 'close', key: { key: 'Esc' }, attrs: { 'data-u': 'cancel', 'data-dialog-cancel': '' } })}${button({ label: F.send, icon: 'ok', variant: 'primary', key: { key: 'Ctrl+Enter' }, attrs: { 'data-u': 'send' } })}</div>
       </div>`;
     parent.appendChild(this.root);
     const el = <T extends HTMLElement>(u: string) => this.root.querySelector<T>(`[data-u="${u}"]`)!;
@@ -138,7 +125,7 @@ export class FeedbackForm {
       this.close();
       return;
     }
-    this.status.textContent = r.error ?? 'Not sent.';
+    this.status.textContent = r.error ?? F.notSent;
     this.status.dataset.tone = 'bad';
     this.refresh();
   }
@@ -156,7 +143,7 @@ export class FeedbackForm {
 
   private refresh(): void {
     this.sendButton.disabled = this.waiting || !this.category || this.text.value.trim().length === 0;
-    if (!this.waiting && this.status.dataset.tone !== 'bad') this.status.textContent = !this.category ? 'Pick what it is about.' : '';
+    if (!this.waiting && this.status.dataset.tone !== 'bad') this.status.textContent = !this.category ? F.pickCategory : '';
   }
 
   private submit(): void {
@@ -164,12 +151,12 @@ export class FeedbackForm {
     const entry: FeedbackDTO = { category: this.category, text: this.text.value.trim(), repro: this.repro.value.trim() || undefined, rating: this.rating, context: { ...this.browserContext(), ...this.host.context() } };
     delete this.status.dataset.tone;
     if (!this.host.send(entry)) {
-      this.status.textContent = 'Not connected to a session: join one, then send it.';
+      this.status.textContent = F.notConnected;
       this.status.dataset.tone = 'bad';
       return;
     }
     this.waiting = true;
-    this.status.textContent = 'Sending…';
+    this.status.textContent = F.sending;
     this.refresh();
   }
 

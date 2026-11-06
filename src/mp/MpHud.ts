@@ -1,6 +1,6 @@
 import { alert, bar, button, card, chip, glyph, iconButton, stat, type Tone } from '../ui/components';
 import { bindButton, esc, type ScreenPoint } from '../ui/dom';
-import { metres } from '../ui/format';
+import { count, metres, paper } from '../ui/format';
 import { icon, type IconName } from '../ui/icons';
 import type { HudZone } from '../ui/HUD';
 import { colourCss, type DeskState, type Emote, type Weapon } from '../net/protocol';
@@ -8,6 +8,9 @@ import type { ConnectionStatus } from './NetClient';
 import { bind } from '../input/bindings';
 import type { GlyphSpec } from '../input/glyphs';
 import { PRESENCE_ICONS, PRESENCE_LABELS, PRESENCE_TIPS, PRESENCE_TONES, type Presence } from './presence';
+import { T } from '../ui/strings';
+
+const H = T.mpHud;
 
 /**
  * A player's rank insignia (player ranks arrive in v0.0.17). The scoreboard rows, the name tags
@@ -133,12 +136,12 @@ export type MpHudZones = Pick<Record<HudZone, HTMLElement>, 'tl' | 'tc' | 'tr' |
 export type FeedSelf = 'killer' | 'victim' | null;
 
 export const WEAPON_ICONS: Readonly<Record<Weapon, IconName>> = { ink: 'ink', rocket: 'rocket', bomb: 'bomb', ram: 'damage', crash: 'crumple' };
-export const WEAPON_NAMES: Readonly<Record<Weapon, string>> = { ink: 'Ink', rocket: 'Rocket', bomb: 'Bomb', ram: 'Collision', crash: 'Crashed' };
+export const WEAPON_NAMES: Readonly<Record<Weapon, string>> = T.mpHud.weapons;
 /** Emotes as icons (not text glyphs), their names and their keys (Z / C / V, D-pad ↑ ← →). */
 export const EMOTES: ReadonlyArray<{ id: Emote; icon: IconName; name: string; key: GlyphSpec }> = [
-  { id: 'waggle', icon: 'plane', name: 'Waggle', key: bind('emote1') },
-  { id: 'confetti', icon: 'level', name: 'Confetti', key: bind('emote2') },
-  { id: 'heart', icon: 'health', name: 'Heart', key: bind('emote3') },
+  { id: 'waggle', icon: 'plane', name: T.mpHud.emotes.waggle, key: bind('emote1') },
+  { id: 'confetti', icon: 'level', name: T.mpHud.emotes.confetti, key: bind('emote2') },
+  { id: 'heart', icon: 'health', name: T.mpHud.emotes.heart, key: bind('emote3') },
 ];
 const EMOTE_ICON: Record<Emote, IconName> = { waggle: 'plane', confetti: 'level', heart: 'health' };
 const FEED_LINES = 5;
@@ -156,7 +159,7 @@ export function killLine(
   ranks: { killer?: InsigniaView | null; victim?: InsigniaView | null } = {},
 ): string {
   const weaponIcon = icon(WEAPON_ICONS[weapon], 'icon mp-weapon', WEAPON_NAMES[weapon]);
-  const helpers = assists.length ? `<small class="mp-assist">+${assists.map(esc).join(', ')}</small>` : '';
+  const helpers = assists.length ? `<small class="mp-assist">+${esc(T.common.list(assists))}</small>` : '';
   const lost = who(victim, victimColour, 'crumple', ranks.victim);
   return killer ? `${who(killer, killerColour, 'fighter', ranks.killer)}${helpers}${weaponIcon}${lost}` : `${weaponIcon}${lost}`;
 }
@@ -174,15 +177,15 @@ export function scoreboardHtml(rows: readonly ScoreRow[]): string {
     .map((r) => {
       const left = r.protect > 0 ? r.protect : r.shield;
       return `<tr data-id="${esc(r.id)}" data-presence="${r.presence}"${r.me ? ' data-me' : ''}>
-        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}${insigniaSlot(r.rank)}<b>${esc(r.name)}</b>${r.me ? chip({ label: 'You', tone: 'friend' }) : ''}</th>
-        <td>${esc(r.territory || '—')}</td><td class="num mp-score">${r.score}</td><td class="num">${r.kills}</td><td class="num">${r.assists}</td><td class="num">${r.deaths}</td>
-        <td class="num">${r.raids}</td><td class="num">${r.defends}</td><td class="num">${r.missions}</td>
+        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}${insigniaSlot(r.rank)}<b>${esc(r.name)}</b>${r.me ? chip({ label: H.you, tone: 'friend' }) : ''}</th>
+        <td>${esc(r.territory || '—')}</td><td class="num mp-score">${count(r.score)}</td><td class="num">${count(r.kills)}</td><td class="num">${count(r.assists)}</td><td class="num">${count(r.deaths)}</td>
+        <td class="num">${count(r.raids)}</td><td class="num">${count(r.defends)}</td><td class="num">${count(r.missions)}</td>
         <td class="mp-phase">${esc(r.status)}</td>
         <td>${presenceChip(r.presence, r.presence === 'protected' && left > 0 ? fmtTime(left) : undefined)}</td>
-        <td class="num mp-ping" data-level="${pingLevel(r)}">${r.connected ? `${r.ping}` : '—'}</td></tr>`;
+        <td class="num mp-ping" data-level="${pingLevel(r)}">${r.connected ? count(r.ping) : '—'}</td></tr>`;
     })
     .join('');
-  return `<table class="mp-table"><thead><tr>${head(null, 'Pilot', 'Pilot')}${head('home', 'Desk')}${head('medal', 'Score')}${head('kills', 'Shot down')}${head(null, 'Assists', '+')}${head('crumple', 'Times shot down')}${head('bomb', 'Raids that got through')}${head('shield', 'Raiders stopped')}${head('ok', 'Missions done')}${head('plane', 'Doing now')}${head('info', 'Presence')}${head('radar', 'Ping (ms)')}</tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="mp-table"><thead><tr>${head(null, H.pilot, H.pilot)}${head('home', H.desk)}${head('medal', H.score)}${head('kills', H.shotDown)}${head(null, H.assists, H.assistsHead)}${head('crumple', H.deaths)}${head('bomb', H.raids)}${head('shield', H.defends)}${head('ok', H.missions)}${head('plane', H.doing)}${head('info', H.presence)}${head('radar', H.ping)}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function pingLevel(r: Pick<ScoreRow, 'connected' | 'ping'>): 'ok' | 'worn' | 'critical' {
@@ -194,13 +197,13 @@ function pingLevel(r: Pick<ScoreRow, 'connected' | 'ping'>): 'ok' | 'worn' | 'cr
 export function connectionState(status: ConnectionStatus, ping: number): { label: string; icon: IconName; tone: Tone } {
   switch (status) {
     case 'connected':
-      return ping > 200 ? { label: 'Slow', icon: 'warn', tone: 'warn' } : { label: 'Online', icon: 'ok', tone: 'good' };
+      return ping > 200 ? { label: H.slow, icon: 'warn', tone: 'warn' } : { label: H.online, icon: 'ok', tone: 'good' };
     case 'connecting':
-      return { label: 'Connecting', icon: 'clock', tone: 'warn' };
+      return { label: H.connecting, icon: 'clock', tone: 'warn' };
     case 'reconnecting':
-      return { label: 'Reconnecting', icon: 'offline', tone: 'warn' };
+      return { label: H.reconnecting, icon: 'offline', tone: 'warn' };
     default:
-      return { label: 'Offline', icon: 'offline', tone: 'hostile' };
+      return { label: H.offline, icon: 'offline', tone: 'hostile' };
   }
 }
 
@@ -244,7 +247,7 @@ export class MpHud {
     this.feed = document.createElement('div');
     this.feed.className = 'mp-feed';
     this.feed.setAttribute('role', 'log');
-    this.feed.setAttribute('aria-label', 'Kill feed');
+    this.feed.setAttribute('aria-label', H.killFeed);
     this.connection = div(zones.tc, 'mp-connection');
     this.connection.hidden = true;
     this.raid = div(zones.tc, 'mp-raid');
@@ -253,11 +256,11 @@ export class MpHud {
     this.landing.hidden = true;
     this.emotes = div(zones.tr, 'mp-emotes');
     this.emotes.setAttribute('role', 'group');
-    this.emotes.setAttribute('aria-label', 'Emotes');
+    this.emotes.setAttribute('aria-label', H.emoteBar);
     this.emotes.hidden = true;
     this.emotes.innerHTML =
       EMOTES.map((e) => iconButton({ icon: e.icon, name: e.name, key: e.key, attrs: { 'data-act': `emote-${e.id}` } })).join('') +
-      `<span class="mp-board-key" data-tip="Scoreboard (hold)">${glyph(bind('scoreboard'))}${icon('kills', 'icon', 'Scoreboard')}</span>`;
+      `<span class="mp-board-key" data-tip="${esc(H.scoreboardHold)}">${glyph(bind('scoreboard'))}${icon('kills', 'icon', esc(H.scoreboard))}</span>`;
     for (const e of EMOTES) bindButton(this.emotes.querySelector<HTMLElement>(`[data-act="emote-${e.id}"]`)!, () => actions.emote(e.id));
     zones.tr.appendChild(this.feed);
     this.board = div(zones.centre, 'mp-board');
@@ -296,9 +299,9 @@ export class MpHud {
     const grid = v.cells
       .map((c) => `<i data-desk="${c.mine ? 'mine' : c.taken ? 'taken' : (c.state ?? 'ai')}" style="grid-column:${xs.indexOf(Math.round(c.x)) + 1};grid-row:${zs.indexOf(Math.round(c.z)) + 1}"></i>`)
       .join('');
-    const map = `<div class="mp-landed-map" role="img" aria-label="Classroom map" style="grid-template-columns:repeat(${xs.length},1fr)">${grid}</div>`;
-    const text = `<div class="mp-landed-text"><small>You landed on</small><b>${esc(v.label)}</b>${chip({ label: v.id, icon: 'home', tone: 'friend' })}<span>Your base, as you left it</span></div>`;
-    this.landing.innerHTML = card({ label: 'You landed on', bodyHtml: `<div class="mp-landed-body">${map}${text}</div>`, elevation: 'floating' });
+    const map = `<div class="mp-landed-map" role="img" aria-label="${esc(H.classroomMap)}" style="grid-template-columns:repeat(${xs.length},1fr)">${grid}</div>`;
+    const text = `<div class="mp-landed-text"><small>${esc(H.landedOn)}</small><b>${esc(v.label)}</b>${chip({ label: v.id, icon: 'home', tone: 'friend' })}<span>${esc(H.asYouLeft)}</span></div>`;
+    this.landing.innerHTML = card({ label: H.landedOn, bodyHtml: `<div class="mp-landed-body">${map}${text}</div>`, elevation: 'floating' });
     this.landing.hidden = false;
     this.landing.classList.remove('fade');
     clearTimeout(this.landingTimer);
@@ -328,22 +331,22 @@ export class MpHud {
     const c = connectionState(v.status, v.ping);
     const protect = v.protection && (v.protection.newPlayer > 0 || v.protection.shield > 0)
       ? chip({
-          label: 'Safe', icon: 'shield', tone: 'friend', value: fmtTime(Math.max(v.protection.newPlayer, v.protection.shield)),
-          tip: v.protection.newPlayer > 0 ? 'New-player protection: nobody can raid your base yet' : 'Raid shield: your base was just raided, nobody can raid it again yet',
+          label: H.safe, icon: 'shield', tone: 'friend', value: fmtTime(Math.max(v.protection.newPlayer, v.protection.shield)),
+          tip: v.protection.newPlayer > 0 ? H.newPlayer : H.shield,
         })
       : '';
     const left = v.sessionLeft;
     const session = left !== null
       ? stat({
-          icon: 'clock', value: fmtTime(left), label: v.closing ? 'The session ends soon (nobody new can join)' : 'Time left in this session',
+          icon: 'clock', value: fmtTime(left), label: v.closing ? H.closing : H.timeLeft,
           state: left <= 60 ? 'critical' : v.closing ? 'warning' : undefined, className: 'mp-session',
         })
       : '';
-    const body = `<div class="mp-net-row">${chip({ label: c.label, icon: c.icon, tone: c.tone, tip: 'Connection', attrs: { 'data-status': v.status } })}
-      ${stat({ icon: 'radar', value: v.status === 'connected' ? String(Math.round(v.ping)) : '—', suffix: 'ms', label: 'Round trip to the server' })}
-      ${stat({ icon: 'fighter', value: `${v.players}/${v.maxPlayers}`, label: 'Players in this session' })}
-      ${session}${protect}<span class="mp-room-name" data-tip="Classroom">${esc(v.room)}</span></div>`;
-    this.net.innerHTML = card({ label: 'Connection', bodyHtml: body, fold: false, className: 'mp-net-card' });
+    const body = `<div class="mp-net-row">${chip({ label: c.label, icon: c.icon, tone: c.tone, tip: H.connection, attrs: { 'data-status': v.status } })}
+      ${stat({ icon: 'radar', value: v.status === 'connected' ? count(v.ping) : '—', suffix: H.ms, label: H.roundTrip })}
+      ${stat({ icon: 'fighter', value: `${count(v.players)}/${count(v.maxPlayers)}`, label: H.players })}
+      ${session}${protect}<span class="mp-room-name" data-tip="${esc(H.classroom)}">${esc(v.room)}</span></div>`;
+    this.net.innerHTML = card({ label: H.connection, bodyHtml: body, fold: false, className: 'mp-net-card' });
   }
 
   private renderConnection(status: ConnectionStatus): void {
@@ -351,7 +354,7 @@ export class MpHud {
     if (this.connection.hidden === show) this.connection.hidden = !show;
     if (!show || this.lastConnection === status) return;
     this.lastConnection = status;
-    this.connection.innerHTML = `${alert({ title: 'Connection lost', value: 'reconnecting…', icon: 'offline', severity: 'critical' })}<small class="mp-connection-note">Your plane and desk are kept for a minute</small>`;
+    this.connection.innerHTML = `${alert({ title: H.connectionLost, value: H.reconnectingValue, icon: 'offline', severity: 'critical' })}<small class="mp-connection-note">${esc(H.kept)}</small>`;
   }
 
   private renderTags(tags: NameTagView[]): void {
@@ -372,13 +375,13 @@ export class MpHud {
       const rankHtml = insigniaSlot(t.rank);
       if (slot.innerHTML !== rankHtml) slot.innerHTML = rankHtml;
       const name = el.querySelector('b')!;
-      const label = `${t.name} · ${t.plane}`;
+      const label = H.tag(t.name, t.plane);
       if (name.textContent !== label) name.textContent = label;
       const hp = Math.round(t.health * 20);
       const barEl = el.children[1] as HTMLElement;
       if (barEl.dataset.hp !== String(hp)) {
         barEl.dataset.hp = String(hp);
-        barEl.innerHTML = bar({ value: t.health, label: 'Health', size: 'mini' });
+        barEl.innerHTML = bar({ value: t.health, label: H.health, size: 'mini' });
       }
       const emote = el.children[2] as HTMLElement;
       const id = t.emote ?? '';
@@ -430,7 +433,7 @@ export class MpHud {
     const key = JSON.stringify(rows);
     if (key === this.lastBoard) return;
     this.lastBoard = key;
-    this.board.innerHTML = card({ title: 'Scoreboard', icon: 'kills', bodyHtml: scoreboardHtml(rows), elevation: 'floating', className: 'mp-board-card' });
+    this.board.innerHTML = card({ title: H.scoreboard, icon: 'kills', bodyHtml: scoreboardHtml(rows), elevation: 'floating', className: 'mp-board-card' });
   }
 
   private renderRaid(v: MpHudView): void {
@@ -446,30 +449,30 @@ export class MpHud {
 export function territoryTagHtml(t: TerritoryTagView): string {
   const p = t.presence;
   const presence = p === 'online' ? '' : `<span class="mp-terr-presence" data-presence="${p}" data-tip="${esc(PRESENCE_TIPS[p])}">${icon(PRESENCE_ICONS[p])}<small>${esc(PRESENCE_LABELS[p])}</small></span>`;
-  const safe = t.safe && p === 'online' ? `<span data-tip="Can't be raided now">${icon('shield', 'icon', 'Protected')}</span>` : '';
-  const raid = t.alert ? `<span class="mp-terr-raid" data-tip="Under attack">${icon('raid', 'icon', 'Raid')}</span>` : '';
+  const safe = t.safe && p === 'online' ? `<span data-tip="${esc(H.cantBeRaided)}">${icon('shield', 'icon', esc(H.protected))}</span>` : '';
+  const raid = t.alert ? `<span class="mp-terr-raid" data-tip="${esc(H.underAttack)}">${icon('raid', 'icon', esc(H.raid))}</span>` : '';
   return `${icon('home', 'icon mp-swatch')}<b>${esc(t.label)}</b>${presence}${safe}${raid}`;
 }
 
 /** The raid card: the attacker, ETA, direction, distance, our guns, the reward, and the one-press interception. */
 export function incomingHtml(r: IncomingView): string {
   const facts = [
-    r.eta !== null && r.detected ? stat({ icon: 'clock', value: `${Math.max(0, Math.ceil(r.eta))}s`, label: 'Time to your desk' }) : '',
-    r.direction && r.detected ? stat({ icon: 'heading', value: r.direction, label: 'Coming from' }) : '',
-    r.distance !== null && r.detected ? stat({ icon: 'distance', value: metres(r.distance), label: 'Distance from your desk' }) : '',
-    r.total > 0 ? stat({ icon: 'shield', value: `${r.ready}/${r.total}`, label: 'Weapons ready', tone: r.ready < r.total ? 'hostile' : 'good' }) : chip({ label: 'No guns', icon: 'warn', tone: 'warn' }),
-    stat({ icon: 'paper', value: `+${r.reward}`, label: 'Defense reward' }),
+    r.eta !== null && r.detected ? stat({ icon: 'clock', value: T.units.seconds(count(Math.max(0, Math.ceil(r.eta)))), label: H.timeToDesk }) : '',
+    r.direction && r.detected ? stat({ icon: 'heading', value: r.direction, label: H.comingFrom }) : '',
+    r.distance !== null && r.detected ? stat({ icon: 'distance', value: metres(r.distance), label: H.distance }) : '',
+    r.total > 0 ? stat({ icon: 'shield', value: `${count(r.ready)}/${count(r.total)}`, label: H.weaponsReady, tone: r.ready < r.total ? 'hostile' : 'good' }) : chip({ label: H.noGuns, icon: 'warn', tone: 'warn' }),
+    stat({ icon: 'paper', value: `+${paper(r.reward)}`, label: H.defenseReward }),
   ].join('');
-  const radar = r.detected ? '' : chip({ label: 'Not on radar yet', icon: 'radar', tone: 'warn' });
+  const radar = r.detected ? '' : chip({ label: H.notOnRadar, icon: 'radar', tone: 'warn' });
   const action = r.response
-    ? button({ label: r.response.label, icon: 'fighter', variant: 'primary', key: { key: r.response.key }, attrs: { 'data-act': 'intercept' }, tip: 'Go and shoot them down' })
+    ? button({ label: r.response.label, icon: 'fighter', variant: 'primary', key: { key: r.response.key }, attrs: { 'data-act': 'intercept' }, tip: H.interceptTip })
     : '';
-  const body = `<div class="mp-raid-who">${who(r.attacker, r.colour, 'bomber')}<span>is raiding your desk</span>${radar}</div><div class="mp-raid-facts">${facts}</div>${action ? `<div class="mp-raid-act">${action}</div>` : ''}`;
-  return card({ title: 'Raid incoming', icon: 'raid', tone: 'hostile', state: 'critical', bodyHtml: body, elevation: 'floating', className: 'mp-raid-card', attrs: { 'data-raid': 'incoming' } });
+  const body = `<div class="mp-raid-who">${around(H.raiding(WHO), who(r.attacker, r.colour, 'bomber'))}${radar}</div><div class="mp-raid-facts">${facts}</div>${action ? `<div class="mp-raid-act">${action}</div>` : ''}`;
+  return card({ title: H.raidIncoming, icon: 'raid', tone: 'hostile', state: 'critical', bodyHtml: body, elevation: 'floating', className: 'mp-raid-card', attrs: { 'data-raid': 'incoming' } });
 }
 
 export function outgoingHtml(o: { victim: string; colour: number }): string {
-  return card({ label: 'Your raid', bodyHtml: `<div class="mp-raid-who">${icon('bomb')}<span>Raid on</span>${who(o.victim, o.colour, 'home')}</div>`, tone: 'warn', fold: false, className: 'mp-raid-card', attrs: { 'data-raid': 'outgoing' } });
+  return card({ label: H.yourRaid, bodyHtml: `<div class="mp-raid-who">${icon('bomb')}${around(H.raidOn(WHO), who(o.victim, o.colour, 'home'))}</div>`, tone: 'warn', fold: false, className: 'mp-raid-card', attrs: { 'data-raid': 'outgoing' } });
 }
 
 function div(parent: HTMLElement, className: string): HTMLElement {
@@ -479,7 +482,17 @@ function div(parent: HTMLElement, className: string): HTMLElement {
   return el;
 }
 
+/** Where a name tag goes in a dictionary sentence ("{who} is raiding your desk"). */
+const WHO = '\u0001';
+
+/** A sentence around a name tag: the words before and after it in spans, the tag's markup in place. */
+function around(sentence: string, whoHtml: string): string {
+  const [before, after = ''] = sentence.split(WHO);
+  const span = (t: string) => (t.trim() ? `<span>${esc(t.trim())}</span>` : '');
+  return `${span(before)}${whoHtml}${span(after)}`;
+}
+
 export function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
-  return m > 0 ? `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}` : `${Math.ceil(s)}s`;
+  return m > 0 ? `${count(m)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : T.units.seconds(count(Math.ceil(s)));
 }

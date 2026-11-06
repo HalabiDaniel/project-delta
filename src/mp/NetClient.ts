@@ -1,6 +1,7 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type FeedbackDTO, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
+import { T } from '../ui/strings';
 
 /**
  * offline      – not in a session.
@@ -155,7 +156,7 @@ export class NetClient {
   async list(): Promise<SessionListing[]> {
     const started = performance.now();
     const response = await fetch(`${this.http}/sessions`);
-    if (!response.ok) throw new Error(`Server answered ${response.status}`);
+    if (!response.ok) throw new Error(T.net.serverAnswered(response.status));
     const list = (await response.json()) as SessionListing[];
     if (!this.room) this.rtt = Math.round(performance.now() - started);
     return list;
@@ -174,7 +175,7 @@ export class NetClient {
       for (let attempt = 0; ; attempt++) {
         const response = await fetch(`${this.http}/sessions/quick`, { method: 'POST' });
         const body = (await response.json().catch(() => ({}))) as Partial<QuickJoinDTO> & { error?: string };
-        if (!response.ok || !body.id) throw new Error(body.error ?? `Server answered ${response.status}`);
+        if (!response.ok || !body.id) throw new Error(body.error ?? T.net.serverAnswered(response.status));
         try {
           return await this.sdk.joinById(body.id, this.joinOptions(name), WorldState);
         } catch (error) {
@@ -243,7 +244,7 @@ export class NetClient {
       }
     }
     this.restarting = false;
-    this.lastError = 'The session could not be rejoined after the restart.';
+    this.lastError = T.net.notRejoined;
     this.setStatus('lost');
     return false;
   }
@@ -320,12 +321,12 @@ export class NetClient {
       this.restarting = code === CLOSE_RESTARTING || (code !== 4000 && code !== CLOSE_TAKEN_OVER && code !== CLOSE_SESSION_ENDED && code !== CLOSE_KICKED && this.lastSession() !== null);
       // The end of a session is no error: the results card is up.
       const clean = code === 4000 || code === CLOSE_SESSION_ENDED;
-      if (!clean) this.lastError = reason ? String(reason) : `Disconnected (${code})`;
+      if (!clean) this.lastError = reason ? String(reason) : T.net.disconnected(code);
       this.stopPinging();
       this.setStatus(clean ? 'offline' : 'lost');
     });
     room.onError((code, message) => {
-      this.lastError = message ?? `Error ${code}`;
+      this.lastError = message ?? T.net.error(code);
     });
     // The server pings us to measure the round trip itself (for lag compensation): answer at once.
     room.onMessage('ping', (m: { n: number }) => room.send('pong', m));
@@ -398,9 +399,9 @@ export class NetClient {
  * the transport's are not.
  */
 export function explain(message: string, endpoint: string): string {
-  if (/failed to fetch|fetch failed|networkerror|econnrefused|failed to connect|load failed/i.test(message)) return `Can't reach the server at ${endpoint}. It may be down or restarting; try again in a moment.`;
-  if (/room ".*" not found|not found/i.test(message)) return 'That session has closed. Pick another one or use Quick join.';
-  if (/is locked/i.test(message)) return 'That session is full or about to end. Pick another one or use Quick join.';
-  if (/seat reservation expired/i.test(message)) return 'Joining took too long. Try again.';
+  if (/failed to fetch|fetch failed|networkerror|econnrefused|failed to connect|load failed/i.test(message)) return T.net.unreachable(endpoint);
+  if (/room ".*" not found|not found/i.test(message)) return T.net.closed;
+  if (/is locked/i.test(message)) return T.net.full;
+  if (/seat reservation expired/i.test(message)) return T.net.tooLong;
   return message;
 }

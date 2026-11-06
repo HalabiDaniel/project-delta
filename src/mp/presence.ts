@@ -1,6 +1,7 @@
 import type { DeskState } from '../net/protocol';
 import type { IconName } from '../ui/icons';
 import type { Tone } from '../ui/components';
+import { T } from '../ui/strings';
 
 /**
  * Where another player is (plan v0.0.15 §5A, presence), worked out from what the server already
@@ -36,12 +37,7 @@ export function presenceOf(p: PresenceInput): Presence {
   return 'online';
 }
 
-export const PRESENCE_LABELS: Readonly<Record<Presence, string>> = { online: 'Online', away: 'Away', offline: 'Offline', protected: 'Protected' };
+export const PRESENCE_LABELS: Readonly<Record<Presence, string>> = T.presence.labels;
 export const PRESENCE_ICONS: Readonly<Record<Presence, IconName>> = { online: 'ok', away: 'clock', offline: 'offline', protected: 'shield' };
 export const PRESENCE_TONES: Readonly<Record<Presence, Tone>> = { online: 'good', away: 'warn', offline: 'plain', protected: 'friend' };
-export const PRESENCE_TIPS: Readonly<Record<Presence, string>> = {
-  online: 'Connected and playing',
-  away: 'Dropped: their plane and desk are kept for a minute',
-  offline: 'Left the session',
-  protected: 'Nobody can raid their base yet',
-};
+export const PRESENCE_TIPS: Readonly<Record<Presence, string>> = T.presence.tips;
