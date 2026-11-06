@@ -278,6 +278,8 @@ body.pad-mode .ui-glyph:not([data-device]) { border-radius: var(--r-pill); backg
 .ui-list[data-layout='row'] { grid-auto-flow: column; grid-auto-columns: max-content; }
 .ui-list[data-nav-scroll] { max-height: 14em; overflow-y: auto; overscroll-behavior: contain; }
 .ui-list > li { display: flex; min-width: 0; }
+.ui-list > li > * { flex: 1 1 auto; }
+.ui-list[data-layout='row'] > li > * { flex: none; }
 .ui-list[data-state='disabled'] { opacity: 0.5; }
 .ui-list[data-state='warning'] { outline: 1px dashed var(--warn); }
 .ui-list[data-state='critical'] { outline: 1px dashed var(--hostile); }

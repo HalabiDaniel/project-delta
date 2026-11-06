@@ -233,8 +233,8 @@ function renderSections(device: GlyphDevice): string {
 
   const tabItems = [{ id: 'records', label: 'Records', icon: 'medal' as const }, { id: 'base', label: 'Base', icon: 'base' as const, selected: true }, { id: 'aircraft', label: 'Aircraft', icon: 'plane' as const, badge: '5' }, { id: 'paper', label: 'Paper', icon: 'paper' as const, disabled: true }];
   out.push(section('tabs', 'Tabs', 'Section switching: Q / E or LB / RB anywhere on the screen.',
-    `${tabs({ id: 'g-tabs', label: 'Logbook sections', tabs: tabItems, prev: KEYS.prevTab, next: KEYS.nextTab, device })}${tabItems.map((t) => tabPanel({ tabsId: 'g-tabs', tab: t.id, selected: !!t.selected, bodyHtml: `<p class="g-note">${esc(t.label)} panel</p>` })).join('')}
-    ${stateTable((s) => tabs({ id: `g-tabs-${s}-${++sample}`, label: 'Sample', tabs: [{ id: 'a', label: 'Selected', selected: true }, { id: 'b', label: 'Other', state: s }] }), ['default', 'hover', 'focused', 'pressed', 'disabled', 'warning', 'critical'])}`));
+    `${tabs({ id: 'g-logbook', label: 'Logbook sections', tabs: tabItems, prev: KEYS.prevTab, next: KEYS.nextTab, device })}${tabItems.map((t) => tabPanel({ tabsId: 'g-logbook', tab: t.id, selected: !!t.selected, bodyHtml: `<p class="g-note">${esc(t.label)} panel</p>` })).join('')}
+    ${stateTable((s) => tabs({ id: `g-sample-${s}-${++sample}`, label: 'Sample', tabs: [{ id: 'a', label: 'Selected', selected: true }, { id: 'b', label: 'Other', state: s }] }), ['default', 'hover', 'focused', 'pressed', 'disabled', 'warning', 'critical'])}`));
 
   out.push(section('dialog', 'Dialog', 'Confirmations for destructive actions. Focus is trapped; Esc / B cancels; Enter / A presses the focused button (confirm first).',
     `<div class="g-row">${button({ label: 'Open confirm dialog', variant: 'danger', icon: 'land', attrs: { 'data-open-dialog': '' } })}<span class="g-note" data-dialog-result aria-live="polite"></span></div>
