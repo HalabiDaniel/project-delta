@@ -31,14 +31,44 @@
 
 /* ---- Layout: fixed zones ------------------------------------------------------------------------ */
 .world-layer { position: absolute; inset: 0; }
+/* Markers over the 3D world (labels, targets, slots, name tags) are placed in window pixels, so they
+   grow above 1080p through their type sizes (and em-sized icons), not by scaling (plan §7).
+   The px values mirror TYPE in src/ui/tokens.ts. */
+.world-layer, .mp-tags {
+  --t-xs: calc(11px * var(--text-scale, 1) * var(--overlay-scale, 1));
+  --t-s: calc(12px * var(--text-scale, 1) * var(--overlay-scale, 1));
+  --t-m: calc(15px * var(--text-scale, 1) * var(--overlay-scale, 1));
+  --t-l: calc(21px * var(--text-scale, 1) * var(--overlay-scale, 1));
+  --t-xl: calc(30px * var(--text-scale, 1) * var(--overlay-scale, 1));
+}
 .zone { position: absolute; display: flex; gap: var(--s2); transform: scale(calc(var(--ui-scale, 1) * var(--fit-scale, 1))); }
-.zone-tl { top: var(--s4); left: var(--s4); flex-direction: column; align-items: flex-start; transform-origin: top left; }
-.zone-tc { top: var(--s4); left: 50%; translate: -50% 0; width: min(560px, 44vw); flex-direction: column; align-items: center; transform-origin: top center; }
-.zone-tr { top: var(--s4); right: var(--s4); flex-direction: column; align-items: flex-end; transform-origin: top right; }
-.zone-bl { bottom: var(--s4); left: var(--s4); flex-direction: column; align-items: flex-start; justify-content: flex-end; transform-origin: bottom left; }
-.zone-bc { bottom: var(--s4); left: 50%; translate: -50% 0; width: max-content; max-width: 70vw; flex-direction: column; align-items: center; justify-content: flex-end; transform-origin: bottom center; }
-.zone-br { bottom: var(--s4); right: var(--s4); flex-direction: column; align-items: flex-end; justify-content: flex-end; transform-origin: bottom right; }
+/* Zones anchor to the corners of the safe area: the whole window, or a centred 16:9 area on an
+   ultrawide screen with "Keep the HUD in 16:9" on (--safe-x, --safe-w from src/ui/layout.ts). */
+.zone-tl { top: var(--s4); left: calc(var(--safe-x, 0px) + var(--s4)); flex-direction: column; align-items: flex-start; transform-origin: top left; }
+.zone-tc { top: var(--s4); left: 50%; translate: -50% 0; width: min(560px, calc(var(--safe-w, 100vw) * 0.44)); flex-direction: column; align-items: center; transform-origin: top center; }
+.zone-tr { top: var(--s4); right: calc(var(--safe-x, 0px) + var(--s4)); flex-direction: column; align-items: flex-end; transform-origin: top right; }
+.zone-bl { bottom: var(--s4); left: calc(var(--safe-x, 0px) + var(--s4)); flex-direction: column; align-items: flex-start; justify-content: flex-end; transform-origin: bottom left; }
+/* Before scaling: 98% of the safe width once scaled (the reference 1080p layout keeps its 70vw). */
+.zone-bc { bottom: var(--s4); left: 50%; translate: -50% 0; width: max-content; max-width: calc(var(--safe-w, 100vw) * 0.98 / (var(--ui-scale, 1) * var(--fit-scale, 1))); flex-direction: column; align-items: center; justify-content: flex-end; transform-origin: bottom center; }
+.zone-br { bottom: var(--s4); right: calc(var(--safe-x, 0px) + var(--s4)); flex-direction: column; align-items: flex-end; justify-content: flex-end; transform-origin: bottom right; }
 .zone-centre { inset: 0; align-items: center; justify-content: center; transform-origin: center; }
+
+/* ---- Reduced motion (plan v0.0.15 §8C) --------------------------------------------------------- */
+/* components.css ends every animation and transition at once. What carries information (the paper
+   change, damage numbers, pop words, the hit arc, threat notes, emotes) stays as a still fade
+   instead of vanishing; the damage flash (a screen-edge vignette) goes. */
+@keyframes hud-still { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+:root[data-motion='reduced'] :is(.delta.show, .threat-note.show, .pop-word, .damage-number, .hit-arc, .mp-tag-emote.pop) {
+  animation-name: hud-still !important;
+  animation-duration: 1.2s !important;
+  animation-timing-function: linear !important;
+  animation-fill-mode: forwards !important;
+  transform: none;
+}
+:root[data-motion='reduced'] .damage-flash { display: none; }
+
+/* ---- Sound captions (plan v0.0.15 §8D): above the instruments, never stepping back ------------- */
+.captions { display: flex; flex-direction: column; align-items: center; gap: var(--s1); margin-bottom: var(--s2); pointer-events: none; }
 
 /* ---- Key hints: only while learning (the first sorties, H held, or by setting) ------------------- */
 .hud .hint-key, .hud .hint-keys { display: none; }
@@ -361,12 +391,13 @@ kbd.pad-hidden { display: none !important; }
   transition: transform var(--motion-fold), box-shadow var(--motion-fold);
   animation: ui-fold-in var(--motion-fold) both;
 }
-/* The risk stripe is colour and position; the slot chip says it in words. */
+/* The risk stripe is colour, position and pattern (safe solid, balanced dotted, risky hatched, event
+   dashed); the slot chip says it in words. */
 .mcard::after { content: ''; position: absolute; inset: var(--s2) auto var(--s2) 0; width: var(--s1); border-radius: 0 var(--r-s) var(--r-s) 0; background: var(--off); }
 .mcard[data-slot='safe']::after { background: var(--good); }
-.mcard[data-slot='balanced']::after { background: var(--friend); }
-.mcard[data-slot='risky']::after { background: var(--hostile); }
-.mcard[data-slot='event']::after { background: var(--warn); }
+.mcard[data-slot='balanced']::after { background: radial-gradient(circle, var(--friend) 1.5px, transparent 1.7px) 0 0 / var(--s1) var(--s1), color-mix(in srgb, var(--friend) 35%, transparent); }
+.mcard[data-slot='risky']::after { background: repeating-linear-gradient(135deg, var(--hostile) 0 3px, color-mix(in srgb, var(--hostile) 30%, transparent) 3px 5px); }
+.mcard[data-slot='event']::after { background: repeating-linear-gradient(180deg, var(--warn) 0 6px, transparent 6px 9px); }
 .mcard:hover { transform: translateX(-2px); }
 .mcard.selected { box-shadow: 0 0 0 2px var(--friend), var(--elev-floating); transform: translateX(calc(-1 * var(--s2))); }
 .mc-top { display: flex; align-items: center; gap: var(--s2); }
@@ -396,8 +427,9 @@ kbd.pad-hidden { display: none !important; }
   background: var(--off);
 }
 /* Fit is shape too: recommended underlined, unsuitable struck through and hollow. */
-.fit[data-level='recommended'] { background: var(--good); box-shadow: inset 0 -2px 0 var(--chip-good-fg); }
+.fit[data-level='recommended'] { background: var(--good); box-shadow: inset 0 -3px 0 var(--ink); }
 .fit[data-level='good'] { background: var(--friend); }
+/* Never colour alone: recommended is underlined, good plain, possible outlined, unsuitable struck through. */
 .fit[data-level='possible'] { background: var(--paper-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--edge); }
 .fit[data-level='unsuitable'] { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--edge); text-decoration: line-through; }
 .fit.mine { outline: 2px solid var(--ink); outline-offset: 1px; }
@@ -681,7 +713,10 @@ kbd.pad-hidden { display: none !important; }
 
 /* ---- Pause menu and welcome card ------------------------------------------------------------------------- */
 .overlay, .welcome, .logbook { position: absolute; inset: 0; display: grid; place-items: center; background: var(--backdrop); pointer-events: auto; }
-.overlay-card, .welcome-card { width: min(37em, calc(100vw - var(--s8))); max-height: calc(100vh - var(--s8)); overflow-y: auto; padding: var(--s4) var(--s5); }
+/* Overlays grow above 1080p with the window (--overlay-scale, src/ui/layout.ts), like the zones;
+   zoom scales their layout, so the window-sized limits are divided by it. */
+.overlay-card, .welcome-card, .logbook-card { zoom: var(--overlay-scale, 1); }
+.overlay-card, .welcome-card { width: min(37em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); max-height: calc((100vh - var(--s8)) / var(--overlay-scale, 1)); overflow-y: auto; padding: var(--s4) var(--s5); }
 .overlay-card .ui-card-body, .welcome-card .ui-card-body { gap: var(--s3); }
 .menu-head { display: flex; align-items: baseline; gap: var(--s2); }
 .menu-head h2 { margin: 0 0 0 auto; font-size: var(--t-l); }
@@ -716,7 +751,7 @@ body.pad-mode .kbd-only { display: none !important; }
 .stats.session { gap: var(--s2) var(--s4); }
 .stats.session .ui-stat b { font-size: var(--t-m); }
 .session-best { display: flex; align-items: center; gap: var(--s1); font-size: var(--t-s); color: var(--ink-2); }
-.welcome-card { width: min(28em, calc(100vw - var(--s8))); }
+.welcome-card { width: min(28em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); }
 .welcome-card .ui-card-body { justify-items: center; text-align: center; }
 .welcome-card h2 { margin: 0; font-size: var(--t-xl); }
 .wc-paper { display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--t-xl); }
@@ -753,7 +788,7 @@ body.pad-mode .kbd-only { display: none !important; }
 }
 
 /* ---- Logbook ------------------------------------------------------------------------------------------- */
-.logbook-card { width: min(62em, calc(100vw - var(--s8))); max-height: calc(100vh - var(--s8) * 2); overflow-y: auto; padding: var(--s4) var(--s5); background: var(--paper-solid); box-shadow: var(--elev-floating); }
+.logbook-card { width: min(62em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); max-height: calc((100vh - var(--s8) * 2) / var(--overlay-scale, 1)); overflow-y: auto; padding: var(--s4) var(--s5); background: var(--paper-solid); box-shadow: var(--elev-floating); }
 .logbook-head { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s1); }
 .logbook-head h2 { margin: 0; font-size: var(--t-l); }
 .logbook-head .ui-tabs { flex: 1; }
@@ -902,10 +937,10 @@ body.pad-mode .kbd-only { display: none !important; }
 
 /* ---- Overlays: lobby and feedback (follow the HUD size) --------------------------------------- */
 .mp-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: var(--backdrop); pointer-events: auto; }
-.mp-overlay > * { zoom: var(--ui-scale, 1); }
+.mp-overlay > * { zoom: calc(var(--ui-scale, 1) * var(--overlay-scale, 1)); }
 .mp-lobby { z-index: 20; }
 .mp-feedback { z-index: 30; }
-.mp-overlay .mp-card { width: min(640px, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; padding: var(--s4); user-select: text; }
+.mp-overlay .mp-card { width: min(640px, calc(92vw / (var(--ui-scale, 1) * var(--overlay-scale, 1)))); max-height: calc((100vh - var(--s8)) / (var(--ui-scale, 1) * var(--overlay-scale, 1))); overflow-y: auto; padding: var(--s4); user-select: text; }
 .mp-card > .ui-card-body { gap: var(--s3); font-size: var(--t-m); color: var(--ink); }
 .mp-head { display: flex; align-items: baseline; gap: var(--s3); }
 .mp-head h2 { margin: 0; font-size: var(--t-l); color: var(--ink-2); }
@@ -1005,7 +1040,7 @@ textarea.mp-input { resize: vertical; font-weight: 500; }
 .mp-medal-3 { color: var(--bronze); }
 
 /* ---- Feedback (F8): a dialog with toggles and two text boxes --------------------------------- */
-.mp-feedback .mp-feedback-card { width: min(36em, 92vw); max-height: calc(100vh - var(--s8)); overflow-y: auto; font-size: var(--t-m); }
+.mp-feedback .mp-feedback-card { width: min(36em, calc(92vw / (var(--ui-scale, 1) * var(--overlay-scale, 1)))); max-height: calc((100vh - var(--s8)) / (var(--ui-scale, 1) * var(--overlay-scale, 1))); overflow-y: auto; font-size: var(--t-m); }
 .mp-toggles { display: flex; flex-wrap: wrap; gap: var(--s1); }
 .mp-feedback .mp-foot .mp-status { flex: 1; }
 

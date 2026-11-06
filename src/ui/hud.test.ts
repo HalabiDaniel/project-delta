@@ -139,7 +139,7 @@ function rawActions(): HudActions & { calls: string[] } {
     build: f('build'), launch: f('launch'), select: f('select'), selectAircraft: f('selectAircraft'), rearm: f('rearm'), takeOff: f('takeOff'),
     endSortie: f('endSortie'), continueToDesk: f('continue'), resume: f('resume'), swap: f('swap'), abandonOperation: f('abandon'),
     openLogbook: f('logbook'), openMenu: f('menu'), resetProgress: f('reset'), dismissWelcome: f('welcome'), toggleSound: f('sound'),
-    setHints: f('hints'), setUiScale: f('scale'), setGraphicsPreset: f('gfx'), toggleBase: f('base'), skipTutorial: f('skip'),
+    setHints: f('hints'), setUiScale: f('scale'), setAccess: f('access'), setGraphicsPreset: f('gfx'), toggleBase: f('base'), skipTutorial: f('skip'),
     restartTutorial: f('restart'), quickRebuild: f('rebuild'), quickRepair: f('repair'), rearmAndGo: f('rearmgo'),
     base: { selectSlot: f('slot'), choose: f('choose'), build: f('b-build'), upgrade: f('upgrade'), repair: f('b-repair'), repairAll: f('repair-all'), remove: f('remove') },
   };

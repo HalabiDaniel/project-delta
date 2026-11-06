@@ -28,6 +28,7 @@ import {
   type InputFrame,
   type MeDTO,
   type NetEvent,
+  type NoteCue,
   type DeskState,
   type OwnFlight,
   type Weapon,
@@ -1119,7 +1120,7 @@ export class ServerWorld {
     }
     const target = this.pilotOfPlane('target' in e ? e.target : '');
     if (!target) return;
-    if (e.type === 'lock') this.note(target, 'launcher', 'Locked on', null, 'bad');
+    if (e.type === 'lock') this.note(target, 'launcher', 'Locked on', null, 'bad', 'lock');
     else if (e.type === 'lock-broken') this.note(target, 'launcher', 'Lock broken', null, 'good');
   }
 
@@ -1413,7 +1414,7 @@ export class ServerWorld {
     attack.detected = true;
     const victim = this.pilots.get(attack.victim);
     const raider = this.pilots.get(attack.attacker);
-    if (victim && raider) this.note(victim, 'raid', `${how}: ${raider.name}`, 'inbound', 'warn');
+    if (victim && raider) this.note(victim, 'raid', `${how}: ${raider.name}`, 'inbound', 'warn', 'raid');
   }
 
   /** A raid ended: the outcome for both sides, the paper, the shield, the reports. */
@@ -1645,7 +1646,7 @@ export class ServerWorld {
     this.attacks.start(p.id, victim.id, victim.home.id, target, this.time);
     // Raiding someone ends your own new-player protection.
     p.protectUntil = 0;
-    this.note(victim, 'raid', `${p.name} is coming`, territoryName(victim.home.id), 'warn');
+    this.note(victim, 'raid', `${p.name} is coming`, territoryName(victim.home.id), 'warn', 'raid');
     this.refreshPvp(victim, false);
   }
 
@@ -1848,8 +1849,8 @@ export class ServerWorld {
     this.events.push({ ...opts, e });
   }
 
-  note(p: Pilot, icon: string, title: string, value: string | null, tone: 'good' | 'bad' | 'warn' | 'info'): void {
-    this.emit({ t: 'note', icon, title, value, tone }, { to: p.id });
+  note(p: Pilot, icon: string, title: string, value: string | null, tone: 'good' | 'bad' | 'warn' | 'info', cue?: NoteCue): void {
+    this.emit(cue ? { t: 'note', icon, title, value, tone, cue } : { t: 'note', icon, title, value, tone }, { to: p.id });
   }
 
   private news(text: string, tone: 'good' | 'bad' | 'info'): void {

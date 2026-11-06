@@ -108,7 +108,8 @@ writes `innerHTML` and updates it in place. Styles are in `components.css`, clas
 | List / grid | `list({ label, itemsHtml, layout?, columns?, scroll? })` | `list`, named | `scroll` makes it a page-scrolled list (`data-nav-scroll`) |
 | Tabs | `tabs({ id, label, tabs, prev?, next?, device? })`, `tabPanel(...)`, `bindTabs(root, onChange)` | `tablist` / `tab` / `tabpanel`, `aria-selected`, `aria-controls` | Selected is also underlined |
 | Dialog | `dialog({ id, title, body?, confirm, cancel, danger?, device? })` | `dialog`, `aria-modal`, labelled and described | Use `ConfirmDialog` to show one |
-| Glyph | `glyph({ key, pad? }, { device? })` | text in `<kbd>` | See section 4 |
+| Glyph | `glyph({ key, pad?, padText?, literal? }, { device?, literal? })` | text in `<kbd>` | See section 4 |
+| Caption | `caption({ text, icon?, direction?, directionLabel?, state? })` | `status` | Sound captions: "[Rocket lock]", icon, an arrow toward the source (radians from the nose). `Captions` in `src/ui/Captions.ts` shows them |
 
 ### A. States
 
@@ -218,6 +219,22 @@ Every hint shows the binding for the device in use, and switches live.
 | PlayStation | ✕, ○, □, △, L1, R1, L2, R2, Share, Options |
 | Generic | as Xbox |
 
+- **Bindings are the source** (`src/input/bindings.ts`): `KEYMAP`, `PAD_PRESS`, `PAD_HOLD` decide what a key
+  or button does, and `bind(action, padAction?)` returns the glyph spec to show for it
+  (`bind('base')` = `{ key: 'B', pad: 'north' }`), `pair(a, b)` a combined hint ("Q / E" / "LB / RB"),
+  `keyFor`, `padButtonFor`. `KEYBOARD_LABELS` and `padControlLabels` (tutorial, dashboard) derive from
+  them too, so rebinding (v0.0.19) updates every hint. Write `bind('…')`, never a key.
+- Every key in `KEYMAP` has a `KEY_TO_PAD` entry ('' = hidden on a controller: reached with the
+  highlight and A); a test checks it.
+- `padText` is a controller template ("{lb} / {rb}", "{lstick}", "{dpad}"): the pause menu's
+  controller grid is drawn from the bindings this way, for the family in use.
+- Tooltips that name a key: `keyTipAttrs(text, spec)` or `tipKey` on `button` / `iconButton`
+  ("Base (B)" → "Base (Y)" / "Base (△)", or "Base" without an equivalent).
+- Text that names actions: `withKeys('fold it ({fold})')` (tips) puts the binding's glyph inline.
+- `literal` (spec or option): the label already names the device's control (from `controlLabel`):
+  never relabelled (the tutorial's chips, the dashboard).
+- `controls.simulatePad('playstation' | 'xbox' | 'generic' | null)`: show the interface as if that
+  controller were in use (screenshots, tests, the console).
 - `glyph({ key, pad })` with no device writes the keyboard key. `applyGlyphs` (run by Controls when
   the HUD changes or the device changes) relabels it for the controller in use: `pad` if given,
   else the `KEY_TO_PAD` table. No equivalent: hidden.
@@ -273,10 +290,20 @@ places them (tokens only; the developer panel and perf readout keep their own co
 
 ## 8. Known gaps (later phases)
 
-- `mp.css` and the multiplayer HUD (`src/mp`) are phase 5. Multiplayer's Enter at the end of a
-  landing still ends the sortie without the dialog (its keyboard path is in `MultiplayerGame.ts`);
-  its End sortie button, Leave classroom and Remove do ask.
 - `MiniMap.ts` still has its own colours (phase 5 owns it).
-- Settings for palette, text scale, contrast and reduced motion arrive in phase 7 (today: system preferences).
+- Phase 6 and 7: see section 9.
 - The highlight is not browser focus, so screen readers do not follow it yet.
 - No web font is loaded; the faces are system faces until the developer picks fonts (plan §13).
+
+## 9. Responsive layout and accessibility (phases 6 and 7)
+
+| Topic | How |
+|---|---|
+| Resolution | `layoutFor(width, height, { safeArea })` in `src/ui/layout.ts`, in CSS px: `fit` (zones, × HUD size) is 1.4 at 1920 × 1080 and in proportion above it (2.8 at 4K), 0.9 at least; it follows the shorter of the height and the safe width (16:10 doesn't clip). `overlay` (pause, welcome, logbook, dialogs, lobby, feedback, focus tooltip, world-marker type) is 1 up to 1080p, then in proportion. Written as `--fit-scale`, `--overlay-scale` on `:root` |
+| Device pixel ratio, zoom | CSS px only: a 4K screen at 200% lays out like 1080p (sharp: icons are SVG); browser zoom enlarges |
+| Ultrawide | "16:9 HUD" (default on): zones anchor to the corners of a centred 16:9 area (`--safe-x`, `--safe-w`) |
+| Settings | `AccessSettings` (`src/ui/access.ts`): `palette` (`standard` / `colourblind`), `textScale` (1 / 1.15 / 1.3), `highContrast`, `motion` (`auto` follows prefers-reduced-motion / `full` / `reduced`), `captions` (`auto` = while muted / `on` / `off`), `safeArea`. Pause menu → Accessibility. Saved in SP `settings.access` and MP `paperwars.mp.settings` `access`, normalised field by field. `HUD.setAccess` applies them live through `applyTokens` |
+| Reduced motion | Every animation and transition ends at once; the paper delta, damage numbers, pop words, the hit arc, threat notes and emotes become a still fade; the damage vignette goes; the mini-map stops blinking and pulsing |
+| Colour never alone | Aircraft markers (shape), mini-map aircraft (dart hostile, round friendly), mini-map defenses (wreck crossed, engaged ringed, ours underlined), fit letters (underlined / plain / outlined / struck), mission stripes (solid / dotted / hatched / dashed), bars (hatched), chips (labels), owner tape (with a shape) |
+| Contrast | `src/ui/contrast.test.ts` checks WCAG ratios over the token tables, both palettes, with and without high contrast: 4.5:1 for text, 3:1 for icons and bold pills |
+| Captions | `Sounds.onCue` reports every sound (also muted); `Captions` shows spotted, rocket lock (while the tone beeps), rocket launch, hit, bandit, raid incoming, with the way to the source where known. `play(name, { caption: false })` for a use that means something else (the build blip, our own launch). Multiplayer's lock and raid notes carry a keyed `cue` from the server |

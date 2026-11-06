@@ -19,13 +19,14 @@
 .pad-tip {
   position: fixed;
   z-index: 60;
-  max-width: 260px;
+  /* Placed in window pixels by the focus manager, so it grows by size, not zoom. */
+  max-width: calc(260px * var(--overlay-scale, 1));
   padding: var(--s1) var(--s2);
   border-radius: var(--r-s);
   background: var(--ink);
   color: var(--on-colour);
   box-shadow: var(--elev-floating);
-  font: 600 var(--t-s) / 1.35 var(--font);
+  font: 600 calc(var(--t-s) * var(--overlay-scale, 1)) / 1.35 var(--font);
   pointer-events: none;
   animation: ui-fade var(--motion-fade) both;
 }
@@ -318,7 +319,8 @@ body.pad-mode .ui-glyph:not([data-device]) { border-radius: var(--r-pill); backg
   position: relative;
   display: grid;
   gap: var(--s3);
-  width: min(26em, 90vw);
+  width: min(26em, calc(90vw / var(--overlay-scale, 1)));
+  zoom: var(--overlay-scale, 1);
   padding: var(--s4);
   border-radius: var(--r);
   background: linear-gradient(225deg, transparent 0 9px, var(--paper-solid) 9px);
@@ -332,3 +334,26 @@ body.pad-mode .ui-glyph:not([data-device]) { border-radius: var(--r-pill); backg
 .ui-dialog-title { margin: 0; font-size: var(--t-l); font-weight: 800; }
 .ui-dialog-body { margin: 0; color: var(--ink-2); font-size: var(--t-s); }
 .ui-dialog-actions { display: flex; justify-content: flex-end; gap: var(--s2); flex-wrap: wrap; }
+
+/* ---- Caption: sound captions (plan v0.0.15 §8D) -------------------------------------------------- */
+/* Subtitle-like: ink on card stock, the sound's icon, the words in brackets and an arrow toward it. */
+.ui-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r-pill);
+  background: var(--paper-solid);
+  box-shadow: inset 0 0 0 1px var(--edge), var(--elev-raised);
+  color: var(--ink);
+  font: 700 var(--t-m) / 1.2 var(--font);
+  white-space: nowrap;
+  animation: ui-fade var(--motion-fade) both;
+}
+.ui-caption-text::before { content: '['; }
+.ui-caption-text::after { content: ']'; }
+.ui-caption .ui-icon { width: 1.1em; height: 1.1em; color: var(--ink-2); }
+.ui-caption-dir { display: inline-grid; place-items: center; width: 1.3em; height: 1.3em; border-radius: var(--r-pill); background: var(--ink); color: var(--on-colour); }
+.ui-caption-dir svg { width: 0.8em; height: 0.8em; rotate: var(--dir, 0deg); }
+.ui-caption[data-state='critical'] { box-shadow: inset 0 0 0 2px var(--hostile), var(--elev-raised); }
+.ui-caption[data-state='critical'] .ui-icon { color: var(--hostile); }

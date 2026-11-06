@@ -91,6 +91,48 @@ export const CONFIRM_TEXT = {
   abandon: { title: 'Abandon operation?', body: 'You keep what it has paid so far; the bonus is lost.', confirm: 'Abandon', cancel: 'Keep going' },
 } as const;
 
+/**
+ * First-time tips that name controls. "{action}" becomes the binding's glyph for the device in use
+ * (src/ui/Alerts.ts `withKeys`), so the words never name a key.
+ */
+export const TIP_TEXT = {
+  base: 'Click a slot, pick a building, build. Damage stays until you repair.',
+  unsuitable: (detail: string) => `${detail}. Switch plane with {prevAircraft} / {nextAircraft}, or pick another card.`,
+  flight: (steer: string) => `${steer} steers. Hold {firePrimary} for ink, {fireSecondary} drops a bomb, {boost} boosts.`,
+  desk: 'Pick a card, pick a plane, fold it ({fold}), launch ({launch}). {base} opens your base.',
+  mpDesk: 'Pick a card, pick a plane ({prevAircraft} / {nextAircraft}), fold it ({fold}), launch ({launch}). {scoreboard} shows the scoreboard; {emote1} {emote2} {emote3} are emotes.',
+} as const;
+
+/**
+ * The accessibility settings in the pause menu (src/ui/access.ts): a name, a tooltip and the
+ * choices of each segmented control.
+ */
+export const ACCESS_TEXT = {
+  section: 'Accessibility',
+  palette: { label: 'Colours', tip: 'Colour palette: the colour-blind palette is safe for protanopia, deuteranopia and tritanopia', standard: 'Standard', colourblind: 'Colour-blind' },
+  text: { label: 'Text', tip: 'Text size, independent of the HUD size' },
+  contrast: { label: 'Panels', tip: 'Solid, higher-contrast panels', normal: 'Normal', high: 'High contrast' },
+  motion: { label: 'Motion', tip: 'Reduced motion: no fold-in, pop, slide or flash. Auto follows your system setting', auto: 'Auto', full: 'Full', reduced: 'Reduced' },
+  captions: { label: 'Captions', tip: 'Sound captions: a caption and an arrow for important sounds. Auto shows them while the sound is off', auto: 'Auto', on: 'On', off: 'Off' },
+  safeArea: { label: '16:9 HUD', tip: 'Ultrawide screens: keep the HUD in a 16:9 area in the middle', on: 'On', off: 'Off' },
+} as const;
+
+/** Sound captions (src/ui/Captions.ts): what each important sound means, in a few words. */
+export const CAPTION_TEXT = {
+  spotted: 'Spotted',
+  lock: 'Rocket lock',
+  launch: 'Rocket launch',
+  hit: 'Hit',
+  bandit: 'Bandit',
+  raid: 'Raid incoming',
+} as const;
+
+/** Where a captioned sound came from, for screen readers (the arrow shows it). */
+export const DIRECTION_TEXT = { ahead: 'ahead', right: 'to the right', behind: 'behind', left: 'to the left' } as const;
+
+/** Sound captions, as a group (the region's accessible name). */
+export const CAPTIONS_LABEL = 'Sound captions';
+
 export const MISSION_TYPE_LABELS: Record<MissionType, string> = {
   bombing: 'Bombing',
   precision: 'Precision bombing',

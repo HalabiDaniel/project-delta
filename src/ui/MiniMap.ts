@@ -1,6 +1,6 @@
 import type { AiRole, Side, ThreatLevel } from '../config';
 import type { InstallationKind } from '../defenses/Layout';
-import { colour, FACES, onTokensChange, withAlpha, type ColourName } from './tokens';
+import { colour, FACES, onTokensChange, tokenOptions, withAlpha, type ColourName } from './tokens';
 
 /**
  * A desk's place in the multiplayer lifecycle (v0.0.13, protocol DESK_STATES): the AI's, a
@@ -194,8 +194,10 @@ export class MiniMap {
     ctx.fill();
     ctx.clip();
 
+    // Reduced motion: nothing blinks or pulses; the states keep their shapes.
+    const still = tokenOptions().reducedMotion;
     // The edge of the airspace.
-    const flash = v.warning && Math.sin(this.time * 10) > 0;
+    const flash = v.warning && (still || Math.sin(this.time * 10) > 0);
     ctx.beginPath();
     const edge = v.boundaryRadius * scale;
     ctx.rect(c - edge, c - edge, edge * 2, edge * 2);
@@ -255,7 +257,7 @@ export class MiniMap {
     for (const d of v.defenses) {
       const x = sx(d.x, d.z);
       const y = sy(d.x, d.z);
-      ctx.fillStyle = !d.alive ? this.c.wreck : d.engaged && Math.sin(this.time * 12) > -0.3 ? this.c.engaged : d.friendly ? this.c.friendlyDefense : this.c.defense;
+      ctx.fillStyle = !d.alive ? this.c.wreck : d.engaged && (still || Math.sin(this.time * 12) > -0.3) ? this.c.engaged : d.friendly ? this.c.friendlyDefense : this.c.defense;
       ctx.beginPath();
       switch (d.kind) {
         case 'turret':
@@ -284,6 +286,25 @@ export class MiniMap {
           break;
       }
       ctx.fill();
+      // Never colour alone: a wreck is crossed out, an engaged weapon ringed, ours underlined.
+      if (!d.alive) {
+        ctx.beginPath();
+        ctx.moveTo(x - 2.6, y - 2.6);
+        ctx.lineTo(x + 2.6, y + 2.6);
+        ctx.moveTo(x + 2.6, y - 2.6);
+        ctx.lineTo(x - 2.6, y + 2.6);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.c.defense;
+        ctx.stroke();
+      } else if (d.engaged) {
+        ctx.beginPath();
+        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.c.engaged;
+        ctx.stroke();
+      } else if (d.friendly) {
+        ctx.fillRect(x - 2.4, y + 3, 4.8, 1);
+      }
     }
 
     for (const z of v.zones) {
@@ -332,7 +353,7 @@ export class MiniMap {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(x, y, 6 + 2 * Math.sin(this.time * 6), 0, Math.PI * 2);
+        ctx.arc(x, y, 6 + (still ? 1 : 2 * Math.sin(this.time * 6)), 0, Math.PI * 2);
         ctx.strokeStyle = this.c.enemy;
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -343,11 +364,21 @@ export class MiniMap {
       ctx.rotate(Math.atan2(Math.sin(a.yaw), -Math.cos(a.yaw)));
       ctx.scale(size, size);
       ctx.beginPath();
-      ctx.moveTo(5, 0);
-      ctx.lineTo(-3.5, -3.5);
-      ctx.lineTo(-1.5, 0);
-      ctx.lineTo(-3.5, 3.5);
-      ctx.closePath();
+      if (a.side === 'enemy') {
+        // Hostile: a sharp dart.
+        ctx.moveTo(5, 0);
+        ctx.lineTo(-3.5, -3.5);
+        ctx.lineTo(-1.5, 0);
+        ctx.lineTo(-3.5, 3.5);
+        ctx.closePath();
+      } else {
+        // Friendly: a round body with a nose, so side never depends on colour alone.
+        ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+        ctx.moveTo(1.5, -1.2);
+        ctx.lineTo(5, 0);
+        ctx.lineTo(1.5, 1.2);
+        ctx.closePath();
+      }
       ctx.fillStyle = a.side === 'enemy' ? this.c.enemy : this.c.friend;
       ctx.fill();
       if (a.mission) {
@@ -484,7 +515,7 @@ export class MiniMap {
     }
     if (t.role === 'objective') {
       ctx.lineWidth = 2;
-      ctx.strokeStyle = this.c.objectivePulse(0.5 + 0.5 * Math.sin(this.time * 4));
+      ctx.strokeStyle = this.c.objectivePulse(tokenOptions().reducedMotion ? 0.85 : 0.5 + 0.5 * Math.sin(this.time * 4));
       ctx.strokeRect(l - 2, top - 2, w + 4, w + 4);
     }
     ctx.fillStyle = this.c.named(st.label);

@@ -1,4 +1,5 @@
 import type { GraphicsPreset } from '../render/GraphicsSettings';
+import type { AccessSettings } from './access';
 import type { RatingKey, SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
@@ -252,6 +253,8 @@ export interface SettingsView {
   muted: boolean;
   hints: HintMode;
   uiScale: number;
+  /** Colour palette, text size, contrast, motion, captions, 16:9 safe area (src/ui/access.ts). */
+  access: AccessSettings;
   graphics: {
     /** The preset, or null once something was changed from it. */
     preset: GraphicsPreset | null;
@@ -505,6 +508,8 @@ export interface HudActions {
   toggleSound(): void;
   setHints(mode: HintMode): void;
   setUiScale(scale: number): void;
+  /** Changes some of the accessibility settings (applied live, saved). */
+  setAccess(patch: Partial<AccessSettings>): void;
   setGraphicsPreset(preset: GraphicsPreset): void;
   toggleBase(): void;
   /** Ends the tutorial for good (it can be restarted from the menu). */

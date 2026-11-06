@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  alert, bar, bindTabs, button, card, chip, ConfirmDialog, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip, tooltipAttrs, attrs,
+  alert, bar, caption, bindTabs, button, card, chip, ConfirmDialog, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip, tooltipAttrs, attrs,
   UI_STATES, type UiState,
 } from './components';
 import { applyGlyphs, buttonLabel, DIALOG_KEYS, GLYPH_DEVICES, glyphDeviceFor, glyphText, padHint, type GlyphDevice, type GlyphSpec } from '../input/glyphs';
@@ -39,6 +39,7 @@ function renderAll(s: UiState, device?: GlyphDevice): Record<string, string> {
     tabPanel: tabPanel({ tabsId: 'tb', tab: 'a', bodyHtml: '<i>S_BODY</i>', selected: true }),
     dialog: dialog({ id: 'd1', title: 'S_TITLE', body: 'S_BODY', confirm: { label: 'S_CONFIRM', key: KEY }, cancel: { label: 'S_CANCEL', key: KEY }, danger: true, device, confirmState: s }),
     glyph: glyph(KEY, { device }),
+    caption: caption({ text: 'S_TEXT', icon: 'launcher', direction: 0.8, directionLabel: 'S_DIR', state: s }),
   };
 }
 

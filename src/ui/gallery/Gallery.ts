@@ -9,7 +9,7 @@
  */
 
 import {
-  alert, bar, bindTabs, button, card, chip, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip,
+  alert, bar, caption, bindTabs, button, card, chip, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip,
   ConfirmDialog, UI_STATES, type UiState,
 } from '../components';
 import { applyTokens, COLOUR_NAMES, PALETTES, tokenOptions, type PaletteName } from '../tokens';
@@ -224,6 +224,9 @@ function renderSections(device: GlyphDevice): string {
 
   out.push(section('alert', 'Alert', 'Short top-centre message with a severity; at most three show.', stateTable((s) =>
     `<div class="g-col">${alert({ title: 'Storage full', icon: 'storage', severity: 'warning', state: s })}${alert({ title: 'Raid inbound', value: '0:42', icon: 'raid', severity: 'critical', count: '×2', state: s })}${alert({ title: 'Target down', value: '+60', icon: 'ok', severity: 'good', state: s })}${alert({ title: 'Rearmed', icon: 'rearm', state: s })}</div>`, ['default', 'hover', 'warning', 'critical'])));
+
+  out.push(section('caption', 'Caption', 'Sound captions (§8D): the sound in a few words, its icon and an arrow toward it when known.', stateTable((s) =>
+    `<div class="g-col">${caption({ text: 'Rocket lock', icon: 'launcher', direction: -1.2, directionLabel: 'to the left', state: s === 'default' ? 'critical' : s })}${caption({ text: 'Spotted', icon: 'radar', state: s })}${caption({ text: 'Hit', icon: 'damage', direction: Math.PI, directionLabel: 'behind', state: s })}</div>`, ['default', 'critical'])));
 
   const planeCard = (name: string, s?: UiState): string =>
     card({ title: name, icon: 'plane', state: s, attrs: { 'data-nav': `plane-${name}` }, bodyHtml: `<div class="g-row">${pips({ filled: 3, total: 5, label: 'Speed 3 of 5' })}${chip({ label: 'Fit', tone: 'good' })}</div>` });

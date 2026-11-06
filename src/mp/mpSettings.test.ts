@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ACCESS } from '../ui/access';
 import { DEFAULT_MP_SETTINGS, hintsShown, loadMpSettings, MP_SETTINGS_KEY, normaliseMpSettings, saveMpSettings } from './MpSettings';
 
 function memory(): Storage & { data: Map<string, string> } {
@@ -20,10 +21,11 @@ describe('multiplayer settings', () => {
   it('saves and loads the HUD size and hints next to the other paperwars.mp keys', () => {
     const store = memory();
     expect(loadMpSettings(store)).toEqual(DEFAULT_MP_SETTINGS);
-    saveMpSettings({ hints: 'off', uiScale: 1.15 }, store);
+    const access = { ...DEFAULT_ACCESS, palette: 'colourblind' as const, textScale: 1.15, highContrast: true, captions: 'on' as const, safeArea: false };
+    saveMpSettings({ hints: 'off', uiScale: 1.15, access }, store);
     expect(MP_SETTINGS_KEY.startsWith('paperwars.mp.')).toBe(true);
-    expect(JSON.parse(store.data.get(MP_SETTINGS_KEY)!)).toEqual({ hints: 'off', uiScale: 1.15 });
-    expect(loadMpSettings(store)).toEqual({ hints: 'off', uiScale: 1.15 });
+    expect(JSON.parse(store.data.get(MP_SETTINGS_KEY)!)).toEqual({ hints: 'off', uiScale: 1.15, access });
+    expect(loadMpSettings(store)).toEqual({ hints: 'off', uiScale: 1.15, access });
   });
 
   it('ignores what it does not recognise', () => {
@@ -31,11 +33,14 @@ describe('multiplayer settings', () => {
     store.setItem(MP_SETTINGS_KEY, '{not json');
     expect(loadMpSettings(store)).toEqual(DEFAULT_MP_SETTINGS);
     expect(normaliseMpSettings({ hints: 'loud', uiScale: 3 })).toEqual(DEFAULT_MP_SETTINGS);
-    expect(normaliseMpSettings({ hints: 'on', uiScale: 0.9 })).toEqual({ hints: 'on', uiScale: 0.9 });
+    expect(normaliseMpSettings({ hints: 'on', uiScale: 0.9 })).toEqual({ hints: 'on', uiScale: 0.9, access: DEFAULT_ACCESS });
+    // A settings record from before phase 7 gets the default accessibility settings; bad fields fall back one by one.
+    expect(normaliseMpSettings({ hints: 'on', uiScale: 1, access: { palette: 'neon', textScale: 1.3, motion: 'reduced', safeArea: 'yes' } }).access)
+      .toEqual({ ...DEFAULT_ACCESS, textScale: 1.3, motion: 'reduced' });
     expect(loadMpSettings(null)).toEqual(DEFAULT_MP_SETTINGS);
     const broken = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
     expect(loadMpSettings(broken)).toEqual(DEFAULT_MP_SETTINGS);
-    expect(() => saveMpSettings({ hints: 'on', uiScale: 1 }, broken)).not.toThrow();
+    expect(() => saveMpSettings({ hints: 'on', uiScale: 1, access: DEFAULT_ACCESS }, broken)).not.toThrow();
   });
 
   it('hints: on, off (H still shows them), auto for the first missions', () => {

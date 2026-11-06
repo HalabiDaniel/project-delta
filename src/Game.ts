@@ -66,7 +66,9 @@ import {
 } from './ui/HUD';
 import { BUILDING_ICONS } from './ui/BaseHud';
 import { compass } from './ui/format';
-import { MISSION_ICONS, SAY } from './ui/strings';
+import { MISSION_ICONS, SAY, TIP_TEXT } from './ui/strings';
+import { controlLabel } from './ui/controlLabels';
+import { DEFAULT_ACCESS, normaliseAccess, type AccessSettings } from './ui/access';
 import { confirmOpen } from './ui/confirm';
 import type { IconName } from './ui/icons';
 import type { MiniMapView } from './ui/MiniMap';
@@ -184,6 +186,8 @@ export class Game {
   /** Settings saved with the game: key hints, HUD size, and which first-time tips were shown. */
   hints: HintMode = 'auto';
   uiScale = 1;
+  /** Colour palette, text size, contrast, motion, captions, 16:9 HUD (src/ui/access.ts). */
+  access: AccessSettings = { ...DEFAULT_ACCESS };
   private readonly tipsSeen = new Set<string>();
   /** Lifetime sorties, for when key hints stop showing (auto). */
   private sortiesTotal = 0;
@@ -386,6 +390,7 @@ export class Game {
       toggleSound: () => game?.toggleSound(),
       setHints: (mode) => game?.setHints(mode),
       setUiScale: (scale) => game?.setUiScale(scale),
+      setAccess: (patch) => game?.setAccess(patch),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
@@ -449,6 +454,7 @@ export class Game {
       game.welcome = { session: saved.lastSession, restored: true, problems };
       game.hints = saved.settings.hints;
       game.uiScale = saved.settings.uiScale;
+      game.access = saved.settings.access;
       for (const t of saved.settings.tips) game.tipsSeen.add(t);
     }
     game.tutorial = Tutorial.fromSave(saved?.tutorial ?? null, game.sortiesTotal > 0);
@@ -466,6 +472,8 @@ export class Game {
     window.addEventListener('pagehide', leave);
     document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && leave());
     game.bindEvents();
+    // Important sounds get a caption (and an arrow toward their source) when captions are on.
+    game.sounds.onCue((name, angle) => game!.hud.caption(name, angle));
     game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
@@ -693,6 +701,13 @@ export class Game {
     this.requestSave();
   }
 
+  /** Accessibility settings: applied at once (and kept in step by the HUD each frame), saved with the game. */
+  setAccess(patch: Partial<AccessSettings>): void {
+    this.access = normaliseAccess({ ...this.access, ...patch });
+    this.hud.setAccess(this.access, this.sounds.muted);
+    this.requestSave();
+  }
+
   /** Key hints show for the first few sorties (auto), always, or never; H shows them while held. */
   /** Frame timing and rendering counts (also shown with ?perf). */
   perf(): PerfSnapshot | null {
@@ -743,7 +758,7 @@ export class Game {
       this.tutorial.note('base-opened');
       this.dismissWelcome();
       this.input.exitPointerLock();
-      this.tip('base', 'Click a slot, pick a building, build. Damage stays until you repair.', ['B']);
+      this.tip('base', TIP_TEXT.base, ['base']);
     } else {
       this.baseMode.exit();
       this.defenseModels.showPreview(null);
@@ -790,7 +805,8 @@ export class Game {
         this.defenseModels.showPreview(null);
         const i = base.installation(e.slot);
         if (i) this.effects.burst(this.v1.set(i.spec.x, i.spec.ground + 1.2, i.spec.z), 'fold');
-        this.sounds.play('spotted');
+        // The same blip confirms a build: no "Spotted" caption.
+        this.sounds.play('spotted', { caption: false });
         this.alert(BUILDING_ICONS[e.kind], BASE.buildings[e.kind].short, `−${e.cost}`, 'good', 1.8);
         break;
       }
@@ -798,7 +814,7 @@ export class Game {
         this.defenseModels.sync();
         const i = base.installation(e.slot);
         if (i) this.effects.burst(this.v1.set(i.spec.x, i.spec.ground + 1.5, i.spec.z), 'ring');
-        this.sounds.play('spotted');
+        this.sounds.play('spotted', { caption: false });
         this.alert('upgrade', `${BASE.buildings[e.kind].short} ${'★'.repeat(e.level - 1)}`, `−${e.cost}`, 'good', 1.8);
         break;
       }
@@ -871,7 +887,7 @@ export class Game {
         byAircraft: [...this.ledger.byAircraft],
         byType: [...this.ledger.byType],
       },
-      settings: { muted: this.sounds.muted, dev: this.dev.open, hints: this.hints, uiScale: this.uiScale, tips: [...this.tipsSeen] },
+      settings: { muted: this.sounds.muted, dev: this.dev.open, hints: this.hints, uiScale: this.uiScale, tips: [...this.tipsSeen], access: this.access },
       lastSession: this.progress.session.sorties > 0 ? this.progress.session : (this.welcome?.session ?? null),
       base: this.base.save(),
       tutorial: this.tutorial.record(),
@@ -1193,7 +1209,7 @@ export class Game {
     const { events, director, state } = this;
     events.update(dt, this.sortiesFlown);
     for (const note of events.takeNotes()) {
-      if (note.event && note.event.status === 'active') this.sounds.play(note.event.kind === 'supply-run' ? 'spotted' : 'bandit');
+      if (note.event && note.event.status === 'active') this.sounds.play(note.event.kind === 'supply-run' ? 'spotted' : 'bandit', { caption: note.event.kind !== 'supply-run' });
       if (note.event?.kind === 'raid') continue; // the raid alert says it
       const short = shortNote(note.title, note.detail);
       this.alert(note.event ? EVENT_ICONS[note.event.kind] : short.icon, short.title, short.value, note.tone, 3);
@@ -1280,7 +1296,7 @@ export class Game {
         break;
       case 'engaging':
         if (e.target === PLAYER_ID && state.phase === 'flying') {
-          this.sounds.play('bandit');
+          this.sounds.play('bandit', { angle: this.bearing(e.aircraft.position.x, e.aircraft.position.z) });
           hud.threatNote(`${e.aircraft.skill.label} ${e.aircraft.spec.name} on your tail!`, 'bad');
         } else if (state.mission?.escorting(e.target)) {
           hud.threatNote(`Enemy ${e.aircraft.spec.name} going for your bomber!`, 'bad');
@@ -1338,7 +1354,7 @@ export class Game {
     this.hud.raidReport(report);
     // After a raid that hurt, T1 gets time to recover before the next.
     if (!report.repelled && (report.paperLost > 0 || report.destroyed.length > 0)) this.airTraffic.delayRaids(RAIDS.recovery);
-    if (report.repairCost > 0) this.tip('repair', 'Damaged buildings stay damaged. Repair them in the base.', ['B']);
+    if (report.repairCost > 0) this.tip('repair', 'Damaged buildings stay damaged. Repair them in the base.', ['base']);
     this.requestSave();
   }
 
@@ -1363,7 +1379,7 @@ export class Game {
     const tracker = this.raidTrackers.get(raid.id);
     const what = tracker ? tracker.target.name.split(' ').slice(-1)[0] : null;
     this.alert('raid', SAY.raidInbound, what ? what.charAt(0).toUpperCase() + what.slice(1) : null, 'bad', 3.5);
-    this.tip('raid', 'A raid is coming for T1. Fly out to meet it, or trust your guns. A radar warns you earlier.', ['F', 'Space']);
+    this.tip('raid', 'A raid is coming for T1. Fly out to meet it, or trust your guns. A radar warns you earlier.', ['fold', 'launch']);
   }
 
   /**
@@ -1525,7 +1541,8 @@ export class Game {
     this.defenseModels.update(dt, flying ? p : null, approached, this.baseMode.open ? world.home.id : null);
     this.ordnanceView.update(dt, this.ordnance, this.camera.entity.getPosition());
     const locking = flying ? this.lockingOnPlayer() : [];
-    this.sounds.lockTone(dt, locking.length > 0 ? Math.max(...locking.map((i) => i.lock)) : null);
+    const nearest = locking.length > 0 ? locking.reduce((a, b) => (b.lock > a.lock ? b : a)) : null;
+    this.sounds.lockTone(dt, nearest ? nearest.lock : null, nearest ? this.bearing(nearest.spec.x, nearest.spec.z) : null);
   }
 
   /** Launchers locking on to the player's plane. */
@@ -1536,9 +1553,11 @@ export class Game {
   private onDefenseEvent(event: DefenseEvent): void {
     if (this.state.phase !== 'flying' || event.target !== PLAYER_ID) return;
     switch (event.type) {
-      case 'launch':
-        this.sounds.play('launch');
+      case 'launch': {
+        const from = this.defenses.get(event.id)?.spec;
+        this.sounds.play('launch', { angle: from ? this.bearing(from.x, from.z) : null });
         break;
+      }
       case 'lock-broken':
         this.hud.threatNote('Lock broken', 'good');
         break;
@@ -1561,8 +1580,8 @@ export class Game {
       const by = source ? `${source.spec.name} on ${source.spec.territoryId}` : shooter ? `enemy ${shooter.skill.label.toLowerCase()} ${shooter.spec.name}` : null;
       const { dealt } = this.state.damageAircraft(event.shot.damage, rocket ? 'blast' : 'projectile', by);
       if (dealt > 0) {
-        this.sounds.play('hit');
         const from = source ? source.spec : shooter?.position;
+        this.sounds.play('hit', { angle: from ? this.bearing(from.x, from.z) : null });
         if (from) this.hud.damageDirection(this.bearing(from.x, from.z), dealt);
         if (rocket) {
           const at = this.projectOnScreen(point);
@@ -1961,7 +1980,7 @@ export class Game {
     this.resources.onOverflow((lost, source) => {
       if (source === 'income') return;
       this.alert('capacity', SAY.storageFull, `−${lost}`, 'warn', 3);
-      this.tip('storage', 'Storage full: paper beyond capacity is lost. Spend it, or build storage boxes.', ['B']);
+      this.tip('storage', 'Storage full: paper beyond capacity is lost. Spend it, or build storage boxes.', ['base']);
     });
     this.base.onEvent((e) => this.onBaseEvent(e));
     state.onEvent((event) => {
@@ -1981,7 +2000,7 @@ export class Game {
         case 'build-refused':
           if (event.reason === 'incompatible') {
             this.alert('wrecked', 'Wrong plane', null, 'bad', 2.4);
-            this.tip('unsuitable', `${event.detail}. Switch plane with Q / E, or pick another card.`, ['Q', 'E']);
+            this.tip('unsuitable', TIP_TEXT.unsuitable(event.detail));
           } else {
             this.alert('paper', 'Need paper', `−${Math.max(0, event.cost - this.resources.paper)}`, 'bad', 2);
           }
@@ -2010,13 +2029,7 @@ export class Game {
           this.career.recordSortie(state.plane!.id);
           this.alert(MISSION_ICONS[mission.spec.type], 'Go', null, 'info', 1.4);
           if (this.tutorial.finished)
-            this.tip(
-            'flight',
-            this.controls.device === 'gamepad'
-              ? 'Left stick steers, right stick looks around. Hold RT for ink, LT drops a bomb, RB boosts.'
-              : 'Mouse steers. Hold left click for ink, right click drops a bomb. Shift boosts.',
-            ['LMB', 'RMB', 'Shift'],
-          );
+            this.tip('flight', TIP_TEXT.flight(controlLabel('steer')));
           this.requestSave();
           break;
         }
@@ -2218,7 +2231,7 @@ export class Game {
       : null;
 
     // First-time tips: the desk, and each kind of objective the first time it comes up.
-    if (choosing && !this.welcome && !baseOpen && !this.paused && this.tutorial.finished) this.tip('desk', 'Pick a card, pick a plane, fold it, launch. B opens your base.', ['1', 'Q', 'F', 'Space']);
+    if (choosing && !this.welcome && !baseOpen && !this.paused && this.tutorial.finished) this.tip('desk', TIP_TEXT.desk);
     if (flying && mission?.isActive && !this.paused) {
       const next = mission.objectives[mission.openObjectives()[0]];
       if (next && !this.tipsSeen.has(`obj-${next.kind}`)) {
@@ -2259,6 +2272,7 @@ export class Game {
           muted: this.sounds.muted,
           hints: this.hints,
           uiScale: this.uiScale,
+          access: this.access,
           graphics: {
             preset: matchesPreset(this.graphics) ? this.graphics.preset : null,
           },

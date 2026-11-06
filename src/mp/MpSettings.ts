@@ -1,10 +1,11 @@
 import { UI_SCALES } from '../systems/SaveGame';
 import type { HintMode } from '../ui/views';
+import { DEFAULT_ACCESS, normaliseAccess, type AccessSettings } from '../ui/access';
 
 /**
- * Multiplayer's own interface settings (v0.0.15 phase 5): the HUD size and the key hints, kept in
- * this browser next to the other `paperwars.mp.*` keys. Single-player keeps the same two in its
- * save (SaveGame `settings.hints` / `settings.uiScale`); the server keeps neither, so a player's
+ * Multiplayer's own interface settings (v0.0.15 phases 5 and 7): the HUD size, the key hints and the
+ * accessibility settings, kept in this browser next to the other `paperwars.mp.*` keys.
+ * Single-player keeps the same in its save (SaveGame `settings`); the server keeps none, so a player's
  * choice survives a reload and a new session without a protocol change.
  */
 export const MP_SETTINGS_KEY = 'paperwars.mp.settings';
@@ -13,9 +14,11 @@ export interface MpSettings {
   hints: HintMode;
   /** One of UI_SCALES (S / M / L = 0.9 / 1 / 1.15). */
   uiScale: number;
+  /** Colour palette, text size, contrast, motion, captions, 16:9 HUD (src/ui/access.ts). */
+  access: AccessSettings;
 }
 
-export const DEFAULT_MP_SETTINGS: Readonly<MpSettings> = { hints: 'auto', uiScale: 1 };
+export const DEFAULT_MP_SETTINGS: Readonly<MpSettings> = { hints: 'auto', uiScale: 1, access: DEFAULT_ACCESS };
 
 const HINT_MODES: readonly HintMode[] = ['auto', 'on', 'off'];
 
@@ -25,6 +28,7 @@ export function normaliseMpSettings(raw: unknown): MpSettings {
   return {
     hints: HINT_MODES.includes(o.hints as HintMode) ? (o.hints as HintMode) : DEFAULT_MP_SETTINGS.hints,
     uiScale: UI_SCALES.includes(o.uiScale as number) ? (o.uiScale as number) : DEFAULT_MP_SETTINGS.uiScale,
+    access: normaliseAccess(o.access),
   };
 }
 

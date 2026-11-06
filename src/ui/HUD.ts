@@ -1,4 +1,5 @@
 import type { RaidReport } from '../base/Raids';
+import { bind } from '../input/bindings';
 import { AirHud } from './AirHud';
 import { Alerts, Tips, type AlertOptions, type AlertTone } from './Alerts';
 import { ConfirmDialog, glyph } from './components';
@@ -18,6 +19,11 @@ import { ReportCard } from './ReportCard';
 import { ThreatHud } from './ThreatHud';
 import type { HudActions, HudView } from './views';
 import { WorldLabels } from './WorldLabels';
+import { accessTokens, DEFAULT_ACCESS, captionsShown, type AccessSettings } from './access';
+import { Captions } from './Captions';
+import { applyLayout, layoutFor } from './layout';
+import type { SoundName } from './Sounds';
+import { applyTokens } from './tokens';
 import './hud.css';
 // The design system's shared rules: the focus ring, the focus tooltip, reduced motion, components.
 import './components.css';
@@ -83,6 +89,10 @@ export class HUD {
   private readonly zones: Record<HudZone, HTMLElement>;
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
+  private readonly captions: Captions;
+  /** Keep the zones in a 16:9 area on ultrawide screens (an accessibility setting). */
+  private safeArea = DEFAULT_ACCESS.safeArea;
+  private accessKey = '';
   private lastRender = performance.now();
   private lastView: HudView | null = null;
   /** The confirm dialog for destructive actions (src/ui/confirm.ts). */
@@ -126,13 +136,45 @@ export class HUD {
     this.dashboard = new Dashboard(this.zones.tl, { quickRebuild: actions.quickRebuild, quickRepair: actions.quickRepair, toggleBase: actions.toggleBase });
     this.tutorial = new TutorialPanel(this.zones.tc, actions.skipTutorial);
     this.menus = new Menus(root, actions);
-    // Zones grow with the window (on top of the HUD size setting), so 1080p isn't a sea of tiny panels.
-    const fit = () => root.style.setProperty('--fit-scale', String(Math.min(1.4, Math.max(0.9, window.innerHeight / 740))));
-    fit();
-    window.addEventListener('resize', fit);
+    // Sound captions, above the instruments (they scale with the zone).
+    this.captions = new Captions(this.zones.bc);
+    // Zones and overlays grow with the window (on top of the HUD size setting), in CSS pixels, so
+    // 1080p isn't a sea of tiny panels and 4K isn't tiny text; ultrawide can keep a 16:9 area.
+    window.addEventListener('resize', () => this.fit());
+    this.fit();
+    // Reduced motion on "auto" follows the system setting, also when it changes.
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => {
+      this.accessKey = '';
+    });
     this.lockHint = div(root, 'hint lock-hint');
-    this.lockHint.innerHTML = `${glyph({ key: 'Esc' })} → click`;
+    this.lockHint.innerHTML = `${glyph({ key: bind('back').key })} → click`;
     this.lockHint.dataset.tip = 'Mouse not captured: press Esc, then click to capture it';
+  }
+
+  /** Lays the zones and overlays out for the window (src/ui/layout.ts). */
+  private fit(): void {
+    applyLayout(document.documentElement, layoutFor(window.innerWidth, window.innerHeight, { safeArea: this.safeArea }));
+  }
+
+  /**
+   * The accessibility settings, live: palette, text size, contrast and motion through the tokens,
+   * the 16:9 safe area, and whether sound captions show (`muted`: auto shows them while it is off).
+   */
+  setAccess(s: AccessSettings, muted: boolean): void {
+    const key = `${JSON.stringify(s)}|${muted}`;
+    if (key === this.accessKey) return;
+    this.accessKey = key;
+    applyTokens(document.documentElement, accessTokens(s));
+    this.captions.enabled = captionsShown(s.captions, muted);
+    if (s.safeArea !== this.safeArea) {
+      this.safeArea = s.safeArea;
+      this.fit();
+    }
+  }
+
+  /** A sound played: its caption, when captions are on (Sounds.onCue). */
+  caption(name: SoundName, angle: number | null = null): void {
+    this.captions.sound(name, angle);
   }
 
   render(v: HudView): void {
@@ -146,6 +188,7 @@ export class HUD {
     this.root.classList.toggle('base-mode', v.baseMode);
     this.root.classList.toggle('hints', v.hints);
     this.root.classList.toggle('paused', v.paused);
+    this.setAccess(v.menu.settings.access, v.menu.settings.muted);
     // In a fight, the less urgent parts of the HUD step back.
     applyCombat(this.root, combatLevel(v));
 
@@ -165,6 +208,7 @@ export class HUD {
     this.tutorial.render(v.tutorial, v.paused || v.result !== null || v.welcome !== null);
     this.alerts.update();
     this.tips.update();
+    this.captions.update();
     toggle(this.lockHint, flying && !v.pointerLocked);
   }
 

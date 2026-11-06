@@ -37,6 +37,9 @@ import { INSTALLATION_STATES, PLANE_STATUSES, signedAngle, type WorldState } fro
 import { ownerOfSide, sharedWorld, sideOf, territoryName } from '../net/World';
 import { emergencyPlane, foldPose, GameState, type GamePhase } from '../systems/GameState';
 import { Input } from '../systems/Input';
+import { TIP_TEXT } from '../ui/strings';
+import { confirmOpen } from '../ui/confirm';
+import { normaliseAccess, type AccessSettings } from '../ui/access';
 import { Controls, type Action, type Device, type InputContext } from '../input/Controls';
 import { ResourceManager } from '../systems/ResourceManager';
 import { HUD, type HintMode } from '../ui/HUD';
@@ -261,7 +264,9 @@ export class MultiplayerGame {
   readonly controls: Controls;
 
   private inputContext(): InputContext {
-    if (!this.room || this.lobby.open || this.paused || !this.state) return 'menu';
+    // A confirm dialog (End sortie, Leave, Remove…) or the server-lost dialog owns the controller:
+    // A and B answer it and no other button reaches the game (as in single-player).
+    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -313,6 +318,7 @@ export class MultiplayerGame {
       toggleSound: () => game?.toggleSound(),
       setHints: (mode) => game?.setHints(mode),
       setUiScale: (scale) => game?.setUiScale(scale),
+      setAccess: (patch) => game?.setAccess(patch),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
@@ -398,6 +404,8 @@ export class MultiplayerGame {
     });
     game.setGraphics(game.graphics);
     hud.setScale(game.settings.uiScale);
+    // Important sounds get a caption (and an arrow toward their source) when captions are on.
+    game.sounds.onCue((name, angle) => hud.caption(name, angle));
     game.bindInput();
     game.tutorial.onChange(() => game!.saveTutorialSoon());
     game.net.onTutorial((record) => {
@@ -531,7 +539,7 @@ export class MultiplayerGame {
     room.onMessage('claimed', (m: { ok: boolean; error: string | null; territory: string }) => {
       // Already placed (a reconnect that raced the welcome) is not an error worth showing.
       this.claimError = m.ok || m.error === 'already claimed' ? null : `Couldn't place your base: ${m.error}`;
-      if (m.ok) this.sounds.play('spotted');
+      if (m.ok) this.sounds.play('spotted', { caption: false });
     });
     room.onStateChange((s) => this.onState(s));
     this.net.onStatus((s) => {
@@ -724,6 +732,13 @@ export class MultiplayerGame {
     saveMpSettings(this.settings);
   }
 
+  /** Accessibility settings: applied at once (and kept in step by the HUD each frame), kept in this browser. */
+  setAccess(patch: Partial<AccessSettings>): void {
+    this.settings = { ...this.settings, access: normaliseAccess({ ...this.settings.access, ...patch }) };
+    this.hud.setAccess(this.settings.access, this.sounds.muted);
+    saveMpSettings(this.settings);
+  }
+
   /** The interception card (put first by the server while we are raided), if one is on offer. */
   private interceptOffer(): number {
     return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept');
@@ -806,6 +821,8 @@ export class MultiplayerGame {
   /** Every action from the keyboard, mouse or controller (see src/input/Controls.ts). */
   private onAction(action: Action, device: Device): void {
     this.sounds.unlock();
+    // A confirm dialog owns Enter / A and Esc / B while it is up; nothing else reaches the game.
+    if (confirmOpen() || this.lostDialog.isOpen) return;
     if (!this.room || this.lobby.open) return;
     if (action === 'sound') return this.toggleSound();
     if (action === 'back' || action === 'pause') {
@@ -871,7 +888,11 @@ export class MultiplayerGame {
           if (phase === 'desk') return this.send({ a: 'build' });
           if (phase === 'ready') return this.launchPlane();
           if (phase === 'landed') return this.takeOff();
-        } else if (phase === 'landed') return this.send({ a: 'end' });
+        } else if (phase === 'landed') {
+          // Enter at the end of a landing asks with the confirm dialog first (Enter again confirms), as in single-player.
+          this.hud.guarded.endSortie();
+          return;
+        }
         if (phase === 'debrief' || phase === 'crashed') this.send({ a: 'continue' });
         return;
     }
@@ -996,7 +1017,7 @@ export class MultiplayerGame {
     this.hud.alert('home', this.room?.state.territories.get(territoryId)?.label || territoryName(territoryId), 'yours', 'good', 3);
     // A first-time tip: once per player (the server keeps which tips they have seen).
     if (!this.net.tipsSeen.has('mp-desk')) {
-      this.hud.tip('Pick a card, pick a plane (Q/E), fold it (F), launch (Space). Tab shows the scoreboard; Z / C / V are emotes.', ['F', 'Space', 'Tab']);
+      this.hud.tip(TIP_TEXT.mpDesk);
       this.net.sawTip('mp-desk');
     }
   }
@@ -1028,7 +1049,8 @@ export class MultiplayerGame {
       this.trails.clear();
       this.offset.set(0, 0, 0);
       this.cosmeticCooldown = 0;
-      this.sounds.play('launch');
+      // Our own launch whoosh: not a rocket, no caption.
+      this.sounds.play('launch', { caption: false });
     }
     if (phase === 'desk') {
       this.plane.hide();
@@ -1243,7 +1265,9 @@ export class MultiplayerGame {
           x: e.p[0], y: e.p[1], z: e.p[2], vx: e.v[0], vy: e.v[1], vz: e.v[2], target: e.tg, damage: 0, travel: e.tr, radius: e.r,
         });
         this.fxIds.set(e.id, shot);
-        if (this.near(e.p)) this.sounds.play(e.k === 'rocket' ? 'launch' : 'ink');
+        // A rocket fired at us is captioned, with the way it came from.
+        const atMe = !!this.me && e.tg === `pl:${this.me}`;
+        if (this.near(e.p)) this.sounds.play(e.k === 'rocket' ? 'launch' : 'ink', { caption: atMe, angle: this.views.bearing(e.p[0], e.p[2]) });
         break;
       }
       case 'end': {
@@ -1314,8 +1338,11 @@ export class MultiplayerGame {
       }
       case 'note':
         this.hud.alert((ICONS.has(e.icon) ? e.icon : 'info') as IconName, e.title, e.value, e.tone, 2.4);
-        if (e.icon === 'raid' && e.tone !== 'good') this.sounds.play('raid');
-        if (e.title === 'Locked on') this.sounds.play('lock');
+        // Keyed by the server (never by the words): a rocket lock, a raid on the way. A raid's outcome
+        // (base hit, raided) keeps its alarm without the "Raid incoming" caption.
+        if (e.cue === 'lock') this.sounds.play('lock');
+        else if (e.cue === 'raid') this.sounds.play('raid');
+        else if (e.icon === 'raid' && e.tone !== 'good') this.sounds.play('raid', { caption: false });
         break;
       case 'news':
         this.mpHud.news(e.text, e.tone);
@@ -1337,8 +1364,8 @@ export class MultiplayerGame {
     const mine = this.me && e.tg === `pl:${this.me}`;
     if (mine) {
       this.hud.damageFlash(e.n);
-      this.sounds.play('hit');
       const from = e.by ? this.remotes.get(e.by)?.model.position : null;
+      this.sounds.play('hit', { angle: from ? this.views.bearing(from.x, from.z) : null });
       if (from) this.hud.damageDirection(this.views.bearing(from.x, from.z), e.n);
       return;
     }
@@ -1625,7 +1652,8 @@ export class MultiplayerGame {
     const attacked = flying && this.ais.size > 0 && this.views.threatened();
     this.sounds.combat(dt, attacked ? 1 : 0);
     const locks = flying ? this.network.installations.filter((i) => i.state === 'locking' && i.alive && this.views.lockingOnMe(i)) : [];
-    this.sounds.lockTone(dt, locks.length > 0 ? Math.max(...locks.map((i) => i.lock)) : null);
+    const nearest = locks.length > 0 ? locks.reduce((a, b) => (b.lock > a.lock ? b : a)) : null;
+    this.sounds.lockTone(dt, nearest ? nearest.lock : null, nearest ? this.views.bearing(nearest.spec.x, nearest.spec.z) : null);
   }
 
   // ---- Multiplayer HUD ----------------------------------------------------------------------------

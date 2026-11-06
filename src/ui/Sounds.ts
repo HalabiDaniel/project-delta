@@ -23,8 +23,17 @@ const BASS = [55, 0, 55, 0, 65.4, 0, 55, 0, 49, 0, 49, 0, 58.3, 0, 49, 0];
  * hears when defenses notice them, lock on and fire. Browsers only allow audio after a key press or
  * click, so `unlock` is called from one; without audio support everything here does nothing.
  */
+/** What a sound means, for its caption: where it came from, or no caption at all (a build blip). */
+export interface SoundCue {
+  /** Radians from the view's nose, positive to the right; null or absent when unknown. */
+  angle?: number | null;
+  /** False: this use of the sound has no caption (the same blip confirms a build). */
+  caption?: boolean;
+}
+
 export class Sounds {
   muted = false;
+  private readonly cueListeners: Array<(name: SoundName, angle: number | null) => void> = [];
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
   private noise: AudioBuffer | null = null;
@@ -57,7 +66,16 @@ export class Sounds {
     }
   }
 
-  play(name: SoundName): void {
+  /**
+   * Every sound as it plays, also while muted or before audio is allowed, for the captions
+   * (src/ui/Captions.ts). Not called for uses marked `caption: false`.
+   */
+  onCue(listener: (name: SoundName, angle: number | null) => void): void {
+    this.cueListeners.push(listener);
+  }
+
+  play(name: SoundName, cue: SoundCue = {}): void {
+    if (cue.caption !== false) for (const l of this.cueListeners) l(name, cue.angle ?? null);
     const ctx = this.ctx;
     if (!ctx || !this.out || this.muted || ctx.state !== 'running') return;
     const t = ctx.currentTime;
@@ -181,14 +199,15 @@ export class Sounds {
    * Keeps the lock warning going while a launcher locks on: beeps that speed up as the lock
    * builds. `progress` is the strongest lock on the plane (0–1), or null for none.
    */
-  lockTone(dt: number, progress: number | null): void {
+  /** The continuous lock tone; `angle`: toward the launcher locking on (for the caption). */
+  lockTone(dt: number, progress: number | null, angle: number | null = null): void {
     if (progress === null) {
       this.lockWait = 0;
       return;
     }
     this.lockWait -= dt;
     if (this.lockWait > 0) return;
-    this.play('lock');
+    this.play('lock', { angle });
     this.lockWait = 0.34 - 0.24 * progress;
   }
 

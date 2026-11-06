@@ -1,4 +1,5 @@
 import { parseTutorial, type TutorialRecord } from '../progress/Tutorial';
+import { normaliseAccess, type AccessSettings } from '../ui/access';
 import { emptyBaseStats, type BaseSave, type BaseStats } from '../base/Base';
 import { AIRCRAFT, AIRCRAFT_ORDER, BASE, STARTER_AIRCRAFT, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
 import type { DirectorState, HistoryEntry, HistoryKind, OfferSource, Recipe, Slot } from '../director/MissionDirector';
@@ -62,6 +63,8 @@ export interface SaveSettings {
   uiScale: number;
   /** First-time tips already shown. */
   tips: string[];
+  /** Colour palette, text size, contrast, motion, captions, 16:9 HUD (src/ui/access.ts). */
+  access: AccessSettings;
 }
 
 export const UI_SCALES: readonly number[] = [0.9, 1, 1.15];
@@ -369,6 +372,8 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
       hints: check.oneOf(settings.hints, 'settings.hints', ['auto', 'on', 'off'] as const, 'auto'),
       uiScale: UI_SCALES.includes(settings.uiScale as number) ? (settings.uiScale as number) : 1,
       tips: Array.isArray(settings.tips) ? settings.tips.filter((t): t is string => typeof t === 'string').slice(0, 50) : [],
+      // Older saves have none: the defaults (follow the system for motion, captions while muted).
+      access: normaliseAccess(settings.access),
     },
     lastSession: validateSession(raw.lastSession, check),
     base: raw.base === null || raw.base === undefined ? null : validateBase(raw.base, check),
