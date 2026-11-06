@@ -265,6 +265,8 @@ export interface BarOptions extends Common {
   /** A bar that is not about condition (progress, boost) keeps one colour. */
   kind?: 'level' | 'progress' | 'boost' | 'capacity';
   size?: 'normal' | 'thin' | 'mini';
+  /** Segments in the track (the style guide's Meter): 10 by default, 0 for a plain fill. Thin and mini bars are plain. */
+  segments?: number;
 }
 
 export function bar(o: BarOptions): string {
@@ -282,9 +284,32 @@ export function bar(o: BarOptions): string {
     'data-kind': o.kind && o.kind !== 'level' ? o.kind : undefined,
     'data-level': lvl,
     'data-size': o.size && o.size !== 'normal' ? o.size : undefined,
+    'data-segments': o.segments !== undefined ? Math.max(0, Math.round(o.segments)) : undefined,
+    style: o.segments ? `--segs:${Math.max(1, Math.round(o.segments))}` : undefined,
     ...stateAttrs(o.state, 'aria-disabled'),
     ...o.attrs,
   })}><i style="width:${pctValue}%"></i></div>`;
+}
+
+// ---- Meter ---------------------------------------------------------------------------------------------
+
+export interface MeterOptions extends Omit<BarOptions, 'label'> {
+  /** What it measures ("Hull"): shown and the accessible name. */
+  label: string;
+  /** The value as text ("70%"), already formatted. */
+  valueText: string;
+  icon?: IconName;
+}
+
+/**
+ * The style guide's Meter: the label, a segmented bar and the value as text. Low (≤ 30%, or level
+ * critical) turns raid-500 and is hatched; progress and boost fill pencil.
+ */
+export function meter(o: MeterOptions): string {
+  const v = Math.max(0, Math.min(1, Number.isFinite(o.value) ? o.value : 0));
+  const lvl = o.level ?? levelOf(v);
+  const low = (o.kind ?? 'level') === 'level' && lvl === 'critical';
+  return `<div${attrs({ class: cls('ui-meter', o.className), 'data-low': low ? '' : undefined })}><span class="ui-meter-label">${o.icon ? icon(o.icon, 'icon ui-icon') : ''}<span>${esc(o.label)}</span></span>${bar({ ...o, attrs: undefined, className: undefined, value: v, level: lvl, segments: o.segments ?? 10 })}<b class="num">${esc(o.valueText)}</b></div>`;
 }
 
 // ---- Stat ----------------------------------------------------------------------------------------------
@@ -510,6 +535,289 @@ export function selectTab(listEl: HTMLElement, tab: HTMLElement): void {
     const p = panel ? listEl.ownerDocument.getElementById(panel) : null;
     if (p) p.hidden = !on;
   }
+}
+
+// ---- Badge ---------------------------------------------------------------------------------------------
+
+export type BadgeKind = 'plain' | 'new' | 'level' | 'locked' | 'enemy';
+
+export interface BadgeOptions extends Common {
+  label: string;
+  kind?: BadgeKind;
+  icon?: IconName;
+  tip?: string;
+}
+
+/** A small uppercase tag: new (eraser), level (pencil), locked (desk), enemy (raid). */
+export function badge(o: BadgeOptions): string {
+  return `<span${attrs({
+    class: cls('ui-badge-tag', o.className),
+    'data-kind': o.kind && o.kind !== 'plain' ? o.kind : undefined,
+    ...(o.tip ? tooltipAttrs(o.tip) : {}),
+    ...stateAttrs(o.state, 'aria-disabled'),
+    ...o.attrs,
+  })}>${o.icon ? icon(o.icon, 'icon ui-icon') : ''}<span class="ui-label">${esc(o.label)}</span></span>`;
+}
+
+// ---- Paper counter -------------------------------------------------------------------------------------
+
+export interface PaperCounterOptions extends Common {
+  /** The balance, already formatted ("1,240"). */
+  value: string;
+  /** The accessible name ("1,240 paper"). */
+  label: string;
+  /** A change, already formatted ("+120"). */
+  delta?: string;
+  icon?: IconName;
+}
+
+/** The paper balance: a pencil pill with the paper icon in a white well and the number in the display face. */
+export function paperCounter(o: PaperCounterOptions): string {
+  return `<span${attrs({ class: cls('ui-counter', o.className), role: 'status', 'aria-label': o.label, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><span class="ui-counter-icon">${icon(o.icon ?? 'paper', 'icon ui-icon')}</span><b class="ui-counter-value num">${esc(o.value)}</b><span class="ui-counter-delta num">${o.delta ? esc(o.delta) : ''}</span></span>`;
+}
+
+// ---- Raid alert ----------------------------------------------------------------------------------------
+
+export interface RaidAlertOptions extends Common {
+  title: string;
+  body?: string;
+  /** Time left, already formatted ("0:18"). */
+  eta?: string;
+  icon?: IconName;
+  /** raid (danger, default), info, win. */
+  tone?: 'raid' | 'info' | 'win';
+}
+
+/** The style guide's RaidAlert: a signal badge, a title, a line of body and the ETA. Raid is `role="alert"`. */
+export function raidAlert(o: RaidAlertOptions): string {
+  const tone = o.tone ?? 'raid';
+  return `<div${attrs({
+    class: cls('ui-raid', o.className),
+    role: tone === 'raid' ? 'alert' : 'status',
+    'data-tone': tone !== 'raid' ? tone : undefined,
+    ...stateAttrs(o.state, 'aria-disabled'),
+    ...o.attrs,
+  })}><span class="ui-raid-badge">${icon(o.icon ?? 'raid', 'icon ui-icon')}</span><div class="ui-raid-text"><p class="ui-raid-title">${esc(o.title)}</p>${o.body ? `<p class="ui-raid-body">${esc(o.body)}</p>` : ''}</div>${o.eta ? `<span class="ui-raid-eta num">${esc(o.eta)}</span>` : ''}</div>`;
+}
+
+// ---- Toggle and segmented control ----------------------------------------------------------------------
+
+export interface ToggleOptions extends Common {
+  /** The setting's name (visible unless `hideLabel`, always the accessible name). */
+  label: string;
+  checked: boolean;
+  id?: string;
+  hideLabel?: boolean;
+  disabled?: boolean;
+}
+
+/** An on/off setting: a switch (`role="switch"`) with its label. */
+export function toggleSwitch(o: ToggleOptions): string {
+  return `<label${attrs({ class: cls('ui-toggle', o.className), ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><input${attrs({
+    type: 'checkbox', role: 'switch', id: o.id, checked: o.checked, disabled: o.disabled || o.state === 'disabled', 'aria-label': o.hideLabel ? o.label : undefined,
+  })}>${o.hideLabel ? '' : `<span class="ui-label">${esc(o.label)}</span>`}</label>`;
+}
+
+export interface SegmentItem {
+  value: string;
+  label: string;
+  pressed?: boolean;
+}
+
+export interface SegmentedOptions extends Common {
+  /** The group's accessible name. */
+  label: string;
+  items: readonly SegmentItem[];
+  /** Written as `data-u` (the pause menu finds its controls by it). */
+  id?: string;
+}
+
+/** A segmented choice: buttons with `aria-pressed`; the chosen one is an ink fill. */
+export function segmented(o: SegmentedOptions): string {
+  return `<span${attrs({ class: cls('ui-seg seg', o.className), role: 'group', 'aria-label': o.label, 'data-u': o.id, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}>${o.items
+    .map((i) => `<button type="button" data-v="${esc(i.value)}" aria-pressed="${i.pressed ? 'true' : 'false'}"${i.pressed ? ' class="on"' : ''}>${esc(i.label)}</button>`).join('')}</span>`;
+}
+
+// ---- Coach mark ----------------------------------------------------------------------------------------
+
+export interface CoachMarkOptions extends Common {
+  /** The hint, in the hand-written face (never numbers or controls: those go in `extraHtml`). */
+  text: string;
+  /** The close button ("Got it"). */
+  close: { label: string; key?: GlyphSpec; device?: GlyphDevice };
+  /** Trusted markup under the text (key caps, a step count). */
+  extraHtml?: string;
+  /** The accessible name of the note ("Tip"). */
+  name?: string;
+  id?: string;
+}
+
+/** A taped-on sticky note for tutorial and first-time tips, with a "Got it" button. */
+export function coachMark(o: CoachMarkOptions): string {
+  return `<aside${attrs({ class: cls('ui-coach', o.className), role: 'note', 'aria-label': o.name, id: o.id, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><p class="ui-coach-text">${esc(o.text)}</p><div class="ui-coach-foot">${o.extraHtml ?? ''}<button type="button" class="ui-coach-close" data-coach-close>${icon('check', 'icon ui-icon')}<span class="ui-label">${esc(o.close.label)}</span>${o.close.key ? glyph(o.close.key, { device: o.close.device }) : ''}</button></div></aside>`;
+}
+
+// ---- Mission card --------------------------------------------------------------------------------------
+
+export interface MissionCardOptions extends Common {
+  title: string;
+  /** The mission type's icon. */
+  icon: IconName;
+  /** Its accessible name ("Bombing"). */
+  typeLabel?: string;
+  /** One sentence. */
+  brief?: string;
+  /** The reward, already formatted ("+300"); shown in win-500 with the trophy and the paper icon. */
+  reward?: string;
+  rewardLabel?: string;
+  /** The risk, naming the plane ("Crash and you lose your Swift"), in raid-500. */
+  risk?: string;
+  /** Trusted markup after the terms (chips, fit letters, actions). */
+  footHtml?: string;
+  /** Trusted markup at the end of the head (a key cap, a badge). */
+  headHtml?: string;
+  selected?: boolean;
+  /** A button (focusable card) instead of an article. */
+  interactive?: boolean;
+}
+
+/** A notebook page: paper, the red margin line, the type icon, a one-sentence brief, reward and risk. */
+export function missionCard(o: MissionCardOptions): string {
+  const tag = o.interactive ? 'button' : 'article';
+  const terms = o.reward || o.risk
+    ? `<div class="ui-mission-terms">${o.reward ? `<span class="ui-mission-reward"${attrs({ 'aria-label': o.rewardLabel })}>${icon('trophy', 'icon ui-icon')}<b class="num">${esc(o.reward)}</b>${icon('paper', 'icon ui-icon')}</span>` : ''}${o.risk ? `<span class="ui-mission-risk">${icon('warn', 'icon ui-icon')}<span>${esc(o.risk)}</span></span>` : ''}</div>`
+    : '';
+  return `<${tag}${attrs({
+    class: cls('ui-mission', o.className),
+    type: o.interactive ? 'button' : undefined,
+    'aria-pressed': o.interactive ? String(!!o.selected) : undefined,
+    'data-selected': o.selected ? '' : undefined,
+    ...stateAttrs(o.state, o.interactive ? 'disabled' : 'aria-disabled'),
+    ...o.attrs,
+  })}><span class="ui-mission-type"${o.typeLabel ? attrs({ role: 'img', 'aria-label': o.typeLabel }) : ''}>${icon(o.icon, 'icon ui-icon')}</span><span class="ui-mission-head"><span class="ui-mission-title">${esc(o.title)}</span>${o.headHtml ?? ''}</span>${o.brief ? `<span class="ui-mission-brief">${esc(o.brief)}</span>` : ''}${terms}${o.footHtml ?? ''}</${tag}>`;
+}
+
+// ---- Plane card ----------------------------------------------------------------------------------------
+
+export interface PlaneCardOptions extends Common {
+  name: string;
+  role: string;
+  roleIcon?: IconName;
+  /** Rated stats: [label, filled, total]. */
+  stats?: ReadonlyArray<readonly [string, number, number]>;
+  /** The cost, already formatted, and its accessible name. */
+  cost?: string;
+  costLabel?: string;
+  /** "Crash and you lose {cost} paper": the words before and the bold part. */
+  risk?: { text: string; strong: string };
+  selected?: boolean;
+  /** Trusted markup at the end (trick cards, actions). */
+  footHtml?: string;
+}
+
+/** One of the planes: name in the display face, role tag, stat pips, cost in cardboard, the risk named. */
+export function planeCard(o: PlaneCardOptions): string {
+  const stats = o.stats?.length
+    ? `<dl class="ui-plane-stats">${o.stats.map(([l, f, t]) => `<dt>${esc(l)}</dt><dd>${pips({ filled: f, total: t, label: `${l} ${f}/${t}`, shape: 'bar' })}</dd>`).join('')}</dl>`
+    : '';
+  return `<article${attrs({ class: cls('ui-plane', o.className), 'aria-selected': o.selected ? 'true' : undefined, 'aria-label': o.name, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><div class="ui-plane-head"><h3 class="ui-plane-name">${esc(o.name)}</h3>${o.cost ? `<span class="ui-plane-cost"${attrs({ 'aria-label': o.costLabel })}>${icon('paper', 'icon ui-icon')}<b class="num">${esc(o.cost)}</b></span>` : ''}</div><span class="ui-plane-role">${o.roleIcon ? icon(o.roleIcon, 'icon ui-icon') : ''}${esc(o.role)}</span>${stats}${o.risk ? `<p class="ui-plane-risk">${esc(o.risk.text)} <strong>${esc(o.risk.strong)}</strong></p>` : ''}${o.footHtml ?? ''}</article>`;
+}
+
+// ---- Build slot ----------------------------------------------------------------------------------------
+
+export interface BuildSlotOptions extends Common {
+  /** The building's name, or the empty slot's ("Build here"). */
+  name: string;
+  icon?: IconName;
+  level?: number;
+  maxLevel?: number;
+  status?: 'ok' | 'damaged' | 'empty';
+  /** The status line ("+10 paper / min", "Damaged 40%"). */
+  meta?: string;
+  metaIcon?: IconName;
+  /** Trusted markup at the end (actions). */
+  footHtml?: string;
+}
+
+/** A defence or building on the desk: name, levels 1–3 as pips, a status line; damaged = raid outline, empty = dashed with a plus. */
+export function buildSlot(o: BuildSlotOptions): string {
+  const status = o.status ?? 'ok';
+  if (status === 'empty') {
+    return `<div${attrs({ class: cls('ui-slot', o.className), role: 'group', 'aria-label': o.name, 'data-status': 'empty', ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}>${icon('plus', 'icon ui-icon')}<span class="ui-slot-meta">${esc(o.name)}</span>${o.footHtml ?? ''}</div>`;
+  }
+  const max = Math.max(0, Math.round(o.maxLevel ?? 0));
+  const lv = Math.max(0, Math.min(max, Math.round(o.level ?? 0)));
+  let levels = '';
+  for (let i = 0; i < max; i++) levels += `<i class="ui-slot-lv"${i < lv ? ' data-on' : ''}></i>`;
+  return `<div${attrs({ class: cls('ui-slot', o.className), role: 'group', 'aria-label': o.name, 'data-status': status !== 'ok' ? status : undefined, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><div class="ui-slot-head">${o.icon ? icon(o.icon, 'icon ui-icon') : ''}<span class="ui-slot-name">${esc(o.name)}</span></div>${max > 0 ? `<span class="ui-slot-levels" role="img" aria-label="${esc(`${lv}/${max}`)}">${levels}</span>` : ''}${o.meta ? `<span class="ui-slot-meta">${o.metaIcon ? icon(o.metaIcon, 'icon ui-icon') : ''}<span>${esc(o.meta)}</span></span>` : ''}${o.footHtml ?? ''}</div>`;
+}
+
+// ---- Result dialog -------------------------------------------------------------------------------------
+
+export interface ResultDialogOptions extends Common {
+  title: string;
+  sub?: string;
+  tone?: 'win' | 'loss' | 'plain';
+  /** [label, value] rows, already formatted. */
+  rows?: ReadonlyArray<readonly [string, string]>;
+  /** Trusted markup: the actions (buttons). */
+  actionsHtml?: string;
+  /** Trusted markup between the sub-line and the rows. */
+  bodyHtml?: string;
+  id?: string;
+}
+
+/** The sortie result: a big title (win-500 home safe, raid-500 crumpled), a line, rows of numbers, the actions. */
+export function resultDialog(o: ResultDialogOptions): string {
+  const titleId = o.id ? `${o.id}-title` : undefined;
+  return `<section${attrs({ class: cls('ui-result', o.className), role: 'group', id: o.id, 'aria-labelledby': titleId, 'aria-label': titleId ? undefined : o.title, 'data-tone': o.tone && o.tone !== 'plain' ? o.tone : undefined, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><h2 class="ui-result-title"${attrs({ id: titleId })}>${esc(o.title)}</h2>${o.sub ? `<p class="ui-result-sub">${esc(o.sub)}</p>` : ''}${o.bodyHtml ?? ''}${o.rows?.length ? `<ul class="ui-result-rows">${o.rows.map(([l, v]) => `<li><span>${esc(l)}</span><b class="num">${esc(v)}</b></li>`).join('')}</ul>` : ''}${o.actionsHtml ? `<div class="ui-result-actions">${o.actionsHtml}</div>` : ''}</section>`;
+}
+
+// ---- Scoreboard ----------------------------------------------------------------------------------------
+
+export interface ScoreColumn {
+  label: string;
+  /** A number column: right-aligned, display face. */
+  num?: boolean;
+}
+
+export interface ScoreRow {
+  /** Cell text, or trusted markup when `html` is set for the row. */
+  cells: readonly string[];
+  you?: boolean;
+  html?: boolean;
+}
+
+export interface ScoreboardOptions extends Common {
+  /** The table's accessible name. */
+  label: string;
+  columns: readonly ScoreColumn[];
+  rows: readonly ScoreRow[];
+}
+
+/** Room standings: a ruled table; your row is marked with a sky edge. */
+export function scoreboard(o: ScoreboardOptions): string {
+  const head = `<thead><tr>${o.columns.map((c) => `<th scope="col"${c.num ? ' class="num"' : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>`;
+  const body = `<tbody>${o.rows.map((r) => `<tr${r.you ? ' data-you' : ''}>${r.cells.map((cell, i) => `<td${o.columns[i]?.num ? ' class="num"' : ''}>${r.html ? cell : esc(cell)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  return `<table${attrs({ class: cls('ui-score', o.className), 'aria-label': o.label, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}>${head}${body}</table>`;
+}
+
+// ---- Team chip -----------------------------------------------------------------------------------------
+
+export interface TeamChipOptions extends Common {
+  name: string;
+  /** Seat 1–8: the team colour (team-1 … team-8), always with its number. */
+  team: number;
+  /** The desk ("Desk 5"), shown quietly after the name. */
+  desk?: string;
+  /** "You", when it is the player. */
+  you?: string;
+}
+
+/** A player in a room: the team colour with its number, the name, the desk. Never colour alone. */
+export function teamChip(o: TeamChipOptions): string {
+  const n = Math.max(1, Math.min(8, Math.round(o.team)));
+  return `<span${attrs({ class: cls('ui-team', o.className), 'data-you': o.you ? '' : undefined, ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}><span class="ui-team-desk num" style="--team: var(--team-${n})">${n}</span><span>${esc(o.name)}</span>${o.desk ? `<span class="ui-team-num">${esc(o.desk)}</span>` : ''}${o.you ? `<span class="ui-team-you">${esc(o.you)}</span>` : ''}</span>`;
 }
 
 // ---- Dialog --------------------------------------------------------------------------------------------

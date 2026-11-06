@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   alert, bar, caption, bindTabs, button, card, chip, ConfirmDialog, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip, tooltipAttrs, attrs,
+  badge, buildSlot, coachMark, meter, missionCard, paperCounter, planeCard, raidAlert, resultDialog, scoreboard, segmented, teamChip, toggleSwitch,
   UI_STATES, type UiState,
 } from './components';
 import { applyGlyphs, buttonLabel, DIALOG_KEYS, GLYPH_DEVICES, glyphDeviceFor, glyphText, padHint, type GlyphDevice, type GlyphSpec } from '../input/glyphs';
@@ -40,6 +41,21 @@ function renderAll(s: UiState, device?: GlyphDevice): Record<string, string> {
     dialog: dialog({ id: 'd1', title: 'S_TITLE', body: 'S_BODY', confirm: { label: 'S_CONFIRM', key: KEY }, cancel: { label: 'S_CANCEL', key: KEY }, danger: true, device, confirmState: s }),
     glyph: glyph(KEY, { device }),
     caption: caption({ text: 'S_TEXT', icon: 'launcher', direction: 0.8, directionLabel: 'S_DIR', state: s }),
+    // The style guide's components (2026-11-06).
+    badge: badge({ label: 'S_LABEL', kind: 'new', icon: 'plus', tip: 'S_TIP', state: s }),
+    meter: meter({ label: 'S_LABEL', value: 0.2, valueText: 'S_VALUE', icon: 'health', state: s }),
+    counter: paperCounter({ value: 'S_VALUE', label: 'S_LABEL', delta: 'S_DELTA', state: s }),
+    raid: raidAlert({ title: 'S_TITLE', body: 'S_BODY', eta: 'S_ETA', state: s }),
+    toggle: toggleSwitch({ label: 'S_LABEL', checked: true, state: s }),
+    seg: segmented({ label: 'S_LABEL', items: [{ value: 'a', label: 'S_ITEM', pressed: true }, { value: 'b', label: 'S_ITEM' }], state: s }),
+    coach: coachMark({ text: 'S_TEXT', close: { label: 'S_CLOSE', key: KEY, device }, name: 'S_NAME', state: s }),
+    mission: missionCard({ title: 'S_TITLE', icon: 'bomb', typeLabel: 'S_TYPE', brief: 'S_BRIEF', reward: 'S_REWARD', rewardLabel: 'S_LABEL', risk: 'S_RISK', interactive: true, selected: true, state: s }),
+    plane: planeCard({ name: 'S_NAME', role: 'S_ROLE', roleIcon: 'kills', stats: [['S_STAT', 2, 5]], cost: 'S_COST', costLabel: 'S_LABEL', risk: { text: 'S_RISK', strong: 'S_STRONG' }, selected: true, state: s }),
+    slot: buildSlot({ name: 'S_NAME', icon: 'workshop', level: 2, maxLevel: 3, status: 'damaged', meta: 'S_META', metaIcon: 'warn', state: s }),
+    emptySlot: buildSlot({ name: 'S_NAME', status: 'empty', state: s }),
+    result: resultDialog({ title: 'S_TITLE', sub: 'S_SUB', tone: 'win', rows: [['S_ROW', 'S_VALUE']], id: 'r1', state: s }),
+    score: scoreboard({ label: 'S_LABEL', columns: [{ label: 'S_COL' }, { label: 'S_COL', num: true }], rows: [{ cells: ['S_CELL', 'S_CELL'], you: true }], state: s }),
+    team: teamChip({ name: 'S_NAME', team: 3, desk: 'S_DESK', you: 'S_YOU', state: s }),
   };
 }
 
@@ -70,7 +86,8 @@ describe('components: no literal user-facing text', () => {
         for (const [name, html] of Object.entries(renderAll(s, device))) {
           const root = dom(html);
           for (const t of userText(root)) {
-            const fromArgs = /^(S_[A-Z]+|KEYSENTINEL)$/.test(t) || glyphLabels.has(t);
+            // Numbers the components compute from numeric arguments (stat pips "2/5", a team's seat) are not words.
+            const fromArgs = /^(S_[A-Z]+|KEYSENTINEL)( \d+\/\d+)?$/.test(t) || /^\d+(\/\d+)?$/.test(t) || glyphLabels.has(t);
             expect(fromArgs, `${name} (${s}) shows "${t}", which is not from its arguments`).toBe(true);
           }
           root.remove();
@@ -169,6 +186,33 @@ describe('components: states, roles and names', () => {
     expect(d.getAttribute('aria-describedby')).toBe('d1-body');
     expect(d.querySelector('[data-dialog-cancel]')).not.toBeNull();
     expect(d.querySelector('[data-dialog-confirm]')!.getAttribute('data-variant')).toBe('danger');
+
+    // The style guide's components.
+    const m = root.querySelector('.ui-meter')!;
+    expect(m.hasAttribute('data-low')).toBe(true); // 20% is low: raid-500
+    expect(m.querySelector('.ui-bar')!.getAttribute('data-segments')).toBe('10');
+    expect(root.querySelector('.ui-counter')!.getAttribute('role')).toBe('status');
+    expect(root.querySelector('.ui-counter')!.getAttribute('aria-label')).toBe('S_LABEL');
+    expect(root.querySelector('.ui-raid')!.getAttribute('role')).toBe('alert');
+    expect(dom(raidAlert({ title: 'x', tone: 'info' })).querySelector('.ui-raid')!.getAttribute('role')).toBe('status');
+    const sw = root.querySelector<HTMLInputElement>('.ui-toggle input')!;
+    expect(sw.getAttribute('role')).toBe('switch');
+    expect(sw.checked).toBe(true);
+    const seg = root.querySelector('.ui-seg')!;
+    expect(seg.getAttribute('role')).toBe('group');
+    expect(seg.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
+    expect(root.querySelector('.ui-coach')!.getAttribute('role')).toBe('note');
+    expect(root.querySelector('.ui-coach [data-coach-close]')!.tagName).toBe('BUTTON');
+    const mc = root.querySelector<HTMLButtonElement>('.ui-mission')!;
+    expect(mc.tagName).toBe('BUTTON');
+    expect(mc.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector('.ui-mission-reward')!.getAttribute('aria-label')).toBe('S_LABEL');
+    expect(root.querySelector('.ui-plane')!.getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('.ui-slot[data-status="damaged"] .ui-slot-lv[data-on]')).not.toBeNull();
+    expect(root.querySelector('.ui-slot[data-status="empty"]')!.getAttribute('aria-label')).toBe('S_NAME');
+    expect(root.querySelector('.ui-result')!.getAttribute('aria-labelledby')).toBe('r1-title');
+    expect(root.querySelector('.ui-score tr[data-you]')).not.toBeNull();
+    expect(root.querySelector('.ui-team-desk')!.textContent).toBe('3');
   });
 
   it('levels bars by format.level', () => {

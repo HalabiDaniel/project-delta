@@ -1,6 +1,6 @@
 /**
  * The design system gallery (`?ui-gallery`, developer only): every component in every state, at
- * HUD sizes S / M / L, in either palette, with keyboard, Xbox and PlayStation glyphs. Toggles
+ * HUD sizes S / M / L, in either theme (Daylight, Lights out) and either palette, with keyboard, Xbox and PlayStation glyphs. Toggles
  * switch the palette, reduced motion, high contrast, text scale and the glyph device. The page is
  * navigable with the focus manager (arrows / D-pad, Enter / A, Esc / B, Q / E / LB / RB, PageUp /
  * PageDown / triggers, Y for a tooltip), like the game's menus.
@@ -10,9 +10,11 @@
 
 import {
   alert, bar, caption, bindTabs, button, card, chip, dialog, glyph, iconButton, infoButton, list, pips, stat, tabPanel, tabs, tooltip,
+  badge, buildSlot, coachMark, meter, missionCard, paperCounter, planeCard as planeCardComponent, raidAlert, resultDialog, scoreboard, segmented, teamChip, toggleSwitch,
   ConfirmDialog, UI_STATES, type UiState,
 } from '../components';
-import { applyTokens, COLOUR_NAMES, PALETTES, tokenOptions, type PaletteName } from '../tokens';
+import { applyTokens, COLOUR_NAMES, THEME_PALETTES, tokenOptions, type PaletteName, type ThemeName } from '../tokens';
+import { ALL_ICONS, icon, ICON_NAMES } from '../icons';
 import { FocusManager } from '../../input/FocusNav';
 import { applyGlyphs, DIALOG_KEYS, GLYPH_DEVICES, type GlyphDevice, type GlyphSpec } from '../../input/glyphs';
 import { GamepadSource, padActive, type PadButton } from '../../input/Gamepad';
@@ -63,7 +65,8 @@ export function mountGallery(host: HTMLElement): void {
     const seg = (group: string, items: Array<[string, string, boolean]>): string =>
       `<div class="g-seg" role="group" aria-label="${esc(group)}"><span class="g-seg-label">${esc(group)}</span>${items.map(([v, label, on]) =>
         button({ label, size: 'small', variant: on ? 'primary' : 'secondary', attrs: { 'data-g': group, 'data-v': v, 'aria-pressed': on ? 'true' : 'false' } })).join('')}</div>`;
-    bar.innerHTML = `<b class="g-title">Design system</b>
+    bar.innerHTML = `<b class="g-title">paperwars.io design system</b>
+      ${seg('Theme', (['daylight', 'lightsOut'] as ThemeName[]).map((t) => [t, t === 'daylight' ? 'Daylight' : 'Lights out', o.theme === t]))}
       ${seg('Palette', (['standard', 'colourblind'] as PaletteName[]).map((p) => [p, p === 'standard' ? 'Standard' : 'Colour-blind', o.palette === p]))}
       ${seg('Motion', [['full', 'Full', !o.reducedMotion], ['reduced', 'Reduced', o.reducedMotion]])}
       ${seg('Contrast', [['normal', 'Normal', !o.highContrast], ['high', 'High', o.highContrast]])}
@@ -72,7 +75,7 @@ export function mountGallery(host: HTMLElement): void {
   };
 
   const render = (): void => {
-    main.innerHTML = renderSections(state.device);
+    main.innerHTML = renderSections(state.device, tokenOptions().theme);
     applyGlyphs(main, state.device === 'keyboard' ? null : state.device);
   };
 
@@ -81,6 +84,7 @@ export function mountGallery(host: HTMLElement): void {
     if (!b) return;
     const v = b.dataset.v!;
     switch (b.dataset.g) {
+      case 'Theme': applyTokens(document.documentElement, { theme: v as ThemeName }); break;
       case 'Palette': applyTokens(document.documentElement, { palette: v as PaletteName }); break;
       case 'Motion': applyTokens(document.documentElement, { reducedMotion: v === 'reduced' }); break;
       case 'Contrast': applyTokens(document.documentElement, { highContrast: v === 'high' }); break;
@@ -190,15 +194,21 @@ function tone(s: UiState): 'warn' | 'hostile' | undefined {
 
 let sample = 0;
 
-function renderSections(device: GlyphDevice): string {
+function renderSections(device: GlyphDevice, theme: ThemeName): string {
   const out: string[] = [];
 
-  // Tokens: both palettes side by side.
+  // Tokens: both palettes of the theme in effect, side by side.
   const swatches = (p: PaletteName): string => `<div class="g-swatches" data-palette-sample="${p}"><h3>${p === 'standard' ? 'Standard' : 'Colour-blind'}</h3><ul>${COLOUR_NAMES.map((n) =>
-    `<li><i style="background:${PALETTES[p][n]}"></i><code>--${n}</code></li>`).join('')}</ul></div>`;
-  out.push(section('tokens', 'Tokens: colour', 'Both palettes. The colour-blind palette is a token swap (Okabe–Ito based).', `<div class="g-two">${swatches('standard')}${swatches('colourblind')}</div>`));
+    `<li><i style="background:${THEME_PALETTES[theme][p][n]}"></i><code>--${n}</code></li>`).join('')}</ul></div>`;
+  out.push(section('tokens', 'Tokens: colour', 'The style guide names (paper-100, ink-900, pencil-400, sky-500, …) and the semantic aliases, in both palettes of this theme. The colour-blind palette is a token swap (Okabe–Ito based).', `<div class="g-two">${swatches('standard')}${swatches('colourblind')}</div>`));
 
-  out.push(section('card', 'Card', 'Cut card stock with a folded corner; the container for every panel.', stateTable((s) =>
+  out.push(section('type', 'Type', 'Lilita One for display and HUD numbers, Nunito 600 / 800 / 900 for everything you read, Kalam for hand-written hints only.',
+    `<div class="g-type"><span class="g-t-xl">Defend your desk</span><span class="g-t-display">Raid incoming!</span><span class="g-t-title">Heavy Bomber</span><span class="g-t-counter">1,240</span><span class="g-t-body">Scout an enemy desk and come home with the map.</span><span class="g-t-sm">Costs 120 paper · 40 s to fold</span><span class="g-t-label">Build</span><span class="g-t-doodle">psst… their radar is down!</span></div>`));
+
+  out.push(section('icons', 'Icons', 'Lucide 0.460.0 at a 2.5px stroke in the text colour; game-specific icons drawn to the same weight.',
+    `<ul class="g-icons">${ALL_ICONS.map((n) => `<li data-tip="${esc(ICON_NAMES[n])}">${icon(n, 'icon ui-icon')}<code>${n}</code></li>`).join('')}</ul>`));
+
+  out.push(section('card', 'Card', 'A sheet of paper: a 3px marker outline and a hard shadow; the container for every panel.', stateTable((s) =>
     card({ title: 'Hangar', icon: 'plane', state: s, bodyHtml: `<span>${stat({ icon: 'paper', value: fmt(1240), label: 'Paper' })}</span>`, tone: tone(s) }))));
 
   out.push(section('chip', 'Chip / tag', 'A small labelled value or state.', stateTable((s) =>
@@ -210,7 +220,10 @@ function renderSections(device: GlyphDevice): string {
   out.push(section('icon-button', 'Icon button', 'Icon only, with a tooltip and an accessible name.', stateTable((s) =>
     `<div class="g-row">${iconButton({ icon: 'base', name: 'Base', key: KEYS.base, device, state: s })}${iconButton({ icon: 'book', name: 'Logbook', key: KEYS.logbook, device, badge: '2', state: s })}${iconButton({ icon: 'menu', name: 'Menu', key: KEYS.pause, device, state: s })}${infoButton({ name: 'More about storage', tip: 'Paper over capacity is lost when you land.', state: s })}</div>`)));
 
-  out.push(section('bar', 'Bar', 'Health, range, boost, progress, capacity. Thresholds from format.level: over 60% ok, over 30% worn, else critical (hatched).', stateTable((s) =>
+  out.push(section('meter', 'Meter', 'Label, a segmented bar, the value as text. Low (30% or less) turns raid and is hatched; progress fills pencil.', stateTable((s) =>
+    `<div class="g-col">${meter({ label: 'Hull', icon: 'health', value: 0.7, valueText: '70%', state: s })}${meter({ label: 'Boost', icon: 'boost', value: 0.4, valueText: '40%', kind: 'progress', state: s })}${meter({ label: 'Hull', icon: 'health', value: 0.2, valueText: '20%', state: s })}</div>`, ['default', 'disabled', 'warning', 'critical'])));
+
+  out.push(section('bar', 'Bar', 'Health, range, boost, progress, capacity, segmented. Thresholds from format.level: over 60% ok, over 30% worn, else critical (hatched).', stateTable((s) =>
     `<div class="g-col">${bar({ value: 0.82, label: 'Health', state: s })}${bar({ value: 0.45, label: 'Range', state: s })}${bar({ value: 0.18, label: 'Health', state: s })}${bar({ value: 0.6, label: 'Progress', kind: 'progress', size: 'thin', state: s })}${bar({ value: 0.35, label: 'Boost', kind: 'boost', size: 'mini', state: s })}</div>`)));
 
   out.push(section('stat', 'Stat', 'Icon plus a tabular number, an optional delta pop.', stateTable((s) =>
@@ -227,6 +240,40 @@ function renderSections(device: GlyphDevice): string {
 
   out.push(section('caption', 'Caption', 'Sound captions (§8D): the sound in a few words, its icon and an arrow toward it when known.', stateTable((s) =>
     `<div class="g-col">${caption({ text: 'Rocket lock', icon: 'launcher', direction: -1.2, directionLabel: 'to the left', state: s === 'default' ? 'critical' : s })}${caption({ text: 'Spotted', icon: 'radar', state: s })}${caption({ text: 'Hit', icon: 'damage', direction: Math.PI, directionLabel: 'behind', state: s })}</div>`, ['default', 'critical'])));
+
+  out.push(section('counter', 'Paper counter', 'The paper balance: a pencil pill, the paper icon in a white well, the number in the display face, a delta.',
+    `<div class="g-row">${paperCounter({ value: fmt(1240), label: '1,240 paper', delta: signed(120) })}${paperCounter({ value: fmt(85), label: '85 paper' })}</div>`));
+
+  out.push(section('raid', 'Raid alert', 'Radar warnings and results: a signal badge, a title, one line and the ETA.',
+    `<div class="g-col">${raidAlert({ title: 'Raid on your desk!', body: '2 bombers from Desk 1 heading for your Workshop.', eta: '0:18', icon: 'raid' })}${raidAlert({ title: 'Radar contact', body: 'A scout is circling Desk 3.', icon: 'radar', tone: 'info' })}${raidAlert({ title: 'Raid repelled', body: 'Your Turret crumpled a fighter.', icon: 'shield', tone: 'win' })}</div>`));
+
+  out.push(section('badge', 'Badge', 'New, level, locked, enemy.',
+    `<div class="g-row">${badge({ label: 'New', kind: 'new' })}${badge({ label: 'Lv 2', kind: 'level' })}${badge({ label: 'Locked', kind: 'locked', icon: 'lock' })}${badge({ label: 'Enemy', kind: 'enemy' })}${badge({ label: 'Fighter', icon: 'kills' })}</div>`));
+
+  out.push(section('toggle', 'Toggle and segmented control', 'On / off settings; a choice of a few. The chosen segment is an ink fill.',
+    `<div class="g-row">${toggleSwitch({ label: 'Raid alerts', checked: true })}${toggleSwitch({ label: 'Reduce motion', checked: false })}${segmented({ label: 'Theme', items: [{ value: 'daylight', label: 'Daylight', pressed: true }, { value: 'lightsOut', label: 'Lights out' }] })}${segmented({ label: 'Size', items: [{ value: 's', label: 'S' }, { value: 'm', label: 'M', pressed: true }, { value: 'l', label: 'L' }] })}</div>`));
+
+  out.push(section('coach', 'Coach mark', 'A taped-on sticky note for tutorial and first-time tips, in the hand-written face. Never numbers or controls in the note itself.',
+    `<div class="g-row">${coachMark({ text: 'psst… their radar is down! Fly low and they won’t see you coming.', close: { label: 'Got it', key: KEYS.confirm, device }, name: 'Tip' })}</div>`));
+
+  out.push(section('mission', 'Mission card', 'A notebook page: the red margin line, the mission type, a one-sentence brief, the reward in win and the risk naming the plane in raid.',
+    `<div class="g-two">${missionCard({ title: 'Bomb the workshop', icon: 'bombload', typeLabel: 'Bombing', brief: 'Fly to Desk 4 and drop one on their Workshop.', reward: '+300', rewardLabel: 'Reward 300 paper', risk: 'Crash and you lose your Swift', interactive: true, selected: true })}${missionCard({ title: 'Scout Desk 3', icon: 'recon', typeLabel: 'Reconnaissance', brief: 'Circle their radar and come home with the map.', reward: '+120', risk: 'Two turrets', interactive: true })}</div>`));
+
+  out.push(section('plane', 'Plane card', 'One of the planes: name, role, stats, cost in cardboard; the risk names what you lose.',
+    `<div class="g-row">${planeCardComponent({ name: 'Lightning', role: 'Fighter', roleIcon: 'kills', stats: [['Speed', 4, 5], ['Hull', 3, 5], ['Bombs', 1, 5]], cost: '80', costLabel: '80 paper', risk: { text: 'Crash and you lose', strong: '80 paper' }, selected: true })}${planeCardComponent({ name: 'Thug', role: 'Bomber', roleIcon: 'bombload', stats: [['Speed', 2, 5], ['Hull', 5, 5], ['Bombs', 4, 5]], cost: '70', risk: { text: 'Crash and you lose', strong: '70 paper' } })}</div>`));
+
+  out.push(section('slot', 'Build slot', 'A defence or building on your desk: levels 1 to 3, a status line with an icon; damaged has a raid outline; empty is dashed with a plus.',
+    `<div class="g-row">${buildSlot({ name: 'Workshop', icon: 'workshop', level: 2, maxLevel: 3, meta: '+10 paper / min', metaIcon: 'rate' })}${buildSlot({ name: 'Turret', icon: 'turret', level: 1, maxLevel: 3, status: 'damaged', meta: 'Damaged · 40%', metaIcon: 'warn' })}${buildSlot({ name: 'Build here', status: 'empty' })}</div>`));
+
+  out.push(section('result', 'Result dialog', 'The sortie report: home safe (win) or crumpled (raid), the numbers, the actions.',
+    `<div class="g-two">${resultDialog({ title: 'Home safe!', sub: 'Mission done. +300 paper', tone: 'win', rows: [['Reward', '+300'], ['Ink used', '42'], ['Time', '1:12']], actionsHtml: button({ label: 'Back to desk', variant: 'primary', key: KEYS.confirm, device }) })}${resultDialog({ title: 'Crumpled', sub: 'Your Swift was shot down over Desk 4.', tone: 'loss', rows: [['Lost', '−15'], ['Time', '0:48']], actionsHtml: button({ label: 'Back to desk', variant: 'primary', key: KEYS.confirm, device }) })}</div>`));
+
+  out.push(section('score', 'Scoreboard and team chip', 'Room standings; a team is always its colour and its desk number.',
+    `<div class="g-two">${scoreboard({ label: 'Room standings', columns: [{ label: '#' }, { label: 'Pilot' }, { label: 'Paper', num: true }, { label: 'Shot down', num: true }], rows: [
+      { cells: ['1', teamChip({ name: 'Mira', team: 1, desk: 'Desk 1' }), '1,980', '7'], html: true },
+      { cells: ['2', teamChip({ name: 'You', team: 2, desk: 'Desk 5', you: 'You' }), '1,240', '4'], html: true, you: true },
+      { cells: ['3', teamChip({ name: 'Jonas', team: 3, desk: 'Desk 3' }), '880', '2'], html: true },
+    ] })}<div class="g-row">${[1, 2, 3, 4, 5, 6, 7, 8].map((t) => teamChip({ name: `Team ${t}`, team: t })).join('')}</div></div>`));
 
   const planeCard = (name: string, s?: UiState): string =>
     card({ title: name, icon: 'plane', state: s, attrs: { 'data-nav': `plane-${name}` }, bodyHtml: `<div class="g-row">${pips({ filled: 3, total: 5, label: 'Speed 3 of 5' })}${chip({ label: 'Fit', tone: 'good' })}</div>` });
