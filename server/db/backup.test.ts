@@ -114,6 +114,25 @@ describe.skipIf(!TEST_DATABASE_URL || !hasTools)('a backup and a restore drill (
     await admin.end();
   });
 
+  it('passes the drill for a game nobody has joined yet', async () => {
+    const empty = new Database(urlOf(names[0]));
+    await migrate(empty, undefined, () => undefined);
+    await empty.close();
+    process.env.DATABASE_URL = urlOf(names[0]);
+    process.env.DRILL_DATABASE_URL = urlOf(names[2]);
+    const logged: Array<Record<string, unknown>> = [];
+    setLogSink((line) => logged.push(JSON.parse(line)));
+    try {
+      await backup([]);
+    } finally {
+      setLogSink(null);
+      delete process.env.DRILL_DATABASE_URL;
+    }
+    expect(logged.find((l) => l.event === 'drill.done')).toMatchObject({ ok: true, identical: true });
+    expect(process.exitCode ?? 0).toBe(0);
+    bucket.objects.clear();
+  });
+
   it('backs a database up to the bucket and restores it, intact, into a fresh one', async () => {
     const src = new Database(urlOf(names[0]));
     await migrate(src, undefined, () => undefined);
