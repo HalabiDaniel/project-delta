@@ -4,7 +4,7 @@ import { attr, bindButton, esc, text, toggle } from './dom';
 import { clock, fmt, pct, signed } from './format';
 import { icon, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { SAY } from './strings';
+import { SAY, STYLE_TEXT } from './strings';
 import type { ResultView } from './views';
 
 /**
@@ -23,7 +23,7 @@ export class ReportCard {
     host.insertAdjacentHTML('beforeend', card({
       className: 'report', label: SAY.report, elevation: 'floating',
       bodyHtml: /* html */ `
-      <div class="rp-head"><span class="rp-icon" data-r="icon"></span><b class="rp-title" data-r="title"></b><span class="medal" data-r="medal"></span></div>
+      <div class="rp-head"><span class="rp-icon" data-r="icon"></span><span class="rp-kicker" data-r="kicker"></span><b class="rp-title" data-r="title"></b><span class="medal" data-r="medal"></span></div>
       <div class="rp-mission" data-r="mission"></div>
       <div class="rp-why" data-r="why"></div>
       <div class="rp-big" data-r="big"></div>
@@ -62,7 +62,10 @@ export class ReportCard {
     attr(this.el, 'data-tone', r.missionTone === 'good' ? 'good' : 'hostile');
     this.q.icon.innerHTML = icon(r.recovered ? 'home' : 'crumple');
     const failed = r.missionLine.replace(/^Failed: /, '');
-    text(this.q.title, r.missionTone === 'good' ? 'Mission complete' : failed.charAt(0).toUpperCase() + failed.slice(1));
+    // The style guide's ResultDialog: home safe or crumpled above a big title.
+    text(this.q.kicker, r.recovered ? STYLE_TEXT.homeSafe : STYLE_TEXT.crumpled);
+    attr(this.q.kicker, 'data-tone', r.recovered ? 'good' : 'bad');
+    text(this.q.title, r.missionTone === 'good' ? STYLE_TEXT.missionDone : failed.charAt(0).toUpperCase() + failed.slice(1));
     attr(this.q.title, 'data-tip', `${r.headline} · ${r.survival}`);
     const medalName = r.medal ? `${r.medal.charAt(0).toUpperCase()}${r.medal.slice(1)}` : '';
     const next = r.medal === 'bronze' ? 'silver' : r.medal === 'silver' ? 'gold' : null;

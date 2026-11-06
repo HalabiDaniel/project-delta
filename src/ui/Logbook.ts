@@ -5,7 +5,7 @@ import { CATEGORY_LABELS, type Category } from '../director/Templates';
 import { ACHIEVEMENTS, BEST_LABELS, clock, type ProgressData } from '../progress/Progress';
 import type { Ledger } from '../systems/Ledger';
 import type { BaseStats } from '../base/Base';
-import { bindTabs, button, panelId, tabPanel, tabs } from './components';
+import { bar, bindTabs, button, panelId, tabPanel, tabs } from './components';
 import { bindButton, esc } from './dom';
 import { icon, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
@@ -169,7 +169,7 @@ function records(v: LogbookView, filter: AchievementFilter = 'all'): string {
     return `<li class="${at !== undefined ? 'got' : ''}"><b>${icon(at !== undefined ? 'medal' : 'lock', 'icon', at !== undefined ? SAY.earned : SAY.locked)} ${esc(a.title)}</b><span>${esc(a.detail)}</span>${at !== undefined ? `<small>${new Date(at).toLocaleDateString()}</small>` : ''}</li>`;
   }).join('');
   return `<div class="lb-cols"><section><h3>Personal bests</h3><dl class="ledger">${bests}</dl></section>
-    <section><div class="lb-section-head"><h3>Achievements <small>${unlocked}/${ACHIEVEMENTS.length}</small></h3>${filterHtml('ach', filter, [['all', SAY.all], ['earned', SAY.earned], ['locked', SAY.locked]])}</div><ul class="achievements">${achievements || '<li class="muted">—</li>'}</ul></section></div>`;
+    <section><div class="lb-section-head"><h3>Achievements <small>${unlocked}/${ACHIEVEMENTS.length}</small></h3>${filterHtml('ach', filter, [['all', SAY.all], ['earned', SAY.earned], ['locked', SAY.locked]])}</div>${bar({ value: unlocked / Math.max(1, ACHIEVEMENTS.length), label: `Achievements ${unlocked}/${ACHIEVEMENTS.length}`, kind: 'progress', segments: 0, className: 'lb-progress' })}<ul class="achievements">${achievements || '<li class="muted">—</li>'}</ul></section></div>`;
 }
 
 function base(v: LogbookView): string {

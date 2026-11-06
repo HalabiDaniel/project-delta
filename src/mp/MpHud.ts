@@ -205,12 +205,12 @@ export function connectionState(status: ConnectionStatus, ping: number): { label
 }
 
 /**
- * What multiplayer adds to the HUD, on the shared components and tokens, in the HUD's zones:
- *   top left      the connection line (state, ping, players, session clock, protection, room)
- *                 and the kill feed / session news under it
+ * What multiplayer adds to the HUD, on the shared components and tokens, in the HUD's zones
+ * (placed as the developer's style guide's flight HUD, 2026-11-06):
+ *   top right     the connection chips (state, ping, players, session clock, protection, room),
+ *                 the emote bar (in flight), then the kill feed / session news under them
  *   top centre    reconnecting, the raid card (incoming, with the one-press interception), the
  *                 outgoing raid and "You landed on…"
- *   top right     the emote bar under the mini-map (in flight)
  *   centre        the scoreboard (held Tab / View)
  * plus name tags over other players' planes and "{username}'s desk" tags on their desks, which
  * follow the 3D world.
@@ -237,8 +237,12 @@ export class MpHud {
     const layer = div(root, 'mp-layer');
     root.prepend(layer);
     this.tagLayer = div(layer, 'mp-tags');
-    this.net = div(zones.tl, 'mp-net');
-    this.feed = div(zones.tl, 'mp-feed');
+    // Top right (the style guide's flight HUD): the chips (connection, players, session clock) first,
+    // the emotes, then the kill feed under them.
+    this.net = div(zones.tr, 'mp-net');
+    zones.tr.prepend(this.net);
+    this.feed = document.createElement('div');
+    this.feed.className = 'mp-feed';
     this.feed.setAttribute('role', 'log');
     this.feed.setAttribute('aria-label', 'Kill feed');
     this.connection = div(zones.tc, 'mp-connection');
@@ -255,6 +259,7 @@ export class MpHud {
       EMOTES.map((e) => iconButton({ icon: e.icon, name: e.name, key: e.key, attrs: { 'data-act': `emote-${e.id}` } })).join('') +
       `<span class="mp-board-key" data-tip="Scoreboard (hold)">${glyph(bind('scoreboard'))}${icon('kills', 'icon', 'Scoreboard')}</span>`;
     for (const e of EMOTES) bindButton(this.emotes.querySelector<HTMLElement>(`[data-act="emote-${e.id}"]`)!, () => actions.emote(e.id));
+    zones.tr.appendChild(this.feed);
     this.board = div(zones.centre, 'mp-board');
     this.board.hidden = true;
     this.raid.addEventListener('click', (e) => {

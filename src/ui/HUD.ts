@@ -2,17 +2,18 @@ import type { RaidReport } from '../base/Raids';
 import { bind } from '../input/bindings';
 import { AirHud } from './AirHud';
 import { Alerts, Tips, type AlertOptions, type AlertTone } from './Alerts';
-import { ConfirmDialog, glyph } from './components';
+import { ConfirmDialog, glyph, iconButton } from './components';
 import { guardActions, installConfirmDialog } from './confirm';
 import { Dashboard } from './Dashboard';
 import { TutorialPanel } from './TutorialPanel';
 import { BaseHud, RaidHud } from './BaseHud';
-import { toggle, type ScreenPoint } from './dom';
+import { bindButton, toggle, type ScreenPoint } from './dom';
 import { EconomyStrip } from './EconomyStrip';
 import { Garage } from './Garage';
 import type { IconName } from './icons';
 import { Menus } from './Menus';
-import { MiniMap } from './MiniMap';
+import { MiniMap, miniMapFrame } from './MiniMap';
+import { SAY } from './strings';
 import { MissionPanel } from './MissionPanel';
 import { PlaneHud } from './PlaneHud';
 import { ReportCard } from './ReportCard';
@@ -60,13 +61,16 @@ export function applyCombat(root: HTMLElement, level: 0 | 1 | 2): void {
 }
 
 /**
- * The HUD, laid out in fixed zones so the eye always knows where to look:
- *   top left      paper, production, storage (and the base / logbook / menu buttons at home)
- *   top centre    the objective, the threat panel, the raid alert, alerts and tips
- *   top right     the mini-map with T1's radar (mission cards beneath it at the desk)
- *   bottom left   the plane's condition (the garage inspector or build tray at home)
- *   bottom centre instruments (the garage, ground crew or base inspector)
- *   bottom right  weapons and the one action that matters now
+ * The HUD, laid out in fixed zones so the eye always knows where to look (the developer's style
+ * guide, 2026-11-06, docs/style-guide/screens/FlightHud and DeskHud):
+ *   top left      the paper counter and production chips (with the base / logbook / menu buttons
+ *                 at home), the objective card under it in flight, the home dashboard at the desk
+ *   top centre    the raid alert, the threat panel, alerts, tips and the tutorial
+ *   top right     in flight: the pause chip (multiplayer: players, session clock, kill feed);
+ *                 at the desk: Fold / Launch and the mission cards; in base mode: the inspector
+ *   bottom left   the plane's condition: hull and range meters (the garage inspector or build tray at home)
+ *   bottom centre speed, altitude, boost and the maneuver slot (the garage tray, ground crew)
+ *   bottom right  weapons, then the mini-map in the corner
  * The centre stays clear for flying and aiming. Each module draws its own part from the view.
  */
 export class HUD {
@@ -89,6 +93,7 @@ export class HUD {
   private readonly zones: Record<HudZone, HTMLElement>;
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
+  private readonly flightChips: HTMLElement;
   private readonly captions: Captions;
   /** Keep the zones in a 16:9 area on ultrawide screens (an accessibility setting). */
   private safeArea = DEFAULT_ACCESS.safeArea;
@@ -118,20 +123,22 @@ export class HUD {
     this.air = new AirHud(layer);
     this.threats = new ThreatHud(layer, this.zones.tc);
     this.economy = new EconomyStrip(this.zones.tl, { base: actions.toggleBase, logbook: actions.openLogbook, menu: actions.openMenu });
-    this.baseHud = new BaseHud({ world: layer, tc: this.zones.tc, bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br }, actions);
+    // In flight, the chips top right: the pause key (multiplayer adds players and the session clock).
+    this.flightChips = div(this.zones.tr, 'flight-chips');
+    this.flightChips.innerHTML = iconButton({ icon: 'pause', name: SAY.menu, tipKey: bind('back', 'pause'), className: 'pause-chip pad-skip', key: bind('back', 'pause'), attrs: { 'data-act': 'pause' } });
+    bindButton(this.flightChips.querySelector<HTMLElement>('[data-act="pause"]')!, actions.openMenu);
+    this.baseHud = new BaseHud({ world: layer, tc: this.zones.tc, tr: this.zones.tr, bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br }, actions);
     this.raids = new RaidHud(this.zones.tc);
     this.alerts = new Alerts(this.zones.tc);
     this.tips = new Tips(this.zones.tc);
-    const map = document.createElement('canvas');
-    map.className = 'minimap';
-    this.zones.tr.appendChild(map);
-    this.minimap = new MiniMap(map);
-    this.missions = new MissionPanel(this.zones.tr, this.zones.tc, { select: actions.select, swap: actions.swap, abandon: actions.abandonOperation });
-    this.zones.tc.prepend(this.zones.tc.querySelector('.objective')!);
+    // The objective card sits under the paper counter, top left (the developer's style guide, 2026-11-06).
+    this.missions = new MissionPanel(this.zones.tr, this.zones.tl, { select: actions.select, swap: actions.swap, abandon: actions.abandonOperation });
     const garageCards = div(this.zones.bc, 'garage-row');
     const inspector = div(this.zones.bl, 'inspector ui-card');
     this.garage = new Garage(garageCards, inspector, actions.selectAircraft);
-    this.plane = new PlaneHud({ bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
+    this.plane = new PlaneHud({ tr: this.zones.tr, bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
+    // The mini-map, bottom right under the weapons: round, with a rim, N, the desk you are over and zoom.
+    this.minimap = new MiniMap(miniMapFrame(this.zones.br));
     this.report = new ReportCard(this.zones.centre, actions.continueToDesk);
     this.dashboard = new Dashboard(this.zones.tl, { quickRebuild: actions.quickRebuild, quickRepair: actions.quickRepair, toggleBase: actions.toggleBase });
     this.tutorial = new TutorialPanel(this.zones.tc, actions.skipTutorial);
@@ -204,6 +211,7 @@ export class HUD {
     this.threats.render(flying ? v.threat : null);
     this.air.render(v.paused ? null : v.air);
     this.minimap.render(v.minimap, dt);
+    toggle(this.flightChips, flying);
     this.dashboard.render(v.paused || v.baseMode || v.result !== null || v.welcome !== null ? null : v.dashboard);
     this.tutorial.render(v.tutorial, v.paused || v.result !== null || v.welcome !== null);
     this.alerts.update();

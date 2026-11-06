@@ -4,7 +4,7 @@ import { attrs, bar, button, card, glyph, pips, tooltipAttrs } from './component
 import { attr, bindButton, text, toggle, width } from './dom';
 import { clock, fmt, level, metres, pct } from './format';
 import { icon, ICON_NAMES } from './icons';
-import { SAY } from './strings';
+import { SAY, STYLE_TEXT } from './strings';
 import type { HudView } from './views';
 
 const VERB = { fold: 'Fold', refit: 'Refit', rollout: 'Roll out' } as const;
@@ -26,7 +26,7 @@ export class PlaneHud {
   private readonly el: Record<string, HTMLElement> = {};
 
   constructor(
-    zones: { bl: HTMLElement; bc: HTMLElement; br: HTMLElement; centre: HTMLElement },
+    zones: { tr?: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement; centre: HTMLElement },
     actions: { build: () => void; launch: () => void; rearm: () => void; takeOff: () => void; endSortie: () => void; base: () => void; rearmAndGo?: () => void },
   ) {
     const add = (host: HTMLElement, html: string): HTMLElement => {
@@ -35,12 +35,13 @@ export class PlaneHud {
       for (const n of node.querySelectorAll<HTMLElement>('[data-p]')) this.el[n.dataset.p!] = n;
       return node;
     };
-    const meter = (p: string, iconName: 'health' | 'range'): string =>
-      `<div class="meter" ${tip(ICON_NAMES[iconName])}>${icon(iconName)}${bar({ value: 1, label: ICON_NAMES[iconName], attrs: { 'data-p': p } })}<b class="num" data-p="${p}-n"></b></div>`;
+    // The style guide's Meter: icon and word, a segmented bar, the value as text.
+    const meter = (p: string, iconName: 'health' | 'range', word: string): string =>
+      `<div class="meter ui-meter" ${tip(ICON_NAMES[iconName])}><span class="ui-meter-label">${icon(iconName)}<span>${word}</span></span>${bar({ value: 1, label: ICON_NAMES[iconName], segments: 10, attrs: { 'data-p': p } })}<b class="num" data-p="${p}-n"></b></div>`;
 
     this.el.condition = add(zones.bl, card({
       className: 'condition', label: SAY.condition,
-      bodyHtml: `<div class="cond-head"><span class="swatch" data-p="swatch"></span><b data-p="name"></b></div>${meter('health', 'health')}${meter('range', 'range')}`,
+      bodyHtml: `<div class="cond-head"><span class="swatch" data-p="swatch"></span><b data-p="name"></b><span class="ui-badge-tag cond-role" data-p="role"></span></div>${meter('health', 'health', STYLE_TEXT.hull)}${meter('range', 'range', STYLE_TEXT.range)}`,
     }));
     this.el.landing = add(zones.bc, card({
       className: 'landing', label: ICON_NAMES.land, fold: false,
@@ -80,15 +81,17 @@ export class PlaneHud {
     this.el.weapons = add(zones.br, card({
       className: 'weapons', label: SAY.weapons,
       bodyHtml: /* html */ `
-        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}>${icon('ink')}<b class="num" data-p="ammo"></b>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph(bind('firePrimary'), { className: 'hint-key' })}</div>
-        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<span class="bomb-pips" data-p="bomb-pips"></span>${glyph(bind('fireSecondary'), { className: 'hint-key' })}</div>`,
+        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}><span class="weapon-icon">${icon('ink')}<b class="num" data-p="ammo"></b></span><span class="weapon-name">${STYLE_TEXT.ink}</span>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph(bind('firePrimary'), { className: 'weapon-key' })}</div>
+        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}><span class="weapon-icon">${icon('bombload')}</span><span class="weapon-name">${STYLE_TEXT.bombs}</span><span class="bomb-pips" data-p="bomb-pips"></span>${glyph(bind('fireSecondary'), { className: 'weapon-key' })}</div>`,
     }));
-    this.el.desk = add(zones.br, /* html */ `<div class="desk-action">
+    // Fold / Launch: the primary button at the end of the desk's top bar (the style guide's DeskHud), top right.
+    this.el.desk = add(zones.tr ?? zones.br, /* html */ `<div class="desk-action">
       <span class="desk-tag ui-chip" data-p="desk-tag"></span>
       ${button({ label: SAY.build, variant: 'primary', size: 'big', key: bind('fold', 'confirm'), attrs: { 'data-p': 'build' } })}
       ${card({ className: 'building', label: SAY.build, fold: false, bodyHtml: `${icon('plane')}${bar({ value: 0, label: SAY.build, kind: 'progress', attrs: { 'data-p': 'building-bar' } })}`, attrs: { 'data-p': 'building' } })}
       ${button({ label: SAY.launch, variant: 'primary', size: 'big', key: bind('launch', 'confirm'), attrs: { 'data-p': 'launch' } })}
     </div>`);
+    if (zones.tr) zones.tr.prepend(this.el.desk);
     this.el.build.querySelector('.ui-glyph')!.insertAdjacentHTML('beforebegin', `<b class="cost num" data-p="build-cost"></b>`);
     this.el['build-cost'] = this.el.build.querySelector<HTMLElement>('.cost')!;
     this.el.boundary = add(zones.centre, /* html */ `<div class="boundary" role="alert" data-critical>${icon('warn')}<b data-p="bw-title"></b><span class="bw-count num" data-p="bw-count"></span></div>`);
@@ -116,6 +119,7 @@ export class PlaneHud {
       }
       text(this.el.name, a.name);
       attr(this.el.name, 'data-tip', a.roleLabel);
+      text(this.el.role, a.roleLabel);
       const hp = a.maxHealth > 0 ? a.health / a.maxHealth : 0;
       const hpLevel = level(hp);
       setBar(this.el.health, hp, hpLevel);

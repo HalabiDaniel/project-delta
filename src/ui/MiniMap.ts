@@ -1,6 +1,8 @@
 import type { AiRole, Side, ThreatLevel } from '../config';
 import type { InstallationKind } from '../defenses/Layout';
 import { colour, FACES, onTokensChange, tokenOptions, withAlpha, type ColourName } from './tokens';
+import { iconButton } from './components';
+import { MAP_TEXT } from './strings';
 
 /**
  * A desk's place in the multiplayer lifecycle (v0.0.13, protocol DESK_STATES): the AI's, a
@@ -113,8 +115,12 @@ export function deskStyle(t: Pick<MiniMapTerritory, 'role' | 'desk' | 'owner'>):
 /** The canvas colours, read from the tokens (and again whenever the tokens change). */
 function readColours() {
   return {
-    bg: colour('paper'),
+    // The classroom floor, as the style guide's Minimap: desk-200, the rim in ink with a paper ring.
+    bg: colour('desk-200'),
     boundary: withAlpha('ink', 0.35),
+    deskEdge: colour('graphite'),
+    rimInk: colour('ink'),
+    rimPaper: colour('paper-solid'),
     warning: colour('hostile'),
     home: colour('friend'),
     objective: colour('objective'),
@@ -148,6 +154,23 @@ function readColours() {
 }
 
 
+/** Zoom steps (the rim's + and − buttons). */
+export const MAP_ZOOMS: readonly number[] = [1, 1.6, 2.4];
+
+/**
+ * The mini-map's frame (the style guide's Minimap): the round canvas, a compass N on the rim, the
+ * desk you are over and zoom buttons. Returns the canvas for MiniMap.
+ */
+export function miniMapFrame(host: HTMLElement): HTMLCanvasElement {
+  host.insertAdjacentHTML('beforeend', `<div class="minimap-wrap" role="img" aria-label="${MAP_TEXT.label}">
+    <canvas class="minimap" aria-hidden="true"></canvas>
+    <span class="mm-n num" aria-hidden="true">${MAP_TEXT.north}</span>
+    <span class="mm-desk num" data-mm="desk" hidden></span>
+    <span class="mm-zoom">${iconButton({ icon: 'plus', name: MAP_TEXT.zoomIn, className: 'pad-skip', attrs: { 'data-mm': 'in' } })}${iconButton({ icon: 'minus', name: MAP_TEXT.zoomOut, className: 'pad-skip', attrs: { 'data-mm': 'out' } })}</span>
+  </div>`);
+  return host.lastElementChild!.querySelector('canvas')!;
+}
+
 /**
  * Compact top-down diagram for navigation. It is a fixed diagram, not a camera: home sits bottom
  * left and the runway points up and to the right, and it is a rotation (not a mirror) of the world,
@@ -159,6 +182,9 @@ export class MiniMap {
   private time = 0;
   private c = readColours();
   private last: MiniMapView | null = null;
+  private zoomStep = 0;
+  private readonly deskLabel: HTMLElement | null;
+  private deskShown = '';
 
   constructor(canvas: HTMLCanvasElement, size = 176) {
     this.size = size;
@@ -174,6 +200,25 @@ export class MiniMap {
       this.c = readColours();
       if (this.last) this.render(this.last, 0);
     });
+    const frame = canvas.parentElement;
+    this.deskLabel = frame?.querySelector<HTMLElement>('[data-mm="desk"]') ?? null;
+    frame?.addEventListener('mousedown', (e) => e.preventDefault());
+    frame?.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('[data-mm]');
+      if (b?.dataset.mm === 'in') this.zoom(1);
+      else if (b?.dataset.mm === 'out') this.zoom(-1);
+    });
+  }
+
+  /** One zoom step in (+1) or out (−1); zoomed in, the map follows the plane. */
+  zoom(step: number): number {
+    this.zoomStep = Math.max(0, Math.min(MAP_ZOOMS.length - 1, this.zoomStep + Math.sign(step)));
+    if (this.last) this.render(this.last, 0);
+    return MAP_ZOOMS[this.zoomStep];
+  }
+
+  get zoomLevel(): number {
+    return MAP_ZOOMS[this.zoomStep];
   }
 
   render(v: MiniMapView, dt: number): void {
@@ -181,10 +226,15 @@ export class MiniMap {
     this.time += dt;
     const { ctx, size } = this;
     const c = size / 2;
-    const scale = (c - 8) / (v.boundaryRadius * 1.12);
+    const zoom = MAP_ZOOMS[this.zoomStep];
+    const scale = ((c - 10) / (v.boundaryRadius * 1.12)) * zoom;
+    // Zoomed in, the plane is the centre.
+    const fx = zoom > 1 && v.plane ? v.plane.x : 0;
+    const fz = zoom > 1 && v.plane ? v.plane.z : 0;
     // World (x, z) → map: x' = z, y' = -x. Home (−x, −z) lands bottom left.
-    const sx = (_x: number, z: number) => c + z * scale;
-    const sy = (x: number, _z: number) => c - x * scale;
+    const sx = (_x: number, z: number) => c + (z - fz) * scale;
+    const sy = (x: number, _z: number) => c - (x - fx) * scale;
+    this.showDesk(v);
 
     ctx.clearRect(0, 0, size, size);
     ctx.save();
@@ -207,7 +257,7 @@ export class MiniMap {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = `700 9px ${FACES.font}`;
+    ctx.font = `400 10px ${FACES['font-display']}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const t of v.territories) this.drawDesk(t, sx(t.x, t.z), sy(t.x, t.z), t.half * scale);
@@ -422,11 +472,40 @@ export class MiniMap {
     }
     ctx.restore();
 
+    // The rim: a thick ink ring with a paper ring inside, and eight ticks (N is a badge on the frame).
     ctx.beginPath();
-    ctx.arc(c, c, c - 1, 0, Math.PI * 2);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = this.c.rim;
+    ctx.arc(c, c, c - 2.5, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = this.c.rimInk;
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c, c, c - 6, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = this.c.rimPaper;
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.c.rimInk;
+    ctx.lineCap = 'round';
+    for (let k = 1; k < 8; k++) {
+      const a = (k * Math.PI) / 4 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * (c - 4), c + Math.sin(a) * (c - 4));
+      ctx.lineTo(c + Math.cos(a) * (c - 10), c + Math.sin(a) * (c - 10));
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+
+  /** The desk the plane is over (or home at the desk), on the rim. */
+  private showDesk(v: MiniMapView): void {
+    if (!this.deskLabel) return;
+    const p = v.plane;
+    const over = p ? v.territories.find((t) => Math.abs(p.x - t.x) <= t.half && Math.abs(p.z - t.z) <= t.half) : v.territories.find((t) => t.role === 'home');
+    const label = over?.id ?? '';
+    if (label === this.deskShown) return;
+    this.deskShown = label;
+    this.deskLabel.textContent = label;
+    this.deskLabel.hidden = label === '';
   }
 
   /** One desk: its fill, pattern, edge and mark (deskStyle), the threat edge, the objective pulse and its id. */
@@ -440,6 +519,10 @@ export class MiniMap {
     if (fill) {
       ctx.fillStyle = fill;
       ctx.fillRect(l, top, w, w);
+      // A marker outline, like every desk on the style guide's map.
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = this.c.deskEdge;
+      ctx.strokeRect(l, top, w, w);
     }
     if (st.pattern === 'hatch') {
       ctx.save();

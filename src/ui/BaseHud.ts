@@ -6,7 +6,7 @@ import { attr, bindButton, esc, text, toggle, width } from './dom';
 import { fmt, level, metres, pct } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS } from './strings';
+import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS, STYLE_TEXT } from './strings';
 import type { BaseInspectorView, BaseView, HudActions, PriceView, RaidAlertView, Stat } from './views';
 
 export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
@@ -42,7 +42,7 @@ export function priceHtml(p: PriceView): string {
 /**
  * Base management on T1, from above: a marker on every construction slot (what stands there, its
  * health, whether the chosen building fits), the base's state across the top, a build tray bottom
- * left, the selected slot's inspector bottom centre, and Repair all / Done bottom right. Costs
+ * left, the selected slot's inspector on the right, and Repair all / Done bottom right. Costs
  * show what is missing; Remove asks with the confirm dialog (BaseMode).
  */
 export class BaseHud {
@@ -53,7 +53,7 @@ export class BaseHud {
   private shown = false;
 
   constructor(
-    zones: { world: HTMLElement; tc: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement },
+    zones: { world: HTMLElement; tc: HTMLElement; tr?: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement },
     private readonly actions: HudActions,
   ) {
     const add = (host: HTMLElement, html: string): HTMLElement => {
@@ -71,7 +71,8 @@ export class BaseHud {
         <span class="ov" ${tip('Base condition')} data-b="ov-integrity">${icon('base')}<b class="num" data-b="integrity"></b></span>`,
     }));
     this.el.tray = add(zones.bl, card({ className: 'tray', label: SAY.buildTray, bodyHtml: `<div class="tray-items" data-b="tray-items"></div>` }));
-    this.el.inspector = add(zones.bc, card({ className: 'base-insp', label: SAY.slot, bodyHtml: '<div class="bi-body" data-b="insp"></div>' }));
+    // The selected slot's inspector: a right-side card (the style guide's DeskHud), bottom centre without a tr zone.
+    this.el.inspector = add(zones.tr ?? zones.bc, card({ className: 'base-insp', label: SAY.slot, bodyHtml: '<div class="bi-body" data-b="insp"></div>' }));
     this.el.actions = add(zones.br, /* html */ `<div class="base-actions">
       ${button({ label: SAY.repairAll, icon: 'repair', tip: 'Repair everything', attrs: { 'data-b': 'repair-all' } })}
       ${button({ label: SAY.done, variant: 'primary', size: 'big', key: bind('base'), attrs: { 'data-b': 'done' } })}</div>`);
@@ -259,7 +260,7 @@ export class RaidHud {
   private reportUntil = 0;
 
   constructor(host: HTMLElement) {
-    host.insertAdjacentHTML('beforeend', `<div class="raid-alert ui-card" role="alert" aria-label="${SAY.raidInbound}" data-critical data-tone="hostile"></div>`);
+    host.insertAdjacentHTML('beforeend', `<div class="raid-alert ui-raid" role="alert" aria-label="${SAY.raidInbound}" data-critical data-tone="hostile"></div>`);
     this.alert = host.lastElementChild as HTMLElement;
     host.insertAdjacentHTML('beforeend', card({ className: 'raid-report', label: SAY.defenseReport, elevation: 'floating', bodyHtml: '' }));
     this.report = host.lastElementChild as HTMLElement;
@@ -276,16 +277,17 @@ export class RaidHud {
     this.alertKey = key;
     attr(this.alert, 'data-state', r.state);
     const escort = r.escorted ? `<span role="img" aria-label="${ICON_NAMES.escort}" ${tip('Escorted')}>${icon('escort')}</span>` : '';
-    this.alert.innerHTML = `
-      <div class="ra-row">${icon('bomber', 'icon ra-icon')}<b class="ra-title">${r.state === 'released' ? SAY.bombsAway : 'RAID'}</b>
-        <span class="ra-dir" ${tip('Coming from')}>${icon('heading')}<b class="num">${r.direction}</b></span>
-        ${r.state === 'inbound' ? `<span class="ra-eta" ${tip('Time to target')}>${icon('clock')}<b class="num">${Math.max(0, Math.ceil(r.eta))}s</b></span>` : ''}${escort}</div>
+    // The style guide's RaidAlert: the badge, a title and a line of facts, the time to target large on the right.
+    this.alert.innerHTML = `<span class="ui-raid-badge">${icon('bomber', 'icon ui-icon')}</span>
+      <div class="ui-raid-text"><p class="ui-raid-title ra-title">${r.state === 'released' ? STYLE_TEXT.bombsAway : STYLE_TEXT.raidTitle}</p>
       <div class="ra-row">
+        <span class="ra-dir" ${tip('Coming from')}>${icon('heading')}<b class="num">${r.direction}</b></span>${escort}
         <span ${tip(`Target: ${r.target}`)}>${icon(r.targetIcon)}<b>${esc(r.target.split(' ').slice(-1)[0])}</b></span>
         <span ${tip('Weapons ready')} data-tone="${r.total === 0 ? 'warn' : r.ready < r.total ? 'bad' : 'good'}">${icon('shield')}<b class="num">${r.ready}/${r.total}</b></span>
         ${r.distance !== null ? `<span ${tip('Distance from you')}>${icon('distance')}<b class="num">${metres(r.distance)}</b></span>` : ''}
         <span ${tip(r.mission ? 'Mission reward' : 'Defense reward if you help')}>${icon('paper')}<b class="num">+${r.reward}</b></span>
-        ${r.response ? `<span class="ra-do">${glyph({ key: r.response.key })}${esc(r.response.label)}</span>` : ''}</div>`;
+        ${r.response ? `<span class="ra-do">${glyph({ key: r.response.key })}${esc(r.response.label)}</span>` : ''}</div></div>
+      ${r.state === 'inbound' ? `<span class="ui-raid-eta ra-eta num" ${tip('Time to target')}>${Math.max(0, Math.ceil(r.eta))}s</span>` : ''}`;
   }
 
   /** The defense report: one card, a few numbers, gone after a while, on click or with its close button. */

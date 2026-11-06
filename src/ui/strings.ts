@@ -131,6 +131,27 @@ export const CAPTION_TEXT = {
 /** Where a captioned sound came from, for screen readers (the arrow shows it). */
 export const DIRECTION_TEXT = { ahead: 'ahead', right: 'to the right', behind: 'behind', left: 'to the left' } as const;
 
+/** The mini-map's frame (the style guide's Minimap): the compass, zoom and the accessible name. */
+export const MAP_TEXT = { label: 'Mini-map of the classroom', north: 'N', zoomIn: 'Zoom in', zoomOut: 'Zoom out' } as const;
+
+/** Labels added with the developer's style guide (2026-11-06), in its voice: short, classroom words, sentence case. */
+export const STYLE_TEXT = {
+  gotIt: 'Got it',
+  raidTitle: 'Raid on your desk!',
+  bombsAway: 'Bombs away!',
+  missionDone: 'Mission done',
+  homeSafe: 'Home safe',
+  crumpled: 'Crumpled',
+  /** The mission card's risk line, naming the plane. */
+  risk: (plane: string) => `Crash and you lose your ${plane}`,
+  hull: 'Hull',
+  range: 'Range',
+  ink: 'Ink',
+  bombs: 'Bombs',
+  game: 'Game',
+  quickNote: 'Changes save as you go.',
+} as const;
+
 /** Sound captions, as a group (the region's accessible name). */
 export const CAPTIONS_LABEL = 'Sound captions';
 

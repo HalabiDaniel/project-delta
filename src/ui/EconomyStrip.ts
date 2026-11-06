@@ -1,4 +1,4 @@
-import { bar, card, chip, glyph, iconButton } from './components';
+import { bar, chip, glyph, iconButton } from './components';
 import { bind } from '../input/bindings';
 import type { GlyphSpec } from '../input/glyphs';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
@@ -25,25 +25,26 @@ export function resourceRows(v: EconomyView): ResourceRow[] {
   ];
 }
 
+/**
+ * One resource as the style guide's PaperCounter (a pencil pill for paper, a paper pill for the
+ * others) with its production chip and a storage chip (how full, and the protected reserve).
+ */
 function rowHtml(r: ResourceRow, primary: boolean): string {
   return /* html */ `<li class="econ-res" data-res="${esc(r.id)}"${primary ? ' data-primary' : ''}>
-    <div class="econ-row">
-      <span class="econ-amount" role="group" aria-label="${esc(r.label)}" data-tip="${esc(r.label)}">${icon(r.icon, 'icon econ-icon')}<b class="num" data-e="value"></b><small class="num" data-e="cap"></small></span>
-      ${primary ? '<span class="delta num" data-e="delta"></span>' : ''}
-      ${chip({ label: '', icon: 'rate', value: '', tip: `${r.label}: ${SAY.paperIn}`, className: 'econ-rate', attrs: { 'data-e': 'rate-chip' } })}
-    </div>
-    <div class="econ-store">
-      ${bar({ value: 0, label: `${r.label}: storage`, kind: 'capacity', size: 'thin', attrs: { 'data-e': 'fill' } })}
+    <span class="econ-amount ui-counter" role="group" aria-label="${esc(r.label)}" data-tip="${esc(r.label)}"><span class="ui-counter-icon">${icon(r.icon, 'icon ui-icon econ-icon')}</span><b class="num ui-counter-value" data-e="value"></b><small class="num" data-e="cap"></small>${primary ? '<span class="delta num" data-e="delta"></span>' : ''}</span>
+    ${chip({ label: '', icon: 'rate', value: '', tip: `${r.label}: ${SAY.paperIn}`, className: 'econ-rate hud-chip', attrs: { 'data-e': 'rate-chip' } })}
+    <span class="econ-store hud-chip">
+      ${icon('capacity')}${bar({ value: 0, label: `${r.label}: storage`, kind: 'capacity', size: 'thin', attrs: { 'data-e': 'fill' } })}
       ${r.protectedAmount !== undefined ? `<span class="econ-safe" data-tip="Protected from raids">${icon('lock')}<b class="num" data-e="safe"></b></span>` : ''}
-    </div>
+    </span>
   </li>`;
 }
 
 /**
- * Top left: each resource as an icon and a number (capacity small beside it once the store fills),
- * its rate per minute, a thin bar for how full the store is and the protected reserve; the
- * streak; changes pop next to the number and fade. Below it, icon buttons for the base, the
- * logbook and the menu.
+ * Top left, a top bar: each resource as a counter pill (capacity small beside it once the store
+ * fills), its rate per minute as a chip, a storage chip (a thin bar for how full the store is and
+ * the protected reserve); the streak; changes pop next to the number and fade. After them, icon
+ * buttons for the base, the logbook and the menu.
  */
 export class EconomyStrip {
   private readonly el: Record<string, HTMLElement> = {};
@@ -52,11 +53,12 @@ export class EconomyStrip {
   private rowsKey = '';
 
   constructor(host: HTMLElement, actions: { base: () => void; logbook: () => void; menu: () => void }) {
-    host.insertAdjacentHTML('beforeend', card({
-      className: 'econ', label: SAY.resources,
-      bodyHtml: `<ul class="econ-list ui-list" role="list" data-e="list"></ul>${chip({ label: '', icon: 'streak', value: '', tip: 'Missions in a row', tone: 'streak', className: 'econ-streak', attrs: { 'data-e': 'streak-chip' } })}`,
-    }));
-    this.card = host.lastElementChild as HTMLElement;
+    // The top bar (the style guide's DeskHud): the counter and its chips, then the base, logbook and menu buttons.
+    host.insertAdjacentHTML('beforeend', `<div class="topbar"></div>`);
+    const bar_ = host.lastElementChild as HTMLElement;
+    bar_.insertAdjacentHTML('beforeend', `<section class="econ" role="group" aria-label="${SAY.resources}"><ul class="econ-list" role="list" data-e="list"></ul>${chip({ label: '', icon: 'streak', value: '', tip: 'Missions in a row', tone: 'streak', className: 'econ-streak hud-chip', attrs: { 'data-e': 'streak-chip' } })}</section>`);
+    this.card = bar_.lastElementChild as HTMLElement;
+    host = bar_;
     const hint = (spec: GlyphSpec) => glyph(spec, { className: 'ui-corner hint-key' });
     const menuKey = bind('back', 'pause');
     host.insertAdjacentHTML('beforeend', /* html */ `<div class="icon-btns">

@@ -2,7 +2,7 @@ import { alert, glyph, type Severity } from './components';
 import { bind, isAction } from '../input/bindings';
 import { esc } from './dom';
 import { icon, type IconName } from './icons';
-import { SAY } from './strings';
+import { SAY, STYLE_TEXT } from './strings';
 
 export type AlertTone = 'good' | 'bad' | 'warn' | 'info';
 
@@ -184,8 +184,9 @@ export function withKeys(text: string): string {
 }
 
 /**
- * A first-time tip: a short line next to a lightbulb, shown once per save for each thing the
- * player meets for the first time. Click to dismiss; it goes by itself after a while.
+ * A first-time tip: a sticky note in the hand-written face (the style guide's CoachMark), shown
+ * once per save for each thing the player meets for the first time. Click to dismiss ("Got it");
+ * it goes by itself after a while.
  */
 export class Tips {
   private readonly el: HTMLElement;
@@ -193,7 +194,8 @@ export class Tips {
 
   constructor(host: HTMLElement) {
     this.el = document.createElement('div');
-    this.el.className = 'tip';
+    // A taped-on sticky note (the style guide's CoachMark).
+    this.el.className = 'tip ui-coach';
     this.el.setAttribute('role', 'status');
     this.el.hidden = true;
     this.el.addEventListener('click', () => this.hide());
@@ -206,7 +208,7 @@ export class Tips {
    */
   show(text: string, keys: string[] = [], seconds = 7): void {
     const kbd = keys.map((k) => glyph(isAction(k) ? bind(k) : { key: k })).join('');
-    this.el.innerHTML = `${icon('tip', 'icon tip-icon')}<span>${withKeys(text)}</span>${kbd ? `<span class="tip-keys">${kbd}</span>` : ''}`;
+    this.el.innerHTML = `<p class="ui-coach-text">${withKeys(text)}</p><div class="ui-coach-foot">${icon('tip', 'icon tip-icon')}${kbd ? `<span class="tip-keys">${kbd}</span>` : ''}<span class="ui-coach-close" aria-hidden="true">${icon('check', 'icon ui-icon')}<span>${STYLE_TEXT.gotIt}</span></span></div>`;
     this.el.hidden = false;
     this.el.classList.remove('show');
     void this.el.offsetWidth;

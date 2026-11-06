@@ -793,16 +793,16 @@ Panels are cut card stock with a folded corner and a soft shadow, semi-opaque ov
 
 ### 15.3 Layout
 
-Fixed zones, the same in every state:
+Fixed zones, the same in every state. Placement follows the developer's style guide (2026-11-06; [docs/style-guide/screens/](style-guide/screens/) FlightHud and DeskHud):
 
 | Zone | Flying | At the desk | Base management |
 |---|---|---|---|
-| Top left | Paper, production, storage | Paper, production, storage; Base, Logbook, Menu buttons | Paper / capacity, production, protected paper |
-| Top centre | Objective, threat panel, raid alert, alerts, tips | Alerts, tips | Weapons ready, radar, base condition; alerts |
-| Top right | Mini-map with T1's radar | Mini-map; mission cards below | Mini-map |
-| Bottom left | Health, range | Aircraft inspector | Build tray |
-| Bottom centre | Speed, altitude, boost; landing checks | Garage | Slot inspector |
-| Bottom right | Ink, bombs | Fold / launch | Repair all, Done |
+| Top left | Paper counter, production; the objective card under it (steps, reward) | Top bar: paper counter, production, storage; Base, Logbook, Menu buttons; the home dashboard under it | Paper / capacity, production, protected paper; the buttons |
+| Top centre | Raid alert, threat panel, alerts, tips | Tutorial, alerts, tips (under the top bar) | Weapons ready, radar, base condition; alerts |
+| Top right | Pause chip (multiplayer: connection, players, session clock, then the kill feed) | Fold / Launch (the top bar's primary button); mission cards below | Slot inspector |
+| Bottom left | Hull and range meters | Aircraft inspector | Build tray |
+| Bottom centre | Speed, altitude, boost (and the maneuver slot); landing checks | Garage tray | |
+| Bottom right | Ink, bombs; the mini-map in the corner | Mini-map (small) | Repair all, Done |
 
 The centre stays clear for flying and aiming. A HUD size setting (S / M / L) scales every zone from its own corner.
 

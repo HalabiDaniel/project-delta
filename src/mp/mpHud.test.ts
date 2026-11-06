@@ -118,7 +118,10 @@ describe('kill feed', () => {
     vi.useFakeTimers();
     const { root, zones: z } = zones();
     const hud = new MpHud(root, z, { emote: () => undefined, intercept: () => undefined });
-    const feed = z.tl.querySelector<HTMLElement>('.mp-feed')!;
+    // Top right, under the chips (the developer's style guide, 2026-11-06).
+    const feed = z.tr.querySelector<HTMLElement>('.mp-feed')!;
+    expect(z.tr.firstElementChild!.classList.contains('mp-net')).toBe(true);
+    expect(z.tr.lastElementChild).toBe(feed);
     hud.kill('Me', 0, 'Bob', 2, 'ink', [], 'killer');
     hud.kill('Bob', 2, 'Me', 0, 'ink', [], 'victim');
     hud.news('Ann joined', 'info');
@@ -142,8 +145,8 @@ describe('connection, raid card, desk tags, emotes', () => {
     const { root, zones: z } = zones();
     const hud = new MpHud(root, z, { emote: () => undefined, intercept: () => undefined });
     hud.render(view({ sessionLeft: 45, closing: true }));
-    expect(z.tl.querySelector('.ui-chip[data-status="connected"]')!.textContent).toContain('Online');
-    expect(z.tl.querySelector('.mp-session')!.getAttribute('data-state')).toBe('critical');
+    expect(z.tr.querySelector('.ui-chip[data-status="connected"]')!.textContent).toContain('Online');
+    expect(z.tr.querySelector('.mp-session')!.getAttribute('data-state')).toBe('critical');
     expect(z.tc.querySelector<HTMLElement>('.mp-connection')!.hidden).toBe(true);
     hud.render(view({ status: 'reconnecting' }));
     const alert = z.tc.querySelector('.mp-connection .ui-alert')!;

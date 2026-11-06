@@ -5,7 +5,7 @@ import { attrs, bar, button, card, chip, glyph, pips, tooltipAttrs, type Tone } 
 import { attr, bindButton, esc, text, toggle, width } from './dom';
 import { clock, fmt, metres } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
-import { MISSION_ICONS, MISSION_TYPE_LABELS, SAY } from './strings';
+import { MISSION_ICONS, MISSION_TYPE_LABELS, SAY, STYLE_TEXT } from './strings';
 import type { HudView, MissionCardView, ThreatSummary, TrackerView } from './views';
 
 const MODIFIER_ICONS: Record<string, IconName> = {
@@ -51,16 +51,18 @@ export function missionCardHtml(c: MissionCardView, i: number): string {
   return `<div class="mcard" role="button" data-nav data-m="card-${i}" data-slot="${c.slot}" data-tier="${c.tier}" aria-label="${esc(`${c.title} · ${c.slotLabel} · +${fmt(c.reward)}`)}" ${tip(title)}>
     <div class="mc-top">${glyph({ key: String(i + 1) }, { className: 'hint-key' })}<span class="mc-type" role="img" aria-label="${esc(MISSION_TYPE_LABELS[c.type])}" ${tip(MISSION_TYPE_LABELS[c.type])}>${icon(MISSION_ICONS[c.type])}</span>
       <b class="mc-title">${esc(c.title)}</b>
-      <b class="mc-reward num" ${tip(c.rewardNote || 'Reward')}>+${fmt(c.reward)}</b></div>
+      <b class="mc-reward" ${tip(c.rewardNote || 'Reward')}>${icon('trophy')}<span class="num">+${fmt(c.reward)}</span>${icon('paper')}</b></div>
     <div class="mc-mid">${chip({ label: c.slotLabel, tone: SLOT_TONES[c.slot], className: 'mc-slot' })}${stars}${c.recommended ? `<span class="mc-yours" role="img" aria-label="${esc("The director's pick for your level")}" ${tip("The director's pick for your level")}>${icon('level')}</span>` : ''}${mods}</div>
     <div class="mc-bottom">${threatHtml(c.threat)}${kit}<span class="fits">${fits}</span></div>
+    <div class="mc-risk" hidden>${icon('plane')}<span data-risk></span></div>
     ${opHtml}</div>`;
 }
 
 /**
  * At the desk: the mission cards, one line each for what matters (type, title, reward, risk, kit,
- * which planes fit), the rest in tooltips. In the air: the objective strip at the top centre, with
- * the current step, its distance and progress, and the clock.
+ * which planes fit), the rest in tooltips; notebook pages with the red margin line and the risk
+ * naming the plane. In the air: the objective card under the paper counter, with the current step,
+ * its distance and progress, the clock, and every step as a line.
  */
 export class MissionPanel {
   private readonly cards: HTMLElement;
@@ -91,7 +93,7 @@ export class MissionPanel {
         <span class="obj-dist num" data-m="dist"></span>
         <span class="obj-timer" data-m="timer">${icon('clock')}<b class="num" data-m="time"></b></span>
         ${chip({ label: '', className: 'obj-status', attrs: { 'data-m': 'status' } })}
-        <b class="obj-reward" data-m="reward" ${tip('Reward')}>${icon('paper')}<span class="num" data-m="reward-n"></span></b>
+        <b class="obj-reward" data-m="reward" ${tip('Reward')}>${icon('trophy')}<span class="num" data-m="reward-n"></span>${icon('paper')}</b>
       </div>
       ${bar({ value: 0, label: SAY.objective, kind: 'progress', size: 'thin', className: 'obj-bar', attrs: { 'data-m': 'bar' } })}
       <ol class="obj-steps" data-m="steps"></ol>`,
@@ -134,6 +136,13 @@ export class MissionPanel {
       cardEl.classList.toggle('selected', i === v.selected);
       attr(cardEl as HTMLElement, 'aria-pressed', String(i === v.selected));
       for (const f of cardEl.querySelectorAll<HTMLElement>('.fit')) f.classList.toggle('mine', !!c.fits.find((x) => x.id === f.dataset.id)?.selected);
+      // The risk names the plane you would lose (the style guide's MissionCard), on the chosen card.
+      const plane = i === v.selected ? c.fits.find((x) => x.selected)?.name ?? '' : '';
+      const risk = cardEl.querySelector<HTMLElement>('.mc-risk');
+      if (risk) {
+        toggle(risk, plane !== '');
+        text(risk.querySelector<HTMLElement>('[data-risk]')!, plane ? STYLE_TEXT.risk(plane) : '');
+      }
       const exp = cardEl.querySelector<HTMLElement>('.card-expires');
       if (exp) {
         toggle(exp, c.expires !== null);
@@ -185,7 +194,8 @@ export class MissionPanel {
     const key = t.objectives.map((o) => `${o.icon}:${o.label}`).join('|');
     if (key !== this.objectivesKey) {
       this.objectivesKey = key;
-      steps.innerHTML = t.objectives.length > 1 ? t.objectives.map((o) => `<li ${tip(o.label)}>${icon(o.icon, 'icon', o.label)}</li>`).join('') : '';
+      // Each step as a line: its icon and its words (a tick when done), as on the style guide's flight HUD.
+      steps.innerHTML = t.objectives.length > 1 ? t.objectives.map((o) => `<li ${tip(o.label)}><span class="obj-step-icon">${icon(o.icon, 'icon')}${icon('ok', 'icon obj-tick')}</span><span class="obj-step-label">${esc(o.label)}</span></li>`).join('') : '';
     }
     t.objectives.forEach((o, i) => {
       const li = steps.children[i] as HTMLElement | undefined;

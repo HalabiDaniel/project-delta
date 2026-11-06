@@ -1,11 +1,11 @@
-import { attrs, button, card, glyph, stat, tooltipAttrs } from './components';
+import { attrs, button, card, glyph, segmented, stat, tooltipAttrs } from './components';
 import { bind, keyFor, padButtonFor, pair, type Action } from '../input/bindings';
 import { padTemplate, type GlyphSpec } from '../input/glyphs';
 import { attr, bindButton, esc, text, toggle } from './dom';
 import { fmt } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { ACCESS_TEXT, SAY } from './strings';
+import { ACCESS_TEXT, SAY, STYLE_TEXT } from './strings';
 import { TEXT_SCALES, type CaptionMode, type MotionMode } from './access';
 import type { GraphicsPreset } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
@@ -89,10 +89,14 @@ export function sessionStats(s: SessionView): string {
   ].join('')}</div>${s.best !== '—' ? `<div class="session-best" ${attrs(tooltipAttrs('Best performance'))}>${icon('medal')}<span>${esc(s.best)}</span></div>` : ''}`;
 }
 
-/** A setting: its name and a segmented choice (aria-pressed; the chosen one is filled and underlined). */
+/**
+ * A setting as a row (the style guide's Settings screen): its name with a short description
+ * under it, and a segmented choice on the right (aria-pressed; the chosen one is an ink fill).
+ */
 function setting(id: string, iconName: IconName, label: string, tipText: string, items: Array<[string, string]>): string {
-  return `<div class="setting" ${attrs(tooltipAttrs(tipText))}><span class="setting-name">${icon(iconName)}${esc(label)}</span><span class="seg" role="group" aria-label="${esc(label)}" data-u="${id}">${items
-    .map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="false">${esc(l)}</button>`).join('')}</span></div>`;
+  return `<div class="setting" ${attrs(tooltipAttrs(tipText))}><span class="setting-label"><span class="setting-name">${icon(iconName)}${esc(label)}</span><small>${esc(tipText)}</small></span>${segmented({
+    label, id, items: items.map(([value, l]) => ({ value, label: l })),
+  })}</div>`;
 }
 
 const LEVELS: Array<[string, string]> = [['low', 'Low'], ['medium', 'Med'], ['high', 'High']];
@@ -117,21 +121,29 @@ export class Menus {
     this.overlay.innerHTML = card({
       className: 'overlay-card', label: SAY.menu, elevation: 'floating', attrs: { role: 'dialog', 'aria-labelledby': 'menu-title' },
       bodyHtml: /* html */ `
-        <div class="menu-head"><b class="brand">paperwars<span>.io</span></b><small data-u="version"></small><h2 id="menu-title" data-u="title"></h2></div>
+        <div class="menu-head"><h2 id="menu-title" data-u="title"></h2><b class="brand">paperwars<span>.io</span></b><small data-u="version"></small></div>
         <div class="menu-actions">
           ${button({ label: SAY.resume, icon: 'plane', variant: 'primary', key: bind('back', 'pause'), attrs: { 'data-u': 'resume', 'data-nav-default': '' } })}
           ${button({ label: SAY.logbook, icon: 'book', key: bind('logbook'), attrs: { 'data-u': 'logbook' } })}
           ${button({ label: '', icon: 'sound', key: bind('sound'), attrs: { 'data-u': 'sound' } })}
           <a class="ui-button" data-variant="secondary" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter', 'icon ui-icon')}<span class="ui-label">${MULTIPLAYER ? 'Single-player' : 'Multiplayer'}</span></a>
         </div>
-        <section class="menu-section" aria-labelledby="menu-settings"><h3 id="menu-settings">${icon('graphics')}${SAY.settings}</h3>
+        <div class="menu-cols">
+        <section class="menu-section" aria-labelledby="menu-settings"><h3 id="menu-settings">${icon('graphics')}${STYLE_TEXT.game}</h3>
           <div class="settings">
             ${setting('hints', 'info', 'Hints', 'Key hints on the HUD', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']])}
             ${setting('scale', 'distance', 'Size', 'HUD size', [['0.9', 'S'], ['1', 'M'], ['1.15', 'L']])}
             ${setting('gfx', 'graphics', 'Graphics', 'Graphics quality: shadows, decorations and resolution', LEVELS)}
             ${setting('a-theme', 'sun', ACCESS_TEXT.theme.label, ACCESS_TEXT.theme.tip, [['daylight', ACCESS_TEXT.theme.daylight], ['lightsOut', ACCESS_TEXT.theme.lightsOut]])}
           </div>
-          <h3 id="menu-access">${icon('info')}${esc(ACCESS_TEXT.section)}</h3>
+          <div class="settings pad-only">
+            ${setting('pad-invert', 'heading', 'Invert Y', 'Controller: pull back to climb', [['off', 'Off'], ['on', 'On']])}
+            ${setting('pad-stick', 'plane', 'Stick', 'Controller steering sensitivity', LEVELS)}
+            ${setting('pad-camera', 'distance', 'Camera', 'Controller camera sensitivity', LEVELS)}
+          </div>
+          <p class="menu-note">${icon('ok')}${esc(STYLE_TEXT.quickNote)}</p>
+        </section>
+        <section class="menu-section" aria-labelledby="menu-access"><h3 id="menu-access">${icon('info')}${esc(ACCESS_TEXT.section)}</h3>
           <div class="settings access" role="group" aria-labelledby="menu-access">
             ${setting('a-palette', 'graphics', ACCESS_TEXT.palette.label, ACCESS_TEXT.palette.tip, [['standard', ACCESS_TEXT.palette.standard], ['colourblind', ACCESS_TEXT.palette.colourblind]])}
             ${setting('a-text', 'pencil', ACCESS_TEXT.text.label, ACCESS_TEXT.text.tip, TEXT_SCALES.map((t) => [String(t), `${Math.round(t * 100)}%`]))}
@@ -140,12 +152,8 @@ export class Menus {
             ${setting('a-captions', 'sound', ACCESS_TEXT.captions.label, ACCESS_TEXT.captions.tip, [['auto', ACCESS_TEXT.captions.auto], ['on', ACCESS_TEXT.captions.on], ['off', ACCESS_TEXT.captions.off]])}
             ${setting('a-safe', 'distance', ACCESS_TEXT.safeArea.label, ACCESS_TEXT.safeArea.tip, [['off', ACCESS_TEXT.safeArea.off], ['on', ACCESS_TEXT.safeArea.on]])}
           </div>
-          <div class="settings pad-only">
-            ${setting('pad-invert', 'heading', 'Invert Y', 'Controller: pull back to climb', [['off', 'Off'], ['on', 'On']])}
-            ${setting('pad-stick', 'plane', 'Stick', 'Controller steering sensitivity', LEVELS)}
-            ${setting('pad-camera', 'distance', 'Camera', 'Controller camera sensitivity', LEVELS)}
-          </div>
         </section>
+        </div>
         <div data-u="session"></div>
         ${controlsGridHtml(keyboardControls(), 'kbd-only')}
         ${controlsGridHtml(padControls(), 'pad-only')}
