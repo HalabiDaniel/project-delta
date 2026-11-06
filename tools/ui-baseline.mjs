@@ -85,6 +85,20 @@ const HUD_ONLY = ['4k-', '21x9-1440-'];
 async function shot(page, name) {
   if (HUD_ONLY.some((p) => name.startsWith(p))) await page.addStyleTag({ content: '#game { display: none !important; } body { background: #9aa3b5; }' });
   await page.waitForTimeout(900);
+  // Overlays enter with an animation; software rendering is slow enough that a fixed wait can catch
+  // them before they draw. Wait for every finite animation to finish (capped at 8 s).
+  await page.evaluate(() =>
+    Promise.race([
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? Infinity))
+          .map((a) => a.finished.catch(() => {})),
+      ),
+      new Promise((ok) => setTimeout(ok, 8000)),
+    ]),
+  );
+  await page.waitForTimeout(600);
   const file = join(OUT, `${name}.jpg`);
   // One slow frame under software rendering doesn't lose the rest of the run.
   try {
