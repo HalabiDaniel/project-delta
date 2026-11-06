@@ -86,7 +86,14 @@ async function shot(page, name) {
   if (HUD_ONLY.some((p) => name.startsWith(p))) await page.addStyleTag({ content: '#game { display: none !important; } body { background: #9aa3b5; }' });
   await page.waitForTimeout(900);
   const file = join(OUT, `${name}.jpg`);
-  await page.screenshot({ path: file, type: 'jpeg', quality: 85, timeout: 240000 });
+  // One slow frame under software rendering doesn't lose the rest of the run.
+  try {
+    await page.screenshot({ path: file, type: 'jpeg', quality: 85, timeout: 240000 });
+  } catch (e) {
+    console.warn(`  FAILED ${name}: ${e.message.split('\n')[0]}`);
+    failed.push(name);
+    return;
+  }
   shots.push(name);
   console.log(`  ${name}`);
 }
