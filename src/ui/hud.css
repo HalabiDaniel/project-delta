@@ -213,7 +213,7 @@ kbd.pad-hidden { display: none !important; }
 .hud :is(.tl-health, .am-health, .sm-health).ui-bar { width: 32px; min-width: 0; height: 4px; background: var(--marker-track); box-shadow: none; }
 
 .target-indicator { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 2px; translate: -50% -50%; }
-.ti-diamond { width: 15px; height: 15px; rotate: 45deg; border: 3.5px solid var(--pencil-400); outline: 2px solid var(--graphite); background: transparent; }
+.ti-diamond { width: 15px; height: 15px; rotate: 45deg; border: var(--stroke-line) solid var(--pencil-400); outline: var(--stroke-line) solid var(--graphite); background: transparent; }
 .target-indicator[data-tone='home'] .ti-diamond { border-color: var(--friend); border-radius: var(--r-pill); rotate: 0deg; }
 .target-indicator[data-tone='ring'] .ti-diamond { border-color: var(--warn); border-radius: var(--r-pill); }
 .ti-icon { position: absolute; top: -28px; display: grid; place-items: center; width: 22px; height: 22px; border: var(--stroke-line) solid var(--graphite); border-radius: var(--r-pill); background: var(--pencil-400); color: var(--graphite); box-shadow: var(--shadow-hard-sm); }
