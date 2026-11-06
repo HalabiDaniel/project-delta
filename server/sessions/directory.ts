@@ -12,7 +12,7 @@ import { joinable, mayCloseEmpty, needsSpare, quickPick, timeLeft, type SessionS
  * Colyseus to create a room, or passing its own seed or protection time, is refused).
  *
  * One process holds every session for now (v0.0.14 runs one server); matchmaking across servers and
- * regions is v0.0.22.
+ * regions is v0.0.24.
  */
 
 /** What a running session tells the directory about itself. */
