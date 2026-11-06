@@ -237,7 +237,7 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.20) |
 | Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
 | Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
-| Raptor | F-22 | Air superiority | 0.0.16 |
+| Raptor | F-22 | Air superiority | 0.0.15 |
 | Lancer | B-1B Lancer | Supersonic bomber | 0.0.18 |
 | Lightning | F-35 | Stealth multirole | 0.0.20 |
 | Thug | A-10 Thunderbolt II | Ground attack | 0.0.20 |
@@ -305,7 +305,7 @@ The initial control model is arcade-oriented.
 - Left mouse button: Primary weapon.
 - Right mouse button: Secondary weapon or bomb release.
 - Space: Contextual boost, where supported.
-- Trick (Space in flight, A / Cross on a controller) plus a direction: a maneuver (§6.3, from 0.0.15).
+- Trick (Space in flight, A / Cross on a controller) plus a direction: a maneuver (§6.3, from 0.0.16).
 - R: Return or recall when eligible.
 - Escape: Menu.
 
@@ -328,7 +328,7 @@ Aircraft properties may include:
 
 The plane should be easy to control, with automatic stabilization and forgiving behavior at low speeds.
 
-On top of that, aircraft perform **maneuvers** (0.0.15): short scripted moves on one Trick button plus a direction, such as the Crane Flip (brake and flip so a chaser overshoots), Fold Back, Dive Fold and Corkscrew. They are arcade, not realistic: spectacular, readable from outside, limited by charges and entry speed, with no invulnerability. Each aircraft has its own set; fighters get the most.
+On top of that, aircraft perform **maneuvers** (0.0.16): short scripted moves on one Trick button plus a direction, such as the Crane Flip (brake and flip so a chaser overshoots), Fold Back, Dive Fold and Corkscrew. They are arcade, not realistic: spectacular, readable from outside, limited by charges and entry speed, with no invulnerability. Each aircraft has its own set; fighters get the most.
 
 ### 6.4 Returning Home
 
@@ -920,7 +920,7 @@ Up to eight players share a classroom on an authoritative Node + Colyseus server
 
 ### Versions 0.0.10 to 0.0.26: towards the first public release
 
-Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows. Flight maneuvers (0.0.15) and player ranks (0.0.17) were added on 2026-11-06, moving the later versions up by one or two.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows. Flight maneuvers (0.0.16) and player ranks (0.0.17) were added on 2026-11-06, after the HUD revamp (0.0.15), moving the later versions up by two.
 
 ### Version 0.0.10: Player Identity and the Database (closed after phase 3)
 
@@ -942,13 +942,13 @@ Timed sessions of up to 16 players (32 from 0.0.22), several at once; a random f
 
 The whole multiplayer system on the internet (the game on Vercel, the server and database on Railway), invite-only access, a minimal admin endpoint, daily backups with a tested restore, logs and an uptime check, the F8 feedback log, tests at scale, the first online playtest, and a step-by-step setup guide for the developer. See [v0.0.14](roadmap/v0.0.14.md).
 
-### Version 0.0.15: Flight Maneuvers
+### Version 0.0.15: HUD and UI Revamp
 
-Five dogfight maneuvers on one Trick button plus a direction (Crane Flip, Fold Back, Dive Fold, Corkscrew and the Paper Hang), a deterministic track system in the shared flight model, per-aircraft sets and charges, a maneuver camera and effects, a flight-school chapter and contextual prompts, server validation and prediction, and AI aces that use them. See [v0.0.15](roadmap/v0.0.15.md).
+A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. Pencil outlines removed from the 3D world. Raptor finalised. See [v0.0.15](roadmap/v0.0.15.md).
 
-### Version 0.0.16: HUD and UI Revamp
+### Version 0.0.16: Flight Maneuvers
 
-A paper-and-pencil UI design system, a rebuilt flight HUD and management screens, a multiplayer HUD, focus-first controller navigation, device-aware hints, responsive layout and accessibility. Pencil outlines removed from the 3D world. Raptor finalised. See [v0.0.16](roadmap/v0.0.16.md).
+Five dogfight maneuvers on one Trick button plus a direction (Crane Flip, Fold Back, Dive Fold, Corkscrew and the Paper Hang), a deterministic track system in the shared flight model, per-aircraft sets and charges, a maneuver camera and effects, a flight-school chapter and contextual prompts, server validation and prediction, and AI aces that use them. See [v0.0.16](roadmap/v0.0.16.md).
 
 ### Version 0.0.17: Player Ranks
 

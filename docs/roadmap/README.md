@@ -12,9 +12,10 @@ versions now come straight after v0.0.11 so the game goes online early (v0.0.12 
 admin dashboard version comes before the release candidate (now v0.0.25), and the earlier plans for
 v0.0.12 to v0.0.20 moved to what were then v0.0.15 to v0.0.24.
 
-**Two versions added on 2026-11-06:** flight maneuvers (v0.0.15) and player ranks (v0.0.17), placed
-early so every later version builds on them (see [the decisions](#decisions-of-2026-11-06)). The
-versions after v0.0.14 moved up: the HUD revamp is now v0.0.16 and the release candidate v0.0.26.
+**Two versions added on 2026-11-06:** flight maneuvers (v0.0.16) and player ranks (v0.0.17), placed
+early so every later version builds on them (see [the decisions](#decisions-of-2026-11-06)). The HUD
+revamp (v0.0.15) was already in progress and keeps its number; the versions after it moved up by
+two, so audio is now v0.0.18 and the release candidate v0.0.26.
 
 ## Version numbering
 
@@ -39,8 +40,8 @@ not because the code compiles. Working features from earlier versions are preser
 | [v0.0.12](v0.0.12.md) | Persistent, portable bases | **Done (all six phases, 2026-11-05)**; the developer plays the retune at the checkpoint. A base belongs to the player and is placed on any desk; every paper change through the ledger; production only while online; dearer planes and slower paper; saved planes, missions and progress; fairness timers that survive restarts; usernames and "{username}'s desk". |
 | [v0.0.13](v0.0.13.md) | Sessions | **Done (all seven phases, 2026-11-05)**; the developer confirms the provisional timers. Timed sessions with a capacity, several at once; random desk placement; the territory lifecycle (draining, empty, open, AI-held); raids that finish even if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and logs. |
 | [v0.0.14](v0.0.14.md) | **Going live** | **Phases 1 to 6 coded (2026-11-05); the developer follows the [setup guide](../SERVER_SETUP.md), then the online playtest.** **The whole multiplayer system on the internet:** the server and database on Railway, the game on Vercel, invite-only access, a minimal admin endpoint, daily backups with a tested restore, logs and an uptime check, the F8 feedback log, tests at scale, the first online playtest, and a **step-by-step setup guide for the developer**. |
-| [v0.0.15](v0.0.15.md) | **Flight maneuvers** | *Added 2026-11-06.* Five dogfight moves on one Trick button plus a direction: the **Crane Flip** (brake and flip so the chaser overshoots), Fold Back, Dive Fold, Corkscrew and the Paper Hang. Per-aircraft sets and charges, a maneuver camera, flight-school chapter and prompts, server-validated and predicted, used by AI aces. |
-| [v0.0.16](v0.0.16.md) | HUD and UI revamp | A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. Pencil outlines removed from the 3D world; Medium as the default preset. Raptor finalised. |
+| [v0.0.15](v0.0.15.md) | HUD and UI revamp | **In progress.** A paper-and-pencil UI design system, rebuilt HUD and management screens, focus-first controller navigation, responsive layout and accessibility. Pencil outlines removed from the 3D world; Medium as the default preset. Raptor finalised. |
+| [v0.0.16](v0.0.16.md) | **Flight maneuvers** | *Added 2026-11-06.* Five dogfight moves on one Trick button plus a direction: the **Crane Flip** (brake and flip so the chaser overshoots), Fold Back, Dive Fold, Corkscrew and the Paper Hang. Per-aircraft sets and charges, a maneuver camera, flight-school chapter and prompts, server-validated and predicted, used by AI aces. |
 | [v0.0.17](v0.0.17.md) | **Player ranks** | *Added 2026-11-06.* Cosmetic-only ranks from **Loose Leaf** to **Head of the Class** (12 tiers, 34 ranks, then Honor Roll stars), earned as Merit on the server through an idempotent ledger; insignia, profile cards, titles, pennants, trails and auras; promotions that never interrupt a fight. |
 | [v0.0.18](v0.0.18.md) | Audio and music revamp | Audio buses and mixing, positional audio, adaptive music and a paper-themed sound library. Lancer finalised. |
 | [v0.0.19](v0.0.19.md) | Menus, settings and branding | Logo and branding, main menu, the session lobby, full settings with rebinding, loading screens and a first-launch flow. |
@@ -64,7 +65,7 @@ mode:
 |---|---|
 | v0.0.11 | In the game: Swift (starter and emergency plane), Falcon, Dart, Widewing, Raptor, Lancer, Lightning, Thug, Ghost, Specter, Jumper |
 | v0.0.12 | Every aircraft dearer to fold (the developer tunes stats later) |
-| v0.0.16 | Raptor finalised |
+| v0.0.15 | Raptor finalised |
 | v0.0.18 | Lancer finalised |
 | v0.0.20 | Lightning (with the stealth system) and Thug finalised |
 | v0.0.21 | Ghost and Specter finalised |
@@ -75,20 +76,21 @@ mode:
 1. **Online first.** v0.0.12 to v0.0.14 finish the multiplayer server for the new design and put
    it on the internet, so the developer and a friend play from their homes and every later
    version is tested online.
-2. **Maneuvers straight after going live** (v0.0.15): they change how every fight plays, so they
-   are tested online first, and the HUD, audio, stunt missions, medals and AI of later versions
-   are built with them in place.
-3. **Presentation next** (v0.0.16 to v0.0.19): the UI, audio and menus are built around the
-   finished input model (v0.0.11), the maneuvers and the session flow (v0.0.13). **Player ranks
-   (v0.0.17)** sit inside it: right after the design system they are drawn with, and before the
-   audio (the promotion fanfare) and the lobby (profile cards) that show them.
-4. **The economy (v0.0.20) comes before advanced multiplayer (v0.0.21)** because bounties, escorts,
+2. **The HUD revamp first** (v0.0.15, in progress): every later screen and HUD element, including
+   the maneuver HUD and the rank cards, is built from its design system.
+3. **Maneuvers and ranks straight after it** (v0.0.16, v0.0.17): maneuvers change how every fight
+   plays, so they are tested online early and the audio, stunt missions, medals and AI of later
+   versions are built with them in place; ranks use the design system for their cards and come
+   before the audio (the promotion fanfare) and the lobby (profile cards) that show them.
+4. **Presentation continues** (v0.0.18, v0.0.19): audio and menus, built around the finished input
+   model (v0.0.11), the maneuvers and the session flow (v0.0.13).
+5. **The economy (v0.0.20) comes before advanced multiplayer (v0.0.21)** because bounties, escorts,
    challenges and raid losses depend on the final resource set.
-5. **Scale (v0.0.22) after the systems it scales:** 32-player sessions, regions and helicopters.
-6. **Public-facing systems come late** (v0.0.24), so accounts, matchmaking and moderation are built
+6. **Scale (v0.0.22) after the systems it scales:** 32-player sessions, regions and helicopters.
+7. **Public-facing systems come late** (v0.0.24), so accounts, matchmaking and moderation are built
    for the finished game, followed by **the admin dashboard (v0.0.25)** to run them, before
    strangers arrive.
-7. **The cosmetic shop is built in v0.0.26 but stays disabled** until retention is proven after the
+8. **The cosmetic shop is built in v0.0.26 but stays disabled** until retention is proven after the
    public release (GDD §14).
 
 ## What the developer supplies
@@ -98,8 +100,8 @@ mode:
 | v0.0.12 | Approval of the price and production retune, the username rules and the goofy desk names (all approved 2026-11-05; the retune is confirmed by playing it at the phase 3 checkpoint) |
 | v0.0.13 | Approval of the session length and capacity, the lifecycle timers, the arrival grace and the combat window (all provisional in `src/config.ts`) |
 | v0.0.14 | Railway, Cloudflare and UptimeRobot accounts (following the setup guide), the invited friend, the online playtest, a real controller and two test computers |
-| v0.0.15 | Approval of the maneuver names, inputs and per-aircraft sets; flying every move on keyboard and a real controller; an online dogfight with the friend |
-| v0.0.16 | Approval of the UI style and icon set |
+| v0.0.15 | Approval of the UI style and icon set |
+| v0.0.16 | Approval of the maneuver names, inputs and per-aircraft sets; flying every move on keyboard and a real controller; an online dogfight with the friend |
 | v0.0.17 | Approval of the rank names, rewards, titles and Merit curve; insignia and card designs (or art) |
 | v0.0.18 | Commissioned or licensed music and sound effects, with licences |
 | v0.0.19 | Logo, branding approval, credits list |
@@ -130,7 +132,7 @@ The developer's answers at v0.0.10's checkpoint and after v0.0.11, and where eac
 | Damaging bases | Only through a raid card; raids can be bombing, a strike on infrastructure, or a challenge to a dogfight that costs paper if declined | v0.0.21 |
 | Teams | Free-for-all for now; alliances that last only for a session; escorting real players | v0.0.21 |
 | PvP values | Kept for the alpha, tuned from the playtests and the feedback log | v0.0.14 onward |
-| Look | No pencil strokes or borders: the normal 3D look | v0.0.16 |
+| Look | No pencil strokes or borders: the normal 3D look | v0.0.15 |
 | Synty | Not bought; the developer's own models cover the main assets | v0.0.11 |
 | Hosting | The game on Vercel, the server and database on Railway (cheap, reliable, WebSockets), movable later | v0.0.14 |
 | Accounts | Guests and signed-in players play together | v0.0.24 |
@@ -143,6 +145,6 @@ The developer asked for two new versions, early in the roadmap:
 
 | Topic | Decision | Built in |
 |---|---|---|
-| Maneuvers | Big, easy dogfight moves for fast planes, not realistic physics: brake hard, flip, end up behind the chaser (the feel of the Su-57 in *Top Gun: Maverick*). Several moves, each easy to know how to do: one Trick button plus a direction | v0.0.15 |
+| Maneuvers | Big, easy dogfight moves for fast planes, not realistic physics: brake hard, flip, end up behind the chaser (the feel of the Su-57 in *Top Gun: Maverick*). Several moves, each easy to know how to do: one Trick button plus a direction | v0.0.16 |
 | Player ranks | Ranks that keep going up, like soldier ranks, with creative game-themed names instead of military ones; cosmetic only (effects, profile cards, aura), nothing extra in the game | v0.0.17 |
-| Placement | Maneuvers right after going live; ranks right after the HUD revamp. The versions after v0.0.14 move up (v0.0.15 → v0.0.16 up to v0.0.24 → v0.0.26) | 2026-11-06 |
+| Placement | Both right after the HUD revamp (v0.0.15, already in progress, keeps its number): maneuvers v0.0.16, ranks v0.0.17. The versions after them move up by two (v0.0.16 → v0.0.18 up to v0.0.24 → v0.0.26) | 2026-11-06 |

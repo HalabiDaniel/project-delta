@@ -1913,7 +1913,9 @@ The road to the first public release is planned version by version in
 | [v0.0.12](docs/roadmap/v0.0.12.md) | Persistent, portable bases |
 | [v0.0.13](docs/roadmap/v0.0.13.md) | Sessions and the territory lifecycle |
 | [v0.0.14](docs/roadmap/v0.0.14.md) | Going live: the multiplayer server on the internet, with a setup guide |
-| [v0.0.16](docs/roadmap/v0.0.16.md) | HUD and UI revamp |
+| [v0.0.15](docs/roadmap/v0.0.15.md) | HUD and UI revamp (in progress) |
+| [v0.0.16](docs/roadmap/v0.0.16.md) | Flight maneuvers (added 2026-11-06) |
+| [v0.0.17](docs/roadmap/v0.0.17.md) | Player ranks (added 2026-11-06) |
 | [v0.0.18](docs/roadmap/v0.0.18.md) | Audio and music revamp |
 | [v0.0.19](docs/roadmap/v0.0.19.md) | Menus, settings and branding |
 | [v0.0.20](docs/roadmap/v0.0.20.md) | Economy and content depth |
