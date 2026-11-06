@@ -599,7 +599,7 @@ readability on real hardware still need playtesting.
 ### Known limitations
 
 - Sessions live in memory on one server process: no accounts, persistence or campaign yet
-  (persistence from v0.0.10 to v0.0.13, accounts in v0.0.24). A server restart ends every session.
+  (persistence from v0.0.10 to v0.0.13, accounts in v0.0.26). A server restart ends every session.
 - Eight claimable desks in the 3 × 3 classroom; more territory slots come with the world expansion.
 - Homes are dressed without the Home Desk landmark and tall props (the server doesn't know their
   collision shapes); remote planes don't show bomb racks or the fold animation.
@@ -1920,11 +1920,13 @@ The road to the first public release is planned version by version in
 | [v0.0.19](docs/roadmap/v0.0.19.md) | Menus, settings and branding |
 | [v0.0.20](docs/roadmap/v0.0.20.md) | Economy and content depth |
 | [v0.0.21](docs/roadmap/v0.0.21.md) | Advanced multiplayer |
-| [v0.0.22](docs/roadmap/v0.0.22.md) | World scale and environments |
-| [v0.0.23](docs/roadmap/v0.0.23.md) | Customization and social |
-| [v0.0.24](docs/roadmap/v0.0.24.md) | Public readiness |
-| [v0.0.25](docs/roadmap/v0.0.25.md) | Admin dashboard |
-| [v0.0.26](docs/roadmap/v0.0.26.md) | Release candidate |
+| [v0.0.22](docs/roadmap/v0.0.22.md) | Maps: nine indoor and outdoor maps (added 2026-11-06) |
+| [v0.0.23](docs/roadmap/v0.0.23.md) | World conditions: fans, wind, rain, day and night, lights out (added 2026-11-06) |
+| [v0.0.24](docs/roadmap/v0.0.24.md) | World scale |
+| [v0.0.25](docs/roadmap/v0.0.25.md) | Customization and social |
+| [v0.0.26](docs/roadmap/v0.0.26.md) | Public readiness |
+| [v0.0.27](docs/roadmap/v0.0.27.md) | Admin dashboard |
+| [v0.0.28](docs/roadmap/v0.0.28.md) | Release candidate |
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
 The roadmap was reorganised on 2026-11-02 around portable bases and timed sessions (the

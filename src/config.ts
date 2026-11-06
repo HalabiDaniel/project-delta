@@ -1070,7 +1070,7 @@ export const TERRITORY_LIFECYCLE = {
 export const SESSION = {
   /** How long a session lasts (seconds). */
   length: 3600,
-  /** Players per session: one per desk (16 now; 32 once the larger classrooms arrive in v0.0.22). */
+  /** Players per session: one per desk (16 now; 32 once the larger classrooms arrive in v0.0.24). */
   capacity: 16,
   /** Everyone is warned this long before the end (seconds). */
   warnings: [600, 120, 30] as readonly number[],

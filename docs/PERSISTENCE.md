@@ -211,7 +211,7 @@ behaviour rather than tables:
 | ~~`buildings`~~ | Replaced in v0.0.12 by `bases` and `base_buildings` (migration 0004): bases belong to players, not desks | ~~Phase 4~~ |
 | `bases` | One per player: format, paper store health, the base's record, where it stands (holder, desk, lease) | v0.0.12 |
 | `base_buildings` | Player, slot, kind, level, health, the rules' own fields | v0.0.12 |
-| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.23; a trigger makes destroyed final | v0.0.12 |
+| `aircraft` | Type, status (ready, airborne, damaged, in repair, destroyed), health, loadout, empty customisation for v0.0.25; a trigger makes destroyed final | v0.0.12 |
 | `missions` | Template, state, card as generated, offered and resolved times, outcome, reward | v0.0.12 |
 | `progress` | Statistics, unlocks, the mission director's state; the garage (0005); protections as clock times (0006) | v0.0.12 |
 | `pvp_records` | Raids and kills, for cooldowns, the repeat rule and kill-farming windows | v0.0.12 |
@@ -496,7 +496,7 @@ kill-farming window follow the players from session to session.
   claim screen; their base is placed once they have one. The server's reason is shown as it is
   ("That username is taken. Try another.").
 - Ownership never depends on it: players are still their UUID and public id. Accounts with sign-in
-  (v0.0.24) keep the username.
+  (v0.0.26) keep the username.
 
 **Desk names.** Every desk is named after whoever holds it: "Daniel's desk" for a player, and for
 the AI a goofy name from `DESK_NAMES` in `src/config.ts`, picked per session ("Billy's desk"),

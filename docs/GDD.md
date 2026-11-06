@@ -49,7 +49,7 @@ As players accumulate resources, their available strategic options increase. A d
 
 The game takes place in a miniature world inspired by school supplies, paper airplanes, and classroom objects.
 
-The initial playable environments may use abstract floating square territories, but later environments can feature classrooms, bedrooms, desks, bookshelves, pencil cases, and other oversized everyday objects.
+The initial playable environments may use abstract floating square territories, but later environments can feature classrooms, bedrooms, desks, bookshelves, pencil cases, and other oversized everyday objects. From 0.0.22 the game has nine maps, each one room or area, indoor (classroom, science lab, library, cafeteria, gym, bedroom) or outdoor (playground, backyard, rooftop); from 0.0.23 they have world conditions: fans whose blades destroy planes, moving air, rain and sprinklers that soak paper, day and night, and lights out.
 
 Aircraft resemble folded paper creations rather than conventional metal airplanes.
 
@@ -243,13 +243,13 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Thug | A-10 Thunderbolt II | Ground attack | 0.0.20 |
 | Ghost | B-2 Spirit | Stealth bomber | 0.0.21 |
 | Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.21 |
-| Jumper | AV-8B Harrier | VTOL fighter | 0.0.22 |
-| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.22 |
-| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.23 |
+| Jumper | AV-8B Harrier | VTOL fighter | 0.0.24 |
+| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.24 |
+| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.25 |
 
-New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.20), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.22), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
+New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.20), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.24), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
 
-Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.24).
+Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.26).
 
 ### 5.4 Aircraft Costs
 
@@ -918,9 +918,9 @@ Built in reviewable phases with developer checkpoints: (1) visual vertical slice
 
 Up to eight players share a classroom on an authoritative Node + Colyseus server: they join an ongoing session, claim one of eight territories as their base (the centre stays the AI's), and fly together. The server runs single-player's rule classes for every player (economy, base, mission board, sortie) and decides every position, hit, kill, balance and reward; clients send input frames and commands, predict their own plane and interpolate everyone else's. Player-versus-player combat with kill and assist credit and bounties that can't be farmed; raid missions against eligible player bases with capped losses above the protected reserve, new-player protection, shields, cooldowns and decaying rewards; defenders warned, given an interception card and backed by their guns; rival missions (raid, scout, shoot down, intercept) alongside each player's own board; names, tags, a scoreboard, a kill feed and emotes (no chat); reconnection with a grace period. Sessions live in memory. Built in eight reviewable phases with bots and a load test; see [MULTIPLAYER.md](MULTIPLAYER.md).
 
-### Versions 0.0.10 to 0.0.26: towards the first public release
+### Versions 0.0.10 to 0.0.28: towards the first public release
 
-Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows. Flight maneuvers (0.0.16) and player ranks (0.0.17) were added on 2026-11-06, after the HUD revamp (0.0.15), moving the later versions up by two.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows. Flight maneuvers (0.0.16) and player ranks (0.0.17) were added on 2026-11-06, after the HUD revamp (0.0.15), and maps (0.0.22) and world conditions (0.0.23) the same day, moving the later versions up.
 
 ### Version 0.0.10: Player Identity and the Database (closed after phase 3)
 
@@ -936,7 +936,7 @@ A base belongs to the player and travels with them: buildings, levels, damage, h
 
 ### Version 0.0.13: Sessions
 
-Timed sessions of up to 16 players (32 from 0.0.22), several at once; a random free desk on every join; the territory lifecycle (draining, empty, open, AI-held, with players replacing AI desks at once); raids that finish normally if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and structured logs. See [v0.0.13](roadmap/v0.0.13.md).
+Timed sessions of up to 16 players (32 from 0.0.24), several at once; a random free desk on every join; the territory lifecycle (draining, empty, open, AI-held, with players replacing AI desks at once); raids that finish normally if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and structured logs. See [v0.0.13](roadmap/v0.0.13.md).
 
 ### Version 0.0.14: Going Live
 
@@ -970,29 +970,37 @@ Ink and rubber balls as real resources (§4.2), upkeep and caps against snowball
 
 AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.21](roadmap/v0.0.21.md).
 
-### Version 0.0.22: World Scale and Environments
+### Version 0.0.22: Maps
 
-Sessions of up to 32 players on larger layouts, new environments (bedroom, library, art room), interest-based network updates (§16.4), regional servers, level of detail and a hover flight mode, with the Jumper's hover and the Wasp and Hawk helicopters completing the thirteen aircraft. See [v0.0.22](roadmap/v0.0.22.md).
+The classroom becomes one map of nine, each one room or area with 16 territories: six indoor (classroom, science lab, library, cafeteria, gym, bedroom) and three outdoor (playground, backyard, rooftop). A data-driven map framework, furniture to fly through (gaps sized against each plane), cover from defenses, sessions on any map with portable bases placed on its territories, and missions, AI and defenses on every map. See [v0.0.22](roadmap/v0.0.22.md).
 
-### Version 0.0.23: Customization and Social
+### Version 0.0.23: World Conditions
 
-Cosmetic-only aircraft and desk customization (§5.6), earned cosmetics, an inventory, friends and optional persistent squads. See [v0.0.23](roadmap/v0.0.23.md).
+The maps come alive with conditions unrelated to combat: one airflow system (updrafts, crosswinds, outdoor gusts), ceiling and small fans whose blades destroy planes instantly, rain showers that come and go and soak planes (heavier handling, a limited life), rare indoor sprinklers and garden sprinklers, day and night outdoors, lights out indoors with lit bases and night vision on a few planes, bursting lab beakers, Bunsen burners, birds and fog, all scheduled and announced by a conditions director. See [v0.0.23](roadmap/v0.0.23.md).
 
-### Version 0.0.24: Public Readiness
+### Version 0.0.24: World Scale
 
-Accounts alongside guests, matchmaking across servers and regions, sessions at scale (timed sessions and portable bases replace the seven-day campaigns of §3.3), moderation as server APIs, abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.24](roadmap/v0.0.24.md).
+Sessions of up to 32 players on larger layouts of every map, interest-based network updates (§16.4), regional servers, level of detail and a hover flight mode, with the Jumper's hover and the Wasp and Hawk helicopters completing the thirteen aircraft. See [v0.0.24](roadmap/v0.0.24.md).
 
-### Version 0.0.25: Admin Dashboard
+### Version 0.0.25: Customization and Social
 
-A secure admin web app with roles, two-factor sign-in and an audit log: live sessions and server health, player support with paper history, the moderation queue, feedback, the economy, LiveOps (events, news, patch notes, maintenance) and backups. See [v0.0.25](roadmap/v0.0.25.md).
+Cosmetic-only aircraft and desk customization (§5.6), earned cosmetics, an inventory, friends and optional persistent squads. See [v0.0.25](roadmap/v0.0.25.md).
 
-### Version 0.0.26: Release Candidate
+### Version 0.0.26: Public Readiness
 
-Cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests (and possibly a tutorial mode), a browser matrix, support channels and a feature freeze. See [v0.0.26](roadmap/v0.0.26.md).
+Accounts alongside guests, matchmaking across servers and regions, sessions at scale (timed sessions and portable bases replace the seven-day campaigns of §3.3), moderation as server APIs, abuse prevention, privacy-light analytics, legal compliance and scalable infrastructure. See [v0.0.26](roadmap/v0.0.26.md).
+
+### Version 0.0.27: Admin Dashboard
+
+A secure admin web app with roles, two-factor sign-in and an audit log: live sessions and server health, player support with paper history, the moderation queue, feedback, the economy, LiveOps (events, news, patch notes, maintenance) and backups. See [v0.0.27](roadmap/v0.0.27.md).
+
+### Version 0.0.28: Release Candidate
+
+Cosmetic shop infrastructure behind a disabled flag, a tutorial retuned from playtests (and possibly a tutorial mode), a browser matrix, support channels and a feature freeze. See [v0.0.28](roadmap/v0.0.28.md).
 
 ### Version 0.1.0: First Public Release (Public Alpha)
 
-After 0.0.26, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
+After 0.0.28, staged testing rounds (developer and friend, a small invited group, a larger closed test); only their fixes and balance changes ship as 0.1.0. See [v0.1.0](roadmap/v0.1.0.md).
 
 Version numbering from here: 0.1.x are small improvements, 0.x.0 are major versions, and 1.0.0 is the first full version. Cosmetic monetization (§14) is enabled in a later major version, only after the core gameplay and retention have been validated.
 

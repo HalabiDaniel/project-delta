@@ -418,8 +418,8 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 ## Known limitations
 
 - **Single server process.** Every session runs in one process (on Railway since v0.0.14: see [SERVER_SETUP.md](SERVER_SETUP.md));
-  matchmaking across servers and regions is v0.0.24. Accounts are v0.0.24.
-- **Sixteen desks, sixteen players**: 32-player sessions need the larger classrooms of v0.0.22.
+  matchmaking across servers and regions is v0.0.26. Accounts are v0.0.26.
+- **Sixteen desks, sixteen players**: 32-player sessions need the larger classrooms of v0.0.24.
 - Remote planes are drawn without their bomb racks or the fold animation on the pad; homes are
   dressed without the Home Desk landmark and tall props, because the server doesn't know their
   collision shapes.
