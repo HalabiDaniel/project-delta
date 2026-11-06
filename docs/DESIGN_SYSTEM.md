@@ -23,6 +23,7 @@ adds it here and to the gallery; it does not build one ad hoc.
 | `src/input/glyphs.ts` | Glyph labels per device, `glyphText()`, `applyGlyphs()`, `DIALOG_KEYS` |
 | `src/input/Controls.ts` | Wires keyboard and controller to the focus manager |
 | `src/ui/gallery/Gallery.ts` | The `?ui-gallery` page |
+| `src/ui/locale/en.ts`, `src/ui/strings.ts`, `src/ui/format.ts` | The English dictionary, the dictionary in use (`T`, `SAY`, …, pseudo-localisation) and the number formats (section 11) |
 
 ---
 
@@ -291,6 +292,7 @@ stay in node.
 | `src/ui/components.test.ts` | Every component in every state, roles and names, no literal text, escaping, tabs, glyph selection and live switching, `ConfirmDialog` |
 | `src/input/focus.test.ts` | Directional moves, overrides, reachability, re-identification, panel and screen restore, modal trap, tabs, pages, tooltips, Controls wiring |
 | `src/input/input.test.ts` | `pickInDirection`, stick navigation, hints (v0.0.11) |
+| `src/ui/localisation.test.ts` | No literal text in `src/ui` and `src/mp` (allowlist in section 11), every key has English, pseudo-localisation keeps placeholders, locale overrides, format functions |
 
 ---
 
@@ -389,3 +391,71 @@ own 3D world and models.
 
 The fonts are bundled by Vite (about 83 kB of woff2; woff fallbacks are emitted but not fetched by
 current browsers); nothing is loaded from Google at run time.
+
+## 11. Localisation (phase 7)
+
+Every word the interface shows comes from one keyed dictionary; numbers come from format
+functions. Translations are not part of v0.0.15, but adding one needs no code changes.
+
+| Piece | Where | What |
+|---|---|---|
+| English base | `src/ui/locale/en.ts` | `en`: sections (`say`, `confirm`, `menus`, `logbook`, `base`, `lobby`, `mpHud`, `mpViews`, …) of keys → a string, or a function of its arguments that returns one. Plurals and word order live inside the function (`repairs: (n) => …`), so a language can change both |
+| The dictionary in use | `src/ui/strings.ts` | `T` (the whole dictionary), `t('menus.hints', …args)` (by dotted key), and the older views `SAY`, `CONFIRM_TEXT`, `TIP_TEXT`, `ACCESS_TEXT`, `STYLE_TEXT`, `MAP_TEXT`, `MISSION_TYPE_LABELS`, … which are parts of `T`. `ICON_NAMES` (`icons.ts`), the failure texts (`reportText.ts`), `KEYBOARD_LABELS` words, `PRESENCE_LABELS` read from it too |
+| A locale | `src/ui/locale/<code>.ts` | `export default { say: { launch: '…' }, … } satisfies LocaleDictionary`: any part of `en`; missing keys (or a value of the wrong kind) stay English. Found by `import.meta.glob`, chosen with `?lang=<code>` or the `paperwars.lang` localStorage entry. None exist yet |
+| Numbers | `src/ui/format.ts` | `count`, `paper`, `num`, `fixed`, `fmt` (1.2k), `signed`, `pct`, `percent`, `clock`, `longClock`, `seconds`, `minutes`, `minutesLong`, `metres`, `km`, `speed`, `times`, `compass`, `date`, `timeOfDay`. Digits and decimal marks from `Intl.NumberFormat` for `LOCALE` (each takes a `locale` argument), no grouping (tabular HUD numbers); unit words from `T.units`. English output is what it was before |
+| Pseudo-localisation | `?pseudo`, or `paperwars.pseudo()` / `paperwars.pseudo(false)` in the console (reloads) | Every dictionary string accented, about 40 % longer and bracketed: "Fold the Swift" → "[Ƒöļð ţĥé Šŵîƒţ ···]". `{control}` names, markup, entities and a function's arguments are kept as they are; `T.keys` (key caps the glyph layer matches) and `T.units` are left alone. The gallery (`?ui-gallery&pseudo`) stretches its sample text in the DOM (`pseudoDom`) |
+
+**Adding a string.** Put it in `en.ts` under the component's section (sentence case, the game's
+short classroom words; a function when it has numbers, names or a plural), read it as
+`T.section.key` (or a view such as `SAY.key`), escape it with `esc()` in HTML, and pass numbers
+through `format.ts` first (`T.base.paperStore(pct(health))`). Never build a sentence from pieces
+in the component: a name inside a sentence is an argument (`T.mpHud.raiding(who)`); markup around a
+word is put back after escaping (`Lobby.ts` `bold`, `MpHud.ts` `around`). Never compare shown text
+in logic: compare ids and keys (the report's title is the failure's own headline, not cut out of the
+mission line; the fit letters are by aircraft id).
+
+**The check.** `src/ui/localisation.test.ts` scans every `.ts` file in `src/ui` and `src/mp` (a
+small lexer in `src/ui/literalScan.ts`: text between tags, the attributes a tooltip or screen reader
+reads, and strings that read as words) and fails on literal text. Console and error messages are
+ignored. Skipped files and allowlisted literals, each with its reason:
+
+| Skipped / allowed | Why |
+|---|---|
+| `ui/DevPanel.ts` | the developer panel (`` ` `` or `?dev`), not player UI |
+| `ui/PerfOverlay.ts` | the `?perf` overlay, developer only |
+| `ui/gallery/Gallery.ts` | the `?ui-gallery` page, developer only; its sample labels are stretched by `?pseudo` in the DOM |
+| `ui/locale/en.ts`, `ui/strings.ts`, `ui/literalScan.ts` | the dictionary, its machinery and the scanner |
+| `ui/tokens.ts`: font stacks | CSS, not text |
+| `mp/MultiplayerGame.ts`: `'already claimed'` | the server's refusal code, compared and never shown |
+| `mp/MultiplayerGame.ts`: `'npm run server'` | a shell command (the no-local-server note), the same in every language |
+
+The same test checks that every key has an English value, that pseudo-localisation reaches every
+string and keeps placeholders and arguments, that a locale overrides any part, and the format
+functions in English and other locales. Brand marks (`paperwars.io`, the version) and key-cap
+names (`Esc`, `Space`, `F8`) are not words to translate.
+
+**No text in images or icons.** The icons are SVG line drawings (Lucide and the game's own), with
+their names in `T.icon` for tooltips and screen readers; the textures are drawn without text
+(`src/render/shading/textures.ts`); the mini-map writes only desk ids (T1…); the loading screen
+and the boot error are HTML text from the dictionary.
+
+**Layout with longer text.** Checked with `?pseudo` at 1080p and 720p and in the gallery
+(screenshots in [checkpoints/0.0.15-pseudo/](checkpoints/0.0.15-pseudo/)). Text wraps rather than
+clipping. Fixed for it: the mini-map's compass badge grows from a circle into a pill
+(`.mm-n`: `min-width`, no fixed width); tab lists wrap onto a second row (`.ui-tablist`), so the
+logbook's Close button stays on the title row; the pause menu's height limit now leaves room for its
+padding (`.overlay-card`, as the logbook's), so at 720p a taller menu scrolls inside the card instead
+of running off the screen (this was a few pixels too tall in English at 720p as well). Everything
+else (cards, chips, buttons, tables, the lobby, the report) already wrapped; table headers and the
+mission cards' fit letters take a second line. No ellipsis was added. Not checked in a live
+session: the in-game multiplayer HUD (no game server here); its components are in the gallery.
+
+**Gaps (outside `src/ui` and `src/mp`, or the server).** Text that still comes in English from
+elsewhere: aircraft names, roles and taglines, threat and tier labels, desk names (`src/config.ts`),
+mission titles, briefings and the tutorial (`src/missions`, `src/progress`), director modifiers and
+world events (`src/director`), single-player alerts and tips and the SP report lines
+(`src/Game.ts`), username problems (`src/net/Username.ts`) and the server's refusals and notices
+(`server/`: claim, username, feedback, restart and kick texts, sent as words, not codes; tests
+match them). The fonts are the latin subsets, so letters outside Western European languages (and
+some pseudo accents) fall back to the system font; a locale beyond them adds the `latin-ext` (or
+other) subsets in `src/ui/fonts.ts`.
