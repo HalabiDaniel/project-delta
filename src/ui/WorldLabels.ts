@@ -1,6 +1,7 @@
 import { attr, place, text, toggle, width, type ScreenPoint } from './dom';
 import { level, metres } from './format';
-import { icon } from './icons';
+import { bar } from './components';
+import { icon, ICON_NAMES } from './icons';
 import { STATE_LABELS } from './strings';
 import type { HudView, TargetLabelView, TerritoryLabel } from './views';
 
@@ -23,7 +24,7 @@ export class WorldLabels {
       /* html */ `
       <div class="labels" data-w="labels"></div>
       <div class="target-labels" data-w="target-labels"></div>
-      <div class="target-indicator" data-w="target"><span class="ti-arrow" data-w="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-icon" data-w="ti-icon"></span><b class="ti-dist" data-w="ti-dist"></b></div>
+      <div class="target-indicator" role="img" data-w="target"><span class="ti-arrow" data-w="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-icon" data-w="ti-icon"></span><b class="ti-dist num" data-w="ti-dist"></b></div>
       <div class="reticle nose" data-w="nose"><span class="hit-x"></span></div>
       <div class="reticle aim" data-w="aim"></div>
       <div class="pops" data-w="pops"></div>`,
@@ -85,7 +86,7 @@ export class WorldLabels {
     el.classList.toggle('offscreen', !t.onScreen);
     el.classList.toggle('near', t.onScreen && t.near);
     attr(el, 'data-tone', t.tone);
-    el.title = t.label;
+    attr(el, 'aria-label', t.label);
     this.el['ti-arrow'].style.transform = `rotate(${t.angle}rad)`;
     text(this.el['ti-dist'], metres(t.distance));
     const iconEl = this.el['ti-icon'];
@@ -108,7 +109,8 @@ export class WorldLabels {
       if (el.dataset.key !== key) {
         el.dataset.key = key;
         const state = label.state !== 'peaceful' ? icon(STATE_ICONS[label.state], 'icon', STATE_LABELS[label.state]) : '';
-        el.innerHTML = `${label.role === 'home' ? icon('home') : ''}<b>${label.id}</b>${state}`;
+        // Role is shape as well as colour: a house for home, a diamond for the objective.
+        el.innerHTML = `${label.role === 'home' ? icon('home') : label.role === 'objective' ? '<i class="tl-diamond"></i>' : ''}<b>${label.id}</b>${state}`;
         el.className = `territory-label ${label.role} state-${label.state}`;
       }
       el.style.transform = `translate(${label.x}px, ${label.y}px)`;
@@ -125,7 +127,8 @@ export class WorldLabels {
       if (!el) {
         el = document.createElement('div');
         el.className = 'target-label';
-        el.innerHTML = `<span class="tl-icon"></span><span class="tl-health"><i></i></span>`;
+        el.setAttribute('role', 'img');
+        el.innerHTML = `<span class="tl-icon"></span>${bar({ value: 1, label: ICON_NAMES.health, size: 'mini', className: 'tl-health' })}`;
         this.el['target-labels'].appendChild(el);
         this.targetEls.set(t.id, el);
       }
@@ -135,13 +138,13 @@ export class WorldLabels {
         iconEl.dataset.icon = iconKey;
         iconEl.innerHTML = icon(iconKey);
       }
-      el.title = `${t.name} · ${t.role}`;
+      attr(el, 'aria-label', `${t.name} · ${t.role}`);
       el.classList.toggle('mission', t.mission);
       attr(el, 'data-state', t.state ?? 'none');
       attr(el, 'data-side', t.side ?? 'none');
-      const bar = el.querySelector('.tl-health i') as HTMLElement;
-      width(bar, t.health);
-      attr(bar, 'data-level', level(t.health));
+      const meter = el.querySelector('.tl-health') as HTMLElement;
+      width(meter.firstElementChild as HTMLElement, t.health);
+      attr(meter, 'data-level', level(t.health));
       el.style.transform = `translate(${t.x}px, ${t.y}px)`;
       el.style.opacity = String(1 - 0.55 * t.far);
       toggle(el, true);

@@ -20,7 +20,7 @@ import {
   NavRepeater, PAD_DEFAULTS, STICK, clamp, padAimAssist, shapeStick, smooth, stickDirection, stickToMouse,
   type AimState, type AssistTarget, type FlightLimits, type NavDirection, type PadTuning, type Stick,
 } from './analog';
-import { FocusManager } from './FocusNav';
+import { FocusManager, setFocusManager } from './FocusNav';
 import { GamepadSource, padActive, type PadButton, type PadEvent, type PadFamily } from './Gamepad';
 import { applyGlyphs, padControlLabels } from './glyphs';
 import { setControlLabels } from '../ui/controlLabels';
@@ -166,6 +166,10 @@ export class Controls {
   ) {
     this.pad = pad ?? new GamepadSource();
     this.nav = new FocusManager(this.hudRoot);
+    // Screens that open panels by code (the logbook, the menus) find it here; mouse hover shows
+    // the same tooltips as focus (data-tip), so nothing is hover-only.
+    setFocusManager(this.nav);
+    if (typeof document !== 'undefined' && this.hudRoot === document) this.nav.bindHoverTips(document);
     input.onKeyDown((code) => {
       this.use('keyboard');
       if (this.navKey(code)) return;

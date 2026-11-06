@@ -37,6 +37,7 @@ export const KEY_ATTRS = ['data-u', 'data-p', 'data-b', 'data-m', 'data-r', 'dat
 const MODAL_SELECTOR = '[aria-modal="true"]';
 const EXCLUDED = '[hidden], .dev-panel, .pad-skip, [inert]';
 const MAX_STACK = 12;
+const RESTORE_FRAMES = 3;
 export const DEFAULT_TIP_DELAY_MS = 450;
 
 export interface Rect {
@@ -109,6 +110,19 @@ export class FocusManager {
   private readonly panelStack: Array<Remembered & { panel: HTMLElement }> = [];
   private readonly screenStack: Array<Remembered & { screen: string }> = [];
   private screen = '';
+  /**
+   * A panel opened (or closed) by code since the last screen change: the screen stack and the
+   * panel stack then agree on where the highlight goes (see reset).
+   */
+  private openedSinceReset: Remembered | null = null;
+  private closedSinceReset = false;
+  /**
+   * Frames to wait for a control being restored to show again (a screen re-renders after the
+   * screen change that restores it), before falling back to the screen's main control.
+   */
+  private restoreFrames = 0;
+  /** The highlight was put on the screen's main control by update(), not by the player. */
+  private autoPlaced = false;
   private readonly rectOf: (el: HTMLElement) => Rect;
   private readonly hitTest: boolean;
   private readonly tipDelay: number;
@@ -133,6 +147,11 @@ export class FocusManager {
   /** Keeps the highlight on something reachable; called every frame while active. */
   update(): void {
     this.trackModal();
+    this.openedSinceReset = null;
+    this.closedSinceReset = false;
+    // In a dialog the keyboard moves real focus (Tab, arrows): the highlight follows it.
+    const real = typeof document !== 'undefined' ? document.activeElement : null;
+    if (this.active && this.modal && real instanceof HTMLElement && real !== this.current && this.modal.contains(real) && real.matches(NAV_SELECTOR)) this.mark(real);
     if (!this.active) {
       this.placeTip();
       return;
@@ -143,11 +162,19 @@ export class FocusManager {
     }
     const list = this.candidates();
     const again = this.currentKey ? list.find((el) => keyOf(el) === this.currentKey) : undefined;
+    if (!again && this.restoreFrames > 0) {
+      this.restoreFrames--;
+      if (this.current) this.mark(null);
+      return;
+    }
+    this.restoreFrames = 0;
     this.mark(again ?? defaultOf(list, this.rectOf));
+    this.autoPlaced = !again;
   }
 
   move(dir: NavDirection): void {
     if (!this.active) return;
+    this.autoPlaced = false;
     this.trackModal();
     const list = this.candidates();
     if (!this.current || !list.includes(this.current)) {
@@ -185,16 +212,27 @@ export class FocusManager {
       const saved = this.screenStack[back];
       this.screenStack.length = back;
       this.screen = screen;
+      // A panel closed by code already put the highlight back on its opener.
+      if (this.closedSinceReset) {
+        this.closedSinceReset = false;
+        return;
+      }
       this.mark(null);
       this.currentKey = saved.key;
       if (saved.el && saved.el.isConnected) this.currentKey = keyOf(saved.el);
+      if (this.currentKey) this.restoreFrames = RESTORE_FRAMES;
       return;
     }
+    // A panel opened by code just now: its opener is what this screen returns to, and the
+    // highlight stays where openPanel put it.
+    const opened = this.openedSinceReset;
+    this.openedSinceReset = null;
     if (this.screen) {
-      this.screenStack.push({ screen: this.screen, el: this.current, key: this.currentKey });
+      this.screenStack.push({ screen: this.screen, el: opened ? opened.el : this.current, key: opened ? opened.key : this.currentKey });
       if (this.screenStack.length > MAX_STACK) this.screenStack.shift();
     }
     this.screen = screen;
+    if (opened) return;
     this.mark(null);
     this.currentKey = '';
   }
@@ -207,7 +245,13 @@ export class FocusManager {
 
   /** A panel opened by code: remember where the highlight was and move into the panel. */
   openPanel(panel: HTMLElement): void {
-    this.panelStack.push({ panel, el: this.current, key: this.currentKey });
+    // A highlight the screen change just placed by default is not an opener: the screen stack
+    // already remembers the real one.
+    const opener: Remembered = this.autoPlaced ? { el: null, key: '' } : { el: this.current, key: this.currentKey };
+    this.autoPlaced = false;
+    this.panelStack.push({ panel, ...opener });
+    this.openedSinceReset = opener;
+    this.closedSinceReset = false;
     if (this.panelStack.length > MAX_STACK) this.panelStack.shift();
     const inside = this.candidates().filter((el) => panel.contains(el));
     const first = inside.find((el) => el.hasAttribute('data-nav-default')) ?? defaultOf(inside, this.rectOf);
@@ -225,6 +269,11 @@ export class FocusManager {
     if (i < 0) return;
     const saved = this.panelStack[i];
     this.panelStack.length = i;
+    this.openedSinceReset = null;
+    // Nothing had the highlight when it opened (a screen change had just cleared it): the screen
+    // stack restores instead.
+    if (!saved.el && !saved.key) return;
+    this.closedSinceReset = true;
     this.restore(saved);
   }
 
@@ -311,6 +360,7 @@ export class FocusManager {
 
   /** Puts the highlight on a control (a click, a screen that knows best). */
   focus(el: HTMLElement | null): void {
+    this.autoPlaced = false;
     this.mark(el);
   }
 
@@ -351,6 +401,7 @@ export class FocusManager {
     else {
       this.mark(null);
       this.currentKey = saved.key;
+      if (saved.key) this.restoreFrames = RESTORE_FRAMES;
     }
   }
 
@@ -481,6 +532,17 @@ export class FocusManager {
     }
     return false;
   }
+}
+
+let shared: FocusManager | null = null;
+
+/** The page's focus manager (Controls registers its own), for screens that open panels by code. */
+export function focusManager(): FocusManager | null {
+  return shared;
+}
+
+export function setFocusManager(m: FocusManager | null): void {
+  shared = m;
 }
 
 /** The v0.0.11 name, kept for Controls and tests. */

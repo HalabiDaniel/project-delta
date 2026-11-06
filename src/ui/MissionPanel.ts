@@ -1,8 +1,9 @@
 import { SUITABILITY_LABELS } from '../aircraft/Aircraft';
 import { DIRECTOR } from '../config';
+import { attrs, bar, button, card, chip, glyph, pips, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
 import { clock, fmt, metres } from './format';
-import { icon, type IconName } from './icons';
+import { icon, ICON_NAMES, type IconName } from './icons';
 import { MISSION_ICONS, MISSION_TYPE_LABELS, SAY } from './strings';
 import type { HudView, MissionCardView, ThreatSummary, TrackerView } from './views';
 
@@ -16,11 +17,43 @@ const MODIFIER_ICONS: Record<string, IconName> = {
   alert: 'warn',
 };
 
-/** "●●○" threat pips with the defenses as icons; the full list is the tooltip. */
+/** The card's risk slot as a chip tone: safe green, balanced blue, high risk red, event amber. */
+export const SLOT_TONES: Record<MissionCardView['slot'], Tone> = { safe: 'good', balanced: 'friend', risky: 'hostile', event: 'warn' };
+
+const tip = (t: string): string => attrs(tooltipAttrs(t));
+
+/** Threat as pips (count and colour) with the defenses as icons; the full list is the tooltip. */
 function threatHtml(t: ThreatSummary): string {
-  const pips = [1, 2, 3].map((n) => `<i class="${n <= t.level ? 'on' : ''}"></i>`).join('');
-  const icons = t.icons.slice(0, 5).map((n) => icon(n)).join('');
-  return `<span class="threat" data-level="${t.level}" title="${esc(`${t.label}: ${t.detail}`)}"><span class="pips">${pips}</span>${icons}</span>`;
+  const icons = t.icons.slice(0, 5).map((n) => icon(n, 'icon', ICON_NAMES[n])).join('');
+  return `<span class="threat" data-level="${t.level}" ${tip(`${t.label}: ${t.detail}`)}>${pips({ filled: t.level, total: 3, label: t.label, tone: 'threat' })}${icons}</span>`;
+}
+
+/** One mission card: reward and risk at a glance (type, title, reward, slot, stars, threat, kit, which planes fit). */
+export function missionCardHtml(c: MissionCardView, i: number): string {
+  const stars = pips({ filled: c.stars, total: Math.max(3, c.stars), label: `${c.tierLabel} ×${c.multiplier}`, tone: 'gold', className: 'mc-stars', attrs: { 'data-tip': `${c.tierLabel} ×${c.multiplier}` } });
+  const mods = c.modifiers.map((m) => `<span class="mod" role="img" aria-label="${esc(m.label)}" ${tip(`${m.label}: ${m.detail}`)}>${icon(MODIFIER_ICONS[m.id] ?? 'info')}</span>`).join('');
+  const kit = [
+    c.bombs > 0 ? `<span class="kit" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<b class="num">${c.bombs}</b></span>` : '',
+    c.timeLimit ? `<span class="kit" ${tip('Time limit')}>${icon('clock')}<b class="num">${clock(c.timeLimit, true)}</b></span>` : '',
+    `<span class="kit card-expires" ${tip('Event ends in')}>${icon('warn')}<b class="num"></b></span>`,
+  ].join('');
+  const fits = c.fits
+    .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" ${tip(`${f.name}: ${SUITABILITY_LABELS[f.level]}`)}>${esc(shortName(f.name))}</span>`)
+    .join('');
+  const op = c.operation;
+  const opHtml = op
+    ? `<div class="op" ${tip(`${op.codename} · bonus +${op.bonus} · ${op.remaining} still to earn`)}>${op.stages
+        .map((st, k) => `<i data-status="${st.status}" class="${k === op.stage ? 'this' : ''}" ${tip(`${st.label} · optional: ${st.optional}`)}></i>`)
+        .join('')}<b class="num">+${op.bonus}</b>${op.active ? button({ label: SAY.abandon, icon: 'close', size: 'small', variant: 'secondary', className: 'op-abandon', tip: 'Abandon the operation', attrs: { 'data-act': 'abandon' } }) : ''}</div>`
+    : '';
+  const title = `${c.codename ? `${c.codename}: ` : ''}${c.description}`;
+  return `<div class="mcard" role="button" data-nav data-m="card-${i}" data-slot="${c.slot}" data-tier="${c.tier}" aria-label="${esc(`${c.title} · ${c.slotLabel} · +${fmt(c.reward)}`)}" ${tip(title)}>
+    <div class="mc-top">${glyph({ key: String(i + 1) }, { className: 'hint-key' })}<span class="mc-type" role="img" aria-label="${esc(MISSION_TYPE_LABELS[c.type])}" ${tip(MISSION_TYPE_LABELS[c.type])}>${icon(MISSION_ICONS[c.type])}</span>
+      <b class="mc-title">${esc(c.title)}</b>
+      <b class="mc-reward num" ${tip(c.rewardNote || 'Reward')}>+${fmt(c.reward)}</b></div>
+    <div class="mc-mid">${chip({ label: c.slotLabel, tone: SLOT_TONES[c.slot], className: 'mc-slot' })}${stars}${c.recommended ? `<span class="mc-yours" role="img" aria-label="${esc("The director's pick for your level")}" ${tip("The director's pick for your level")}>${icon('level')}</span>` : ''}${mods}</div>
+    <div class="mc-bottom">${threatHtml(c.threat)}${kit}<span class="fits">${fits}</span></div>
+    ${opHtml}</div>`;
 }
 
 /**
@@ -42,24 +75,39 @@ export class MissionPanel {
   ) {
     this.cards = document.createElement('div');
     this.cards.className = 'mission-cards';
-    this.cards.innerHTML = `<div class="cards" data-m="cards"></div><button class="btn small ghost swap-btn" data-m="swap" title="Swap the chosen card (X)">${icon('swap')}<span>${SAY.swap}</span><b data-m="swaps"></b><kbd class="hint-key">X</kbd></button>`;
+    this.cards.innerHTML = `<div class="cards" role="group" aria-label="${SAY.missions}" data-m="cards"></div>${button({
+      label: SAY.swap, icon: 'swap', size: 'small', tip: 'Swap the chosen card (X)', className: 'swap-btn', attrs: { 'data-m': 'swap' },
+    })}`;
     cardHost.appendChild(this.cards);
-    this.strip = document.createElement('div');
-    this.strip.className = 'objective card';
-    this.strip.innerHTML = /* html */ `
+    const swap = this.cards.querySelector<HTMLElement>('[data-m="swap"]')!;
+    swap.querySelector('.ui-label')!.insertAdjacentHTML('afterend', `<b class="num" data-m="swaps"></b>${glyph({ key: 'X' }, { className: 'hint-key' })}`);
+    stripHost.insertAdjacentHTML('beforeend', card({
+      className: 'objective', label: SAY.objective, fold: true,
+      bodyHtml: /* html */ `
       <div class="obj-head">
         <span class="obj-type" data-m="type"></span>
         <b class="obj-now" data-m="now"></b>
-        <span class="obj-dist" data-m="dist"></span>
-        <span class="obj-timer" data-m="timer">${icon('clock')}<b data-m="time"></b></span>
-        <span class="pill" data-m="status"></span>
-        <b class="obj-reward" data-m="reward" title="Reward">${icon('paper')}<span data-m="reward-n"></span></b>
+        <span class="obj-dist num" data-m="dist"></span>
+        <span class="obj-timer" data-m="timer">${icon('clock')}<b class="num" data-m="time"></b></span>
+        ${chip({ label: '', className: 'obj-status', attrs: { 'data-m': 'status' } })}
+        <b class="obj-reward" data-m="reward" ${tip('Reward')}>${icon('paper')}<span class="num" data-m="reward-n"></span></b>
       </div>
-      <div class="bar thin obj-bar" data-m="bar"><i data-m="bar-fill"></i></div>
-      <ol class="obj-steps" data-m="steps"></ol>`;
-    stripHost.appendChild(this.strip);
+      ${bar({ value: 0, label: SAY.objective, kind: 'progress', size: 'thin', className: 'obj-bar', attrs: { 'data-m': 'bar' } })}
+      <ol class="obj-steps" data-m="steps"></ol>`,
+    }));
+    this.strip = stripHost.lastElementChild as HTMLElement;
     for (const root of [this.cards, this.strip]) for (const n of root.querySelectorAll<HTMLElement>('[data-m]')) this.el[n.dataset.m!] = n;
     bindButton(this.el.swap, actions.swap);
+    const wrap = this.el.cards;
+    wrap.addEventListener('mousedown', (e) => e.preventDefault());
+    wrap.addEventListener('click', (e) => {
+      const t = e.target as Element;
+      const cardEl = t.closest<HTMLElement>('.mcard');
+      if (!cardEl) return;
+      e.stopPropagation();
+      if (t.closest('[data-act="abandon"]')) return this.actions.abandon();
+      this.actions.select(Number(cardEl.dataset.m!.slice(5)));
+    });
   }
 
   render(v: HudView): void {
@@ -73,19 +121,19 @@ export class MissionPanel {
     if (!show || !v.cards) return;
     const key = v.cards
       .map((c) => [c.title, c.tier, c.reward, c.slotLabel, c.recommended, c.modifiers.map((m) => m.id).join('+'), c.fits.map((f) => f.level).join(','), c.threat.level,
-        c.operation ? `${c.operation.stage}:${c.operation.active}:${c.operation.confirming}:${c.operation.stages.map((x) => x.status).join('')}` : ''].join('|'))
+        c.operation ? `${c.operation.stage}:${c.operation.active}:${c.operation.stages.map((x) => x.status).join('')}` : ''].join('|'))
       .join('/');
     if (key !== this.cardsKey) {
       this.cardsKey = key;
-      const wrap = this.el.cards;
-      wrap.innerHTML = '';
-      v.cards.forEach((c, i) => wrap.appendChild(this.card(c, i)));
+      this.el.cards.innerHTML = v.cards.map(missionCardHtml).join('');
     }
-    [...this.el.cards.children].forEach((card, i) => {
+    [...this.el.cards.children].forEach((cardEl, i) => {
       const c = v.cards![i];
-      card.classList.toggle('selected', i === v.selected);
-      for (const chip of card.querySelectorAll<HTMLElement>('.fit')) chip.classList.toggle('mine', !!c.fits.find((f) => f.id === chip.dataset.id)?.selected);
-      const exp = card.querySelector<HTMLElement>('.card-expires');
+      if (!c) return;
+      cardEl.classList.toggle('selected', i === v.selected);
+      attr(cardEl as HTMLElement, 'aria-pressed', String(i === v.selected));
+      for (const f of cardEl.querySelectorAll<HTMLElement>('.fit')) f.classList.toggle('mine', !!c.fits.find((x) => x.id === f.dataset.id)?.selected);
+      const exp = cardEl.querySelector<HTMLElement>('.card-expires');
       if (exp) {
         toggle(exp, c.expires !== null);
         text(exp.querySelector('b') as HTMLElement, c.expires !== null ? clock(c.expires) : '');
@@ -98,41 +146,6 @@ export class MissionPanel {
     text(this.el.swaps, `${v.swaps}/${DIRECTOR.swaps.max}`);
   }
 
-  private card(c: MissionCardView, i: number): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'mcard';
-    card.setAttribute('role', 'button');
-    card.dataset.slot = c.slot;
-    card.dataset.tier = c.tier;
-    const stars = [1, 2, 3, 4].slice(0, Math.max(3, c.stars)).map((n) => `<i class="${n <= c.stars ? 'on' : ''}"></i>`).join('');
-    const mods = c.modifiers.map((m) => `<span class="mod" title="${esc(`${m.label}: ${m.detail}`)}">${icon(MODIFIER_ICONS[m.id] ?? 'info')}</span>`).join('');
-    const kit = [
-      c.bombs > 0 ? `<span class="kit" title="Bombs">${icon('bombload')}<b>${c.bombs}</b></span>` : '',
-      c.timeLimit ? `<span class="kit" title="Time limit">${icon('clock')}<b>${clock(c.timeLimit, true)}</b></span>` : '',
-      `<span class="kit card-expires" title="Event ends in">${icon('warn')}<b></b></span>`,
-    ].join('');
-    const fits = c.fits
-      .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" title="${esc(`${f.name}: ${SUITABILITY_LABELS[f.level]}`)}">${esc(shortName(f.name))}</span>`)
-      .join('');
-    const op = c.operation;
-    const opHtml = op
-      ? `<div class="op" title="${esc(`${op.codename} · bonus +${op.bonus} · ${op.remaining} still to earn`)}"><span class="op-dots">${op.stages
-          .map((st, k) => `<i data-status="${st.status}" class="${k === op.stage ? 'this' : ''}" title="${esc(`${st.label} · optional: ${st.optional}`)}"></i>`)
-          .join('')}</span><b>+${op.bonus}</b>${op.active ? `<button class="btn tiny ghost op-abandon${op.confirming ? ' confirm' : ''}" title="Abandon the operation">${icon('close')}${op.confirming ? '<span>Confirm</span>' : ''}</button>` : ''}</div>`
-      : '';
-    card.innerHTML = `
-      <div class="mc-top"><kbd class="hint-key">${i + 1}</kbd><span class="mc-type" title="${esc(MISSION_TYPE_LABELS[c.type])}">${icon(MISSION_ICONS[c.type])}</span>
-        <b class="mc-title" title="${esc(`${c.codename ? `${c.codename}: ` : ''}${c.description}`)}">${esc(c.title)}</b>
-        <b class="mc-reward" title="${esc(c.rewardNote || 'Reward')}">+${fmt(c.reward)}</b></div>
-      <div class="mc-mid"><span class="tag" data-slot="${c.slot}">${esc(c.slotLabel)}</span><span class="stars" title="${esc(`${c.tierLabel} ×${c.multiplier}`)}">${stars}</span>${c.recommended ? `<span class="mc-yours" title="The director's pick for your level">${icon('level')}</span>` : ''}${mods}</div>
-      <div class="mc-bottom">${threatHtml(c.threat)}${kit}<span class="fits">${fits}</span></div>
-      ${opHtml}`;
-    bindButton(card, () => this.actions.select(i));
-    const abandon = card.querySelector<HTMLElement>('.op-abandon');
-    if (abandon) bindButton(abandon, () => this.actions.abandon());
-    return card;
-  }
-
   private renderStrip(t: TrackerView | null): void {
     toggle(this.strip, t !== null);
     if (!t) return;
@@ -140,12 +153,12 @@ export class MissionPanel {
     const typeEl = this.el.type;
     if (typeEl.dataset.type !== t.type) {
       typeEl.dataset.type = t.type;
-      typeEl.innerHTML = icon(MISSION_ICONS[t.type]);
-      typeEl.title = `${MISSION_TYPE_LABELS[t.type]} · ${t.difficultyLabel} ×${t.multiplier}`;
+      typeEl.innerHTML = icon(MISSION_ICONS[t.type], 'icon', MISSION_TYPE_LABELS[t.type]);
+      typeEl.dataset.tip = `${MISSION_TYPE_LABELS[t.type]} · ${t.difficultyLabel} ×${t.multiplier}`;
     }
     const done = t.status === 'succeeded';
     text(this.el.now, done ? 'Complete' : t.status === 'failed' ? 'Failed' : (current?.label ?? t.title));
-    this.el.now.title = `${t.title}${t.hint ? ` · ${t.hint}` : ''}`;
+    attr(this.el.now, 'data-tip', `${t.title}${t.hint ? ` · ${t.hint}` : ''}`);
     const dist = current && current.open && current.distance !== null ? metres(current.distance) : '';
     text(this.el.dist, dist);
     toggle(this.el.dist, dist !== '');
@@ -154,23 +167,24 @@ export class MissionPanel {
       text(this.el.time, clock(t.timeLeft));
       this.el.timer.classList.toggle('urgent', t.timeLeft < 10);
     }
-    const [status, tone] = t.status === 'succeeded' ? [`+${fmt(t.reward)}`, 'good'] : t.status === 'failed' ? ['', 'bad'] : ['', ''];
+    const status = t.status === 'succeeded' ? `+${fmt(t.reward)}` : '';
     toggle(this.el.status, status !== '');
-    text(this.el.status, status);
-    attr(this.el.status, 'data-tone', tone);
+    text(this.el.status.querySelector<HTMLElement>('.ui-label')!, status);
+    attr(this.el.status, 'data-tone', t.status === 'succeeded' ? 'good' : t.status === 'failed' ? 'hostile' : 'plain');
     toggle(this.el.reward, t.status === 'active' || t.status === 'available');
     text(this.el['reward-n'], `+${fmt(t.reward)}`);
     attr(this.strip, 'data-status', t.status);
+    attr(this.strip, 'data-state', t.status === 'succeeded' ? 'default' : t.status === 'failed' ? 'critical' : 'default');
     const progress = current?.progress ?? null;
     toggle(this.el.bar, progress !== null && !current?.done && t.status === 'active');
-    width(this.el['bar-fill'], progress ?? 0);
+    width(this.el.bar.firstElementChild as HTMLElement, progress ?? 0);
 
     // The other steps, as a row of small icons with a tick when done.
     const steps = this.el.steps;
     const key = t.objectives.map((o) => `${o.icon}:${o.label}`).join('|');
     if (key !== this.objectivesKey) {
       this.objectivesKey = key;
-      steps.innerHTML = t.objectives.length > 1 ? t.objectives.map((o) => `<li title="${esc(o.label)}">${icon(o.icon)}</li>`).join('') : '';
+      steps.innerHTML = t.objectives.length > 1 ? t.objectives.map((o) => `<li ${tip(o.label)}>${icon(o.icon, 'icon', o.label)}</li>`).join('') : '';
     }
     t.objectives.forEach((o, i) => {
       const li = steps.children[i] as HTMLElement | undefined;

@@ -44,6 +44,51 @@ export const SAY = {
   empty: 'Empty',
   gliding: 'Gliding',
   bombsAway: 'Bomb away',
+  cancel: 'Cancel',
+  keepFlying: 'Keep it',
+  leave: 'Leave',
+  abandon: 'Abandon',
+  lowHealth: 'Low health',
+  settings: 'Settings',
+  close: 'Close',
+  need: 'Need',
+  all: 'All',
+  earned: 'Earned',
+  locked: 'Locked',
+  paperIn: 'In',
+  paperOut: 'Out',
+  condition: 'Condition',
+  instruments: 'Instruments',
+  weapons: 'Weapons',
+  objective: 'Objective',
+  alerts: 'Alerts',
+  resources: 'Resources',
+  missions: 'Missions',
+  aircraft: 'Aircraft',
+  buildTray: 'Build tray',
+  slot: 'Slot',
+  report: 'Sortie report',
+  defenseReport: 'Defense report',
+  tutorial: 'Tutorial',
+  paused: 'Paused',
+  welcome: 'Welcome',
+  ratings: 'Ratings',
+  loadout: 'Loadout',
+  filter: 'Filter',
+  rocketLock: 'Rocket lock',
+} as const;
+
+/**
+ * The confirm dialogs for destructive actions (docs/DESIGN_SYSTEM.md §2C): a question, one line on
+ * what happens, and the two buttons. Shown by src/ui/confirm.ts.
+ */
+export const CONFIRM_TEXT = {
+  remove: { title: 'Remove building?', body: 'It comes down for a partial refund of its paper.', confirm: 'Remove', cancel: 'Keep it' },
+  endSortie: { title: 'End sortie?', body: 'The plane goes into the hangar and the report comes up.', confirm: 'End sortie', cancel: 'Stay' },
+  endSortieActive: { title: 'End sortie?', body: 'The mission is still on: ending the sortie now abandons it.', confirm: 'End sortie', cancel: 'Stay' },
+  leave: { title: 'Leave classroom?', body: 'You leave this classroom for good and your desk is freed.', confirm: 'Leave', cancel: 'Stay' },
+  reset: { title: 'Reset all progress?', body: 'Everything saved in this browser is deleted and the game starts over.', confirm: 'Reset', cancel: 'Keep it' },
+  abandon: { title: 'Abandon operation?', body: 'You keep what it has paid so far; the bonus is lost.', confirm: 'Abandon', cancel: 'Keep going' },
 } as const;
 
 export const MISSION_TYPE_LABELS: Record<MissionType, string> = {

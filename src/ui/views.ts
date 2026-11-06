@@ -267,6 +267,22 @@ export interface MenuView {
   confirmingReset: boolean;
 }
 
+/**
+ * A resource beyond paper, for the economy strip (v0.0.20 adds ink and rubber balls): one more row
+ * of the same shape, no layout change.
+ */
+export interface ResourceView {
+  id: string;
+  icon: IconName;
+  /** Its name (tooltip, screen readers). */
+  label: string;
+  amount: number;
+  /** Storage limit, or null when there is none. */
+  capacity: number | null;
+  /** Per minute. */
+  rate?: number;
+}
+
 /** Paper, production and storage: the economy strip, top left. */
 export interface EconomyView {
   paper: number;
@@ -280,6 +296,8 @@ export interface EconomyView {
   streak: number;
   /** Structures on T1 that need repairs. */
   repairs: number;
+  /** Further resources, after paper (optional; none yet). */
+  resources?: ResourceView[];
 }
 
 /** The desk's main action: fold, refit or roll out the chosen plane, then launch. */

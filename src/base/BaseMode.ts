@@ -4,6 +4,7 @@ import type { RaidReport } from './Raids';
 import type { SlotHighlight } from '../world/DefenseModels';
 import type { BaseInspectorView, BaseView, SlotMarkerView, Stat, TrayItemView } from '../ui/views';
 import { Base, fits, levelOf, STORE } from './Base';
+import { requestConfirm } from '../ui/confirm';
 
 /** A slot's (or the store's) position on screen, or null when off screen. */
 export type Projector = (x: number, z: number) => { x: number; y: number } | null;
@@ -49,9 +50,14 @@ export class BaseMode {
   open = false;
   selected: string | null = null;
   chosen: BuildingKind | null = null;
-  private confirmRemove: { slot: string; until: number } | null = null;
+  /** The slot a remove dialog is open for. */
+  private confirmRemove: { slot: string } | null = null;
 
-  constructor(private readonly base: Base) {}
+  /** `confirm` asks before a building comes down (the confirm dialog; tests answer directly). */
+  constructor(
+    private readonly base: Base,
+    private readonly confirm: () => Promise<boolean> = () => requestConfirm('remove'),
+  ) {}
 
   enter(): void {
     this.open = true;
@@ -102,16 +108,21 @@ export class BaseMode {
     return this.base.repairAll();
   }
 
-  /** Asks twice: the first press arms it. Returns true once removed. */
-  remove(): boolean {
+  /**
+   * Asks first (the confirm dialog, v0.0.15; it was a second press before). Resolves true once
+   * removed; false when cancelled, or when the slot changed while the dialog was up.
+   */
+  async remove(): Promise<boolean> {
     const slot = this.selected;
-    if (!slot || slot === STORE || !this.base.at(slot)) return false;
-    if (this.confirmRemove?.slot === slot && performance.now() < this.confirmRemove.until) {
-      this.confirmRemove = null;
+    if (!slot || slot === STORE || !this.base.at(slot) || this.confirmRemove) return false;
+    this.confirmRemove = { slot };
+    try {
+      if (!(await this.confirm())) return false;
+      if (this.selected !== slot || !this.open) return false;
       return this.base.remove(slot);
+    } finally {
+      this.confirmRemove = null;
     }
-    this.confirmRemove = { slot, until: performance.now() + 4000 };
-    return false;
   }
 
   /** The see-through building to show at the selected slot, and whether it can be built there. */
@@ -230,7 +241,7 @@ export class BaseMode {
       upgrade: b.level < maxLevel ? { ...price(levelOf(b.kind, b.level + 1).cost), next: levelStats(b.kind, b.level + 1, b.level) } : null,
       repair,
       refund: base.refundFor(key),
-      confirmingRemove: this.confirmRemove?.slot === key && performance.now() < this.confirmRemove.until,
+      confirmingRemove: this.confirmRemove?.slot === key,
     };
   }
 }
