@@ -13,7 +13,7 @@ import { book, crayon, lyingCrayon, lyingPencil, paperBall, paperFlag, pencil, r
  */
 export interface Landmark {
   model: Model;
-  /** Flat markings drawn without outlines or shadows. */
+  /** Flat markings drawn without shadows. */
   decals: Model;
   colliders: Shape[];
   /** Highest point, metres above the desk. */

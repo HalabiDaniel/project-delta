@@ -1,5 +1,5 @@
 import type { Shape } from '../combat/Collision';
-import type { MaterialId, OutlineTier } from '../render/style';
+import type { MaterialId, PropTier } from '../render/style';
 import { Model } from '../world/props/Model';
 
 /**
@@ -49,7 +49,7 @@ export interface SyntySlot {
   licensed: readonly string[];
   fitHeight: number;
   materials: 'keep' | MaterialId;
-  tier: OutlineTier;
+  tier: PropTier;
   colliders?: readonly Shape[];
 }
 
@@ -95,7 +95,7 @@ export function syntySlots(category?: SyntyCategory): SyntyPropId[] {
 
 function slot(name: string, category: SyntyCategory, file: string, heightCm: number, build: () => Model, colliders?: readonly Shape[]): SyntySlot {
   // Room furniture and fittings are background: never on a territory, outside the flying heights.
-  const tier: OutlineTier = category === 'obstacle' ? 'structure' : DESK_FILES.has(file) ? 'prop' : 'background';
+  const tier: PropTier = category === 'obstacle' ? 'structure' : DESK_FILES.has(file) ? 'prop' : 'background';
   return { name, category, licensed: [file], fitHeight: heightCm * CM, build: () => ({ model: build() }), materials: 'keep', tier, colliders };
 }
 

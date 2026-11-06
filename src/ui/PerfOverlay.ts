@@ -11,9 +11,6 @@ export interface PerfSnapshot {
   spikes: number;
   drawCalls: number;
   triangles: number;
-  /** Pencil strokes drawn (edges) and objects outlined. */
-  strokes: number;
-  outlined: number;
   /** GPU memory the engine has allocated for textures and for vertex/index buffers (MB). */
   textureMb: number;
   bufferMb: number;
@@ -44,7 +41,6 @@ export class PerfMonitor {
 
   constructor(
     private readonly app: pc.AppBase,
-    private readonly strokes: () => { objects: number; edges: number },
     show: boolean,
   ) {
     if (show) {
@@ -68,7 +64,7 @@ export class PerfMonitor {
       const s = this.snapshot();
       this.el.textContent =
         `${s.fps.toFixed(0)} fps  ${s.frameMs.toFixed(1)} ms (p95 ${s.frameP95.toFixed(1)}, ${s.spikes} spikes)\n` +
-        `${s.drawCalls} draws  ${(s.triangles / 1000).toFixed(0)}k tris  ${s.strokes} strokes / ${s.outlined} objects` +
+        `${s.drawCalls} draws  ${(s.triangles / 1000).toFixed(0)}k tris` +
         (s.instanced ? `\n${s.instanced.copies} instanced in ${s.instanced.groups} draws (${s.instanced.culled} culled)` : '') +
         `\n${s.textureMb.toFixed(0)} MB textures  ${s.bufferMb.toFixed(0)} MB buffers` +
         (s.heapMb !== null ? `  ${s.heapMb.toFixed(0)} MB heap` : '') +
@@ -82,7 +78,6 @@ export class PerfMonitor {
     const mean = sorted.length ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
     const stats = this.app.stats as unknown as { drawCalls: { total: number }; frame: { triangles?: number; primitives?: number } };
     const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
-    const strokes = this.strokes();
     const vram = (this.app.graphicsDevice as unknown as { _vram?: { tex?: number; vb?: number; ib?: number } })._vram ?? {};
     return {
       fps: mean > 0 ? 1000 / mean : 0,
@@ -91,8 +86,6 @@ export class PerfMonitor {
       spikes: sorted.filter((t) => t > 33).length,
       drawCalls: stats.drawCalls.total,
       triangles: stats.frame.triangles ?? stats.frame.primitives ?? 0,
-      strokes: strokes.edges,
-      outlined: strokes.objects,
       textureMb: (vram.tex ?? 0) / 1048576,
       bufferMb: ((vram.vb ?? 0) + (vram.ib ?? 0)) / 1048576,
       instanced: this.instanced(),
@@ -103,7 +96,7 @@ export class PerfMonitor {
 
   /** This frame against the current preset's budget. */
   budget(s: PerfSnapshot = this.snapshot()): BudgetCheck {
-    return checkBudget(this.preset(), { drawCalls: s.drawCalls, triangles: s.triangles, strokes: s.strokes, textureMb: s.textureMb, loadSeconds: s.loadSeconds });
+    return checkBudget(this.preset(), { drawCalls: s.drawCalls, triangles: s.triangles, textureMb: s.textureMb, loadSeconds: s.loadSeconds });
   }
 }
 

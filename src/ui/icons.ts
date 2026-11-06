@@ -96,7 +96,7 @@ export const ICON_NAMES: Record<IconName, string> = {
   raid: 'Raid',
   ok: 'Operational', warn: 'Damaged', wrecked: 'Destroyed', offline: 'Offline',
   clock: 'Time', distance: 'Distance', home: 'Home', kills: 'Shot down', crumple: 'Planes lost', damage: 'Damage', medal: 'Medal', streak: 'Streak',
-  swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', pencil: 'Pencil outlines', graphics: 'Graphics', tip: 'Tip', close: 'Close', more: 'Details',
+  swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', pencil: 'Pencil', graphics: 'Graphics', tip: 'Tip', close: 'Close', more: 'Details',
 };
 
 /**

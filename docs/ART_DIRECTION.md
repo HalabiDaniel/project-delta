@@ -1,10 +1,14 @@
 # paperwars.io: art direction and visual system
 
 From v0.0.8 paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly models
-under soft cartoon light, outlined in graphite, made of paper, cardboard and school supplies, in a
+under soft cartoon light, made of paper, cardboard and school supplies, in a
 miniature classroom. This document is the reference for that look and for the code that makes it,
 so future aircraft, buildings, territories and props can reuse it instead of replacing it.
 
+> **v0.0.15 update: pencil outlines removed.** The pencil-outline renderer, its settings (Outlines,
+> Lines) and the outlined mission markers were removed in v0.0.15 by the developer's decision of 2026-11-02, who chose to keep the normal 3D look. The
+> paper materials and the lighting stay. The default graphics preset is now Medium.
+>
 > **v0.0.11 update: no more pencil strokes.** The developer's asset labs (`tools/labs/`) now supply
 > the models: clean low-poly planes in the Paper skin, cardboard buildings and a real-colour
 > classroom, without outlines. Pencil outlines are off by default (they stay in the graphics menu,
@@ -20,7 +24,7 @@ so future aircraft, buildings, territories and props can reuse it instead of rep
 
 1. [The look](#1-the-look)
 2. [Where the code is](#2-where-the-code-is)
-3. [Pencil outlines](#3-pencil-outlines)
+3. [Pencil outlines](#3-pencil-outlines) (removed in v0.0.15)
 4. [Paper shading and light](#4-paper-shading-and-light)
 5. [The material library](#5-the-material-library)
 6. [Graphics settings and performance](#6-graphics-settings-and-performance)
@@ -34,9 +38,8 @@ so future aircraft, buildings, territories and props can reuse it instead of rep
 
 - **Low-poly, flat-shaded geometry.** Every facet is a flat plane, like folded paper. Silhouettes
   are simple and a little exaggerated (giant pencils, chunky erasers) so they read at speed.
-- **Pencil outlines.** Graphite lines (dark blue-grey, never pure black) along silhouettes, folds
-  and paper edges. Aircraft and threats are drawn boldest, buildings and targets firmly, props
-  lighter, background faintest; lines thin and fade with distance.
+- **No pencil outlines.** The graphite outlines were removed in v0.0.15 (see §3); models are
+  clean low-poly.
 - **Soft cartoon light.** The sun lights surfaces in two or three flat tones with a soft edge;
   shadows are light and tinted by a cool sky / warm bounce ambient, never grey.
 - **Paper everywhere.** A faint fibre grain on every lit surface; ruled notebook paper, graph
@@ -57,10 +60,7 @@ so future aircraft, buildings, territories and props can reuse it instead of rep
 
 ```
 src/render/                     Rendering only: no gameplay rules
-  style.ts                      Art direction in numbers: outline tiers, shading, light, the material list
-  outline/EdgeTopology.ts       Edge extraction (pure, tested): welding, adjacency, stroke vertices
-  outline/strokeShader.ts       The stroke shader (GLSL)
-  outline/OutlineRenderer.ts    Attaching strokes to entities, merging, dynamic meshes, settings
+  style.ts                      Art direction in numbers: prop tiers, shading, light, the material list
   shading/PaperShading.ts       The lighting model (engine shader-chunk overrides)
   shading/textures.ts           Procedural textures, painted on canvases at start-up
   materials/MaterialLibrary.ts  Library materials from style.ts
@@ -87,68 +87,10 @@ collision shapes as before, plus the landmark's and tall props' shapes.
 
 ## 3. Pencil outlines
 
-### How it works
-
-The outlines are **geometry, not a full-screen filter**. For every mesh, `EdgeTopology` welds
-corners that share a position (flat shading and UV seams split them), lists every edge with the
-one or two triangles beside it, and turns each edge into a *stroke*: a quad whose four vertices
-all sit on the edge. Each vertex carries both ends, both faces' normals and
-`(side, end, kind, seed)`.
-
-Every frame the stroke shader decides per edge whether it shows:
-
-| Edge | Drawn when |
-|---|---|
-| Boundary (one face, e.g. the rim of a paper sheet) | always |
-| Crease (fold sharper than the tier's crease angle) | its front face is towards the camera (sheets: always) |
-| Smooth edge | on the silhouette: one face towards the camera, the other away |
-
-Visible strokes are widened on screen to a few pixels, pulled a fraction of their distance
-towards the camera so they win against their own faces, and clipped at the near plane. Hand-drawn
-character comes from stable per-edge noise (the edge's `seed`): uneven width end to end, a little
-sideways wobble, short runs past the corners, lighter ends and graphite grain along the line.
-Because all of it is keyed to the edge, nothing crawls when the camera moves.
-
-The renderer was chosen over the alternatives the plan asked to investigate:
-
-- **Depth/normal edge detection** (a full-screen pass) needs a depth and normal pre-pass, can't
-  tell an aircraft from scenery (no per-object strength), shimmers on thin geometry at a distance,
-  and costs every pixel every frame whatever is on screen.
-- **Inverted hulls** (a back-face copy pushed out along normals) break apart on flat-shaded
-  low-poly meshes and can't outline single-sided paper sheets, which is what the aircraft are.
-- **Edge strokes** (chosen) cost a little vertex work per edge, nothing per pixel beyond the lines
-  themselves, never flicker, work on paper sheets, and give every object its own strength.
-
-### Using it
-
-```ts
-import { outline, outlineDynamic } from '../render/outline/OutlineRenderer';
-
-outline(entity, 'structure', { merge: true });            // a rigid model: one stroke mesh, one draw call
-outline(turretBody, 'structure', { merge: true, exclude: [gunHouse] }); // moving parts outlined separately
-outline(carriedBomb, 'hero');                             // per mesh: follows each part's visibility
-const strokes = outlineDynamic(entity, 'hero', parts);    // meshes that change shape (folding planes)
-strokes?.update(i, positions);                            // …after each change
-```
-
-Strokes follow the entity's transform, hide when it (or its render component) is disabled or its
-material is see-through, and go away when it is destroyed. `merge` bakes a rigid group into one
-mesh in the root's space: use it whenever parts never move or hide on their own. Strokes for
-engine primitives (`box`, `cylinder`…) are built once and shared.
-
-### Tiers and tuning
-
-Tiers and their styles are in `OUTLINE.tiers` in `src/render/style.ts`:
-
-| Tier | Used for | Width (px) | Opacity | Fades out |
-|---|---|---|---|---|
-| `hero` | Aircraft (player, AI, practice), rockets, carried bombs | 3.2 | 0.95 | 170–320 m |
-| `structure` | Buildings, defenses, targets, landmarks, flags, platform edges | 2.7 | 0.9 | 150–300 m |
-| `prop` | Decorations | 2.1 | 0.78 | 80–190 m |
-| `background` | Trims and far scenery | 1.5 | 0.5 | 140–280 m |
-
-Width is in CSS pixels (scaled for high-DPI screens) up close, thinning with distance down to
-`minWidthScale`. `OUTLINE.color`, `depthBias`, `wobble` and `minLength` apply to all tiers.
+The pencil-outline renderer (`src/render/outline/`: edge strokes drawn as geometry, in tiers from
+hero to background) and its Outlines and Lines settings were removed in v0.0.15 by the developer's decision of 2026-11-02. The game keeps the normal 3D
+look: paper materials, paper shading and light. `tier` on props (`PropTier` in `style.ts`) stays:
+it tells territory props, structures and background furniture apart.
 
 ## 4. Paper shading and light
 
@@ -198,13 +140,12 @@ per face, so keep them to untextured materials: the world-space paper grain stil
 
 ## 6. Graphics settings and performance
 
-Pause menu → **Graphics** (preset), **Outlines** (off / low / medium / high) and **Lines**
-(faint / normal / bold). Settings belong to the computer: they are stored apart from the save
+Pause menu → **Graphics** (preset). The Outlines and Lines settings were removed in v0.0.15;
+older saved settings that still hold them load as before, without them. Settings belong to the computer: they are stored apart from the save
 (`paperwars.graphics` in local storage), survive a progress reset and never travel with a save.
 
-| | Low | Medium | High (default) |
+| | Low | Medium (default since v0.0.15) | High |
 |---|---|---|---|
-| Outline quality | low: no background strokes, shorter fade, straight lines, fewer creases | medium | high: longer fade, livelier strokes |
 | Shadows | off | 1024 | 2048 |
 | Decoration | detail 1 | detail 2 | all |
 | Resolution | 1× | up to 1.5× | up to 2× |
@@ -212,14 +153,12 @@ Pause menu → **Graphics** (preset), **Outlines** (off / low / medium / high) a
 Hidden props also lose their collision shapes, so nothing invisible can be flown into.
 
 **Measuring:** add `?perf` to the address for a live readout (fps, mean and 95th-percentile frame
-time, frames over 33 ms, draw calls, triangles, strokes, heap, load time), or call
+time, frames over 33 ms, draw calls, triangles, heap, load time), or call
 `paperwars.perf()` in the console. See the README's checkpoint section for the numbers measured so
 far.
 
-**Keeping it cheap:** merge static decoration (`Model.add` into one model per territory, then
-`outline(…, { merge: true })`); reuse library materials (one draw call per material per merged
-model); keep strokes off see-through effects; give moving parts their own stroke groups only when
-they really move or hide.
+**Keeping it cheap:** merge static decoration (`Model.add` into one model per territory); reuse
+library materials (one draw call per material per merged model).
 
 ## 7. Licensed assets (Synty)
 
@@ -232,7 +171,7 @@ Licensed models give the environment geometry; they never define the look. The p
 3. At start-up `AssetLibrary` finds the files present (`import.meta.glob`, so a missing file costs
    nothing), loads them, and **adapts** each instance: non-metallic matte surfaces under the paper
    shading (palette textures kept) or one library material throughout (`materials`), scaled to
-   `fitHeight`, stood on its base and centred, and outlined in the prop's tier.
+   `fitHeight`, stood on its base and centred.
 4. A file that fails to load falls back to its placeholder with a console warning;
    `paperwars.assets.report()` in the browser console lists what each prop is using.
 
@@ -250,7 +189,6 @@ m.part('pencil/yellow').cylinder(0.2, 3, { sides: 6, twist: 30 }, { at: [1.6, 0,
 m.part('tape/masking').tube(1, 0.66, 0.7);
 m.add(pencil(4.4), { at: [0, 0, 2], rot: [0, 30, -90] });  // reuse other models
 const entity = m.toEntity(device, 'my-model');               // one child per material
-outline(entity, 'prop', { merge: true });
 ```
 
 `MeshBuilder` offers `face` (convex polygon), `box`, `cylinder` (prisms, frustums, cones, smooth
@@ -260,15 +198,15 @@ flat-shaded with UVs in metres. Rotations are degrees, X then Y then Z.
 ### In Blender
 
 For shapes too fiddly to build in code: model low-poly and flat-shaded, Y up, metres, a few simple
-materials (colours carry over and are shaded like paper; outlines are added by the game), export
+materials (colours carry over and are shaded like paper), export
 **glTF binary** into `assets/models/`, and point a prop's `model` field at it.
 
 ### Aircraft
 
 Aircraft are folded paper and stay code-built so they can fold up on the launch card and crumple
 with damage: add a shape to `PLANE_SHAPES` in `src/aircraft/PlaneShapes.ts` (triangles of the
-left half, the accent strips, the centre keel). `FoldablePlane` folds, crumples and outlines it
-(hero tier) automatically. Keep silhouettes different enough to tell the roles apart from behind.
+left half, the accent strips, the centre keel). `FoldablePlane` folds and crumples it
+automatically. Keep silhouettes different enough to tell the roles apart from behind.
 
 ## 9. Territory themes, landmarks and props
 
@@ -290,8 +228,7 @@ store.
 
 `Dressing` builds a territory from its layout: the surface (slab, sheet, tape, margin and binder
 holes, and on T1 the taped runway and index-card launch pad) merged into a few meshes, the
-landmark, and the props allowed at the current detail level merged per material, with one stroke
-mesh per tier. Imported props are placed as entities. Its `colliders` are added to the world's
+landmark, and the props allowed at the current detail level merged per material. Imported props are placed as entities. Its `colliders` are added to the world's
 solids, so the player and AI planes hit them like any barrier.
 
 ## 10. Reproducing the style
@@ -302,10 +239,10 @@ For any new content:
 2. Use library materials only; add a library entry rather than a one-off colour.
 3. Build flat-shaded geometry (code or Blender) with UVs in metres; no smooth normals except
    round things.
-4. Outline it in the right tier; merge what doesn't move.
+4. Give it the right tier; merge what doesn't move.
 5. Keep gameplay readable: ownership colours plus a symbol, nothing on paths the player needs,
    simple colliders for anything tall.
-6. Check it on Low (no shadows, fewer props, simpler strokes) as well as High.
+6. Check it on Low (no shadows, fewer props) as well as High.
 
 ## 11. Known limitations
 
@@ -320,5 +257,5 @@ For any new content:
   setting yet.
 - **Measured in software rendering only** (headless Chromium, SwiftShader): GPU frame times on real
   hardware in Chrome, Edge and Firefox still need measuring with `?perf`.
-- Effects (wreckage, puffs, ink splats) and mission markers other than bullseyes aren't outlined
-  yet; that belongs with the effects pass (phase 5).
+- The stroke-related limitations above (draw calls for stroke groups, unoutlined effects) no longer
+  apply: the outlines were removed in v0.0.15.

@@ -58,7 +58,7 @@ export class HangarPreview {
         entity.addChild(jet);
         model = { entity };
       } else {
-        const folded = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials, 0, null, null);
+        const folded = new FoldablePlane(app.graphicsDevice, PLANE_SHAPES[id], materials, 0, null);
         folded.entity.render!.castShadows = false;
         model = folded;
       }

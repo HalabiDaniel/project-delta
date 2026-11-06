@@ -361,7 +361,7 @@ export function createPlaneModel(
   store: ModelStore | null,
   id: AircraftId,
   paint: JetPaint,
-  options: { restDrop?: number; blots?: pc.Material | null; outline?: boolean } = {},
+  options: { restDrop?: number; blots?: pc.Material | null } = {},
 ): PlaneModelView {
   const info = CATALOG.aircraft[id];
   const template = info && store ? store.instance(info.file) : null;
@@ -369,7 +369,7 @@ export function createPlaneModel(
     createWindTexture(device);
     return new JetModel(template, id, info, paint, options.restDrop ?? 0);
   }
-  return new FoldablePlane(device, PLANE_SHAPES[id], planeMaterials(paint.paper, paint.accent), options.restDrop ?? 0, options.blots ?? null, options.outline === false ? null : 'hero');
+  return new FoldablePlane(device, PLANE_SHAPES[id], planeMaterials(paint.paper, paint.accent), options.restDrop ?? 0, options.blots ?? null);
 }
 
 /** Is there a jet model for every design in this build? */

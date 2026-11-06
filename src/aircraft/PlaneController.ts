@@ -9,7 +9,6 @@ import { buildPaperBallMesh, createPaperMaterial, inkBlotMaterial } from './Plan
 import { createPlaneModel, type PlaneModelView } from './JetModel';
 import type { ModelStore } from '../assets/CustomModels';
 import { PLANE_SHAPES } from './PlaneShapes';
-import { outline } from '../render/outline/OutlineRenderer';
 
 export { clamp, forwardFromAngles, wrapAngle, yawFromDirection } from './FlightModel';
 export type { AircraftStatus, Collision, FlightControls, FlightOutcome, FlightResult } from './FlightModel';
@@ -58,7 +57,6 @@ export class PlaneController {
         ball.setLocalScale(scale, scale, scale);
         ball.enabled = false;
         this.root.addChild(ball);
-        outline(ball, 'hero');
         return ball;
       });
       this.airframes.set(spec.id, { spec, model, bombs });

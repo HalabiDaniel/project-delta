@@ -4,11 +4,8 @@ import {
   loadGraphics,
   matchesPreset,
   normalizeGraphics,
-  outlineChoice,
   PRESETS,
   saveGraphics,
-  withIntensity,
-  withOutlines,
   withPreset,
 } from './GraphicsSettings';
 
@@ -27,54 +24,35 @@ function memory(): Storage {
 }
 
 describe('graphics settings', () => {
-  it('starts on High, which matches its preset', () => {
-    expect(DEFAULT_GRAPHICS.preset).toBe('high');
+  it('starts on Medium, which matches its preset', () => {
+    expect(DEFAULT_GRAPHICS.preset).toBe('medium');
     expect(matchesPreset(DEFAULT_GRAPHICS)).toBe(true);
   });
 
-  it('presets scale shadows, decoration, outline quality and resolution together', () => {
+  it('presets scale shadows, decoration and resolution together', () => {
     const low = withPreset(DEFAULT_GRAPHICS, 'low');
-    expect(low).toMatchObject({ shadows: 'off', detail: 1, outlineQuality: 'low', resolution: 1 });
+    expect(low).toMatchObject({ shadows: 'off', detail: 1, resolution: 1 });
     expect(PRESETS.medium.detail).toBeGreaterThan(PRESETS.low.detail);
     expect(PRESETS.high.resolution).toBeGreaterThan(PRESETS.medium.resolution);
-  });
-
-  it('keeps the outline intensity when the preset changes', () => {
-    const bold = withIntensity(DEFAULT_GRAPHICS, 1.4);
-    expect(withPreset(bold, 'low').outlineIntensity).toBe(1.4);
-  });
-
-  it('turns outlines on and off without losing the rest of the preset', () => {
-    const medium = withPreset(DEFAULT_GRAPHICS, 'medium');
-    expect(outlineChoice(medium)).toBe('off');
-    const on = withOutlines(medium, 'medium');
-    expect(outlineChoice(on)).toBe('medium');
-    expect(on.shadows).toBe('low');
-    expect(matchesPreset(on)).toBe(false);
-    const back = withOutlines(on, 'off');
-    expect(matchesPreset(back)).toBe(true);
-  });
-
-  it('starts without pencil outlines (the v0.0.11 models are clean low-poly)', () => {
-    expect(DEFAULT_GRAPHICS.outlines).toBe(false);
-  });
-
-  it('snaps intensity to the offered steps', () => {
-    expect(withIntensity(DEFAULT_GRAPHICS, 1.3).outlineIntensity).toBe(1.4);
-    expect(withIntensity(DEFAULT_GRAPHICS, -5).outlineIntensity).toBe(0.6);
   });
 
   it('repairs damaged or unknown stored values', () => {
     expect(normalizeGraphics(null)).toEqual(DEFAULT_GRAPHICS);
     expect(normalizeGraphics('nonsense')).toEqual(DEFAULT_GRAPHICS);
-    const fixed = normalizeGraphics({ preset: 'ultra', outlines: 'yes', outlineQuality: 'max', outlineIntensity: NaN, shadows: 2, detail: 9, resolution: 100 });
+    const fixed = normalizeGraphics({ preset: 'ultra', shadows: 2, detail: 9, resolution: 100 });
     expect(fixed).toEqual({ ...DEFAULT_GRAPHICS, resolution: 3 });
     expect(normalizeGraphics({ preset: 'low' })).toEqual(withPreset(DEFAULT_GRAPHICS, 'low'));
   });
 
+  it('loads settings saved before v0.0.15, ignoring the removed outline fields', () => {
+    const store = memory();
+    store.setItem('paperwars.graphics.v2', JSON.stringify({ preset: 'high', outlines: true, outlineQuality: 'high', outlineIntensity: 1.4, shadows: 'low', detail: 3, resolution: 2 }));
+    expect(loadGraphics(store)).toEqual({ preset: 'high', shadows: 'low', detail: 3, resolution: 2 });
+  });
+
   it('saves and loads through storage, and survives blocked or broken storage', () => {
     const store = memory();
-    const s = withIntensity(withPreset(DEFAULT_GRAPHICS, 'medium'), 0.6);
+    const s = { ...withPreset(DEFAULT_GRAPHICS, 'high'), detail: 1 as const };
     saveGraphics(store, s);
     expect(loadGraphics(store)).toEqual(s);
     store.setItem('paperwars.graphics.v2', '{not json');

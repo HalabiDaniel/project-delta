@@ -53,10 +53,9 @@ import { territoryFacing, territoryLayout } from '../world/territories/decor';
 import { Dressing, type Ownership } from '../world/territories/Dressing';
 import { buildSharedScene, type SharedScene, type World } from '../world/WorldGenerator';
 import { AssetLibrary } from '../assets/AssetLibrary';
-import { installOutlines, type OutlineRenderer } from '../render/outline/OutlineRenderer';
 import { instanceScenery, type Instancer } from '../render/Instancer';
 import { LoadingScreen } from '../ui/LoadingScreen';
-import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withIntensity, withOutlines, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
+import { browserStorage, DETAIL_DISTANCE, loadGraphics, saveGraphics, SHADOW_RESOLUTION, withPreset, type GraphicsSettings } from '../render/GraphicsSettings';
 import { setShadowQuality } from '../render/lighting';
 import { TextureBank } from '../render/shading/textures';
 import { PaperShading } from '../render/shading/PaperShading';
@@ -212,7 +211,6 @@ export class MultiplayerGame {
   private lastPhase: GamePhase | null = null;
   private lastPaper = -1;
   private touchTimer = 0;
-  private outlines: OutlineRenderer | null = null;
   private lastStateTime = -1;
   private resumed = false;
   /** The interactive tutorial; its progress lives on the player's record on the server. */
@@ -274,7 +272,6 @@ export class MultiplayerGame {
     const textures = new TextureBank(device);
     new PaperShading(device, textures);
     installMaterials(new MaterialLibrary(textures));
-    const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
     const loading = new LoadingScreen();
     await assets.preload(undefined, (p) => loading.progress(p));
@@ -308,8 +305,6 @@ export class MultiplayerGame {
       setHints: () => undefined,
       setUiScale: (scale) => game?.hud.setScale(scale),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
-      setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
-      setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
       restartTutorial: () => game?.tutorial.restart(),
@@ -371,7 +366,6 @@ export class MultiplayerGame {
       assets,
       network,
     );
-    game.outlines = outlines;
     // The playtest feedback log (v0.0.14): F8, or Feedback in the pause menu.
     let pausedBefore = false;
     game.feedback = new FeedbackForm(hudRoot, {
@@ -402,7 +396,6 @@ export class MultiplayerGame {
     // After the game has moved everything: repeated scenery drawn instanced (v0.0.11).
     game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
     game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
-    app.on('update', () => outlines.update());
     app.start();
     // A refresh lands back in the session if the server still keeps our place.
     void game.start();
@@ -702,7 +695,6 @@ export class MultiplayerGame {
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
     saveGraphics(browserStorage(), settings);
-    this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.scene.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.dressings.values()) d.setDetail(settings.detail);

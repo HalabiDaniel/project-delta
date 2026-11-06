@@ -2,7 +2,7 @@ import { attr, bindButton, esc, text, toggle } from './dom';
 import { fmt } from './format';
 import { icon, type IconName } from './icons';
 import { SAY } from './strings';
-import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
+import type { GraphicsPreset } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
 import { getPadSettings, setPadSettings, type PadLevel } from '../input/Controls';
 
@@ -86,12 +86,8 @@ export class Menus {
             <button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button></span></div>
           <div class="setting" title="HUD size"><span>${icon('distance')}Size</span><span class="seg" data-u="scale">
             <button data-v="0.9">S</button><button data-v="1">M</button><button data-v="1.15">L</button></span></div>
-          <div class="setting" title="Graphics quality: shadows, decorations, outline detail and resolution"><span>${icon('graphics')}Graphics</span><span class="seg" data-u="gfx">
+          <div class="setting" title="Graphics quality: shadows, decorations and resolution"><span>${icon('graphics')}Graphics</span><span class="seg" data-u="gfx">
             <button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
-          <div class="setting" title="Pencil outlines: off, or how detailed"><span>${icon('pencil')}Outlines</span><span class="seg" data-u="outlines">
-            <button data-v="off">Off</button><button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></span></div>
-          <div class="setting" title="How strongly outlines are drawn"><span>${icon('pencil')}Lines</span><span class="seg" data-u="lines">
-            <button data-v="0.6">Faint</button><button data-v="1">Normal</button><button data-v="1.4">Bold</button></span></div>
         </div>
         <div data-u="session"></div>
         <div class="settings pad-only">
@@ -140,8 +136,6 @@ export class Menus {
     for (const b of this.el.hints.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setHints(b.dataset.v as HintMode));
     for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setUiScale(Number(b.dataset.v)));
     for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setGraphicsPreset(b.dataset.v as GraphicsPreset));
-    for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlines(b.dataset.v as OutlineChoice));
-    for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) bindButton(b, () => actions.setOutlineIntensity(Number(b.dataset.v)));
     for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), invertY: b.dataset.v === 'on' }));
     for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), stick: b.dataset.v as PadLevel }));
     for (const b of this.el['pad-camera'].querySelectorAll<HTMLElement>('button')) bindButton(b, () => setPadSettings({ ...getPadSettings(), camera: b.dataset.v as PadLevel }));
@@ -167,9 +161,6 @@ export class Menus {
       for (const b of this.el.scale.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === v.menu.settings.uiScale);
       const g = v.menu.settings.graphics;
       for (const b of this.el.gfx.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.preset);
-      for (const b of this.el.outlines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === g.outlines);
-      for (const b of this.el.lines.querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', Number(b.dataset.v) === g.intensity);
-      toggle(this.el.lines.parentElement!, g.outlines !== 'off');
       const pad = getPadSettings();
       for (const b of this.el['pad-invert'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', (b.dataset.v === 'on') === pad.invertY);
       for (const b of this.el['pad-stick'].querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.v === pad.stick);
