@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { predictImpact } from '../aircraft/Bomb';
-import { AI, BOMB, DEFENSES, PLAYER_ID, WORLD, type Difficulty } from '../config';
+import { AI, AIRCRAFT, BOMB, DEFENSES, PLAYER_ID, WORLD, type Difficulty } from '../config';
 import { seededRng } from '../systems/Random';
 import type { AiOrders } from './AiAircraft';
 import { patrolPlan, raidPlan, scoutPlan } from './FlightPlans';
@@ -45,6 +45,20 @@ function dps(skill: Difficulty, script: () => Script, seconds = 20, seeds = 6): 
   return { dps: damage / seeds / seconds, hitRate: shots ? damage / AI_DAMAGE / shots : 0 };
 }
 const AI_DAMAGE = 7; // the Falcon's ink
+
+describe('designs the mission director may order (v0.0.15)', () => {
+  it('a fighter order can fly the Raptor, with its own guns and health; a bomber order cannot', () => {
+    const air = traffic(1);
+    const raptor = air.spawn({ ...guard('medium', 'r1'), aircraft: 'raptor' });
+    expect(raptor.spec.id).toBe('raptor');
+    expect(raptor.durability.max).toBe(AIRCRAFT.raptor.maxHealth);
+    const falcon = air.spawn(guard('medium', 'f2'));
+    expect(falcon.spec.id).toBe(AI.roles.fighter);
+    const bomber = air.spawn({ ...raidPlan(at('T9'), store, 'medium', 'b1', seededRng(2))[0], aircraft: 'raptor' });
+    expect(bomber.spec.id).toBe('widewing');
+    expect(bomber.spec.bombs.capacity).toBeGreaterThan(0);
+  });
+});
 
 describe('navigation', () => {
   it('keeps clear of platforms (and their edges), lower over the gaps, and enters and leaves out beyond the airspace', () => {

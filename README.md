@@ -1257,7 +1257,7 @@ and Multi-stage strike missions, but it's how you avoid paying for a new plane.
 | Specter | Surveillance drone | 30 | 6 | 60 | 3.2 km | 1 light, 30 ink | – | 0.55 | Flies furthest and quietest; nothing to fight with |
 | Thug | Ground attack | 40 | 9 | 150 | 1.5 km | rotary, 220 ink | 3 mini | 1.15 | Slow and tough, shreds turrets on low passes |
 | Jumper | VTOL fighter | 40 | 9 | 100 | 1.5 km | 1, 90 ink | 2 mini | 0.95 | Slowest stall speed with jets; hover comes later |
-| Raptor | Air superiority | 45 | 10 | 120 | 1.8 km | 2 heavy, 140 ink | – | 0.75 | The best gun platform; no bombs |
+| Raptor | Air superiority | 72 | 16 | 120 | 1.8 km | 2 heavy, 140 ink | – | 0.75 | The best gun platform, fastest fighter and best climber; turns a little wider than the Falcon; no bombs; folds in 3 s (v0.0.15) |
 | Lightning | Stealth multirole | 45 | 10 | 110 | 2.0 km | 1, 100 ink | 2 | 0.65 | Hard to spot, good at everything |
 | Lancer | Supersonic bomber | 55 | 12 | 135 | 1.7 km | 1, 50 ink | 3 | 1.1 | Outruns fighters with a bomb load |
 | Ghost | Stealth bomber | 60 | 13 | 140 | 2.3 km | 1, 30 ink | 4 | 0.5 | Defenses barely notice it; no dogfighting |

@@ -237,7 +237,7 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.18) |
 | Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
 | Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
-| Raptor | F-22 | Air superiority | 0.0.15 |
+| Raptor | F-22 | Air superiority: the strongest pure dogfighter (fastest fighter, best climber, heaviest guns, turns slightly wider than the Falcon); no bombs | 0.0.15 (provisional since 0.0.11) |
 | Lancer | B-1B Lancer | Supersonic bomber | 0.0.16 |
 | Lightning | F-35 | Stealth multirole | 0.0.18 |
 | Thug | A-10 Thunderbolt II | Ground attack | 0.0.18 |

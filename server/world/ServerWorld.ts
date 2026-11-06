@@ -1,7 +1,7 @@
 import { Vec3 } from 'playcanvas';
 import type { Collision } from '../../src/aircraft/FlightModel';
 import { PLANE_SHAPES } from '../../src/aircraft/PlaneShapes';
-import { assessSuitability } from '../../src/aircraft/Aircraft';
+import { aiRoleFor, assessSuitability } from '../../src/aircraft/Aircraft';
 import type { ZoneRef } from '../../src/aircraft/Bomb';
 import type { AiOrders, Contact } from '../../src/ai/AiAircraft';
 import { AirTraffic, type AirEvent, type AirSpawn } from '../../src/ai/AirTraffic';
@@ -1499,7 +1499,7 @@ export class ServerWorld {
     const currentHunt = p.pvp.find((c) => c.tag.kind === 'hunt' && airborne.some((o) => o.id === c.tag.target));
     const prey = currentHunt ? this.pilots.get(currentHunt.tag.target)! : airborne.length > 0 ? airborne[Math.floor(this.rng() * airborne.length)] : null;
     if (prey) {
-      const role = prey.state?.plane?.role === 'bomber' ? 'bomber' : 'fighter';
+      const role = prey.state?.plane ? aiRoleFor(prey.state.plane) : 'fighter';
       offered.push(() => add(`hunt:${prey.id}`, () => ({ spec: huntMission(prey.id, prey.name, prey.home, role), tag: { kind: 'hunt', target: prey.id, name: prey.name, territoryId: prey.home?.id ?? null } })));
     }
     // Recon: any other base.
@@ -1664,7 +1664,7 @@ export class ServerWorld {
     const { killer, assists } = p.forfeit ? { killer: null, assists: [] as string[] } : creditFor(p.damageLog, this.time);
     const k = killer ? this.pilots.get(killer) : undefined;
     const plane = st.plane!;
-    const role = plane.role === 'bomber' ? 'bomber' : 'fighter';
+    const role = aiRoleFor(plane);
     if (k?.state) {
       k.stats.kills++;
       k.addScore(PVP.score.kill);

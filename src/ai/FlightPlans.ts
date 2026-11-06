@@ -1,3 +1,4 @@
+import { aiDesignFor } from '../aircraft/Aircraft';
 import { AI, AIRCRAFT, type AiRole, type Difficulty, type Side } from '../config';
 import type { Point3, TargetZone } from '../missions/Mission';
 import { randRange, type Rng } from '../systems/Random';
@@ -54,7 +55,7 @@ export function raidPlan(origin: Territory, store: Strike, skill: Difficulty, id
 /** Seconds a plan's aircraft takes to fly its whole route (to its bombing run, for a raid). */
 export function flightTime(orders: AiOrders): number {
   const route = orders.strike ? [...orders.route.slice(1), orders.strike] : orders.route.slice(1);
-  return routeLength(orders.route[0], route) / (orders.speed ?? AIRCRAFT[orders.aircraft ?? AI.roles[orders.role]].flight.cruiseSpeed);
+  return routeLength(orders.route[0], route) / (orders.speed ?? AIRCRAFT[aiDesignFor(orders.role, orders.aircraft)].flight.cruiseSpeed);
 }
 
 /**
