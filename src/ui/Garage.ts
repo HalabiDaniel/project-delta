@@ -5,7 +5,8 @@ import type { BuildKind } from '../systems/GameState';
 import { attrs, bar, glyph, pips, stat, tooltipAttrs } from './components';
 import { attr, esc, text, toggle } from './dom';
 import { icon, ICON_NAMES, type IconName } from './icons';
-import { SAY } from './strings';
+import { SAY, T } from './strings';
+import { paper } from './format';
 import type { Stat } from './views';
 
 export interface GarageCardView {
@@ -60,10 +61,10 @@ function fitBadge(level: SuitabilityLevel, tipText: string, small = false): stri
  */
 export function planeCardHtml(c: GarageCardView): string {
   const price =
-    c.buildKind === 'rollout' ? `${icon('home')}<b class="num">0</b>`
-    : c.buildKind === 'refit' ? `${icon('repair')}<b class="num">${c.buildCost}</b>`
-    : `${icon('paper')}<b class="num">${c.cost}</b>`;
-  const tipText = `${c.name} · ${c.roleLabel} · ${SUITABILITY_LABELS[c.suitability]}${c.hangar === 'ready' ? ' · in the hangar' : c.hangar === 'recovered' ? ` · recovered, refit ${c.buildCost} instead of ${c.cost}` : ''}`;
+    c.buildKind === 'rollout' ? `${icon('home')}<b class="num">${paper(0)}</b>`
+    : c.buildKind === 'refit' ? `${icon('repair')}<b class="num">${paper(c.buildCost)}</b>`
+    : `${icon('paper')}<b class="num">${paper(c.cost)}</b>`;
+  const tipText = `${c.name} · ${c.roleLabel} · ${SUITABILITY_LABELS[c.suitability]}${c.hangar === 'ready' ? T.garage.inHangar : c.hangar === 'recovered' ? T.garage.recovered(paper(c.buildCost), paper(c.cost)) : ''}`;
   const health = c.hangar === 'recovered' && c.hangarHealth !== null ? bar({ value: c.hangarHealth, label: ICON_NAMES.health, size: 'mini', className: 'pc-health' }) : '';
   return `<button type="button" class="plane-card" data-id="${c.id}" style="--accent:${esc(c.accent)}" aria-label="${esc(tipText)}" ${attrs(tooltipAttrs(tipText))}>
     <span class="pc-name">${esc(c.name)}</span>${fitBadge(c.suitability, SUITABILITY_LABELS[c.suitability], true)}

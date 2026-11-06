@@ -1,13 +1,13 @@
 import { AIRCRAFT, LANDING, STARTER_AIRCRAFT } from '../config';
 import { bind } from '../input/bindings';
 import { attrs, bar, button, card, glyph, pips, tooltipAttrs } from './components';
-import { attr, bindButton, text, toggle, width } from './dom';
-import { clock, fmt, level, metres, pct } from './format';
+import { attr, bindButton, esc, text, toggle, width } from './dom';
+import { clock, count, fixed, fmt, level, metres, num, paper, pct } from './format';
 import { icon, ICON_NAMES } from './icons';
-import { SAY, STYLE_TEXT } from './strings';
+import { SAY, STYLE_TEXT, T } from './strings';
 import type { HudView } from './views';
 
-const VERB = { fold: 'Fold', refit: 'Refit', rollout: 'Roll out' } as const;
+const VERB = T.plane.verb;
 
 /** Range is critical sooner than health: none left means gliding home. */
 export function rangeLevel(fraction: number): 'ok' | 'worn' | 'critical' {
@@ -37,7 +37,7 @@ export class PlaneHud {
     };
     // The style guide's Meter: icon and word, a segmented bar, the value as text.
     const meter = (p: string, iconName: 'health' | 'range', word: string): string =>
-      `<div class="meter ui-meter" ${tip(ICON_NAMES[iconName])}><span class="ui-meter-label">${icon(iconName)}<span>${word}</span></span>${bar({ value: 1, label: ICON_NAMES[iconName], segments: 10, attrs: { 'data-p': p } })}<b class="num" data-p="${p}-n"></b></div>`;
+      `<div class="meter ui-meter" ${tip(ICON_NAMES[iconName])}><span class="ui-meter-label">${icon(iconName)}<span>${esc(word)}</span></span>${bar({ value: 1, label: ICON_NAMES[iconName], segments: 10, attrs: { 'data-p': p } })}<b class="num" data-p="${p}-n"></b></div>`;
 
     this.el.condition = add(zones.bl, card({
       className: 'condition', label: SAY.condition,
@@ -46,9 +46,9 @@ export class PlaneHud {
     this.el.landing = add(zones.bc, card({
       className: 'landing', label: ICON_NAMES.land, fold: false,
       bodyHtml: /* html */ `
-        <span class="check" data-p="lg-speed" ${tip(`Speed (under ${LANDING.maxSpeed})`)}>${icon('speed')}<b class="num"></b></span>
-        <span class="check" data-p="lg-sink" ${tip(`Descent (under ${LANDING.maxSink} m/s)`)}>${icon('land')}<b class="num"></b></span>
-        <span class="check" data-p="lg-level" ${tip('Bank')}>${icon('heading')}<b class="num"></b></span>`,
+        <span class="check" data-p="lg-speed" ${tip(T.plane.speedCheck(num(LANDING.maxSpeed)))}>${icon('speed')}<b class="num"></b></span>
+        <span class="check" data-p="lg-sink" ${tip(T.plane.sinkCheck(num(LANDING.maxSink, 1)))}>${icon('land')}<b class="num"></b></span>
+        <span class="check" data-p="lg-level" ${tip(T.plane.bankCheck)}>${icon('heading')}<b class="num"></b></span>`,
     }));
     this.el.instruments = add(zones.bc, card({
       className: 'instruments', label: SAY.instruments, fold: false,
@@ -66,10 +66,10 @@ export class PlaneHud {
     this.el.ground = add(zones.bc, card({
       className: 'ground', label: ICON_NAMES.home, fold: false,
       bodyHtml: [
-        `<span class="ground-where" ${tip('Landed at T1')}>${icon('home')}<b>T1</b></span>`,
+        `<span class="ground-where" ${tip(T.plane.landedAt)}>${icon('home')}<b>${esc(T.plane.home)}</b></span>`,
         `<span class="ground-status" data-p="gr-status"></span>`,
-        button({ label: SAY.rearm, icon: 'rearm', key: bind('service'), tip: 'Rearm ink and range (free)', attrs: { 'data-p': 'rearm' } }),
-        button({ label: 'Rearm & go', icon: 'rearm', tip: 'Rearm, then take off as soon as the ground crew is done', attrs: { 'data-p': 'rearmgo' } }),
+        button({ label: SAY.rearm, icon: 'rearm', key: bind('service'), tip: T.plane.rearmTip, attrs: { 'data-p': 'rearm' } }),
+        button({ label: T.plane.rearmGo, icon: 'rearm', tip: T.plane.rearmGoTip, attrs: { 'data-p': 'rearmgo' } }),
         button({ label: SAY.takeOff, icon: 'plane', variant: 'primary', key: bind('launch', 'confirm'), attrs: { 'data-p': 'takeoff' } }),
         button({ label: SAY.endSortie, icon: 'close', key: { key: bind('confirm').key }, attrs: { 'data-p': 'end' } }),
         button({ label: SAY.base, icon: 'base', key: bind('base'), tip: SAY.base, tipKey: bind('base'), attrs: { 'data-p': 'gr-base' } }),
@@ -81,8 +81,8 @@ export class PlaneHud {
     this.el.weapons = add(zones.br, card({
       className: 'weapons', label: SAY.weapons,
       bodyHtml: /* html */ `
-        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}><span class="weapon-icon">${icon('ink')}<b class="num" data-p="ammo"></b></span><span class="weapon-name">${STYLE_TEXT.ink}</span>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph(bind('firePrimary'), { className: 'weapon-key' })}</div>
-        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}><span class="weapon-icon">${icon('bombload')}</span><span class="weapon-name">${STYLE_TEXT.bombs}</span><span class="bomb-pips" data-p="bomb-pips"></span>${glyph(bind('fireSecondary'), { className: 'weapon-key' })}</div>`,
+        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}><span class="weapon-icon">${icon('ink')}<b class="num" data-p="ammo"></b></span><span class="weapon-name">${esc(STYLE_TEXT.ink)}</span>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph(bind('firePrimary'), { className: 'weapon-key' })}</div>
+        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}><span class="weapon-icon">${icon('bombload')}</span><span class="weapon-name">${esc(STYLE_TEXT.bombs)}</span><span class="bomb-pips" data-p="bomb-pips"></span>${glyph(bind('fireSecondary'), { className: 'weapon-key' })}</div>`,
     }));
     // Fold / Launch: the primary button at the end of the desk's top bar (the style guide's DeskHud), top right.
     this.el.desk = add(zones.tr ?? zones.br, /* html */ `<div class="desk-action">
@@ -141,8 +141,8 @@ export class PlaneHud {
       if (pipsEl.dataset.key !== key) {
         pipsEl.dataset.key = key;
         pipsEl.innerHTML = b.capacity === 0
-          ? `<span class="none" role="img" aria-label="${ICON_NAMES.bombload} 0">–</span>`
-          : pips({ filled: b.loaded, total: b.capacity, label: `${ICON_NAMES.bombload} ${b.loaded}/${b.capacity}` });
+          ? `<span class="none" role="img" aria-label="${esc(T.common.labelSpaceValue(ICON_NAMES.bombload, count(0)))}">–</span>`
+          : pips({ filled: b.loaded, total: b.capacity, label: T.plane.bombs(ICON_NAMES.bombload, b.loaded, b.capacity) });
       }
       const state = b.capacity === 0 ? 'none' : b.ready ? 'ready' : b.loaded > 0 ? 'reloading' : b.falling > 0 ? 'falling' : 'empty';
       attr(this.el.bombs, 'data-state', state);
@@ -151,11 +151,11 @@ export class PlaneHud {
     const f = v.flight;
     toggle(this.el.instruments, flying && f !== null);
     if (f && flying) {
-      text(this.el.speed, String(Math.round(f.speed)));
+      text(this.el.speed, count(f.speed));
       width(this.el['speed-bar'].firstElementChild as HTMLElement, f.speedFrac);
       const left = `${Math.round(f.throttleFrac * 100)}%`;
       if (this.el.throttle.style.left !== left) this.el.throttle.style.left = left;
-      text(this.el.alt, String(Math.round(f.altitude)));
+      text(this.el.alt, count(f.altitude));
       attr(this.el.boost, 'data-state', f.boost.state);
       width(this.el['boost-bar'].firstElementChild as HTMLElement, f.boost.level);
     }
@@ -163,9 +163,9 @@ export class PlaneHud {
     const l = v.landing;
     toggle(this.el.landing, l !== null && !v.paused);
     if (l) {
-      check(this.el['lg-speed'], l.check.speedOk, `${Math.round(l.speed)}/${LANDING.maxSpeed}`);
-      check(this.el['lg-sink'], l.check.sinkOk, `${Math.max(0, l.sink).toFixed(1)}/${LANDING.maxSink}`);
-      check(this.el['lg-level'], l.check.levelOk, `${Math.round(Math.abs(l.rollDeg))}°`);
+      check(this.el['lg-speed'], l.check.speedOk, `${count(l.speed)}/${num(LANDING.maxSpeed)}`);
+      check(this.el['lg-sink'], l.check.sinkOk, `${fixed(Math.max(0, l.sink), 1)}/${num(LANDING.maxSink, 1)}`);
+      check(this.el['lg-level'], l.check.levelOk, `${count(Math.abs(l.rollDeg))}°`);
       this.el.landing.classList.toggle('ok', l.check.ok);
     }
 
@@ -182,7 +182,7 @@ export class PlaneHud {
           : g.status === 'active' ? `${icon('clock')}<b class="num">${g.timeLeft !== null ? clock(g.timeLeft) : '…'}</b>`
           : '';
         attr(status, 'data-tone', g.status === 'succeeded' ? 'good' : g.status === 'failed' ? 'bad' : 'info');
-        attr(status, 'data-tip', g.status === 'succeeded' ? 'Mission complete' : g.status === 'failed' ? 'Mission failed' : 'Mission still on: ending the sortie abandons it');
+        attr(status, 'data-tip', g.status === 'succeeded' ? T.plane.missionComplete : g.status === 'failed' ? T.plane.missionFailed : T.plane.missionOn);
       }
       (this.el.rearm as HTMLButtonElement).disabled = !g.canRearm;
       toggle(this.el.rearmgo, g.canRearm && g.rearming === null);
@@ -200,18 +200,18 @@ export class PlaneHud {
       toggle(this.el.build, v.phase === 'desk');
       toggle(this.el.building, v.phase === 'building');
       toggle(this.el.launch, v.phase === 'ready');
-      text(this.el.build.querySelector<HTMLElement>('.ui-label')!, d.emergency ? `Emergency ${AIRCRAFT[STARTER_AIRCRAFT].name}` : `${VERB[d.kind]} ${d.name}`);
+      text(this.el.build.querySelector<HTMLElement>('.ui-label')!, d.emergency ? T.plane.emergency(AIRCRAFT[STARTER_AIRCRAFT].name) : T.plane.build(VERB[d.kind], d.name));
       const costEl = this.el['build-cost'];
       const cKey = `${d.emergency}:${d.cost}`;
       if (costEl.dataset.key !== cKey) {
         costEl.dataset.key = cKey;
-        costEl.innerHTML = d.emergency || d.cost === 0 ? SAY.free : `${icon('paper')}${d.cost}`;
+        costEl.innerHTML = d.emergency || d.cost === 0 ? esc(SAY.free) : `${icon('paper')}${paper(d.cost)}`;
       }
       (this.el.build as HTMLButtonElement).disabled = !d.canBuild;
       attr(this.el.build, 'data-tip', d.note ?? '');
       width(this.el['building-bar'].firstElementChild as HTMLElement, d.progress);
-      attr(this.el.building, 'data-tip', `${VERB[d.kind]} ${d.name}`);
-      text(this.el.launch.querySelector<HTMLElement>('.ui-label')!, `${SAY.launch} ${d.name}`);
+      attr(this.el.building, 'data-tip', T.plane.build(VERB[d.kind], d.name));
+      text(this.el.launch.querySelector<HTMLElement>('.ui-label')!, T.plane.launch(SAY.launch, d.name));
       const tag = this.el['desk-tag'];
       toggle(tag, d.tag !== null);
       text(tag, d.tag ?? '');
@@ -224,8 +224,8 @@ export class PlaneHud {
     toggle(this.el.boundary, out);
     if (out) {
       attr(this.el.boundary, 'data-state', b.state);
-      text(this.el['bw-title'], b.state === 'warning' ? 'Turn back' : 'Autopilot');
-      text(this.el['bw-count'], b.state === 'warning' ? String(Math.ceil(b.countdown)) : '');
+      text(this.el['bw-title'], b.state === 'warning' ? T.plane.turnBack : T.plane.autopilot);
+      text(this.el['bw-count'], b.state === 'warning' ? count(Math.ceil(b.countdown)) : '');
     }
   }
 }

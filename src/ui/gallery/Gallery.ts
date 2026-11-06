@@ -21,6 +21,7 @@ import { GamepadSource, padActive, type PadButton } from '../../input/Gamepad';
 import { NavRepeater, stickDirection, type NavDirection } from '../../input/analog';
 import { esc } from '../dom';
 import { fmt, signed } from '../format';
+import { PSEUDO, pseudoDom } from '../strings';
 import '../components.css';
 import './gallery.css';
 
@@ -77,6 +78,8 @@ export function mountGallery(host: HTMLElement): void {
   const render = (): void => {
     main.innerHTML = renderSections(state.device, tokenOptions().theme);
     applyGlyphs(main, state.device === 'keyboard' ? null : state.device);
+    // ?pseudo: the sample text is not from the dictionary, so it is stretched here, in the page.
+    if (PSEUDO) pseudoDom(main);
   };
 
   bar.addEventListener('click', (e) => {

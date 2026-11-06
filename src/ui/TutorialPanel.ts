@@ -1,7 +1,7 @@
 import { bar, button, card, glyph } from './components';
 import { bindButton, esc, toggle } from './dom';
 import { icon } from './icons';
-import { SAY } from './strings';
+import { SAY, T } from './strings';
 import type { TutorialView } from './views';
 
 /**
@@ -16,7 +16,7 @@ export class TutorialPanel {
   constructor(host: HTMLElement, onSkip: () => void) {
     host.insertAdjacentHTML('beforeend', card({
       className: 'tutorial', label: SAY.tutorial, tone: 'friend',
-      bodyHtml: `<div class="tu-body"></div>${button({ label: 'Skip tutorial', size: 'small', className: 'tu-skip', attrs: { 'data-nav': 'tutorial-skip' } })}`,
+      bodyHtml: `<div class="tu-body"></div>${button({ label: T.tutorial.skip, size: 'small', className: 'tu-skip', attrs: { 'data-nav': 'tutorial-skip' } })}`,
     }));
     this.el = host.lastElementChild as HTMLElement;
     this.el.hidden = true;

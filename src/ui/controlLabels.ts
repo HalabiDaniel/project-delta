@@ -8,6 +8,7 @@
  */
 
 import { keyFor } from '../input/bindings';
+import { T } from './strings';
 
 export type ControlAction =
   | 'selectCard'
@@ -39,9 +40,9 @@ export const KEYBOARD_LABELS: Readonly<Record<ControlAction, string>> = {
   nextPlane: keyFor('nextAircraft'),
   fold: keyFor('fold'),
   launch: keyFor('launch'),
-  steer: 'Mouse',
-  fire: 'Left click',
-  bomb: 'Right click',
+  steer: T.keys.mouse,
+  fire: T.keys.leftClick,
+  bomb: T.keys.rightClick,
   boost: keyFor('boost'),
   throttle: `${keyFor('throttleUp')} / ${keyFor('throttleDown')}`,
   bank: `${keyFor('bankLeft')} / ${keyFor('bankRight')}`,
@@ -50,9 +51,9 @@ export const KEYBOARD_LABELS: Readonly<Record<ControlAction, string>> = {
   endSortie: keyFor('confirm'),
   continue: keyFor('confirm'),
   base: keyFor('base'),
-  repairAll: `${keyFor('base')} → Repair all`,
+  repairAll: T.controls.repairAll(keyFor('base')),
   quickRebuild: keyFor('fold'),
-  skipTutorial: 'Skip',
+  skipTutorial: T.controls.skip,
   back: keyFor('back'),
   pause: keyFor('back'),
 };

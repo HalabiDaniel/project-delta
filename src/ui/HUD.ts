@@ -7,13 +7,13 @@ import { guardActions, installConfirmDialog } from './confirm';
 import { Dashboard } from './Dashboard';
 import { TutorialPanel } from './TutorialPanel';
 import { BaseHud, RaidHud } from './BaseHud';
-import { bindButton, toggle, type ScreenPoint } from './dom';
+import { bindButton, esc, toggle, type ScreenPoint } from './dom';
 import { EconomyStrip } from './EconomyStrip';
 import { Garage } from './Garage';
 import type { IconName } from './icons';
 import { Menus } from './Menus';
 import { MiniMap, miniMapFrame } from './MiniMap';
-import { SAY } from './strings';
+import { SAY, T } from './strings';
 import { MissionPanel } from './MissionPanel';
 import { PlaneHud } from './PlaneHud';
 import { ReportCard } from './ReportCard';
@@ -154,8 +154,8 @@ export class HUD {
       this.accessKey = '';
     });
     this.lockHint = div(root, 'hint lock-hint');
-    this.lockHint.innerHTML = `${glyph({ key: bind('back').key })} → click`;
-    this.lockHint.dataset.tip = 'Mouse not captured: press Esc, then click to capture it';
+    this.lockHint.innerHTML = `${glyph({ key: bind('back').key })} → ${esc(T.hud.lockClick)}`;
+    this.lockHint.dataset.tip = T.hud.lockTip;
   }
 
   /** Lays the zones and overlays out for the window (src/ui/layout.ts). */

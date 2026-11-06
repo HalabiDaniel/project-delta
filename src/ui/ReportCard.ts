@@ -1,10 +1,10 @@
 import { button, card, chip, stat, type Tone } from './components';
 import { bind } from '../input/bindings';
 import { attr, bindButton, esc, text, toggle } from './dom';
-import { clock, fmt, pct, signed } from './format';
+import { clock, count, fmt, paper, pct, signed } from './format';
 import { icon, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { SAY, STYLE_TEXT } from './strings';
+import { SAY, STYLE_TEXT, T } from './strings';
 import type { ResultView } from './views';
 
 /**
@@ -61,21 +61,21 @@ export class ReportCard {
     this.key = key;
     attr(this.el, 'data-tone', r.missionTone === 'good' ? 'good' : 'hostile');
     this.q.icon.innerHTML = icon(r.recovered ? 'home' : 'crumple');
-    const failed = r.missionLine.replace(/^Failed: /, '');
     // The style guide's ResultDialog: home safe or crumpled above a big title.
     text(this.q.kicker, r.recovered ? STYLE_TEXT.homeSafe : STYLE_TEXT.crumpled);
     attr(this.q.kicker, 'data-tone', r.recovered ? 'good' : 'bad');
-    text(this.q.title, r.missionTone === 'good' ? STYLE_TEXT.missionDone : failed.charAt(0).toUpperCase() + failed.slice(1));
-    attr(this.q.title, 'data-tip', `${r.headline} · ${r.survival}`);
-    const medalName = r.medal ? `${r.medal.charAt(0).toUpperCase()}${r.medal.slice(1)}` : '';
+    // The failure's own headline ("Out of bombs"), never cut out of the English mission line.
+    text(this.q.title, r.missionTone === 'good' || !r.failure ? STYLE_TEXT.missionDone : r.failure.title);
+    attr(this.q.title, 'data-tip', T.common.dot([r.headline, r.survival]));
+    const medalName = r.medal ? T.report.medal[r.medal] : '';
     const next = r.medal === 'bronze' ? 'silver' : r.medal === 'silver' ? 'gold' : null;
-    const medalTip = r.criteria ? (next ? `Next, ${next}: ${r.criteria[next]}` : r.criteria.gold) : '';
-    this.q.medal.innerHTML = r.medal ? `${icon('medal')}<b>${medalName}</b>` : '';
+    const medalTip = r.criteria ? (next ? T.report.nextMedal(T.report.medalId[next], r.criteria[next]) : r.criteria.gold) : '';
+    this.q.medal.innerHTML = r.medal ? `${icon('medal')}<b>${esc(medalName)}</b>` : '';
     attr(this.q.medal, 'data-medal', r.medal ?? 'none');
     attr(this.q.medal, 'data-tip', medalTip);
     attr(this.q.medal, 'aria-label', medalName);
     toggle(this.q.medal, r.medal !== null);
-    this.q.mission.innerHTML = `${esc(r.missionTitle)} · ${icon('plane')}<b>${esc(r.aircraftName)}</b> ${icon(r.recovered ? 'health' : 'wrecked')}<b class="num">${r.recovered ? pct(r.health) : '0%'}</b>`;
+    this.q.mission.innerHTML = `${esc(r.missionTitle)} · ${icon('plane')}<b>${esc(r.aircraftName)}</b> ${icon(r.recovered ? 'health' : 'wrecked')}<b class="num">${pct(r.recovered ? r.health : 0)}</b>`;
     attr(this.q.mission, 'data-tip', r.planeLine);
 
     // Why it failed, and what to try: in plain words, not only a headline.
@@ -84,7 +84,7 @@ export class ReportCard {
     // Where the paper came from and went.
     this.q.paper.innerHTML = r.paper
       .map((l) => `<li data-tone="${l.amount > 0 ? 'good' : 'bad'}"><span>${esc(l.label)}</span><b class="num">${signed(l.amount)}</b></li>`)
-      .join('') + (r.paper.length > 1 ? `<li class="rp-total"><span>Net</span><b class="num">${signed(net)}</b></li>` : '');
+      .join('') + (r.paper.length > 1 ? `<li class="rp-total"><span>${esc(T.report.net)}</span><b class="num">${signed(net)}</b></li>` : '');
     toggle(this.q.paper, r.paper.length > 0);
     text(this.q.next, r.next);
     toggle(this.q.next, r.next.length > 0);
@@ -93,19 +93,19 @@ export class ReportCard {
     const big = (iconName: IconName, value: string, label: string, tone?: Tone) => `<div class="rp-tile">${stat({ icon: iconName, value, label, tone })}</div>`;
     const kills = r.aircraftDestroyed + r.defensesDestroyed + r.targetsDestroyed;
     this.q.big.innerHTML = [
-      big('paper', signed(net), 'Net paper', net > 0 ? 'good' : net < 0 ? 'hostile' : undefined),
-      big('kills', String(kills), `Destroyed: ${r.aircraftDestroyed} aircraft, ${r.defensesDestroyed} defenses, ${r.targetsDestroyed} targets`),
-      big('damage', fmt(r.damageDealt), 'Damage dealt'),
-      big('clock', clock(r.time), 'Time'),
+      big('paper', signed(net), T.report.netPaper, net > 0 ? 'good' : net < 0 ? 'hostile' : undefined),
+      big('kills', count(kills), T.report.destroyed(r.aircraftDestroyed, r.defensesDestroyed, r.targetsDestroyed)),
+      big('damage', fmt(r.damageDealt), T.report.damageDealt),
+      big('clock', clock(r.time), T.report.time),
     ].join('');
 
     const chips = [
-      ...r.bonuses.map((b) => chip({ label: '', icon: 'level', value: `+${b.amount}`, tone: 'good', tip: b.label })),
+      ...r.bonuses.map((b) => chip({ label: '', icon: 'level', value: `+${paper(b.amount)}`, tone: 'good', tip: b.label })),
       ...(r.operation ? [chip({ label: r.operation.split(':')[0], icon: 'radar', tip: r.operation })] : []),
-      ...(r.streak >= 2 ? [chip({ label: '', icon: 'streak', value: String(r.streak), tone: 'streak', tip: 'Missions in a row' })] : []),
-      ...r.records.map((x) => chip({ label: x, icon: 'reach', tone: 'good', tip: `New best: ${x}` })),
+      ...(r.streak >= 2 ? [chip({ label: '', icon: 'streak', value: count(r.streak), tone: 'streak', tip: T.report.streak })] : []),
+      ...r.records.map((x) => chip({ label: x, icon: 'reach', tone: 'good', tip: T.report.newBest(x) })),
       ...r.achievements.map((a) => chip({ label: a.title, icon: 'medal', tone: 'gold', tip: a.detail })),
-      ...(r.paperOverflow > 0 ? [chip({ label: '', icon: 'capacity', value: `−${r.paperOverflow}`, tone: 'warn', tip: 'Storage was full: build or upgrade storage boxes' })] : []),
+      ...(r.paperOverflow > 0 ? [chip({ label: '', icon: 'capacity', value: `−${paper(r.paperOverflow)}`, tone: 'warn', tip: T.report.overflow })] : []),
     ].join('');
     this.q.chips.innerHTML = chips;
     toggle(this.q.chips, chips.length > 0);
@@ -115,21 +115,21 @@ export class ReportCard {
     toggle(this.q.details, this.open);
     if (this.open) {
       const row = (iconName: IconName, label: string, value: string, tone = '') => `<div><dt>${icon(iconName)}${esc(label)}</dt><dd class="num" data-tone="${tone}">${value}</dd></div>`;
-      const ratio = (a: number, b: number) => (b > 0 ? `${a}/${b} · ${pct(a / b)}` : '—');
+      const ratio = (a: number, b: number) => (b > 0 ? `${count(a)}/${count(b)} · ${pct(a / b)}` : '—');
       this.q.details.innerHTML = [
-        row('health', 'Aircraft', esc(r.survival), r.survived ? 'good' : 'bad'),
-        row('damage', 'Damage dealt', fmt(r.damageDealt)),
-        row('health', 'Damage taken', fmt(r.damageTaken)),
-        row('turret', 'Defenses destroyed', String(r.defensesDestroyed)),
-        row('kills', 'Aircraft shot down', String(r.aircraftDestroyed)),
-        row('bomber', 'Bombers intercepted', String(r.bombersIntercepted)),
-        row('shield', 'Objectives protected', String(r.objectivesProtected)),
-        row('recon', 'Enemy fire dodged', r.enemyShots > 0 ? ratio(r.enemyShots - r.enemyHits, r.enemyShots) : '—'),
-        row('bomb', 'Bombs on target', ratio(r.bombHits, r.bombsDropped)),
-        row('ink', 'Ink hits', ratio(r.shotsHit, r.shotsFired)),
-        row('paper', 'Paper spent', r.paperSpent > 0 ? `−${r.paperSpent}` : '0', r.paperSpent > 0 ? 'bad' : ''),
-        row('paper', 'Paper earned', r.paperEarned > 0 ? `+${r.paperEarned}` : '0', r.paperEarned > 0 ? 'good' : ''),
-        ...(r.paperLost > 0 ? [row('raid', 'Lost to raids', `−${r.paperLost}`, 'bad')] : []),
+        row('health', T.report.aircraft, esc(r.survival), r.survived ? 'good' : 'bad'),
+        row('damage', T.report.damageDealt, fmt(r.damageDealt)),
+        row('health', T.report.damageTaken, fmt(r.damageTaken)),
+        row('turret', T.report.defensesDestroyed, count(r.defensesDestroyed)),
+        row('kills', T.report.aircraftShotDown, count(r.aircraftDestroyed)),
+        row('bomber', T.report.bombersIntercepted, count(r.bombersIntercepted)),
+        row('shield', T.report.objectivesProtected, count(r.objectivesProtected)),
+        row('recon', T.report.fireDodged, r.enemyShots > 0 ? ratio(r.enemyShots - r.enemyHits, r.enemyShots) : '—'),
+        row('bomb', T.report.bombsOnTarget, ratio(r.bombHits, r.bombsDropped)),
+        row('ink', T.report.inkHits, ratio(r.shotsHit, r.shotsFired)),
+        row('paper', T.report.paperSpent, r.paperSpent > 0 ? `−${paper(r.paperSpent)}` : count(0), r.paperSpent > 0 ? 'bad' : ''),
+        row('paper', T.report.paperEarned, r.paperEarned > 0 ? `+${paper(r.paperEarned)}` : count(0), r.paperEarned > 0 ? 'good' : ''),
+        ...(r.paperLost > 0 ? [row('raid', T.report.lostToRaids, `−${paper(r.paperLost)}`, 'bad')] : []),
       ].join('');
     }
   }

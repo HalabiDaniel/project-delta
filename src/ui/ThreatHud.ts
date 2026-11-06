@@ -3,7 +3,7 @@ import type { InstallationKind } from '../defenses/Layout';
 import { bar, pips } from './components';
 import { attr, text, toggle, width } from './dom';
 import { icon, ICON_NAMES, type IconName } from './icons';
-import { SAY } from './strings';
+import { SAY, T } from './strings';
 
 const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
 
@@ -49,10 +49,10 @@ export interface ThreatView {
 const RING_RADIUS = 190;
 
 const STATUS: Record<ThreatPanelView['status'], { icon: IconName; label: string }> = {
-  clear: { icon: 'recon', label: 'Not spotted' },
-  spotted: { icon: 'recon', label: 'Spotted' },
-  engaged: { icon: 'kills', label: 'Under fire' },
-  neutralised: { icon: 'offline', label: 'Defenses down' },
+  clear: { icon: 'recon', label: T.threat.clear },
+  spotted: { icon: 'recon', label: T.threat.spotted },
+  engaged: { icon: 'kills', label: T.threat.engaged },
+  neutralised: { icon: 'offline', label: T.threat.neutralised },
 };
 
 const PANEL = /* html */ `

@@ -2,10 +2,10 @@ import { attrs, button, card, glyph, segmented, stat, tooltipAttrs } from './com
 import { bind, keyFor, padButtonFor, pair, type Action } from '../input/bindings';
 import { padTemplate, type GlyphSpec } from '../input/glyphs';
 import { attr, bindButton, esc, text, toggle } from './dom';
-import { fmt } from './format';
+import { count, fmt, minutes, minutesLong, percent } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { ACCESS_TEXT, SAY, STYLE_TEXT } from './strings';
+import { ACCESS_TEXT, SAY, STYLE_TEXT, T } from './strings';
 import { TEXT_SCALES, type CaptionMode, type MotionMode } from './access';
 import type { GraphicsPreset } from '../render/GraphicsSettings';
 import type { HintMode, HudActions, HudView, SessionView } from './views';
@@ -29,43 +29,43 @@ const padRow = (template: string, iconName: IconName, label: string): ControlRow
  */
 export function padControls(): ControlRow[] {
   return [
-    padRow('{lstick}', 'heading', 'Steer'),
-    padRow('{rstick}', 'distance', 'Look'),
-    padRow(padOf('firePrimary'), 'ink', 'Ink'),
-    padRow(padOf('fireSecondary'), 'bombload', 'Bomb'),
-    padRow(padOf('boost'), 'boost', 'Boost'),
-    padRow(`${padOf('modifier')} + L`, 'speed', 'Throttle / bank'),
-    padRow(padOf('confirm'), 'ok', 'Confirm, launch'),
-    padRow(padOf('back'), 'close', 'Back'),
-    padRow(padOf('service'), 'rearm', 'Rearm, repair'),
-    padRow(padOf('base'), 'base', 'Base · hold: hints'),
-    padRow(`${padOf('prevAircraft')} / ${padOf('nextAircraft')}`, 'plane', 'Aircraft (home)'),
-    padRow(`${padOf('prevMission')} / ${padOf('nextMission')}`, 'reach', 'Mission (home)'),
-    padRow('{dpad}', 'more', 'Menus · emotes'),
-    padRow(padOf('logbook'), 'book', 'Logbook · scores'),
-    padRow(padOf('pause'), 'info', 'Pause'),
+    padRow('{lstick}', 'heading', T.menus.controls.steer),
+    padRow('{rstick}', 'distance', T.menus.controls.look),
+    padRow(padOf('firePrimary'), 'ink', T.menus.controls.ink),
+    padRow(padOf('fireSecondary'), 'bombload', T.menus.controls.bomb),
+    padRow(padOf('boost'), 'boost', T.menus.controls.boost),
+    padRow(`${padOf('modifier')} + L`, 'speed', T.menus.controls.throttleBank),
+    padRow(padOf('confirm'), 'ok', T.menus.controls.confirmLaunch),
+    padRow(padOf('back'), 'close', T.menus.controls.back),
+    padRow(padOf('service'), 'rearm', T.menus.controls.rearmRepair),
+    padRow(padOf('base'), 'base', T.menus.controls.baseHints),
+    padRow(`${padOf('prevAircraft')} / ${padOf('nextAircraft')}`, 'plane', T.menus.controls.aircraftHome),
+    padRow(`${padOf('prevMission')} / ${padOf('nextMission')}`, 'reach', T.menus.controls.missionHome),
+    padRow('{dpad}', 'more', T.menus.controls.menusEmotes),
+    padRow(padOf('logbook'), 'book', T.menus.controls.logbookScores),
+    padRow(padOf('pause'), 'info', T.menus.controls.pause),
   ];
 }
 
 /** The keyboard and mouse mapping, from the bindings. */
 export function keyboardControls(): ControlRow[] {
   return [
-    { spec: { key: 'Mouse', padText: '{lstick}' }, icon: 'heading', label: 'Steer' },
-    { spec: pair(bind('throttleUp'), bind('throttleDown')), icon: 'speed', label: 'Throttle' },
-    { spec: pair(bind('bankLeft'), bind('bankRight')), icon: 'plane', label: 'Bank' },
-    { spec: bind('boost'), icon: 'boost', label: 'Boost' },
-    { spec: bind('firePrimary'), icon: 'ink', label: 'Ink' },
-    { spec: bind('fireSecondary'), icon: 'bombload', label: 'Bomb' },
-    { spec: { key: `${keyFor('pick1')} – ${keyFor('pick4')}` }, icon: 'reach', label: 'Mission' },
-    { spec: pair(bind('prevAircraft'), bind('nextAircraft')), icon: 'plane', label: 'Aircraft' },
-    { spec: bind('fold'), icon: 'build', label: 'Fold' },
-    { spec: bind('launch'), icon: 'plane', label: 'Launch' },
-    { spec: bind('service'), icon: 'rearm', label: 'Rearm' },
-    { spec: bind('base'), icon: 'base', label: 'Base' },
-    { spec: bind('swap'), icon: 'swap', label: 'Swap card' },
-    { spec: bind('logbook'), icon: 'book', label: 'Logbook' },
-    { spec: bind('hints'), icon: 'info', label: 'Key hints' },
-    { spec: bind('sound'), icon: 'sound', label: 'Sound' },
+    { spec: { key: T.keys.mouse, padText: '{lstick}' }, icon: 'heading', label: T.menus.controls.steer },
+    { spec: pair(bind('throttleUp'), bind('throttleDown')), icon: 'speed', label: T.menus.controls.throttle },
+    { spec: pair(bind('bankLeft'), bind('bankRight')), icon: 'plane', label: T.menus.controls.bank },
+    { spec: bind('boost'), icon: 'boost', label: T.menus.controls.boost },
+    { spec: bind('firePrimary'), icon: 'ink', label: T.menus.controls.ink },
+    { spec: bind('fireSecondary'), icon: 'bombload', label: T.menus.controls.bomb },
+    { spec: { key: `${keyFor('pick1')} – ${keyFor('pick4')}` }, icon: 'reach', label: T.menus.controls.mission },
+    { spec: pair(bind('prevAircraft'), bind('nextAircraft')), icon: 'plane', label: T.menus.controls.aircraft },
+    { spec: bind('fold'), icon: 'build', label: T.menus.controls.fold },
+    { spec: bind('launch'), icon: 'plane', label: T.menus.controls.launch },
+    { spec: bind('service'), icon: 'rearm', label: T.menus.controls.rearm },
+    { spec: bind('base'), icon: 'base', label: T.menus.controls.base },
+    { spec: bind('swap'), icon: 'swap', label: T.menus.controls.swapCard },
+    { spec: bind('logbook'), icon: 'book', label: T.menus.controls.logbook },
+    { spec: bind('hints'), icon: 'info', label: T.menus.controls.keyHints },
+    { spec: bind('sound'), icon: 'sound', label: T.menus.controls.sound },
   ];
 }
 
@@ -80,13 +80,13 @@ const MULTIPLAYER = typeof window !== 'undefined' && ['mp', 'invite'].some((k) =
 /** "This session" / "Last time" as icon stats. */
 export function sessionStats(s: SessionView): string {
   return `<div class="stats session">${[
-    stat({ icon: 'ok', value: String(s.missionsCompleted), label: `Missions completed${s.missionsFailed ? ` (${s.missionsFailed} failed)` : ''}` }),
-    stat({ icon: 'paper', value: `+${fmt(s.paperEarned)}`, label: 'Paper earned', tone: 'good' }),
-    stat({ icon: 'paper', value: `−${fmt(s.paperSpent)}`, label: 'Paper spent' }),
-    stat({ icon: 'crumple', value: String(s.aircraftLost), label: 'Aircraft lost' }),
-    stat({ icon: 'kills', value: String(s.enemiesDestroyed), label: 'Enemies destroyed' }),
-    stat({ icon: 'clock', value: `${s.minutes}m`, label: 'Time' }),
-  ].join('')}</div>${s.best !== '—' ? `<div class="session-best" ${attrs(tooltipAttrs('Best performance'))}>${icon('medal')}<span>${esc(s.best)}</span></div>` : ''}`;
+    stat({ icon: 'ok', value: count(s.missionsCompleted), label: T.menus.missionsCompleted(s.missionsFailed) }),
+    stat({ icon: 'paper', value: `+${fmt(s.paperEarned)}`, label: T.menus.paperEarned, tone: 'good' }),
+    stat({ icon: 'paper', value: `−${fmt(s.paperSpent)}`, label: T.menus.paperSpent }),
+    stat({ icon: 'crumple', value: count(s.aircraftLost), label: T.menus.aircraftLost }),
+    stat({ icon: 'kills', value: count(s.enemiesDestroyed), label: T.menus.enemiesDestroyed }),
+    stat({ icon: 'clock', value: minutes(s.minutes), label: T.menus.time }),
+  ].join('')}</div>${s.best !== '—' ? `<div class="session-best" ${attrs(tooltipAttrs(T.menus.bestPerformance))}>${icon('medal')}<span>${esc(s.best)}</span></div>` : ''}`;
 }
 
 /**
@@ -99,7 +99,7 @@ function setting(id: string, iconName: IconName, label: string, tipText: string,
   })}</div>`;
 }
 
-const LEVELS: Array<[string, string]> = [['low', 'Low'], ['medium', 'Med'], ['high', 'High']];
+const LEVELS: Array<[string, string]> = [['low', T.menus.low], ['medium', T.menus.medium], ['high', T.menus.high]];
 
 /**
  * The pause menu (Resume, the settings, the controls, leave or reset) and the welcome card on
@@ -126,27 +126,27 @@ export class Menus {
           ${button({ label: SAY.resume, icon: 'plane', variant: 'primary', key: bind('back', 'pause'), attrs: { 'data-u': 'resume', 'data-nav-default': '' } })}
           ${button({ label: SAY.logbook, icon: 'book', key: bind('logbook'), attrs: { 'data-u': 'logbook' } })}
           ${button({ label: '', icon: 'sound', key: bind('sound'), attrs: { 'data-u': 'sound' } })}
-          <a class="ui-button" data-variant="secondary" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter', 'icon ui-icon')}<span class="ui-label">${MULTIPLAYER ? 'Single-player' : 'Multiplayer'}</span></a>
+          <a class="ui-button" data-variant="secondary" data-u="mode" href="${MULTIPLAYER ? '?' : '?mp'}">${icon(MULTIPLAYER ? 'home' : 'fighter', 'icon ui-icon')}<span class="ui-label">${esc(MULTIPLAYER ? T.menus.singlePlayer : T.menus.multiplayer)}</span></a>
         </div>
         <div class="menu-cols">
-        <section class="menu-section" aria-labelledby="menu-settings"><h3 id="menu-settings">${icon('graphics')}${STYLE_TEXT.game}</h3>
+        <section class="menu-section" aria-labelledby="menu-settings"><h3 id="menu-settings">${icon('graphics')}${esc(STYLE_TEXT.game)}</h3>
           <div class="settings">
-            ${setting('hints', 'info', 'Hints', 'Key hints on the HUD', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']])}
-            ${setting('scale', 'distance', 'Size', 'HUD size', [['0.9', 'S'], ['1', 'M'], ['1.15', 'L']])}
-            ${setting('gfx', 'graphics', 'Graphics', 'Graphics quality: shadows, decorations and resolution', LEVELS)}
+            ${setting('hints', 'info', T.menus.hints, T.menus.hintsTip, [['auto', T.menus.auto], ['on', T.menus.on], ['off', T.menus.off]])}
+            ${setting('scale', 'distance', T.menus.size, T.menus.sizeTip, [['0.9', T.menus.sizeS], ['1', T.menus.sizeM], ['1.15', T.menus.sizeL]])}
+            ${setting('gfx', 'graphics', T.menus.graphics, T.menus.graphicsTip, LEVELS)}
             ${setting('a-theme', 'sun', ACCESS_TEXT.theme.label, ACCESS_TEXT.theme.tip, [['daylight', ACCESS_TEXT.theme.daylight], ['lightsOut', ACCESS_TEXT.theme.lightsOut]])}
           </div>
           <div class="settings pad-only">
-            ${setting('pad-invert', 'heading', 'Invert Y', 'Controller: pull back to climb', [['off', 'Off'], ['on', 'On']])}
-            ${setting('pad-stick', 'plane', 'Stick', 'Controller steering sensitivity', LEVELS)}
-            ${setting('pad-camera', 'distance', 'Camera', 'Controller camera sensitivity', LEVELS)}
+            ${setting('pad-invert', 'heading', T.menus.invertY, T.menus.invertYTip, [['off', T.menus.off], ['on', T.menus.on]])}
+            ${setting('pad-stick', 'plane', T.menus.stick, T.menus.stickTip, LEVELS)}
+            ${setting('pad-camera', 'distance', T.menus.camera, T.menus.cameraTip, LEVELS)}
           </div>
           <p class="menu-note">${icon('ok')}${esc(STYLE_TEXT.quickNote)}</p>
         </section>
         <section class="menu-section" aria-labelledby="menu-access"><h3 id="menu-access">${icon('info')}${esc(ACCESS_TEXT.section)}</h3>
           <div class="settings access" role="group" aria-labelledby="menu-access">
             ${setting('a-palette', 'graphics', ACCESS_TEXT.palette.label, ACCESS_TEXT.palette.tip, [['standard', ACCESS_TEXT.palette.standard], ['colourblind', ACCESS_TEXT.palette.colourblind]])}
-            ${setting('a-text', 'pencil', ACCESS_TEXT.text.label, ACCESS_TEXT.text.tip, TEXT_SCALES.map((t) => [String(t), `${Math.round(t * 100)}%`]))}
+            ${setting('a-text', 'pencil', ACCESS_TEXT.text.label, ACCESS_TEXT.text.tip, TEXT_SCALES.map((t) => [String(t), percent(t)]))}
             ${setting('a-contrast', 'info', ACCESS_TEXT.contrast.label, ACCESS_TEXT.contrast.tip, [['off', ACCESS_TEXT.contrast.normal], ['on', ACCESS_TEXT.contrast.high]])}
             ${setting('a-motion', 'speed', ACCESS_TEXT.motion.label, ACCESS_TEXT.motion.tip, [['auto', ACCESS_TEXT.motion.auto], ['full', ACCESS_TEXT.motion.full], ['reduced', ACCESS_TEXT.motion.reduced]])}
             ${setting('a-captions', 'sound', ACCESS_TEXT.captions.label, ACCESS_TEXT.captions.tip, [['auto', ACCESS_TEXT.captions.auto], ['on', ACCESS_TEXT.captions.on], ['off', ACCESS_TEXT.captions.off]])}
@@ -159,10 +159,10 @@ export class Menus {
         ${controlsGridHtml(padControls(), 'pad-only')}
         <div class="menu-transfer" data-u="transfer" hidden></div>
         <div class="menu-foot"><span class="save-note" data-u="save"></span>${MULTIPLAYER
-          ? `${button({ label: 'Feedback', icon: 'pencil', size: 'small', key: { key: 'F8' }, tip: 'Tell the developer about a bug, a frustration or what you enjoyed (F8)', attrs: { 'data-u': 'feedback' } })}${button({ label: 'Another computer', icon: 'swap', size: 'small', tip: 'Get a one-time code to play as yourself on another computer', attrs: { 'data-u': 'move' } })}`
-          : ''}${button({ label: 'Tutorial', icon: 'tip', size: 'small', tip: 'Show the step-by-step tutorial again', attrs: { 'data-u': 'tutorial' } })}${button({
-            label: MULTIPLAYER ? 'Leave classroom' : SAY.reset, icon: MULTIPLAYER ? 'close' : 'remove', size: 'small', variant: 'danger',
-            tip: MULTIPLAYER ? 'Leave this classroom for good: your desk is freed (asks first)' : 'Delete all progress (asks first)', attrs: { 'data-u': 'reset' },
+          ? `${button({ label: T.menus.feedback, icon: 'pencil', size: 'small', key: { key: 'F8' }, tip: T.menus.feedbackTip, attrs: { 'data-u': 'feedback' } })}${button({ label: T.menus.anotherComputer, icon: 'swap', size: 'small', tip: T.menus.anotherComputerTip, attrs: { 'data-u': 'move' } })}`
+          : ''}${button({ label: T.menus.tutorial, icon: 'tip', size: 'small', tip: T.menus.tutorialTip, attrs: { 'data-u': 'tutorial' } })}${button({
+            label: MULTIPLAYER ? T.menus.leaveClassroom : SAY.reset, icon: MULTIPLAYER ? 'close' : 'remove', size: 'small', variant: 'danger',
+            tip: MULTIPLAYER ? T.menus.leaveTip : T.menus.resetTip, attrs: { 'data-u': 'reset' },
           })}</div>`,
     });
     root.appendChild(this.overlay);
@@ -173,10 +173,10 @@ export class Menus {
       bodyHtml: /* html */ `
         <b class="brand">paperwars<span>.io</span></b>
         <h2 id="wc-title" data-u="wc-title"></h2>
-        <div class="wc-paper" ${attrs(tooltipAttrs('Paper'))}>${icon('paper')}<b class="num" data-u="wc-paper"></b></div>
+        <div class="wc-paper" ${attrs(tooltipAttrs(T.menus.paper))}>${icon('paper')}<b class="num" data-u="wc-paper"></b></div>
         <div data-u="wc-session"></div>
         ${button({ label: SAY.continue, icon: 'home', variant: 'primary', key: bind('confirm'), attrs: { 'data-u': 'wc-go', 'data-nav-default': '' } })}
-        ${MULTIPLAYER ? '' : `<a class="ui-button" data-variant="secondary" data-size="small" data-u="wc-mp" href="?mp" ${attrs(tooltipAttrs('Play with others in a shared classroom'))}>${icon('fighter', 'icon ui-icon')}<span class="ui-label">Multiplayer</span></a>`}`,
+        ${MULTIPLAYER ? '' : `<a class="ui-button" data-variant="secondary" data-size="small" data-u="wc-mp" href="?mp" ${attrs(tooltipAttrs(T.menus.playWithOthers))}>${icon('fighter', 'icon ui-icon')}<span class="ui-label">${esc(T.menus.multiplayer)}</span></a>`}`,
     });
     root.appendChild(this.welcome);
     // Hidden until the first render says otherwise (multiplayer doesn't render the HUD before a desk is claimed).
@@ -236,8 +236,8 @@ export class Menus {
       if (this.el.sound.dataset.key !== sKey) {
         this.el.sound.dataset.key = sKey;
         this.el.sound.querySelector('svg')!.outerHTML = icon(muted ? 'mute' : 'sound', 'icon ui-icon');
-        text(this.el.sound.querySelector<HTMLElement>('.ui-label')!, muted ? 'Off' : 'On');
-        attr(this.el.sound, 'aria-label', `${ICON_NAMES.sound}: ${muted ? 'Off' : 'On'}`);
+        text(this.el.sound.querySelector<HTMLElement>('.ui-label')!, muted ? T.menus.off : T.menus.on);
+        attr(this.el.sound, 'aria-label', T.menus.soundState(ICON_NAMES.sound, !muted));
         attr(this.el.sound, 'aria-pressed', String(!muted));
       }
       const pressed = (id: string, on: (value: string) => boolean) => {
@@ -268,7 +268,7 @@ export class Menus {
       if (this.el.transfer.dataset.key !== tKey) {
         this.el.transfer.dataset.key = tKey;
         this.el.transfer.innerHTML = t
-          ? `${icon('swap')}<span>On the other computer, open the multiplayer menu and enter</span><b class="transfer-code">${esc(t.code)}</b><small>Works once, for ${t.minutes} min</small>`
+          ? `${icon('swap')}<span>${esc(T.menus.transferHow)}</span><b class="transfer-code">${esc(t.code)}</b><small>${esc(T.menus.transferOnce(minutesLong(t.minutes)))}</small>`
           : '';
       }
       toggle(this.el.transfer, t !== null);
@@ -282,9 +282,9 @@ export class Menus {
       else focusManager()?.closePanel(panel);
     }
     if (w) {
-      text(this.el['wc-title'], w.restored ? 'Welcome back' : 'Welcome');
+      text(this.el['wc-title'], w.restored ? T.menus.welcomeBack : SAY.welcome);
       text(this.el['wc-paper'], fmt(w.paper));
-      attr(this.el['wc-title'], 'data-tip', w.problems > 0 ? `${w.problems} damaged save entries were repaired` : '');
+      attr(this.el['wc-title'], 'data-tip', w.problems > 0 ? T.menus.savesRepaired(w.problems) : '');
       const html = w.session ? sessionStats(w.session) : '';
       if (this.el['wc-session'].dataset.html !== html) {
         this.el['wc-session'].dataset.html = html;

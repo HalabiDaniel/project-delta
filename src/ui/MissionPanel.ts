@@ -3,9 +3,9 @@ import { bind } from '../input/bindings';
 import { DIRECTOR } from '../config';
 import { attrs, bar, button, card, chip, glyph, pips, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
-import { clock, fmt, metres } from './format';
+import { clock, count, fmt, metres, paper } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
-import { MISSION_ICONS, MISSION_TYPE_LABELS, SAY, STYLE_TEXT } from './strings';
+import { MISSION_ICONS, MISSION_TYPE_LABELS, SAY, STYLE_TEXT, T } from './strings';
 import type { HudView, MissionCardView, ThreatSummary, TrackerView } from './views';
 
 const MODIFIER_ICONS: Record<string, IconName> = {
@@ -26,33 +26,33 @@ const tip = (t: string): string => attrs(tooltipAttrs(t));
 /** Threat as pips (count and colour) with the defenses as icons; the full list is the tooltip. */
 function threatHtml(t: ThreatSummary): string {
   const icons = t.icons.slice(0, 5).map((n) => icon(n, 'icon', ICON_NAMES[n])).join('');
-  return `<span class="threat" data-level="${t.level}" ${tip(`${t.label}: ${t.detail}`)}>${pips({ filled: t.level, total: 3, label: t.label, tone: 'threat' })}${icons}</span>`;
+  return `<span class="threat" data-level="${t.level}" ${tip(T.common.labelValue(t.label, t.detail))}>${pips({ filled: t.level, total: 3, label: t.label, tone: 'threat' })}${icons}</span>`;
 }
 
 /** One mission card: reward and risk at a glance (type, title, reward, slot, stars, threat, kit, which planes fit). */
 export function missionCardHtml(c: MissionCardView, i: number): string {
-  const stars = pips({ filled: c.stars, total: Math.max(3, c.stars), label: `${c.tierLabel} ×${c.multiplier}`, tone: 'gold', className: 'mc-stars', attrs: { 'data-tip': `${c.tierLabel} ×${c.multiplier}` } });
-  const mods = c.modifiers.map((m) => `<span class="mod" role="img" aria-label="${esc(m.label)}" ${tip(`${m.label}: ${m.detail}`)}>${icon(MODIFIER_ICONS[m.id] ?? 'info')}</span>`).join('');
+  const stars = pips({ filled: c.stars, total: Math.max(3, c.stars), label: T.mission.tier(c.tierLabel, c.multiplier), tone: 'gold', className: 'mc-stars', attrs: { 'data-tip': T.mission.tier(c.tierLabel, c.multiplier) } });
+  const mods = c.modifiers.map((m) => `<span class="mod" role="img" aria-label="${esc(m.label)}" ${tip(T.common.labelValue(m.label, m.detail))}>${icon(MODIFIER_ICONS[m.id] ?? 'info')}</span>`).join('');
   const kit = [
-    c.bombs > 0 ? `<span class="kit" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<b class="num">${c.bombs}</b></span>` : '',
-    c.timeLimit ? `<span class="kit" ${tip('Time limit')}>${icon('clock')}<b class="num">${clock(c.timeLimit, true)}</b></span>` : '',
-    `<span class="kit card-expires" ${tip('Event ends in')}>${icon('warn')}<b class="num"></b></span>`,
+    c.bombs > 0 ? `<span class="kit" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<b class="num">${count(c.bombs)}</b></span>` : '',
+    c.timeLimit ? `<span class="kit" ${tip(T.mission.timeLimit)}>${icon('clock')}<b class="num">${clock(c.timeLimit, true)}</b></span>` : '',
+    `<span class="kit card-expires" ${tip(T.mission.eventEnds)}>${icon('warn')}<b class="num"></b></span>`,
   ].join('');
   const fits = c.fits
-    .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" ${tip(`${f.name}: ${SUITABILITY_LABELS[f.level]}`)}>${esc(shortName(f.name))}</span>`)
+    .map((f) => `<span class="fit" data-id="${f.id}" data-level="${f.level}" ${tip(T.common.labelValue(f.name, SUITABILITY_LABELS[f.level]))}>${esc(shortName(f.id, f.name))}</span>`)
     .join('');
   const op = c.operation;
   const opHtml = op
-    ? `<div class="op" ${tip(`${op.codename} · bonus +${op.bonus} · ${op.remaining} still to earn`)}>${op.stages
-        .map((st, k) => `<i data-status="${st.status}" class="${k === op.stage ? 'this' : ''}" ${tip(`${st.label} · optional: ${st.optional}`)}></i>`)
-        .join('')}<b class="num">+${op.bonus}</b>${op.active ? button({ label: SAY.abandon, icon: 'close', size: 'small', variant: 'secondary', className: 'op-abandon', tip: 'Abandon the operation', attrs: { 'data-act': 'abandon' } }) : ''}</div>`
+    ? `<div class="op" ${tip(T.mission.operation(op.codename, paper(op.bonus), paper(op.remaining)))}>${op.stages
+        .map((st, k) => `<i data-status="${st.status}" class="${k === op.stage ? 'this' : ''}" ${tip(T.mission.stage(st.label, st.optional))}></i>`)
+        .join('')}<b class="num">+${paper(op.bonus)}</b>${op.active ? button({ label: SAY.abandon, icon: 'close', size: 'small', variant: 'secondary', className: 'op-abandon', tip: T.mission.abandonTip, attrs: { 'data-act': 'abandon' } }) : ''}</div>`
     : '';
-  const title = `${c.codename ? `${c.codename}: ` : ''}${c.description}`;
-  return `<div class="mcard" role="button" data-nav data-m="card-${i}" data-slot="${c.slot}" data-tier="${c.tier}" aria-label="${esc(`${c.title} · ${c.slotLabel} · +${fmt(c.reward)}`)}" ${tip(title)}>
+  const title = c.codename ? T.mission.codename(c.codename, c.description) : c.description;
+  return `<div class="mcard" role="button" data-nav data-m="card-${i}" data-slot="${c.slot}" data-tier="${c.tier}" aria-label="${esc(T.common.dot([c.title, c.slotLabel, `+${fmt(c.reward)}`]))}" ${tip(title)}>
     <div class="mc-top">${glyph({ key: String(i + 1) }, { className: 'hint-key' })}<span class="mc-type" role="img" aria-label="${esc(MISSION_TYPE_LABELS[c.type])}" ${tip(MISSION_TYPE_LABELS[c.type])}>${icon(MISSION_ICONS[c.type])}</span>
       <b class="mc-title">${esc(c.title)}</b>
-      <b class="mc-reward" ${tip(c.rewardNote || 'Reward')}>${icon('trophy')}<span class="num">+${fmt(c.reward)}</span>${icon('paper')}</b></div>
-    <div class="mc-mid">${chip({ label: c.slotLabel, tone: SLOT_TONES[c.slot], className: 'mc-slot' })}${stars}${c.recommended ? `<span class="mc-yours" role="img" aria-label="${esc("The director's pick for your level")}" ${tip("The director's pick for your level")}>${icon('level')}</span>` : ''}${mods}</div>
+      <b class="mc-reward" ${tip(c.rewardNote || T.mission.reward)}>${icon('trophy')}<span class="num">+${fmt(c.reward)}</span>${icon('paper')}</b></div>
+    <div class="mc-mid">${chip({ label: c.slotLabel, tone: SLOT_TONES[c.slot], className: 'mc-slot' })}${stars}${c.recommended ? `<span class="mc-yours" role="img" aria-label="${esc(T.mission.directorsPick)}" ${tip(T.mission.directorsPick)}>${icon('level')}</span>` : ''}${mods}</div>
     <div class="mc-bottom">${threatHtml(c.threat)}${kit}<span class="fits">${fits}</span></div>
     <div class="mc-risk" hidden>${icon('plane')}<span data-risk></span></div>
     ${opHtml}</div>`;
@@ -79,7 +79,7 @@ export class MissionPanel {
     this.cards = document.createElement('div');
     this.cards.className = 'mission-cards';
     this.cards.innerHTML = `<div class="cards" role="group" aria-label="${SAY.missions}" data-m="cards"></div>${button({
-      label: SAY.swap, icon: 'swap', size: 'small', tip: 'Swap the chosen card', tipKey: bind('swap'), className: 'swap-btn', attrs: { 'data-m': 'swap' },
+      label: SAY.swap, icon: 'swap', size: 'small', tip: T.mission.swapTip, tipKey: bind('swap'), className: 'swap-btn', attrs: { 'data-m': 'swap' },
     })}`;
     cardHost.appendChild(this.cards);
     const swap = this.cards.querySelector<HTMLElement>('[data-m="swap"]')!;
@@ -93,7 +93,7 @@ export class MissionPanel {
         <span class="obj-dist num" data-m="dist"></span>
         <span class="obj-timer" data-m="timer">${icon('clock')}<b class="num" data-m="time"></b></span>
         ${chip({ label: '', className: 'obj-status', attrs: { 'data-m': 'status' } })}
-        <b class="obj-reward" data-m="reward" ${tip('Reward')}>${icon('trophy')}<span class="num" data-m="reward-n"></span>${icon('paper')}</b>
+        <b class="obj-reward" data-m="reward" ${tip(T.mission.reward)}>${icon('trophy')}<span class="num" data-m="reward-n"></span>${icon('paper')}</b>
       </div>
       ${bar({ value: 0, label: SAY.objective, kind: 'progress', size: 'thin', className: 'obj-bar', attrs: { 'data-m': 'bar' } })}
       <ol class="obj-steps" data-m="steps"></ol>`,
@@ -164,11 +164,11 @@ export class MissionPanel {
     if (typeEl.dataset.type !== t.type) {
       typeEl.dataset.type = t.type;
       typeEl.innerHTML = icon(MISSION_ICONS[t.type], 'icon', MISSION_TYPE_LABELS[t.type]);
-      typeEl.dataset.tip = `${MISSION_TYPE_LABELS[t.type]} · ${t.difficultyLabel} ×${t.multiplier}`;
+      typeEl.dataset.tip = T.common.dot([MISSION_TYPE_LABELS[t.type], T.mission.tier(t.difficultyLabel, t.multiplier)]);
     }
     const done = t.status === 'succeeded';
-    text(this.el.now, done ? 'Complete' : t.status === 'failed' ? 'Failed' : (current?.label ?? t.title));
-    attr(this.el.now, 'data-tip', `${t.title}${t.hint ? ` · ${t.hint}` : ''}`);
+    text(this.el.now, done ? T.mission.complete : t.status === 'failed' ? T.mission.failed : (current?.label ?? t.title));
+    attr(this.el.now, 'data-tip', t.hint ? T.common.dot([t.title, t.hint]) : t.title);
     const dist = current && current.open && current.distance !== null ? metres(current.distance) : '';
     text(this.el.dist, dist);
     toggle(this.el.dist, dist !== '');
@@ -206,8 +206,7 @@ export class MissionPanel {
   }
 }
 
-/** One letter per design, two where names share a first letter (Swift / Specter, Lancer / Lightning). */
-const SHORT: Record<string, string> = { Specter: 'Sp', Swift: 'Sw', Lancer: 'La', Lightning: 'Li' };
-function shortName(name: string): string {
-  return SHORT[name] ?? name.charAt(0);
+/** One letter per design, two where names share a first letter (Swift / Specter, Lancer / Lightning); by id, not by name. */
+function shortName(id: string, name: string): string {
+  return T.mission.fitLetter[id] ?? name.charAt(0);
 }

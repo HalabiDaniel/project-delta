@@ -9,8 +9,14 @@ import { bar, bindTabs, button, panelId, tabPanel, tabs } from './components';
 import { bindButton, esc } from './dom';
 import { icon, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { MISSION_TYPE_LABELS, SAY } from './strings';
+import { MISSION_TYPE_LABELS, SAY, T } from './strings';
+import { count, date, km, minutesLong, num, paper as paperAmount, pct, timeOfDay, times } from './format';
 import type { SessionView } from './views';
+
+const L = T.logbook;
+/** A loss or a gain in the ledger, in full: "−120", "+40", "0". */
+const minus = (n: number): string => (n > 0 ? `−${paperAmount(n)}` : count(0));
+const plus = (n: number): string => (n > 0 ? `+${paperAmount(n)}` : count(0));
 
 export interface LogbookView {
   /** Career numbers in this browser (the HUD no longer shows them). */
@@ -34,7 +40,7 @@ export interface LogbookView {
 
 export type LogbookTab = 'records' | 'base' | 'aircraft' | 'paper' | 'session';
 type Tab = LogbookTab;
-const TABS: Array<[Tab, string, IconName]> = [['records', 'Records', 'medal'], ['base', 'Base', 'base'], ['aircraft', 'Aircraft', 'plane'], ['paper', 'Paper', 'paper'], ['session', 'Session', 'clock']];
+const TABS: Array<[Tab, string, IconName]> = [['records', T.logbook.tabs.records, 'medal'], ['base', T.logbook.tabs.base, 'base'], ['aircraft', T.logbook.tabs.aircraft, 'plane'], ['paper', T.logbook.tabs.paper, 'paper'], ['session', T.logbook.tabs.session, 'clock']];
 const TABS_ID = 'logbook-tabs';
 
 /** Filters: which achievements, which transactions. */
@@ -47,7 +53,7 @@ interface Filters {
 
 /** A segmented filter: buttons with aria-pressed, the chosen one also underlined. */
 function filterHtml(group: keyof Filters, chosen: string, items: Array<[string, string]>): string {
-  return `<div class="lb-filter" role="group" aria-label="${SAY.filter}">${icon('more', 'icon', SAY.filter)}${items
+  return `<div class="lb-filter" role="group" aria-label="${esc(SAY.filter)}">${icon('more', 'icon', SAY.filter)}${items
     .map(([v, label]) => `<button type="button" class="lb-filter-btn" data-filter="${group}" data-v="${v}" aria-pressed="${v === chosen}">${esc(label)}</button>`)
     .join('')}</div>`;
 }
@@ -71,7 +77,7 @@ export class Logbook {
     this.el.hidden = true;
     this.el.innerHTML = `
       <section class="logbook-card ui-card" role="dialog" aria-labelledby="logbook-title" data-fold="none">
-        <div class="logbook-head"><h2 id="logbook-title">${SAY.logbook}</h2>${this.tabsHtml()}${button({ label: SAY.close, icon: 'close', key: bind('back'), attrs: { 'data-close': '', 'data-act': 'close-logbook' } })}</div>
+        <div class="logbook-head"><h2 id="logbook-title">${esc(SAY.logbook)}</h2>${this.tabsHtml()}${button({ label: SAY.close, icon: 'close', key: bind('back'), attrs: { 'data-close': '', 'data-act': 'close-logbook' } })}</div>
         ${TABS.map(([id]) => tabPanel({ tabsId: TABS_ID, tab: id, bodyHtml: '', selected: id === this.tab, className: 'logbook-body' })).join('')}
       </section>`;
     this.panels = Object.fromEntries(TABS.map(([id]) => [id, this.el.querySelector<HTMLElement>(`#${panelId(TABS_ID, id)}`)!])) as Record<Tab, HTMLElement>;
@@ -142,23 +148,23 @@ export class Logbook {
 
 function records(v: LogbookView, filter: AchievementFilter = 'all'): string {
   const b = v.progress.bests;
-  const row = (label: string, value: string) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const row = (label: string, value: string) => `<div><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
   const bests = [
     row(BEST_LABELS.fastestBombing, b.fastestBombing ? `${clock(b.fastestBombing.time)} <small>${esc(b.fastestBombing.title)}</small>` : '—'),
-    row(BEST_LABELS.bestBombAccuracy, b.bestBombAccuracy ? `${Math.round(b.bestBombAccuracy.accuracy * 100)}% of ${b.bestBombAccuracy.bombs} <small>${esc(b.bestBombAccuracy.title)}</small>` : '—'),
-    row(BEST_LABELS.longestFlight, b.longestFlight ? `${(b.longestFlight.distance / 1000).toFixed(2)} km <small>${AIRCRAFT[b.longestFlight.aircraft].name}</small>` : '—'),
-    row(BEST_LABELS.mostKills, b.mostKills ? `${b.mostKills.count} <small>${esc(b.mostKills.title)}</small>` : '—'),
-    row(BEST_LABELS.cleanRun, String(b.cleanRun)),
-    row('Longest mission streak', String(v.progress.streak.best)),
-    row('Medals', (['gold', 'silver', 'bronze'] as const).map((m) => `<span class="medal-n" data-medal="${m}" role="img" aria-label="${m} ${v.progress.medals[m]}">${icon('medal')}<b class="num">${v.progress.medals[m]}</b></span>`).join('')),
-    row('Safe landings', String(v.progress.landings)),
-    row('Difficulty that suits you now', `${v.recommended} <small>(the director's guess: harder cards are always there if you want them)</small>`),
-    row('Missions completed', String(v.career.missionsCompleted)),
-    row('Planes lost', String(v.career.planesLost)),
-    row('Targets destroyed', String(v.career.targetsDestroyed)),
-    row('Defenses destroyed', String(v.career.defensesDestroyed)),
-    row('Aircraft shot down', String(v.career.aircraftDestroyed)),
-    row('Favourite plane', v.career.favorite ?? '—'),
+    row(BEST_LABELS.bestBombAccuracy, b.bestBombAccuracy ? `${esc(T.logbook.accuracyOf(pct(b.bestBombAccuracy.accuracy), b.bestBombAccuracy.bombs))} <small>${esc(b.bestBombAccuracy.title)}</small>` : '—'),
+    row(BEST_LABELS.longestFlight, b.longestFlight ? `${km(b.longestFlight.distance, 2)} <small>${esc(AIRCRAFT[b.longestFlight.aircraft].name)}</small>` : '—'),
+    row(BEST_LABELS.mostKills, b.mostKills ? `${count(b.mostKills.count)} <small>${esc(b.mostKills.title)}</small>` : '—'),
+    row(BEST_LABELS.cleanRun, count(b.cleanRun)),
+    row(L.longestStreak, count(v.progress.streak.best)),
+    row(L.medals, (['gold', 'silver', 'bronze'] as const).map((m) => `<span class="medal-n" data-medal="${m}" role="img" aria-label="${esc(L.medalCount(L.medal[m], v.progress.medals[m]))}">${icon('medal')}<b class="num">${count(v.progress.medals[m])}</b></span>`).join('')),
+    row(L.safeLandings, count(v.progress.landings)),
+    row(L.suitsYou, `${esc(v.recommended)} <small>${esc(L.suitsYouNote)}</small>`),
+    row(L.missionsCompleted, count(v.career.missionsCompleted)),
+    row(L.planesLost, count(v.career.planesLost)),
+    row(L.targetsDestroyed, count(v.career.targetsDestroyed)),
+    row(L.defensesDestroyed, count(v.career.defensesDestroyed)),
+    row(L.aircraftShotDown, count(v.career.aircraftDestroyed)),
+    row(L.favouritePlane, esc(v.career.favorite ?? '—')),
   ].join('');
   const unlocked = ACHIEVEMENTS.filter((a) => v.progress.achievements[a.id] !== undefined).length;
   const achievements = ACHIEVEMENTS.filter((a) => {
@@ -166,37 +172,37 @@ function records(v: LogbookView, filter: AchievementFilter = 'all'): string {
     return filter === 'all' || (filter === 'earned') === got;
   }).map((a) => {
     const at = v.progress.achievements[a.id];
-    return `<li class="${at !== undefined ? 'got' : ''}"><b>${icon(at !== undefined ? 'medal' : 'lock', 'icon', at !== undefined ? SAY.earned : SAY.locked)} ${esc(a.title)}</b><span>${esc(a.detail)}</span>${at !== undefined ? `<small>${new Date(at).toLocaleDateString()}</small>` : ''}</li>`;
+    return `<li class="${at !== undefined ? 'got' : ''}"><b>${icon(at !== undefined ? 'medal' : 'lock', 'icon', at !== undefined ? SAY.earned : SAY.locked)} ${esc(a.title)}</b><span>${esc(a.detail)}</span>${at !== undefined ? `<small>${date(at)}</small>` : ''}</li>`;
   }).join('');
-  return `<div class="lb-cols"><section><h3>Personal bests</h3><dl class="ledger">${bests}</dl></section>
-    <section><div class="lb-section-head"><h3>Achievements <small>${unlocked}/${ACHIEVEMENTS.length}</small></h3>${filterHtml('ach', filter, [['all', SAY.all], ['earned', SAY.earned], ['locked', SAY.locked]])}</div>${bar({ value: unlocked / Math.max(1, ACHIEVEMENTS.length), label: `Achievements ${unlocked}/${ACHIEVEMENTS.length}`, kind: 'progress', segments: 0, className: 'lb-progress' })}<ul class="achievements">${achievements || '<li class="muted">—</li>'}</ul></section></div>`;
+  return `<div class="lb-cols"><section><h3>${esc(L.personalBests)}</h3><dl class="ledger">${bests}</dl></section>
+    <section><div class="lb-section-head"><h3>${esc(L.achievements)} <small>${count(unlocked)}/${count(ACHIEVEMENTS.length)}</small></h3>${filterHtml('ach', filter, [['all', SAY.all], ['earned', SAY.earned], ['locked', SAY.locked]])}</div>${bar({ value: unlocked / Math.max(1, ACHIEVEMENTS.length), label: L.achievementsCount(unlocked, ACHIEVEMENTS.length), kind: 'progress', segments: 0, className: 'lb-progress' })}<ul class="achievements">${achievements || '<li class="muted">—</li>'}</ul></section></div>`;
 }
 
 function base(v: LogbookView): string {
   const b = v.base;
   const s = b.stats;
-  const row = (label: string, value: string) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
-  const status = { ok: '✓', damaged: 'Damaged', destroyed: 'Wrecked' };
+  const row = (label: string, value: string) => `<div><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+  const status = { ok: L.statusOk, damaged: L.statusDamaged, destroyed: L.statusDestroyed };
   const buildings = b.buildings.length
-    ? b.buildings.map((x) => `<tr><th>${icon(x.icon)} ${esc(x.name)}</th><td>${'★'.repeat(x.level)}</td><td class="${x.status === 'ok' ? 'good' : 'bad'}">${status[x.status]}</td><td>${x.kills}</td><td>${x.bombers}</td><td>${x.damage}</td></tr>`).join('')
-    : '<tr><td colspan="6" class="muted">Nothing built yet</td></tr>';
-  return `<div class="lb-cols"><section><h3>T1 now</h3><dl class="ledger">
-      ${row('Paper per minute', String(Math.round(b.production * 10) / 10))}
-      ${row('Capacity', String(b.capacity))}
-      ${row('Protected from raids', String(b.protectedPaper))}
+    ? b.buildings.map((x) => `<tr><th>${icon(x.icon)} ${esc(x.name)}</th><td>${'★'.repeat(x.level)}</td><td class="${x.status === 'ok' ? 'good' : 'bad'}">${esc(status[x.status])}</td><td>${count(x.kills)}</td><td>${count(x.bombers)}</td><td>${count(x.damage)}</td></tr>`).join('')
+    : `<tr><td colspan="6" class="muted">${esc(L.nothingBuilt)}</td></tr>`;
+  return `<div class="lb-cols"><section><h3>${esc(L.t1Now)}</h3><dl class="ledger">
+      ${row(L.paperPerMinute, num(b.production, 1))}
+      ${row(L.capacity, paperAmount(b.capacity))}
+      ${row(L.protectedFromRaids, paperAmount(b.protectedPaper))}
     </dl>
-    <h3>Buildings</h3><table class="lb-table"><thead><tr><th></th><th>Level</th><th>State</th><th>Shot down</th><th>Bombers</th><th>Damage</th></tr></thead><tbody>${buildings}</tbody></table></section>
-    <section><h3>Raids and building</h3><dl class="ledger">
-      ${row('Raids on T1', String(s.raids))}
-      ${row('Raids repelled', String(s.repelled))}
-      ${row('Bombers destroyed by defenses', String(s.bombersDowned))}
-      ${row('Aircraft destroyed by defenses', String(s.aircraftDowned))}
-      ${row('Paper lost to attacks', s.paperLost > 0 ? `−${s.paperLost}` : '0')}
-      ${row('Paper spent on construction', s.construction > 0 ? `−${s.construction}` : '0')}
-      ${row('Paper spent on repairs', s.repairCosts > 0 ? `−${s.repairCosts}` : '0')}
-      ${row('Paper made by workshops', `+${Math.round(s.workshopPaper)}`)}
-      ${row('Structures repaired', String(s.repairs))}
-      ${row('Refunds for removed buildings', s.refunds > 0 ? `+${s.refunds}` : '0')}
+    <h3>${esc(L.buildings)}</h3><table class="lb-table"><thead><tr><th></th><th>${esc(L.level)}</th><th>${esc(L.state)}</th><th>${esc(L.shotDown)}</th><th>${esc(L.bombers)}</th><th>${esc(L.damage)}</th></tr></thead><tbody>${buildings}</tbody></table></section>
+    <section><h3>${esc(L.raidsAndBuilding)}</h3><dl class="ledger">
+      ${row(L.raidsOnT1, count(s.raids))}
+      ${row(L.raidsRepelled, count(s.repelled))}
+      ${row(L.bombersByDefenses, count(s.bombersDowned))}
+      ${row(L.aircraftByDefenses, count(s.aircraftDowned))}
+      ${row(L.paperLostToAttacks, minus(s.paperLost))}
+      ${row(L.paperOnConstruction, minus(s.construction))}
+      ${row(L.paperOnRepairs, minus(s.repairCosts))}
+      ${row(L.paperByWorkshops, `+${paperAmount(s.workshopPaper)}`)}
+      ${row(L.structuresRepaired, count(s.repairs))}
+      ${row(L.refunds, plus(s.refunds))}
     </dl></section></div>`;
 }
 
@@ -204,38 +210,38 @@ function aircraft(v: LogbookView): string {
   const rows = AIRCRAFT_ORDER.map((id) => {
     const m = v.progress.mastery[id];
     const spec = AIRCRAFT[id];
-    if (!m || m.flights === 0) return `<tr><th>${spec.name}</th><td colspan="7" class="muted">Not flown yet</td></tr>`;
-    const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—');
+    if (!m || m.flights === 0) return `<tr><th>${esc(spec.name)}</th><td colspan="7" class="muted">${esc(L.notFlown)}</td></tr>`;
+    const share = (a: number, b: number) => (b > 0 ? pct(a / b) : '—');
     const best = (Object.entries(m.byCategory) as Array<[Category, number]>).sort((a, b) => b[1] - a[1])[0];
-    return `<tr><th>${spec.name}</th><td>${m.flights}</td><td>${m.missions}</td><td>${m.lost}</td><td>${pct(m.shotsHit, m.shotsFired)}</td><td>${pct(m.bombHits, m.bombsDropped)}</td><td>${m.kills}</td>
-      <td>${best ? `${best[1]} ${CATEGORY_LABELS[best[0]].toLowerCase()}` : '—'}</td></tr>`;
+    return `<tr><th>${esc(spec.name)}</th><td>${count(m.flights)}</td><td>${count(m.missions)}</td><td>${count(m.lost)}</td><td>${share(m.shotsHit, m.shotsFired)}</td><td>${share(m.bombHits, m.bombsDropped)}</td><td>${count(m.kills)}</td>
+      <td>${best ? esc(L.mostDone(best[1], CATEGORY_LABELS[best[0]])) : '—'}</td></tr>`;
   }).join('');
-  return `<p class="muted">Each design's record. Statistics only: nothing unlocks, every plane stays as it is.</p>
-    <table class="lb-table"><thead><tr><th></th><th>Flights</th><th>Missions done</th><th>Lost</th><th>Ink accuracy</th><th>Bomb accuracy</th><th>Shot down</th><th>Most done</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<p class="muted">${esc(L.designsNote)}</p>
+    <table class="lb-table"><thead><tr><th></th><th>${esc(L.flights)}</th><th>${esc(L.missionsDone)}</th><th>${esc(L.lost)}</th><th>${esc(L.inkAccuracy)}</th><th>${esc(L.bombAccuracy)}</th><th>${esc(L.shotDown)}</th><th>${esc(L.mostDoneHead)}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function paper(v: LogbookView, filter: PaperFilter = 'all'): string {
   const l = v.ledger;
-  const log = l.recent(30).filter((e) => filter === 'all' || (filter === 'in') === e.delta > 0).map((e) => `<tr><td>${new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td><td>${esc(e.source === 'income' ? `Home production (${e.count} payouts)` : e.label)}</td><td class="${e.delta > 0 ? 'good' : 'bad'}">${e.delta > 0 ? '+' : '−'}${Math.abs(e.delta)}</td><td>${e.balance}</td></tr>`).join('');
+  const log = l.recent(30).filter((e) => filter === 'all' || (filter === 'in') === e.delta > 0).map((e) => `<tr><td>${timeOfDay(e.at)}</td><td>${esc(e.source === 'income' ? L.homeProduction(e.count) : e.label)}</td><td class="${e.delta > 0 ? 'good' : 'bad'}">${e.delta > 0 ? '+' : '−'}${paperAmount(Math.abs(e.delta))}</td><td>${paperAmount(e.balance)}</td></tr>`).join('');
   const t = l.totals;
   const eff = (rows: Array<[string, { sorties: number; successes: number; lost: number; spent: number; earned: number }]>) =>
-    rows.map(([name, e]) => `<tr><th>${esc(name)}</th><td>${e.sorties}</td><td>${e.successes}</td><td>${e.lost}</td><td>−${e.spent}</td><td>+${e.earned}</td><td>${e.spent > 0 ? `${(e.earned / e.spent).toFixed(1)}×` : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No sorties yet</td></tr>';
-  const head = '<thead><tr><th></th><th>Sorties</th><th>Done</th><th>Lost</th><th>Spent</th><th>Earned</th><th>Return</th></tr></thead>';
-  return `<div class="lb-cols"><section><div class="lb-section-head"><h3>Recent transactions</h3>${filterHtml('paper', filter, [['all', SAY.all], ['in', SAY.paperIn], ['out', SAY.paperOut]])}</div><table class="lb-table">${log || '<tr><td class="muted">Nothing yet</td></tr>'}</table></section>
-    <section><h3>Totals</h3><dl class="ledger"><div><dt>Earned (all sources)</dt><dd>+${t.earned}</dd></div><div><dt>Of which home production</dt><dd>+${t.income}</dd></div><div><dt>Of which bonuses</dt><dd>+${t.bonuses}</dd></div><div><dt>Spent on planes</dt><dd>−${t.spent}</dd></div><div><dt>Lost to raids</dt><dd>−${t.raids}</dd></div></dl>
-    <h3>By aircraft</h3><table class="lb-table">${head}<tbody>${eff(AIRCRAFT_ORDER.filter((id) => l.byAircraft.has(id)).map((id) => [AIRCRAFT[id].name, l.byAircraft.get(id)!]))}</tbody></table>
-    <h3>By mission type</h3><table class="lb-table">${head}<tbody>${eff([...l.byType].map(([type, e]) => [MISSION_TYPE_LABELS[type], e]))}</tbody></table></section></div>`;
+    rows.map(([name, e]) => `<tr><th>${esc(name)}</th><td>${count(e.sorties)}</td><td>${count(e.successes)}</td><td>${count(e.lost)}</td><td>−${paperAmount(e.spent)}</td><td>+${paperAmount(e.earned)}</td><td>${e.spent > 0 ? times(e.earned / e.spent) : '—'}</td></tr>`).join('') || `<tr><td colspan="7" class="muted">${esc(L.noSorties)}</td></tr>`;
+  const head = `<thead><tr><th></th>${[L.sorties, L.done, L.lost, L.spent, L.earned, L.return].map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>`;
+  return `<div class="lb-cols"><section><div class="lb-section-head"><h3>${esc(L.recentTransactions)}</h3>${filterHtml('paper', filter, [['all', SAY.all], ['in', SAY.paperIn], ['out', SAY.paperOut]])}</div><table class="lb-table">${log || `<tr><td class="muted">${esc(L.nothingYet)}</td></tr>`}</table></section>
+    <section><h3>${esc(L.totals)}</h3><dl class="ledger"><div><dt>${esc(L.earnedAll)}</dt><dd>+${paperAmount(t.earned)}</dd></div><div><dt>${esc(L.ofWhichHome)}</dt><dd>+${paperAmount(t.income)}</dd></div><div><dt>${esc(L.ofWhichBonuses)}</dt><dd>+${paperAmount(t.bonuses)}</dd></div><div><dt>${esc(L.spentOnPlanes)}</dt><dd>−${paperAmount(t.spent)}</dd></div><div><dt>${esc(L.lostToRaids)}</dt><dd>−${paperAmount(t.raids)}</dd></div></dl>
+    <h3>${esc(L.byAircraft)}</h3><table class="lb-table">${head}<tbody>${eff(AIRCRAFT_ORDER.filter((id) => l.byAircraft.has(id)).map((id) => [AIRCRAFT[id].name, l.byAircraft.get(id)!]))}</tbody></table>
+    <h3>${esc(L.byMissionType)}</h3><table class="lb-table">${head}<tbody>${eff([...l.byType].map(([type, e]) => [MISSION_TYPE_LABELS[type], e]))}</tbody></table></section></div>`;
 }
 
 function session(v: LogbookView): string {
   const s = v.session;
   return `<dl class="ledger session wide">
-    <div><dt>Missions completed</dt><dd>${s.missionsCompleted}${s.missionsFailed ? ` (${s.missionsFailed} failed)` : ''}</dd></div>
-    <div><dt>Paper earned</dt><dd>+${s.paperEarned}</dd></div>
-    <div><dt>Paper spent</dt><dd>−${s.paperSpent}</dd></div>
-    <div><dt>Aircraft lost</dt><dd>${s.aircraftLost}</dd></div>
-    <div><dt>Enemies destroyed</dt><dd>${s.enemiesDestroyed}</dd></div>
-    <div><dt>Best performance</dt><dd>${esc(s.best)}</dd></div>
-    <div><dt>Time played</dt><dd>${s.minutes} min</dd></div>
+    <div><dt>${esc(L.missionsCompleted)}</dt><dd>${count(s.missionsCompleted)}${s.missionsFailed ? ` ${esc(L.failedCount(s.missionsFailed))}` : ''}</dd></div>
+    <div><dt>${esc(L.paperEarned)}</dt><dd>+${paperAmount(s.paperEarned)}</dd></div>
+    <div><dt>${esc(L.paperSpent)}</dt><dd>−${paperAmount(s.paperSpent)}</dd></div>
+    <div><dt>${esc(L.aircraftLost)}</dt><dd>${count(s.aircraftLost)}</dd></div>
+    <div><dt>${esc(L.enemiesDestroyed)}</dt><dd>${count(s.enemiesDestroyed)}</dd></div>
+    <div><dt>${esc(L.bestPerformance)}</dt><dd>${esc(s.best)}</dd></div>
+    <div><dt>${esc(L.timePlayed)}</dt><dd>${minutesLong(s.minutes)}</dd></div>
   </dl>${s.achievements.length ? `<p class="session-ach">${icon('medal')} ${s.achievements.map(esc).join(' · ')}</p>` : ''}`;
 }

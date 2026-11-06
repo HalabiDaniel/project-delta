@@ -1,4 +1,6 @@
 import type { LoadProgress } from '../assets/AssetLibrary';
+import { esc } from './dom';
+import { T } from './strings';
 
 /**
  * The loading screen (v0.0.11): a sheet of paper with a progress bar while the models load, so a
@@ -20,7 +22,7 @@ export class LoadingScreen {
     const el = document.createElement('div');
     el.className = 'loading-screen';
     el.setAttribute('role', 'progressbar');
-    el.setAttribute('aria-label', 'Loading paperwars.io');
+    el.setAttribute('aria-label', T.loading.label);
     el.setAttribute('aria-valuemin', '0');
     el.setAttribute('aria-valuemax', '100');
     Object.assign(el.style, {
@@ -40,7 +42,7 @@ export class LoadingScreen {
         <div style="height:12px;border:2px solid #1f2937;border-radius:3px;background:#fff;overflow:hidden">
           <div data-bar style="height:100%;width:0;background:#3a7cf0;transition:width .15s"></div>
         </div>
-        <div data-label style="margin-top:8px;font-weight:500;font-size:13px;color:#4b5563">Folding the paper…</div>
+        <div data-label style="margin-top:8px;font-weight:500;font-size:13px;color:#4b5563">${esc(T.loading.folding)}</div>
       </div>`;
     parent.appendChild(el);
     this.el = el;
@@ -52,7 +54,7 @@ export class LoadingScreen {
     const pct = loadPercent(p);
     if (this.bar) this.bar.style.width = `${pct}%`;
     this.el?.setAttribute('aria-valuenow', String(pct));
-    if (this.label) this.label.textContent = p.total > 0 ? `Loading models ${p.done} / ${p.total}` : 'Folding the paper…';
+    if (this.label) this.label.textContent = p.total > 0 ? T.loading.models(p.done, p.total) : T.loading.folding;
   }
 
   /** Loading finished: fades out, after a short note if some models fell back to stand-ins. */
@@ -62,7 +64,7 @@ export class LoadingScreen {
     if (this.bar) this.bar.style.width = '100%';
     const hold = failures.length > 0 ? 1800 : 0;
     if (failures.length > 0 && this.label) {
-      this.label.textContent = `${failures.length} model${failures.length > 1 ? 's' : ''} didn't load: using simpler stand-ins.`;
+      this.label.textContent = T.loading.standIns(failures.length);
       console.warn('paperwars: models that fell back to stand-ins', failures);
     }
     setTimeout(() => {

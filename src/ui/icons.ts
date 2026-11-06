@@ -14,6 +14,7 @@
  */
 
 /** Lucide icons on the 24px grid (Lucide's own name in the trailing comment). */
+import { T } from './strings';
 const LUCIDE = {
   bomb: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>', // target
   radar: '<path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>', // radar
@@ -106,22 +107,7 @@ const GAME = {
 export type IconName = keyof typeof LUCIDE | keyof typeof GAME;
 
 /** What each icon stands for: tooltips and screen readers. */
-export const ICON_NAMES: Record<IconName, string> = {
-  bomb: 'Bullseye', turret: 'Ink turret', launcher: 'Rocket launcher', radar: 'Radar', supply: 'Supply depot', recon: 'Reconnaissance',
-  survive: 'Survive', escape: 'Escape', land: 'Land', ring: 'Ring', practice: 'Practice plane', reach: 'Reach', rocket: 'Rocket',
-  fighter: 'Fighter', scout: 'Scout', bomber: 'Bomber', escort: 'Escort', patrol: 'Patrol',
-  paper: 'Paper', rate: 'Paper per minute', capacity: 'Storage capacity', lock: 'Protected paper', refund: 'Refund', store: 'Paper store',
-  workshop: 'Paper workshop', storage: 'Storage box',
-  speed: 'Speed', altitude: 'Altitude', boost: 'Boost', health: 'Health', range: 'Range', ink: 'Ink', bombload: 'Bombs', rearm: 'Rearm',
-  plane: 'Aircraft', heading: 'Direction',
-  base: 'Base', repair: 'Repair', upgrade: 'Upgrade', build: 'Build', remove: 'Remove', slot: 'Empty slot', level: 'Level', shield: 'Defenses',
-  raid: 'Raid',
-  ok: 'Operational', warn: 'Damaged', wrecked: 'Destroyed', offline: 'Offline',
-  clock: 'Time', distance: 'Distance', home: 'Home', kills: 'Shot down', crumple: 'Planes lost', damage: 'Damage', medal: 'Medal', streak: 'Streak',
-  swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', pencil: 'Pencil', graphics: 'Graphics', tip: 'Tip', close: 'Close', more: 'Details',
-  trophy: 'Reward', users: 'Players', pause: 'Pause', plus: 'Add', minus: 'Less', check: 'Done', back: 'Back', map: 'Map', swords: 'Fight',
-  sun: 'Daylight', moon: 'Lights out',
-};
+export const ICON_NAMES: Readonly<Record<IconName, string>> = T.icon;
 
 /** The stroke on the 24px Lucide grid (the style guide's 2.5px) and the same weight on the 16px grid. */
 const STROKE_24 = 2.5;

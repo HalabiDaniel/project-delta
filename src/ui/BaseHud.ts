@@ -3,10 +3,10 @@ import { bind } from '../input/bindings';
 import type { RaidReport } from '../base/Raids';
 import { attrs, bar, button, card, chip, glyph, iconButton, pips, stat, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
-import { fmt, level, metres, pct } from './format';
+import { count, fmt, level, metres, paper, pct } from './format';
 import { icon, ICON_NAMES, type IconName } from './icons';
 import { focusManager } from '../input/FocusNav';
-import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS, STYLE_TEXT } from './strings';
+import { SAY, SLOT_KIND_ICONS, SLOT_KIND_LABELS, STYLE_TEXT, T } from './strings';
 import type { BaseInspectorView, BaseView, HudActions, PriceView, RaidAlertView, Stat } from './views';
 
 export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
@@ -18,7 +18,7 @@ const STATUS_ICON = { ok: 'ok', damaged: 'warn', destroyed: 'wrecked' } as const
 type TrayCategory = 'defense' | 'radar' | 'economy';
 const TRAY_CATEGORY: Record<BuildingKind, TrayCategory> = { turret: 'defense', launcher: 'defense', radar: 'radar', workshop: 'economy', storage: 'economy' };
 const CATEGORY_ICONS: Record<TrayCategory, IconName> = { defense: 'shield', radar: 'radar', economy: 'paper' };
-const CATEGORY_LABELS: Record<TrayCategory, string> = { defense: 'Defense', radar: 'Detection', economy: 'Economy' };
+const CATEGORY_LABELS: Readonly<Record<TrayCategory, string>> = T.base.category;
 
 const tip = (t: string): string => attrs(tooltipAttrs(t));
 const TONE: Record<NonNullable<Stat['tone']>, Tone> = { good: 'good', bad: 'hostile', warn: 'warn' };
@@ -32,11 +32,11 @@ function stats(list: readonly Stat[]): string {
  * as a red chip ("−10", tooltip "Need 10 more paper"): what to earn, not just the total.
  */
 export function priceHtml(p: PriceView): string {
-  const name = p.missing > 0 ? `${p.cost} ${ICON_NAMES.paper} · ${SAY.need} ${p.missing}` : `${p.cost} ${ICON_NAMES.paper}`;
+  const name = p.missing > 0 ? T.base.priceShort(paper(p.cost), ICON_NAMES.paper, SAY.need, paper(p.missing)) : T.base.price(paper(p.cost), ICON_NAMES.paper);
   const missing = p.missing > 0
-    ? chip({ label: '', value: `−${p.missing}`, tone: 'hostile', className: 'missing', tip: `${SAY.need} ${p.missing} more ${ICON_NAMES.paper.toLowerCase()}`, attrs: { 'data-missing': p.missing } })
+    ? chip({ label: '', value: `−${paper(p.missing)}`, tone: 'hostile', className: 'missing', tip: T.base.needMore(SAY.need, paper(p.missing), ICON_NAMES.paper), attrs: { 'data-missing': p.missing } })
     : '';
-  return `<span class="price" role="img" aria-label="${esc(name)}"${p.missing > 0 ? ' data-short' : ''}>${icon('paper')}<b class="num">${p.cost}</b>${missing}</span>`;
+  return `<span class="price" role="img" aria-label="${esc(name)}"${p.missing > 0 ? ' data-short' : ''}>${icon('paper')}<b class="num">${paper(p.cost)}</b>${missing}</span>`;
 }
 
 /**
@@ -66,15 +66,15 @@ export class BaseHud {
     this.el.overview = add(zones.tc, card({
       className: 'base-overview', label: SAY.base, fold: true,
       bodyHtml: /* html */ `
-        <span class="ov" ${tip('Weapons ready')} data-b="ov-ready">${icon('shield')}<b class="num" data-b="ready"></b></span>
-        <span class="ov" ${tip('Radar')} data-b="ov-radar">${icon('radar')}<b class="num" data-b="radar"></b></span>
-        <span class="ov" ${tip('Base condition')} data-b="ov-integrity">${icon('base')}<b class="num" data-b="integrity"></b></span>`,
+        <span class="ov" ${tip(T.base.weaponsReady)} data-b="ov-ready">${icon('shield')}<b class="num" data-b="ready"></b></span>
+        <span class="ov" ${tip(T.base.radar)} data-b="ov-radar">${icon('radar')}<b class="num" data-b="radar"></b></span>
+        <span class="ov" ${tip(T.base.baseCondition)} data-b="ov-integrity">${icon('base')}<b class="num" data-b="integrity"></b></span>`,
     }));
     this.el.tray = add(zones.bl, card({ className: 'tray', label: SAY.buildTray, bodyHtml: `<div class="tray-items" data-b="tray-items"></div>` }));
     // The selected slot's inspector: a right-side card (the style guide's DeskHud), bottom centre without a tr zone.
     this.el.inspector = add(zones.tr ?? zones.bc, card({ className: 'base-insp', label: SAY.slot, bodyHtml: '<div class="bi-body" data-b="insp"></div>' }));
     this.el.actions = add(zones.br, /* html */ `<div class="base-actions">
-      ${button({ label: SAY.repairAll, icon: 'repair', tip: 'Repair everything', attrs: { 'data-b': 'repair-all' } })}
+      ${button({ label: SAY.repairAll, icon: 'repair', tip: T.base.repairEverything, attrs: { 'data-b': 'repair-all' } })}
       ${button({ label: SAY.done, variant: 'primary', size: 'big', key: bind('base'), attrs: { 'data-b': 'done' } })}</div>`);
     this.el['repair-all'].querySelector('.ui-label')!.insertAdjacentHTML('afterend', '<span class="price-slot" data-b="repair-all-cost"></span>');
     this.el['repair-all-cost'] = this.el['repair-all'].querySelector<HTMLElement>('[data-b="repair-all-cost"]')!;
@@ -146,7 +146,7 @@ export class BaseHud {
         iconEl.dataset.icon = iconName;
         iconEl.innerHTML = icon(iconName);
       }
-      const name = s.building === 'store' ? `Paper store · ${pct(s.health)}` : s.building ? `${BASE.buildings[s.building].name} · level ${s.level} · ${pct(s.health)}` : SLOT_KIND_LABELS[s.kind];
+      const name = s.building === 'store' ? T.base.paperStore(pct(s.health)) : s.building ? T.base.building(BASE.buildings[s.building].name, s.level, pct(s.health)) : SLOT_KIND_LABELS[s.kind];
       attr(el, 'aria-label', name);
       attr(el, 'data-tip', name);
       attr(el, 'data-state', s.building ? (s.status ?? 'ok') : 'empty');
@@ -157,7 +157,7 @@ export class BaseHud {
       const lv = el.querySelector('.sm-level') as HTMLElement;
       if (lv.dataset.key !== lvKey) {
         lv.dataset.key = lvKey;
-        lv.innerHTML = lvKey ? pips({ filled: s.level, total: s.level, label: `${ICON_NAMES.level} ${s.level}`, tone: 'gold' }) : '';
+        lv.innerHTML = lvKey ? pips({ filled: s.level, total: s.level, label: T.common.labelSpaceValue(ICON_NAMES.level, count(s.level)), tone: 'gold' }) : '';
       }
       const meter = el.querySelector('.sm-health') as HTMLElement;
       toggle(meter, !!s.building && s.status !== 'ok');
@@ -173,11 +173,11 @@ export class BaseHud {
 
   private renderOverview(v: BaseView): void {
     const o = v.overview;
-    text(this.el.ready, o.total > 0 ? `${o.ready}/${o.total}` : '0');
+    text(this.el.ready, o.total > 0 ? `${count(o.ready)}/${count(o.total)}` : count(0));
     attr(this.el['ov-ready'], 'data-tone', o.total === 0 ? 'warn' : o.ready < o.total ? 'bad' : 'good');
     text(this.el.radar, o.radar === 'none' ? metres(o.detection) : o.radar === 'on' ? metres(o.detection) : SAY.offline);
     attr(this.el['ov-radar'], 'data-tone', o.radar === 'on' ? 'good' : o.radar === 'off' ? 'bad' : 'warn');
-    attr(this.el['ov-radar'], 'data-tip', o.radar === 'none' ? 'No radar: raids are seen late' : o.radar === 'on' ? 'Radar: early warning range' : 'Radar destroyed');
+    attr(this.el['ov-radar'], 'data-tip', o.radar === 'none' ? T.base.noRadar : o.radar === 'on' ? T.base.radarOn : T.base.radarDestroyed);
     text(this.el.integrity, pct(o.integrity));
     attr(this.el['ov-integrity'], 'data-tone', o.integrity >= 0.99 ? 'good' : o.integrity > 0.6 ? 'warn' : 'bad');
   }
@@ -192,7 +192,7 @@ export class BaseHud {
     let items: string[] = [];
     const firstOpen = v.tray.find((t) => t.placeable)?.kind;
     const flush = () => {
-      if (category) groups.push(`<div class="tray-group" role="group" aria-label="${CATEGORY_LABELS[category as TrayCategory]}"><span class="tray-cat" role="img" aria-label="${CATEGORY_LABELS[category as TrayCategory]}" ${tip(CATEGORY_LABELS[category as TrayCategory])}>${icon(CATEGORY_ICONS[category as TrayCategory])}</span>${items.join('')}</div>`);
+      if (category) groups.push(`<div class="tray-group" role="group" aria-label="${esc(CATEGORY_LABELS[category as TrayCategory])}"><span class="tray-cat" role="img" aria-label="${esc(CATEGORY_LABELS[category as TrayCategory])}" ${tip(CATEGORY_LABELS[category as TrayCategory])}>${icon(CATEGORY_ICONS[category as TrayCategory])}</span>${items.join('')}</div>`);
       items = [];
     };
     for (const t of v.tray) {
@@ -201,7 +201,7 @@ export class BaseHud {
         flush();
         category = cat;
       }
-      const tipText = `${t.name}: ${t.purpose}${t.placeable ? '' : ' (no free slot for it)'}${t.missing > 0 ? ` · ${SAY.need} ${t.missing}` : ''}`;
+      const tipText = T.base.trayTip(t.name, t.purpose, !t.placeable, t.missing > 0 ? T.common.labelSpaceValue(SAY.need, paper(t.missing)) : null);
       items.push(`<button type="button" class="tray-item${t.chosen ? ' chosen' : ''}${t.missing > 0 ? ' short' : ''}" data-kind="${t.kind}"${t.placeable ? '' : ' disabled'}${t.kind === firstOpen ? ' data-nav-default' : ''} aria-pressed="${t.chosen}" aria-label="${esc(tipText)}" ${tip(tipText)}>${icon(BUILDING_ICONS[t.kind], 'icon tray-icon')}<span class="tray-name">${esc(t.short)}</span>${priceHtml(t)}</button>`);
     }
     flush();
@@ -223,22 +223,22 @@ export class BaseHud {
         <div class="bi-head">${icon(SLOT_KIND_ICONS[i.slotKind])}<b>${esc(SLOT_KIND_LABELS[i.slotKind])}</b><span class="bi-takes">${takes}</span></div>
         ${c ? `<div class="bi-build"><span class="bi-what">${icon(BUILDING_ICONS[c.kind])}<b>${esc(c.name)}</b></span><span class="stats">${stats(c.effects)}</span></div>
           <div class="bi-actions">${button({ label: SAY.build, icon: 'build', variant: 'primary', key: { key: bind('confirm').key }, disabled: !c.fits || c.price.missing > 0, attrs: { 'data-act': 'build' } })}<span class="bi-price">${priceHtml(c.price)}</span></div>`
-          : `<div class="bi-pick">${icon('build')}<span>Pick a building</span></div>`}`;
+          : `<div class="bi-pick">${icon('build')}<span>${esc(T.base.pickBuilding)}</span></div>`}`;
       return;
     }
     attr(this.el.inspector, 'aria-label', i.name);
-    const lv = pips({ filled: i.level, total: i.maxLevel, label: `Level ${i.level}/${i.maxLevel}`, tone: 'friend', attrs: { 'data-tip': `Level ${i.level}/${i.maxLevel}` } });
+    const lv = pips({ filled: i.level, total: i.maxLevel, label: T.base.level(i.level, i.maxLevel), tone: 'friend', attrs: { 'data-tip': T.base.level(i.level, i.maxLevel) } });
     const hp = i.maxHealth > 0 ? i.health / i.maxHealth : 0;
     const actions: string[] = [];
     if (i.upgrade) {
-      const gains = i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="gain" role="img" aria-label="${esc(`${s.label}: ${s.value}`)}" ${tip(`${s.label}: ${s.value}`)}>${icon(s.icon)}<em class="num">${esc(s.delta!)}</em></span>`).join('');
-      actions.push(`<div class="bi-action">${button({ label: SAY.upgrade, icon: 'upgrade', key: bind('upgrade'), disabled: i.upgrade.missing > 0 || i.status === 'destroyed', tip: i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '), attrs: { 'data-act': 'upgrade' } })}${priceHtml(i.upgrade)}<span class="stats gain-list">${gains}</span></div>`);
+      const gains = i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="gain" role="img" aria-label="${esc(T.common.labelValue(s.label, s.value))}" ${tip(T.common.labelValue(s.label, s.value))}>${icon(s.icon)}<em class="num">${esc(s.delta!)}</em></span>`).join('');
+      actions.push(`<div class="bi-action">${button({ label: SAY.upgrade, icon: 'upgrade', key: bind('upgrade'), disabled: i.upgrade.missing > 0 || i.status === 'destroyed', tip: T.common.dot(i.upgrade.next.map((s) => T.common.labelSpaceValue(s.label, s.value))), attrs: { 'data-act': 'upgrade' } })}${priceHtml(i.upgrade)}<span class="stats gain-list">${gains}</span></div>`);
     } else if (i.kind !== 'store') {
-      actions.push(chip({ label: SAY.maxLevel, icon: 'level', tip: 'Fully upgraded' }));
+      actions.push(chip({ label: SAY.maxLevel, icon: 'level', tip: T.base.fullyUpgraded }));
     }
     if (i.repair) actions.push(`<div class="bi-action">${button({ label: SAY.repair, icon: 'repair', key: bind('service'), disabled: i.repair.missing > 0, attrs: { 'data-act': 'repair' } })}${priceHtml(i.repair)}</div>`);
     if (i.refund !== null) {
-      actions.push(`<div class="bi-action">${button({ label: SAY.remove, icon: 'remove', variant: 'danger', key: bind('swap'), tip: 'Remove for a partial refund (asks first)', attrs: { 'data-act': 'remove' } })}<span class="price refund" role="img" aria-label="${esc(`${ICON_NAMES.refund} +${i.refund}`)}" ${tip(ICON_NAMES.refund)}>${icon('refund')}<b class="num">+${i.refund}</b></span></div>`);
+      actions.push(`<div class="bi-action">${button({ label: SAY.remove, icon: 'remove', variant: 'danger', key: bind('swap'), tip: T.base.removeTip, attrs: { 'data-act': 'remove' } })}<span class="price refund" role="img" aria-label="${esc(T.common.labelSpaceValue(ICON_NAMES.refund, `+${paper(i.refund)}`))}" ${tip(ICON_NAMES.refund)}>${icon('refund')}<b class="num">+${paper(i.refund)}</b></span></div>`);
     }
     host.innerHTML = `
       <div class="bi-head">${icon(BUILDING_ICONS[i.kind])}<b>${esc(i.name)}</b>${lv}
@@ -260,7 +260,7 @@ export class RaidHud {
   private reportUntil = 0;
 
   constructor(host: HTMLElement) {
-    host.insertAdjacentHTML('beforeend', `<div class="raid-alert ui-raid" role="alert" aria-label="${SAY.raidInbound}" data-critical data-tone="hostile"></div>`);
+    host.insertAdjacentHTML('beforeend', `<div class="raid-alert ui-raid" role="alert" aria-label="${esc(SAY.raidInbound)}" data-critical data-tone="hostile"></div>`);
     this.alert = host.lastElementChild as HTMLElement;
     host.insertAdjacentHTML('beforeend', card({ className: 'raid-report', label: SAY.defenseReport, elevation: 'floating', bodyHtml: '' }));
     this.report = host.lastElementChild as HTMLElement;
@@ -276,18 +276,18 @@ export class RaidHud {
     if (key === this.alertKey) return;
     this.alertKey = key;
     attr(this.alert, 'data-state', r.state);
-    const escort = r.escorted ? `<span role="img" aria-label="${ICON_NAMES.escort}" ${tip('Escorted')}>${icon('escort')}</span>` : '';
+    const escort = r.escorted ? `<span role="img" aria-label="${esc(ICON_NAMES.escort)}" ${tip(T.base.escorted)}>${icon('escort')}</span>` : '';
     // The style guide's RaidAlert: the badge, a title and a line of facts, the time to target large on the right.
     this.alert.innerHTML = `<span class="ui-raid-badge">${icon('bomber', 'icon ui-icon')}</span>
-      <div class="ui-raid-text"><p class="ui-raid-title ra-title">${r.state === 'released' ? STYLE_TEXT.bombsAway : STYLE_TEXT.raidTitle}</p>
+      <div class="ui-raid-text"><p class="ui-raid-title ra-title">${esc(r.state === 'released' ? STYLE_TEXT.bombsAway : STYLE_TEXT.raidTitle)}</p>
       <div class="ra-row">
-        <span class="ra-dir" ${tip('Coming from')}>${icon('heading')}<b class="num">${r.direction}</b></span>${escort}
-        <span ${tip(`Target: ${r.target}`)}>${icon(r.targetIcon)}<b>${esc(r.target.split(' ').slice(-1)[0])}</b></span>
-        <span ${tip('Weapons ready')} data-tone="${r.total === 0 ? 'warn' : r.ready < r.total ? 'bad' : 'good'}">${icon('shield')}<b class="num">${r.ready}/${r.total}</b></span>
-        ${r.distance !== null ? `<span ${tip('Distance from you')}>${icon('distance')}<b class="num">${metres(r.distance)}</b></span>` : ''}
-        <span ${tip(r.mission ? 'Mission reward' : 'Defense reward if you help')}>${icon('paper')}<b class="num">+${r.reward}</b></span>
+        <span class="ra-dir" ${tip(T.base.comingFrom)}>${icon('heading')}<b class="num">${r.direction}</b></span>${escort}
+        <span ${tip(T.base.target(r.target))}>${icon(r.targetIcon)}<b>${esc(r.target.split(' ').slice(-1)[0])}</b></span>
+        <span ${tip(T.base.weaponsReady)} data-tone="${r.total === 0 ? 'warn' : r.ready < r.total ? 'bad' : 'good'}">${icon('shield')}<b class="num">${count(r.ready)}/${count(r.total)}</b></span>
+        ${r.distance !== null ? `<span ${tip(T.base.distanceFromYou)}>${icon('distance')}<b class="num">${metres(r.distance)}</b></span>` : ''}
+        <span ${tip(r.mission ? T.base.missionReward : T.base.defenseReward)}>${icon('paper')}<b class="num">+${paper(r.reward)}</b></span>
         ${r.response ? `<span class="ra-do">${glyph({ key: r.response.key })}${esc(r.response.label)}</span>` : ''}</div></div>
-      ${r.state === 'inbound' ? `<span class="ui-raid-eta ra-eta num" ${tip('Time to target')}>${Math.max(0, Math.ceil(r.eta))}s</span>` : ''}`;
+      ${r.state === 'inbound' ? `<span class="ui-raid-eta ra-eta num" ${tip(T.base.timeToTarget)}>${T.units.seconds(count(Math.max(0, Math.ceil(r.eta))))}</span>` : ''}`;
   }
 
   /** The defense report: one card, a few numbers, gone after a while, on click or with its close button. */
@@ -296,14 +296,14 @@ export class RaidHud {
     attr(this.report, 'data-tone', r.repelled ? 'good' : 'hostile');
     const share = r.defenseDamage + r.playerDamage;
     (this.report.querySelector('.ui-card-body') as HTMLElement).innerHTML = `
-      <div class="rr-head">${icon(r.repelled ? 'shield' : 'raid')}<b>${r.repelled ? SAY.raidRepelled : SAY.baseHit}</b><span class="rr-where num">T1</span>${iconButton({ icon: 'close', name: SAY.close, className: 'rr-close' })}</div>
+      <div class="rr-head">${icon(r.repelled ? 'shield' : 'raid')}<b>${esc(r.repelled ? SAY.raidRepelled : SAY.baseHit)}</b><span class="rr-where num">${esc(T.base.home)}</span>${iconButton({ icon: 'close', name: SAY.close, className: 'rr-close' })}</div>
       <div class="stats">
-        ${row('bomber', String(r.aircraftDestroyed), `Raiders shot down (defenses ${r.byDefenses}, you ${r.byPlayer})`, r.aircraftDestroyed > 0 ? 'good' : undefined)}
-        ${row('paper', r.paperLost > 0 ? `−${r.paperLost}` : '0', 'Paper lost', r.paperLost > 0 ? 'hostile' : 'good')}
-        ${r.prevented > 0 ? row('shield', `+${r.prevented}`, 'Paper saved', 'good') : ''}
-        ${r.destroyed.length + r.damaged.length > 0 ? row('warn', String(r.destroyed.length + r.damaged.length), `Hit: ${[...r.destroyed, ...r.damaged].join(', ')}`, 'hostile') : ''}
-        ${r.repairCost > 0 ? row('repair', String(r.repairCost), 'Repair cost', 'warn') : ''}
-        ${share > 0 ? row('turret', pct(r.defenseDamage / share), `Defenses' share of the damage (you: ${pct(r.playerDamage / share)})`) : ''}
+        ${row('bomber', count(r.aircraftDestroyed), T.base.raidersShotDown(r.byDefenses, r.byPlayer), r.aircraftDestroyed > 0 ? 'good' : undefined)}
+        ${row('paper', r.paperLost > 0 ? `−${paper(r.paperLost)}` : count(0), T.base.paperLost, r.paperLost > 0 ? 'hostile' : 'good')}
+        ${r.prevented > 0 ? row('shield', `+${paper(r.prevented)}`, T.base.paperSaved, 'good') : ''}
+        ${r.destroyed.length + r.damaged.length > 0 ? row('warn', count(r.destroyed.length + r.damaged.length), T.base.hit([...r.destroyed, ...r.damaged]), 'hostile') : ''}
+        ${r.repairCost > 0 ? row('repair', paper(r.repairCost), T.base.repairCost, 'warn') : ''}
+        ${share > 0 ? row('turret', pct(r.defenseDamage / share), T.base.defenseShare(pct(r.playerDamage / share))) : ''}
       </div>
       <div class="rr-line">${esc(r.highlight)}</div>`;
     this.report.hidden = false;

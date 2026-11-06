@@ -9,6 +9,7 @@
 import type { PadButton, PadFamily } from './Gamepad';
 import type { ControlAction } from '../ui/controlLabels';
 import { padButtonFor, type Action } from './bindings';
+import { T } from '../ui/strings';
 
 const LABELS: Record<PadFamily, Record<PadButton, string>> = {
   xbox: {
@@ -54,9 +55,10 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   Shift: '{rb}',
   LMB: '{rt}',
   RMB: '{lt}',
-  'Left click': '{rt}',
-  'Right click': '{lt}',
-  Mouse: '{lstick}',
+  // Key caps that are words come from the dictionary, so a translation keeps working.
+  [T.keys.leftClick]: '{rt}',
+  [T.keys.rightClick]: '{lt}',
+  [T.keys.mouse]: '{lstick}',
   W: '{lb}+↑',
   S: '{lb}+↓',
   A: '{lb}+←',

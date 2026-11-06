@@ -2,9 +2,9 @@ import { bar, chip, glyph, iconButton } from './components';
 import { bind } from '../input/bindings';
 import type { GlyphSpec } from '../input/glyphs';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
-import { fmt, signed } from './format';
+import { count, fmt, num, signed } from './format';
 import { icon } from './icons';
-import { SAY } from './strings';
+import { SAY, T } from './strings';
 import type { EconomyView, ResourceView } from './views';
 
 /** One resource row in the strip (paper today; ink and rubber balls join in v0.0.20). */
@@ -20,7 +20,7 @@ export interface ResourceRow extends ResourceView {
  */
 export function resourceRows(v: EconomyView): ResourceRow[] {
   return [
-    { id: 'paper', icon: 'paper', label: 'Paper', amount: v.paper, capacity: v.capacity, rate: v.rate, state: v.state, protectedAmount: v.protectedPaper },
+    { id: 'paper', icon: 'paper', label: T.economy.paper, amount: v.paper, capacity: v.capacity, rate: v.rate, state: v.state, protectedAmount: v.protectedPaper },
     ...(v.resources ?? []),
   ];
 }
@@ -32,10 +32,10 @@ export function resourceRows(v: EconomyView): ResourceRow[] {
 function rowHtml(r: ResourceRow, primary: boolean): string {
   return /* html */ `<li class="econ-res" data-res="${esc(r.id)}"${primary ? ' data-primary' : ''}>
     <span class="econ-amount ui-counter" role="group" aria-label="${esc(r.label)}" data-tip="${esc(r.label)}"><span class="ui-counter-icon">${icon(r.icon, 'icon ui-icon econ-icon')}</span><b class="num ui-counter-value" data-e="value"></b><small class="num" data-e="cap"></small>${primary ? '<span class="delta num" data-e="delta"></span>' : ''}</span>
-    ${chip({ label: '', icon: 'rate', value: '', tip: `${r.label}: ${SAY.paperIn}`, className: 'econ-rate hud-chip', attrs: { 'data-e': 'rate-chip' } })}
+    ${chip({ label: '', icon: 'rate', value: '', tip: T.common.labelValue(r.label, SAY.paperIn), className: 'econ-rate hud-chip', attrs: { 'data-e': 'rate-chip' } })}
     <span class="econ-store hud-chip">
-      ${icon('capacity')}${bar({ value: 0, label: `${r.label}: storage`, kind: 'capacity', size: 'thin', attrs: { 'data-e': 'fill' } })}
-      ${r.protectedAmount !== undefined ? `<span class="econ-safe" data-tip="Protected from raids">${icon('lock')}<b class="num" data-e="safe"></b></span>` : ''}
+      ${icon('capacity')}${bar({ value: 0, label: T.economy.storage(r.label), kind: 'capacity', size: 'thin', attrs: { 'data-e': 'fill' } })}
+      ${r.protectedAmount !== undefined ? `<span class="econ-safe" data-tip="${esc(T.economy.protected)}">${icon('lock')}<b class="num" data-e="safe"></b></span>` : ''}
     </span>
   </li>`;
 }
@@ -56,7 +56,7 @@ export class EconomyStrip {
     // The top bar (the style guide's DeskHud): the counter and its chips, then the base, logbook and menu buttons.
     host.insertAdjacentHTML('beforeend', `<div class="topbar"></div>`);
     const bar_ = host.lastElementChild as HTMLElement;
-    bar_.insertAdjacentHTML('beforeend', `<section class="econ" role="group" aria-label="${SAY.resources}"><ul class="econ-list" role="list" data-e="list"></ul>${chip({ label: '', icon: 'streak', value: '', tip: 'Missions in a row', tone: 'streak', className: 'econ-streak hud-chip', attrs: { 'data-e': 'streak-chip' } })}</section>`);
+    bar_.insertAdjacentHTML('beforeend', `<section class="econ" role="group" aria-label="${esc(SAY.resources)}"><ul class="econ-list" role="list" data-e="list"></ul>${chip({ label: '', icon: 'streak', value: '', tip: T.economy.streak, tone: 'streak', className: 'econ-streak hud-chip', attrs: { 'data-e': 'streak-chip' } })}</section>`);
     this.card = bar_.lastElementChild as HTMLElement;
     host = bar_;
     const hint = (spec: GlyphSpec) => glyph(spec, { className: 'ui-corner hint-key' });
@@ -72,7 +72,7 @@ export class EconomyStrip {
     this.el['book-btn'].insertAdjacentHTML('beforeend', hint(bind('logbook')));
     this.el['menu-btn'].insertAdjacentHTML('beforeend', hint(menuKey));
     this.el.repairs = this.el['base-btn'].querySelector<HTMLElement>('.ui-badge')!;
-    this.el.repairs.dataset.tip = 'Need repairs';
+    this.el.repairs.dataset.tip = T.economy.needRepairs;
     this.el.buttons = buttons;
     this.list = this.el.list;
     bindButton(this.el['base-btn'], actions.base);
@@ -97,10 +97,10 @@ export class EconomyStrip {
       if (r.capacity !== null) text(cap, `/${fmt(r.capacity)}`);
       const rateChip = q('rate-chip')!;
       const rate = r.rate ?? 0;
-      text(rateChip.querySelector<HTMLElement>('b')!, rate > 0 ? `+${Math.round(rate * 10) / 10}` : '0');
+      text(rateChip.querySelector<HTMLElement>('b')!, rate > 0 ? `+${num(rate, 1)}` : count(0));
       attr(rateChip, 'data-state', r.state === 'full' ? 'warning' : 'default');
       attr(rateChip, 'data-tone', r.state === 'boosted' ? 'friend' : 'plain');
-      attr(rateChip, 'data-tip', r.state === 'full' ? 'Storage full: production stopped' : r.state === 'boosted' ? 'Paper per minute (low reserves: faster)' : `${r.label} per minute`);
+      attr(rateChip, 'data-tip', r.state === 'full' ? T.economy.full : r.state === 'boosted' ? T.economy.boosted : T.economy.perMinute(r.label));
       const fillBar = q('fill')!;
       const fill = r.capacity ? r.amount / r.capacity : 0;
       width(fillBar.firstElementChild as HTMLElement, fill);
