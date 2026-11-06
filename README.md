@@ -290,7 +290,8 @@ Screenshots are in [docs/checkpoints/0.0.11-assets/](docs/checkpoints/0.0.11-ass
   workshop chimneys smoke. Every home desk has an **aircraft hangar** behind the runway that
   grows from level 1 to 3 with the planes kept in it.
 - **No pencil strokes.** The models are clean low-poly; pencil outlines are off by default (still
-  in the menu). Planes use the Paper skin, buildings cardboard, the classroom its real colours.
+  in the menu; the outlines and their settings were removed in v0.0.15 by the developer's decision
+  of 2026-11-02). Planes use the Paper skin, buildings cardboard, the classroom its real colours.
 
 ### Assets and the export
 
@@ -627,7 +628,8 @@ the plan asks to be approved before the look is rolled out to the rest of the wo
 
 ### What is in it
 
-- **Pencil-outline renderer** (`src/render/outline/`): graphite strokes along silhouettes, folds
+- **Pencil-outline renderer** (`src/render/outline/`, removed in v0.0.15 by the developer's
+  decision of 2026-11-02): graphite strokes along silhouettes, folds
   and paper edges, built from each mesh's edges and widened on screen by a shader, with per-object
   strength (aircraft and rockets boldest, buildings and targets firm, props lighter, trims
   faintest), distance thinning and fading, and stable hand-drawn irregularity (uneven width,

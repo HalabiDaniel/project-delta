@@ -79,17 +79,13 @@ import { OrdnanceView } from './world/OrdnanceView';
 import { MissionMarkers } from './world/MissionMarkers';
 import { TargetRange } from './world/TargetRange';
 import { buildWorld, type World } from './world/WorldGenerator';
-import { installOutlines, type OutlineRenderer } from './render/outline/OutlineRenderer';
 import {
   browserStorage,
   DETAIL_DISTANCE,
   loadGraphics,
   matchesPreset,
-  outlineChoice,
   saveGraphics,
   SHADOW_RESOLUTION,
-  withIntensity,
-  withOutlines,
   withPreset,
   type BudgetCheck,
   type GraphicsSettings,
@@ -192,7 +188,6 @@ export class Game {
   private sortiesTotal = 0;
   /** Graphics settings: this computer's, kept apart from the save. */
   graphics: GraphicsSettings = loadGraphics(browserStorage());
-  private outlines: OutlineRenderer | null = null;
   /** Licensed and own models in use, e.g. `paperwars.assets.report()` in the console. */
   assets: AssetLibrary | null = null;
   private perfMonitor: PerfMonitor | null = null;
@@ -275,11 +270,10 @@ export class Game {
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
     window.addEventListener('resize', () => app.resizeCanvas());
 
-    // The look: paper shading for every lit material, the material library, pencil outlines.
+    // The look: paper shading for every lit material, the material library.
     const textures = new TextureBank(device);
     new PaperShading(device, textures);
     installMaterials(new MaterialLibrary(textures));
-    const outlines = installOutlines(app);
     const assets = new AssetLibrary(app);
     const loading = new LoadingScreen();
     await assets.preload(undefined, (p) => loading.progress(p));
@@ -392,8 +386,6 @@ export class Game {
       setHints: (mode) => game?.setHints(mode),
       setUiScale: (scale) => game?.setUiScale(scale),
       setGraphicsPreset: (preset) => game?.setGraphics(withPreset(game.graphics, preset)),
-      setOutlines: (choice) => game?.setGraphics(withOutlines(game.graphics, choice)),
-      setOutlineIntensity: (intensity) => game?.setGraphics(withIntensity(game.graphics, intensity)),
       toggleBase: () => game?.toggleBase(),
       skipTutorial: () => game?.tutorial.skip(),
       restartTutorial: () => game?.tutorial.restart(),
@@ -461,10 +453,9 @@ export class Game {
     game.tutorial = Tutorial.fromSave(saved?.tutorial ?? null, game.sortiesTotal > 0);
     game.tutorial.onChange(() => game!.requestSave());
     game.hud.setScale(game.uiScale);
-    game.outlines = outlines;
     game.assets = assets;
     game.setGraphics(graphics);
-    game.perfMonitor = new PerfMonitor(app, () => outlines.stats(), new URLSearchParams(window.location.search).has('perf'));
+    game.perfMonitor = new PerfMonitor(app, new URLSearchParams(window.location.search).has('perf'));
     game.perfMonitor.preset = () => game!.graphics.preset;
     game.perfMonitor.instanced = () => game!.instancer?.stats ?? null;
     assets.attachPerf(() => game!.perfMonitor?.budget() ?? null);
@@ -477,11 +468,10 @@ export class Game {
     game.refreshPad();
     game.camera.updateDesk(0, world.launchPosition, world.launchYaw, true);
     app.on('update', (dt: number) => game!.tick(dt));
-    // After the game has moved everything: repeated scenery drawn instanced, then strokes and stats.
+    // After the game has moved everything: repeated scenery drawn instanced, then stats.
     game.instancer = instanceScenery(app, game.camera.entity.camera ?? null);
     game.instancer.detailDistance = DETAIL_DISTANCE[game.graphics.preset];
     app.on('update', () => {
-      outlines.update();
       game!.perfMonitor?.frame();
     });
     app.start();
@@ -727,16 +717,15 @@ export class Game {
     return this.perfMonitor?.snapshot() ?? null;
   }
 
-  /** This frame against the graphics preset's budget (draw calls, triangles, strokes, textures). */
+  /** This frame against the graphics preset's budget (draw calls, triangles, textures). */
   budget(): BudgetCheck | null {
     return this.perfMonitor?.budget() ?? null;
   }
 
-  /** Applies and remembers graphics settings (outlines, shadows, decoration, resolution). */
+  /** Applies and remembers graphics settings (shadows, decoration, resolution). */
   setGraphics(settings: GraphicsSettings): void {
     this.graphics = settings;
     saveGraphics(browserStorage(), settings);
-    this.outlines?.configure({ enabled: settings.outlines, quality: settings.outlineQuality, intensity: settings.outlineIntensity });
     const shadows = SHADOW_RESOLUTION[settings.shadows];
     setShadowQuality(this.world.sun, { enabled: shadows > 0, resolution: shadows });
     for (const d of this.world.dressings.values()) d.setDetail(settings.detail);
@@ -2277,8 +2266,6 @@ export class Game {
           uiScale: this.uiScale,
           graphics: {
             preset: matchesPreset(this.graphics) ? this.graphics.preset : null,
-            outlines: outlineChoice(this.graphics),
-            intensity: this.graphics.outlineIntensity,
           },
         },
         saveNote: this.saveNote(),

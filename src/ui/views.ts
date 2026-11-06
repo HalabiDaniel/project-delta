@@ -1,4 +1,4 @@
-import type { GraphicsPreset, OutlineChoice } from '../render/GraphicsSettings';
+import type { GraphicsPreset } from '../render/GraphicsSettings';
 import type { RatingKey, SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
@@ -255,8 +255,6 @@ export interface SettingsView {
   graphics: {
     /** The preset, or null once something was changed from it. */
     preset: GraphicsPreset | null;
-    outlines: OutlineChoice;
-    intensity: number;
   };
 }
 
@@ -490,8 +488,6 @@ export interface HudActions {
   setHints(mode: HintMode): void;
   setUiScale(scale: number): void;
   setGraphicsPreset(preset: GraphicsPreset): void;
-  setOutlines(choice: OutlineChoice): void;
-  setOutlineIntensity(intensity: number): void;
   toggleBase(): void;
   /** Ends the tutorial for good (it can be restarted from the menu). */
   skipTutorial(): void;

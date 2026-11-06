@@ -55,8 +55,8 @@ export function classroomFiles(): string[] {
 }
 
 /**
- * Places the classroom from its loaded models (the room is scenery: nothing in it is outlined or
- * collides; the airspace boundary keeps planes inside the walls). Returns the room's root entity,
+ * Places the classroom from its loaded models (the room is scenery: nothing in it collides;
+ * the airspace boundary keeps planes inside the walls). Returns the room's root entity,
  * or null if the models aren't available.
  */
 export function buildClassroom(app: pc.AppBase, store: ModelStore): pc.Entity | null {

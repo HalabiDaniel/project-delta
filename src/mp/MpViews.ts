@@ -34,7 +34,7 @@ import type {
 import type { IconName } from '../ui/icons';
 import type { MiniMapView } from '../ui/MiniMap';
 import type { ThreatRingItem, ThreatView } from '../ui/ThreatHud';
-import { matchesPreset, outlineChoice } from '../render/GraphicsSettings';
+import { matchesPreset } from '../render/GraphicsSettings';
 import type { MultiplayerGame, RemoteAircraft } from './MultiplayerGame';
 
 const RETICLE_RANGE = 60;
@@ -193,7 +193,7 @@ export class MpViews {
           muted: g.sounds.muted,
           hints: 'auto',
           uiScale: 1,
-          graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null, outlines: outlineChoice(g.graphics), intensity: g.graphics.outlineIntensity },
+          graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null },
         },
         saveNote: 'Multiplayer: your paper, base and planes live on the server. "Leave classroom" frees your desk.',
         transfer: this.transferView(),

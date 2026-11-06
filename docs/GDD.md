@@ -70,9 +70,9 @@ The aesthetic is intentionally not realistic military simulation. The goal is pl
 
 ### 2.1 Art Direction (from v0.0.8)
 
-paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly geometry under soft, flat cartoon shading, hand-drawn graphite outlines, paper grain, folds and cardboard, in colourful miniature classroom scenes. It should look as if a student built the world from paper, cardboard and school supplies, then brought it to life.
+paperwars.io looks like a **playable three-dimensional sketchbook**: low-poly geometry under soft, flat cartoon shading, paper grain, folds and cardboard, in colourful miniature classroom scenes. It should look as if a student built the world from paper, cardboard and school supplies, then brought it to life.
 
-- **Pencil outlines** on everything that matters, boldest on aircraft, lighter on scenery, fading with distance; configurable and optional.
+- **No pencil outlines:** the graphite outlines were removed in v0.0.15 by the developer's decision of 2026-11-02; the game keeps the normal 3D look with paper materials and lighting.
 - **One material library** (paper, notebook and graph paper, cardboard, ink, pencil markings, rubber, wood, plastic) and one lighting model, shared by the game's own models and imported ones.
 - **Custom models where identity matters** (aircraft, cardboard buildings, defenses, landmarks, mission targets); licensed asset packs such as Synty only as environment geometry, always adapted to the shared materials and outlines.
 - **Readable first:** ownership colours (blue player, red hostile, grey neutral, orange objective) with symbols, recognisable landmarks, silhouettes that hold up at speed.
