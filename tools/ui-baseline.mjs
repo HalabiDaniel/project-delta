@@ -93,12 +93,30 @@ async function shot(page, name) {
 
 const game = (page, fn, arg) => page.evaluate(fn, arg);
 
+/**
+ * Before folding: a mission card the selected plane can fly (the deal is random, and the Swift
+ * can't fly every card: "Wrong plane"). Falls back to the first plane that suits the first card.
+ */
+async function pickFlyable(page) {
+  await game(page, () => {
+    const g = window.paperwars;
+    const s = g.state;
+    const ok = (id, m) => s.suitability(id, m).level !== 'unsuitable';
+    const i = s.offers.findIndex((m) => ok(s.aircraft, m));
+    if (i >= 0) return g.select(i);
+    g.select(0);
+    const id = ['swift', 'dart', 'falcon'].find((a) => ok(a, s.offers[0]));
+    if (id) g.selectAircraft(id);
+  });
+}
+
 /** Fold the selected plane and launch it; a few seconds in the air. */
 async function fly(page) {
   await game(page, () => {
     window.paperwars.dismissWelcome();
-    window.paperwars.build();
   });
+  await pickFlyable(page);
+  await game(page, () => window.paperwars.build());
   await page.waitForFunction(() => window.paperwars.state.phase === 'ready', null, { timeout: 300000 });
   await game(page, () => window.paperwars.launch());
   await page.waitForTimeout(3500);
@@ -126,6 +144,7 @@ try {
     await game(page, () => window.paperwars.pause());
     await shot(page, '1080p-06-pause-menu');
     await game(page, () => window.paperwars.resume());
+    await pickFlyable(page);
     await game(page, () => window.paperwars.build());
     await page.waitForTimeout(600);
     await shot(page, '1080p-07-folding');

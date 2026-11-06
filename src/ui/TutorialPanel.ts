@@ -30,7 +30,8 @@ export class TutorialPanel {
     const key = JSON.stringify(v);
     if (key === this.key) return;
     this.key = key;
-    const keys = v.keys.map((k) => glyph({ key: k })).join('');
+    // The labels already name the device's controls (controlLabel): shown as written.
+    const keys = v.keys.map((k) => glyph({ key: k }, { literal: true })).join('');
     this.body.innerHTML =
       `<div class="tu-head">${icon('tip', 'icon tu-icon')}<span class="tu-count num">${v.step} / ${v.total}</span><b class="tu-title">${esc(v.title)}</b></div>` +
       `<div class="tu-text">${esc(v.text)}</div>` +

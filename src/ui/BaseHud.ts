@@ -1,4 +1,5 @@
 import { BASE, type BuildingKind } from '../config';
+import { bind } from '../input/bindings';
 import type { RaidReport } from '../base/Raids';
 import { attrs, bar, button, card, chip, glyph, iconButton, pips, stat, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
@@ -73,7 +74,7 @@ export class BaseHud {
     this.el.inspector = add(zones.bc, card({ className: 'base-insp', label: SAY.slot, bodyHtml: '<div class="bi-body" data-b="insp"></div>' }));
     this.el.actions = add(zones.br, /* html */ `<div class="base-actions">
       ${button({ label: SAY.repairAll, icon: 'repair', tip: 'Repair everything', attrs: { 'data-b': 'repair-all' } })}
-      ${button({ label: SAY.done, variant: 'primary', size: 'big', key: { key: 'B' }, attrs: { 'data-b': 'done' } })}</div>`);
+      ${button({ label: SAY.done, variant: 'primary', size: 'big', key: bind('base'), attrs: { 'data-b': 'done' } })}</div>`);
     this.el['repair-all'].querySelector('.ui-label')!.insertAdjacentHTML('afterend', '<span class="price-slot" data-b="repair-all-cost"></span>');
     this.el['repair-all-cost'] = this.el['repair-all'].querySelector<HTMLElement>('[data-b="repair-all-cost"]')!;
     bindButton(this.el['repair-all'], () => actions.base.repairAll());
@@ -220,7 +221,7 @@ export class BaseHud {
       host.innerHTML = `
         <div class="bi-head">${icon(SLOT_KIND_ICONS[i.slotKind])}<b>${esc(SLOT_KIND_LABELS[i.slotKind])}</b><span class="bi-takes">${takes}</span></div>
         ${c ? `<div class="bi-build"><span class="bi-what">${icon(BUILDING_ICONS[c.kind])}<b>${esc(c.name)}</b></span><span class="stats">${stats(c.effects)}</span></div>
-          <div class="bi-actions">${button({ label: SAY.build, icon: 'build', variant: 'primary', key: { key: 'Enter' }, disabled: !c.fits || c.price.missing > 0, attrs: { 'data-act': 'build' } })}<span class="bi-price">${priceHtml(c.price)}</span></div>`
+          <div class="bi-actions">${button({ label: SAY.build, icon: 'build', variant: 'primary', key: { key: bind('confirm').key }, disabled: !c.fits || c.price.missing > 0, attrs: { 'data-act': 'build' } })}<span class="bi-price">${priceHtml(c.price)}</span></div>`
           : `<div class="bi-pick">${icon('build')}<span>Pick a building</span></div>`}`;
       return;
     }
@@ -230,13 +231,13 @@ export class BaseHud {
     const actions: string[] = [];
     if (i.upgrade) {
       const gains = i.upgrade.next.filter((s) => s.delta).slice(0, 3).map((s) => `<span class="gain" role="img" aria-label="${esc(`${s.label}: ${s.value}`)}" ${tip(`${s.label}: ${s.value}`)}>${icon(s.icon)}<em class="num">${esc(s.delta!)}</em></span>`).join('');
-      actions.push(`<div class="bi-action">${button({ label: SAY.upgrade, icon: 'upgrade', key: { key: 'U' }, disabled: i.upgrade.missing > 0 || i.status === 'destroyed', tip: i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '), attrs: { 'data-act': 'upgrade' } })}${priceHtml(i.upgrade)}<span class="stats gain-list">${gains}</span></div>`);
+      actions.push(`<div class="bi-action">${button({ label: SAY.upgrade, icon: 'upgrade', key: bind('upgrade'), disabled: i.upgrade.missing > 0 || i.status === 'destroyed', tip: i.upgrade.next.map((s) => `${s.label} ${s.value}`).join(' · '), attrs: { 'data-act': 'upgrade' } })}${priceHtml(i.upgrade)}<span class="stats gain-list">${gains}</span></div>`);
     } else if (i.kind !== 'store') {
       actions.push(chip({ label: SAY.maxLevel, icon: 'level', tip: 'Fully upgraded' }));
     }
-    if (i.repair) actions.push(`<div class="bi-action">${button({ label: SAY.repair, icon: 'repair', key: { key: 'R' }, disabled: i.repair.missing > 0, attrs: { 'data-act': 'repair' } })}${priceHtml(i.repair)}</div>`);
+    if (i.repair) actions.push(`<div class="bi-action">${button({ label: SAY.repair, icon: 'repair', key: bind('service'), disabled: i.repair.missing > 0, attrs: { 'data-act': 'repair' } })}${priceHtml(i.repair)}</div>`);
     if (i.refund !== null) {
-      actions.push(`<div class="bi-action">${button({ label: SAY.remove, icon: 'remove', variant: 'danger', key: { key: 'X' }, tip: 'Remove for a partial refund (asks first)', attrs: { 'data-act': 'remove' } })}<span class="price refund" role="img" aria-label="${esc(`${ICON_NAMES.refund} +${i.refund}`)}" ${tip(ICON_NAMES.refund)}>${icon('refund')}<b class="num">+${i.refund}</b></span></div>`);
+      actions.push(`<div class="bi-action">${button({ label: SAY.remove, icon: 'remove', variant: 'danger', key: bind('swap'), tip: 'Remove for a partial refund (asks first)', attrs: { 'data-act': 'remove' } })}<span class="price refund" role="img" aria-label="${esc(`${ICON_NAMES.refund} +${i.refund}`)}" ${tip(ICON_NAMES.refund)}>${icon('refund')}<b class="num">+${i.refund}</b></span></div>`);
     }
     host.innerHTML = `
       <div class="bi-head">${icon(BUILDING_ICONS[i.kind])}<b>${esc(i.name)}</b>${lv}

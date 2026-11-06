@@ -1,4 +1,5 @@
 import { AIRCRAFT, LANDING, STARTER_AIRCRAFT } from '../config';
+import { bind } from '../input/bindings';
 import { attrs, bar, button, card, glyph, pips, tooltipAttrs } from './components';
 import { attr, bindButton, text, toggle, width } from './dom';
 import { clock, fmt, level, metres, pct } from './format';
@@ -51,9 +52,9 @@ export class PlaneHud {
     this.el.instruments = add(zones.bc, card({
       className: 'instruments', label: SAY.instruments, fold: false,
       bodyHtml: /* html */ `
-        <div class="gauge" ${tip(ICON_NAMES.speed)}>${icon('speed')}<b class="num" data-p="speed"></b><span class="speed-track">${bar({ value: 0, label: ICON_NAMES.speed, kind: 'progress', attrs: { 'data-p': 'speed-bar' } })}<em class="throttle-mark" data-p="throttle"></em></span><span class="hint-keys">${glyph({ key: 'W' })}${glyph({ key: 'S' })}</span></div>
+        <div class="gauge" ${tip(ICON_NAMES.speed)}>${icon('speed')}<b class="num" data-p="speed"></b><span class="speed-track">${bar({ value: 0, label: ICON_NAMES.speed, kind: 'progress', attrs: { 'data-p': 'speed-bar' } })}<em class="throttle-mark" data-p="throttle"></em></span><span class="hint-keys">${glyph(bind('throttleUp'))}${glyph(bind('throttleDown'))}</span></div>
         <div class="gauge" ${tip(ICON_NAMES.altitude)}>${icon('altitude')}<b class="num" data-p="alt"></b></div>
-        <div class="gauge boost" data-p="boost" ${tip(ICON_NAMES.boost)}>${icon('boost')}${bar({ value: 1, label: ICON_NAMES.boost, kind: 'boost', attrs: { 'data-p': 'boost-bar' } })}${glyph({ key: 'Shift' }, { className: 'hint-key' })}</div>
+        <div class="gauge boost" data-p="boost" ${tip(ICON_NAMES.boost)}>${icon('boost')}${bar({ value: 1, label: ICON_NAMES.boost, kind: 'boost', attrs: { 'data-p': 'boost-bar' } })}${glyph(bind('boost'), { className: 'hint-key' })}</div>
         <div class="maneuver-slot" data-p="maneuvers" hidden></div>`,
     }));
     // Extension point for v0.0.16 (flight maneuvers): crease charges, the "fast enough" marker,
@@ -66,11 +67,11 @@ export class PlaneHud {
       bodyHtml: [
         `<span class="ground-where" ${tip('Landed at T1')}>${icon('home')}<b>T1</b></span>`,
         `<span class="ground-status" data-p="gr-status"></span>`,
-        button({ label: SAY.rearm, icon: 'rearm', key: { key: 'R' }, tip: 'Rearm ink and range (free)', attrs: { 'data-p': 'rearm' } }),
+        button({ label: SAY.rearm, icon: 'rearm', key: bind('service'), tip: 'Rearm ink and range (free)', attrs: { 'data-p': 'rearm' } }),
         button({ label: 'Rearm & go', icon: 'rearm', tip: 'Rearm, then take off as soon as the ground crew is done', attrs: { 'data-p': 'rearmgo' } }),
-        button({ label: SAY.takeOff, icon: 'plane', variant: 'primary', key: { key: 'Space' }, attrs: { 'data-p': 'takeoff' } }),
-        button({ label: SAY.endSortie, icon: 'close', key: { key: 'Enter' }, attrs: { 'data-p': 'end' } }),
-        button({ label: SAY.base, icon: 'base', key: { key: 'B' }, tip: 'Base (B)', attrs: { 'data-p': 'gr-base' } }),
+        button({ label: SAY.takeOff, icon: 'plane', variant: 'primary', key: bind('launch', 'confirm'), attrs: { 'data-p': 'takeoff' } }),
+        button({ label: SAY.endSortie, icon: 'close', key: { key: bind('confirm').key }, attrs: { 'data-p': 'end' } }),
+        button({ label: SAY.base, icon: 'base', key: bind('base'), tip: SAY.base, tipKey: bind('base'), attrs: { 'data-p': 'gr-base' } }),
       ].join(''),
     }));
     // The rearm button carries its own progress.
@@ -79,14 +80,14 @@ export class PlaneHud {
     this.el.weapons = add(zones.br, card({
       className: 'weapons', label: SAY.weapons,
       bodyHtml: /* html */ `
-        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}>${icon('ink')}<b class="num" data-p="ammo"></b>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph({ key: 'LMB' }, { className: 'hint-key' })}</div>
-        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<span class="bomb-pips" data-p="bomb-pips"></span>${glyph({ key: 'RMB' }, { className: 'hint-key' })}</div>`,
+        <div class="weapon" data-p="gun" ${tip(ICON_NAMES.ink)}>${icon('ink')}<b class="num" data-p="ammo"></b>${bar({ value: 1, label: ICON_NAMES.ink, size: 'thin', kind: 'progress', attrs: { 'data-p': 'ammo-bar' } })}${glyph(bind('firePrimary'), { className: 'hint-key' })}</div>
+        <div class="weapon" data-p="bombs" ${tip(ICON_NAMES.bombload)}>${icon('bombload')}<span class="bomb-pips" data-p="bomb-pips"></span>${glyph(bind('fireSecondary'), { className: 'hint-key' })}</div>`,
     }));
     this.el.desk = add(zones.br, /* html */ `<div class="desk-action">
       <span class="desk-tag ui-chip" data-p="desk-tag"></span>
-      ${button({ label: SAY.build, variant: 'primary', size: 'big', key: { key: 'F' }, attrs: { 'data-p': 'build' } })}
+      ${button({ label: SAY.build, variant: 'primary', size: 'big', key: bind('fold', 'confirm'), attrs: { 'data-p': 'build' } })}
       ${card({ className: 'building', label: SAY.build, fold: false, bodyHtml: `${icon('plane')}${bar({ value: 0, label: SAY.build, kind: 'progress', attrs: { 'data-p': 'building-bar' } })}`, attrs: { 'data-p': 'building' } })}
-      ${button({ label: SAY.launch, variant: 'primary', size: 'big', key: { key: 'Space' }, attrs: { 'data-p': 'launch' } })}
+      ${button({ label: SAY.launch, variant: 'primary', size: 'big', key: bind('launch', 'confirm'), attrs: { 'data-p': 'launch' } })}
     </div>`);
     this.el.build.querySelector('.ui-glyph')!.insertAdjacentHTML('beforebegin', `<b class="cost num" data-p="build-cost"></b>`);
     this.el['build-cost'] = this.el.build.querySelector<HTMLElement>('.cost')!;

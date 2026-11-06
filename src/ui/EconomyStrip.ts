@@ -1,4 +1,6 @@
 import { bar, card, chip, glyph, iconButton } from './components';
+import { bind } from '../input/bindings';
+import type { GlyphSpec } from '../input/glyphs';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
 import { fmt, signed } from './format';
 import { icon } from './icons';
@@ -55,17 +57,18 @@ export class EconomyStrip {
       bodyHtml: `<ul class="econ-list ui-list" role="list" data-e="list"></ul>${chip({ label: '', icon: 'streak', value: '', tip: 'Missions in a row', tone: 'streak', className: 'econ-streak', attrs: { 'data-e': 'streak-chip' } })}`,
     }));
     this.card = host.lastElementChild as HTMLElement;
-    const hint = (key: string, pad?: 'menu') => glyph({ key, pad }, { className: 'ui-corner hint-key' });
+    const hint = (spec: GlyphSpec) => glyph(spec, { className: 'ui-corner hint-key' });
+    const menuKey = bind('back', 'pause');
     host.insertAdjacentHTML('beforeend', /* html */ `<div class="icon-btns">
-      ${iconButton({ icon: 'base', name: SAY.base, tip: 'Base (B)', badge: '0', attrs: { 'data-e': 'base-btn' } })}
-      ${iconButton({ icon: 'book', name: SAY.logbook, tip: 'Logbook (L)', attrs: { 'data-e': 'book-btn' } })}
-      ${iconButton({ icon: 'menu', name: SAY.menu, tip: 'Menu (Esc)', attrs: { 'data-e': 'menu-btn' } })}
+      ${iconButton({ icon: 'base', name: SAY.base, tipKey: bind('base'), badge: '0', attrs: { 'data-e': 'base-btn' } })}
+      ${iconButton({ icon: 'book', name: SAY.logbook, tipKey: bind('logbook'), attrs: { 'data-e': 'book-btn' } })}
+      ${iconButton({ icon: 'menu', name: SAY.menu, tipKey: menuKey, attrs: { 'data-e': 'menu-btn' } })}
     </div>`);
     const buttons = host.lastElementChild as HTMLElement;
     for (const root of [this.card, buttons]) for (const node of root.querySelectorAll<HTMLElement>('[data-e]')) this.el[node.dataset.e!] = node;
-    this.el['base-btn'].insertAdjacentHTML('beforeend', hint('B'));
-    this.el['book-btn'].insertAdjacentHTML('beforeend', hint('L'));
-    this.el['menu-btn'].insertAdjacentHTML('beforeend', hint('Esc', 'menu'));
+    this.el['base-btn'].insertAdjacentHTML('beforeend', hint(bind('base')));
+    this.el['book-btn'].insertAdjacentHTML('beforeend', hint(bind('logbook')));
+    this.el['menu-btn'].insertAdjacentHTML('beforeend', hint(menuKey));
     this.el.repairs = this.el['base-btn'].querySelector<HTMLElement>('.ui-badge')!;
     this.el.repairs.dataset.tip = 'Need repairs';
     this.el.buttons = buttons;

@@ -1,4 +1,5 @@
 import { SUITABILITY_LABELS } from '../aircraft/Aircraft';
+import { bind } from '../input/bindings';
 import { DIRECTOR } from '../config';
 import { attrs, bar, button, card, chip, glyph, pips, tooltipAttrs, type Tone } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
@@ -76,11 +77,11 @@ export class MissionPanel {
     this.cards = document.createElement('div');
     this.cards.className = 'mission-cards';
     this.cards.innerHTML = `<div class="cards" role="group" aria-label="${SAY.missions}" data-m="cards"></div>${button({
-      label: SAY.swap, icon: 'swap', size: 'small', tip: 'Swap the chosen card (X)', className: 'swap-btn', attrs: { 'data-m': 'swap' },
+      label: SAY.swap, icon: 'swap', size: 'small', tip: 'Swap the chosen card', tipKey: bind('swap'), className: 'swap-btn', attrs: { 'data-m': 'swap' },
     })}`;
     cardHost.appendChild(this.cards);
     const swap = this.cards.querySelector<HTMLElement>('[data-m="swap"]')!;
-    swap.querySelector('.ui-label')!.insertAdjacentHTML('afterend', `<b class="num" data-m="swaps"></b>${glyph({ key: 'X' }, { className: 'hint-key' })}`);
+    swap.querySelector('.ui-label')!.insertAdjacentHTML('afterend', `<b class="num" data-m="swaps"></b>${glyph(bind('swap'), { className: 'hint-key' })}`);
     stripHost.insertAdjacentHTML('beforeend', card({
       className: 'objective', label: SAY.objective, fold: true,
       bodyHtml: /* html */ `

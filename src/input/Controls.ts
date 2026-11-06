@@ -24,63 +24,18 @@ import { FocusManager, setFocusManager } from './FocusNav';
 import { GamepadSource, padActive, type PadButton, type PadEvent, type PadFamily } from './Gamepad';
 import { applyGlyphs, padControlLabels } from './glyphs';
 import { setControlLabels } from '../ui/controlLabels';
-import { MOUSE_LEFT, MOUSE_RIGHT, type Input } from '../systems/Input';
+import { MOUSE_RIGHT, type Input } from '../systems/Input';
+import { KEYMAP, MOUSE_HOLD, PAD_HOLD, PAD_PRESS, type Action, type InputContext } from './bindings';
 
-export type Action =
-  // Flight
-  | 'throttleUp' | 'throttleDown' | 'bankLeft' | 'bankRight' | 'boost' | 'firePrimary' | 'fireSecondary' | 'modifier'
-  // Sortie flow
-  | 'confirm' | 'launch' | 'back' | 'pause' | 'fold' | 'service' | 'swap' | 'remove' | 'upgrade'
-  // Selection
-  | 'prevAircraft' | 'nextAircraft' | 'prevMission' | 'nextMission'
-  | 'pick0' | 'pick1' | 'pick2' | 'pick3' | 'pick4' | 'pick5' | 'pick6' | 'pick7'
-  // Screens
-  | 'base' | 'logbook' | 'sound' | 'dev' | 'hints' | 'scoreboard'
-  // Multiplayer
-  | 'emote1' | 'emote2' | 'emote3';
+export { KEYMAP, PAD_HOLD, PAD_PRESS, type Action, type InputContext } from './bindings';
 
 export type Device = 'keyboard' | 'gamepad';
-
-/** Where the player is, which decides what the controller's buttons do. */
-export type InputContext = 'flight' | 'home' | 'menu';
-
-/** Keyboard: physical key code → action. */
-export const KEYMAP: Readonly<Record<string, Action>> = {
-  KeyW: 'throttleUp', KeyS: 'throttleDown', KeyA: 'bankLeft', KeyD: 'bankRight',
-  ShiftLeft: 'boost', ShiftRight: 'boost',
-  Enter: 'confirm', NumpadEnter: 'confirm', Space: 'launch', Escape: 'back',
-  KeyF: 'fold', KeyR: 'service', KeyX: 'swap', Delete: 'remove', KeyU: 'upgrade',
-  KeyQ: 'prevAircraft', KeyE: 'nextAircraft',
-  KeyB: 'base', KeyL: 'logbook', KeyM: 'sound', Backquote: 'dev', KeyH: 'hints', Tab: 'scoreboard',
-  KeyZ: 'emote1', KeyC: 'emote2', KeyV: 'emote3',
-  Digit0: 'pick0', Digit1: 'pick1', Digit2: 'pick2', Digit3: 'pick3', Digit4: 'pick4', Digit5: 'pick5', Digit6: 'pick6', Digit7: 'pick7',
-  Numpad0: 'pick0', Numpad1: 'pick1', Numpad2: 'pick2', Numpad3: 'pick3', Numpad4: 'pick4', Numpad5: 'pick5', Numpad6: 'pick6', Numpad7: 'pick7',
-};
-
-/** Controller: per context, button → action on press. */
-export const PAD_PRESS: Readonly<Record<InputContext, Partial<Record<PadButton, Action>>>> = {
-  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3' },
-  home: {
-    south: 'confirm', east: 'back', west: 'service', north: 'base', lb: 'prevAircraft', rb: 'nextAircraft',
-    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause',
-  },
-  menu: { south: 'confirm', east: 'back', menu: 'pause', view: 'logbook' },
-};
-
-/** Controller: per context, button → action while held. */
-export const PAD_HOLD: Readonly<Record<InputContext, Partial<Record<PadButton, Action>>>> = {
-  flight: { rt: 'firePrimary', rb: 'boost', lb: 'modifier', north: 'hints', view: 'scoreboard' },
-  home: { view: 'scoreboard' },
-  menu: {},
-};
 
 /** Keys the focus manager owns outside flight (none is in KEYMAP). */
 export const NAV_KEYS: Readonly<Record<string, NavDirection | 'pageUp' | 'pageDown'>> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', PageUp: 'pageUp', PageDown: 'pageDown',
 };
 
-/** The mouse buttons as actions. */
-const MOUSE_HOLD: Partial<Record<Action, number>> = { firePrimary: MOUSE_LEFT, fireSecondary: MOUSE_RIGHT };
 
 // ---- Controller settings (per browser) ---------------------------------------------------------
 
@@ -155,6 +110,7 @@ export class Controls {
   private steerStick: Stick = { x: 0, y: 0 };
   private lookState: Stick = { x: 0, y: 0 };
   private glyphFamily: PadFamily | null = null;
+  private simulated: PadFamily | null = null;
   /** The arrow keys have moved the highlight since the mouse was last used. */
   private keyNav = false;
   private glyphsDirty = true;
@@ -199,7 +155,18 @@ export class Controls {
   }
 
   get padFamily(): PadFamily {
-    return this.pad.state?.family ?? 'xbox';
+    return this.simulated ?? this.pad.state?.family ?? 'xbox';
+  }
+
+  /**
+   * Shows the interface as if a controller of this family were in use, or the keyboard again
+   * (null). For screenshots, tests and the console (`paperwars.controls.simulatePad('playstation')`):
+   * glyphs, the controls grid and the highlight switch exactly as for a real controller.
+   */
+  simulatePad(family: PadFamily | null): void {
+    this.simulated = family;
+    this.use(family ? 'gamepad' : 'keyboard');
+    this.refreshGlyphs();
   }
 
   private get tuning(): PadTuning {

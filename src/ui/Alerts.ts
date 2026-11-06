@@ -1,4 +1,5 @@
 import { alert, glyph, type Severity } from './components';
+import { bind, isAction } from '../input/bindings';
 import { esc } from './dom';
 import { icon, type IconName } from './icons';
 import { SAY } from './strings';
@@ -177,6 +178,11 @@ export class Alerts {
   }
 }
 
+/** Escapes `text` and turns each "{action}" into that action's glyph (the device's binding, live). */
+export function withKeys(text: string): string {
+  return esc(text).replace(/\{(\w+)\}/g, (whole, name: string) => (isAction(name) ? glyph(bind(name), { className: 'tip-key' }) : whole));
+}
+
 /**
  * A first-time tip: a short line next to a lightbulb, shown once per save for each thing the
  * player meets for the first time. Click to dismiss; it goes by itself after a while.
@@ -194,9 +200,13 @@ export class Tips {
     host.appendChild(this.el);
   }
 
+  /**
+   * `text` may name actions in braces, "fold it ({fold})": each becomes the binding's glyph inline,
+   * relabelled live for the device in use. `keys`: actions (or key labels) shown as chips after it.
+   */
   show(text: string, keys: string[] = [], seconds = 7): void {
-    const kbd = keys.map((k) => glyph({ key: k })).join('');
-    this.el.innerHTML = `${icon('tip', 'icon tip-icon')}<span>${esc(text)}</span>${kbd ? `<span class="tip-keys">${kbd}</span>` : ''}`;
+    const kbd = keys.map((k) => glyph(isAction(k) ? bind(k) : { key: k })).join('');
+    this.el.innerHTML = `${icon('tip', 'icon tip-icon')}<span>${withKeys(text)}</span>${kbd ? `<span class="tip-keys">${kbd}</span>` : ''}`;
     this.el.hidden = false;
     this.el.classList.remove('show');
     void this.el.offsetWidth;

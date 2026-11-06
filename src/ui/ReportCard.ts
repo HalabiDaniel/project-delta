@@ -1,4 +1,5 @@
 import { button, card, chip, stat, type Tone } from './components';
+import { bind } from '../input/bindings';
 import { attr, bindButton, esc, text, toggle } from './dom';
 import { clock, fmt, pct, signed } from './format';
 import { icon, type IconName } from './icons';
@@ -30,7 +31,7 @@ export class ReportCard {
       <div class="rp-next" data-r="next"></div>
       <div class="rp-chips" data-r="chips"></div>
       <div class="rp-foot">${button({ label: SAY.details, icon: 'more', size: 'small', className: 'rp-toggle', attrs: { 'data-r': 'toggle', 'aria-expanded': 'false', 'aria-controls': 'rp-details' } })}
-        ${button({ label: SAY.continue, variant: 'primary', key: { key: 'Enter' }, attrs: { 'data-r': 'continue', 'data-nav-default': '' } })}</div>
+        ${button({ label: SAY.continue, variant: 'primary', key: bind('confirm'), attrs: { 'data-r': 'continue', 'data-nav-default': '' } })}</div>
       <dl class="rp-details" id="rp-details" data-r="details"></dl>`,
     }));
     this.el = host.lastElementChild as HTMLElement;

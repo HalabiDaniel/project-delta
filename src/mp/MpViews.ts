@@ -165,7 +165,7 @@ export class MpViews {
       phase,
       paused: g.paused,
       baseMode: baseOpen,
-      hints: hintsShown(g.settings.hints, g.input.isHeld('KeyH'), st?.phase === 'desk' && (g.room?.state.players.get(g.me ?? '')?.missions ?? 0) < 2),
+      hints: hintsShown(g.settings.hints, g.controls.held('hints'), st?.phase === 'desk' && (g.room?.state.players.get(g.me ?? '')?.missions ?? 0) < 2),
       economy: {
         paper: eco?.paper ?? 0,
         capacity: eco?.capacity ?? 0,
@@ -195,6 +195,7 @@ export class MpViews {
           muted: g.sounds.muted,
           hints: g.settings.hints,
           uiScale: g.settings.uiScale,
+          access: g.settings.access,
           graphics: { preset: matchesPreset(g.graphics) ? g.graphics.preset : null },
         },
         saveNote: 'Multiplayer: your paper, base and planes live on the server. "Leave classroom" frees your desk.',

@@ -5,6 +5,8 @@ import { icon, type IconName } from '../ui/icons';
 import type { HudZone } from '../ui/HUD';
 import { colourCss, type DeskState, type Emote, type Weapon } from '../net/protocol';
 import type { ConnectionStatus } from './NetClient';
+import { bind } from '../input/bindings';
+import type { GlyphSpec } from '../input/glyphs';
 import { PRESENCE_ICONS, PRESENCE_LABELS, PRESENCE_TIPS, PRESENCE_TONES, type Presence } from './presence';
 
 /**
@@ -133,10 +135,10 @@ export type FeedSelf = 'killer' | 'victim' | null;
 export const WEAPON_ICONS: Readonly<Record<Weapon, IconName>> = { ink: 'ink', rocket: 'rocket', bomb: 'bomb', ram: 'damage', crash: 'crumple' };
 export const WEAPON_NAMES: Readonly<Record<Weapon, string>> = { ink: 'Ink', rocket: 'Rocket', bomb: 'Bomb', ram: 'Collision', crash: 'Crashed' };
 /** Emotes as icons (not text glyphs), their names and their keys (Z / C / V, D-pad ↑ ← →). */
-export const EMOTES: ReadonlyArray<{ id: Emote; icon: IconName; name: string; key: string; pad: 'up' | 'left' | 'right' }> = [
-  { id: 'waggle', icon: 'plane', name: 'Waggle', key: 'Z', pad: 'up' },
-  { id: 'confetti', icon: 'level', name: 'Confetti', key: 'C', pad: 'left' },
-  { id: 'heart', icon: 'health', name: 'Heart', key: 'V', pad: 'right' },
+export const EMOTES: ReadonlyArray<{ id: Emote; icon: IconName; name: string; key: GlyphSpec }> = [
+  { id: 'waggle', icon: 'plane', name: 'Waggle', key: bind('emote1') },
+  { id: 'confetti', icon: 'level', name: 'Confetti', key: bind('emote2') },
+  { id: 'heart', icon: 'health', name: 'Heart', key: bind('emote3') },
 ];
 const EMOTE_ICON: Record<Emote, IconName> = { waggle: 'plane', confetti: 'level', heart: 'health' };
 const FEED_LINES = 5;
@@ -250,8 +252,8 @@ export class MpHud {
     this.emotes.setAttribute('aria-label', 'Emotes');
     this.emotes.hidden = true;
     this.emotes.innerHTML =
-      EMOTES.map((e) => iconButton({ icon: e.icon, name: e.name, key: { key: e.key, pad: e.pad }, attrs: { 'data-act': `emote-${e.id}` } })).join('') +
-      `<span class="mp-board-key" data-tip="Scoreboard (hold)">${glyph({ key: 'Tab', pad: 'view' })}${icon('kills', 'icon', 'Scoreboard')}</span>`;
+      EMOTES.map((e) => iconButton({ icon: e.icon, name: e.name, key: e.key, attrs: { 'data-act': `emote-${e.id}` } })).join('') +
+      `<span class="mp-board-key" data-tip="Scoreboard (hold)">${glyph(bind('scoreboard'))}${icon('kills', 'icon', 'Scoreboard')}</span>`;
     for (const e of EMOTES) bindButton(this.emotes.querySelector<HTMLElement>(`[data-act="emote-${e.id}"]`)!, () => actions.emote(e.id));
     this.board = div(zones.centre, 'mp-board');
     this.board.hidden = true;

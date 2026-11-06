@@ -1,4 +1,5 @@
 import { SUITABILITY_LABELS, type RatingKey, type SuitabilityLevel } from '../aircraft/Aircraft';
+import { bind } from '../input/bindings';
 import type { AircraftId } from '../config';
 import type { BuildKind } from '../systems/GameState';
 import { attrs, bar, glyph, pips, stat, tooltipAttrs } from './components';
@@ -90,7 +91,7 @@ export class Garage {
       <dl class="ratings" data-i="ratings" aria-label="${SAY.ratings}"></dl>
       <div class="stats" data-i="loadout" role="group" aria-label="${SAY.loadout}"></div>
       <div class="insp-tricks" data-i="tricks" hidden></div>
-      <div class="insp-keys hint-keys">${glyph({ key: 'Q' })}${glyph({ key: 'E' })}${icon('swap')}</div></div>`;
+      <div class="insp-keys hint-keys">${glyph(bind('prevAircraft'))}${glyph(bind('nextAircraft'))}${icon('swap')}</div></div>`;
     cards.addEventListener('mousedown', (e) => e.preventDefault());
     cards.addEventListener('click', (e) => {
       const card = (e.target as Element).closest<HTMLButtonElement>('.plane-card');

@@ -18,7 +18,7 @@
 import { esc } from './dom';
 import { level as levelOf } from './format';
 import { icon, type IconName } from './icons';
-import { glyphText, type GlyphDevice, type GlyphSpec } from '../input/glyphs';
+import { glyphText, keyTip, type GlyphDevice, type GlyphSpec } from '../input/glyphs';
 import './components.css';
 
 // ---- Shared ------------------------------------------------------------------------------------------
@@ -66,17 +66,23 @@ export interface GlyphOptions {
    * with the keyboard key and relabelled live for the controller in use (applyGlyphs).
    */
   device?: GlyphDevice;
+  /**
+   * The label already names the device's control (text from `controlLabel`, which follows the
+   * device): show it as written, never relabel it.
+   */
+  literal?: boolean;
   className?: string;
 }
 
 /** A key cap or controller button for a binding. Empty when the device has no equivalent. */
 export function glyph(spec: GlyphSpec, opts: GlyphOptions = {}): string {
-  const fixed = opts.device !== undefined;
-  const label = fixed ? glyphText(spec, opts.device!) : spec.key;
+  const fixed = opts.device !== undefined || opts.literal === true || spec.literal === true;
+  const label = opts.device !== undefined ? glyphText(spec, opts.device) : spec.key;
   if (fixed && label === '') return '';
   return `<kbd${attrs({
     class: cls('ui-glyph', opts.className),
     'data-pad': spec.pad,
+    'data-pad-text': spec.padText,
     'data-device': opts.device,
     'data-glyph-fixed': fixed,
     'data-key': fixed ? spec.key : undefined,
@@ -92,6 +98,14 @@ export function glyph(spec: GlyphSpec, opts: GlyphOptions = {}): string {
  */
 export function tooltipAttrs(text: string, describedBy?: string): Attrs {
   return { 'data-tip': text, 'aria-describedby': describedBy };
+}
+
+/**
+ * A tooltip that names its binding, "Base (B)": written for the keyboard and relabelled for the
+ * controller in use by applyGlyphs ("Base (Y)", "Base (△)", or just "Base" without an equivalent).
+ */
+export function keyTipAttrs(text: string, spec: GlyphSpec): Attrs {
+  return { 'data-tip': keyTip(text, spec.key), 'data-tip-text': text, 'data-tip-key': spec.key, 'data-tip-pad': spec.pad, 'data-tip-pad-text': spec.padText };
 }
 
 export interface TooltipOptions {
@@ -176,6 +190,8 @@ export interface ButtonOptions extends Common {
   device?: GlyphDevice;
   size?: 'small' | 'normal' | 'big';
   tip?: string;
+  /** The binding the tooltip names ("Base (B)"), following the device. */
+  tipKey?: GlyphSpec;
   id?: string;
   disabled?: boolean;
 }
@@ -189,7 +205,7 @@ export function button(o: ButtonOptions): string {
     id: o.id,
     'data-variant': variant,
     'data-size': o.size && o.size !== 'normal' ? o.size : undefined,
-    ...(o.tip ? tooltipAttrs(o.tip) : {}),
+    ...(o.tip ? (o.tipKey ? keyTipAttrs(o.tip, o.tipKey) : tooltipAttrs(o.tip)) : {}),
     ...stateAttrs(o.state),
     disabled,
     ...o.attrs,
@@ -203,6 +219,8 @@ export interface IconButtonOptions extends Common {
   /** The accessible name (also the tooltip unless `tip` is given). */
   name: string;
   tip?: string;
+  /** The binding the tooltip names ("Base (B)"), following the device. */
+  tipKey?: GlyphSpec;
   key?: GlyphSpec;
   device?: GlyphDevice;
   /** A small count in the corner ("3"). */
@@ -218,7 +236,7 @@ export function iconButton(o: IconButtonOptions): string {
     class: cls('ui-icon-button', o.className),
     id: o.id,
     'aria-label': o.name,
-    ...tooltipAttrs(o.tip ?? o.name),
+    ...(o.tipKey ? keyTipAttrs(o.tip ?? o.name, o.tipKey) : tooltipAttrs(o.tip ?? o.name)),
     ...stateAttrs(o.state),
     disabled,
     ...o.attrs,
@@ -348,6 +366,29 @@ export function alert(o: AlertOptions): string {
     ...stateAttrs(o.state, 'aria-disabled'),
     ...o.attrs,
   })}>${o.icon ? icon(o.icon, 'icon ui-icon') : ''}<span class="ui-alert-title">${esc(o.title)}</span>${o.value ? `<b class="num">${esc(o.value)}</b>` : ''}${o.count ? `<span class="ui-alert-count num">${esc(o.count)}</span>` : ''}</div>`;
+}
+
+// ---- Caption -------------------------------------------------------------------------------------------
+
+export interface CaptionOptions extends Common {
+  /** What the sound means, in a few words ("Rocket lock"). Shown in brackets (CSS), like a subtitle. */
+  text: string;
+  icon?: IconName;
+  /**
+   * Where it came from, relative to the view (radians: 0 ahead, positive to the right), when
+   * known: an arrow turned that way, named by `directionLabel` for screen readers.
+   */
+  direction?: number | null;
+  directionLabel?: string;
+}
+
+/** A sound caption (plan v0.0.15 §8D): "[Rocket lock]" with an icon and, when known, a direction arrow. */
+export function caption(o: CaptionOptions): string {
+  const dir = typeof o.direction === 'number' && Number.isFinite(o.direction);
+  const deg = dir ? Math.round((o.direction! * 180) / Math.PI) : 0;
+  return `<div${attrs({ class: cls('ui-caption', o.className), role: 'status', ...stateAttrs(o.state, 'aria-disabled'), ...o.attrs })}>${o.icon ? icon(o.icon, 'icon ui-icon') : ''}<span class="ui-caption-text">${esc(o.text)}</span>${dir
+    ? `<span class="ui-caption-dir" role="img"${attrs({ 'aria-label': o.directionLabel })} style="--dir: ${deg}deg"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L10.5 10 L6 7.6 L1.5 10 Z" fill="currentColor"/></svg></span>`
+    : ''}</div>`;
 }
 
 // ---- List / grid ---------------------------------------------------------------------------------------

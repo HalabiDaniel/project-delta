@@ -58,7 +58,7 @@ export class Dashboard {
     const mission = v.mission
       ? `<div class="db-row">${icon('ok')}<span><b>${esc(v.mission.title)}</b> · +${v.mission.reward} · ${esc(v.mission.plane)} ${chip({ label: FIT_LABEL[v.mission.fit] ?? v.mission.fit, tone: FIT_TONE[v.mission.fit], className: 'db-fit', attrs: { 'data-fit': v.mission.fit } })}</span></div>`
       : '';
-    const next = v.next.map((n) => `<li data-tone="${n.tone}"><span>${esc(n.text)}</span>${n.key ? glyph({ key: n.key }) : ''}</li>`).join('');
+    const next = v.next.map((n) => `<li data-tone="${n.tone}"><span>${esc(n.text)}</span>${n.key ? glyph({ key: n.key }, { literal: true }) : ''}</li>`).join('');
     this.body.innerHTML =
       `<div class="db-title">${icon('home')}<b>Home desk</b><span class="db-muted">${v.rate}/min · ${v.paper}/${v.capacity} · ${v.protectedPaper} safe</span></div>` +
       `<div class="db-row" data-tone="${b.repairs > 0 ? 'warn' : ''}">${icon('shield')}<span>Defenses <b class="num">${b.ready}/${b.total}</b> · ${radar} · condition <b class="num">${pct(b.integrity)}</b>${b.repairs > 0 ? ` · ${b.repairs} to repair` : ''}</span></div>` +
@@ -70,7 +70,7 @@ export class Dashboard {
       const r = v.rebuild;
       buttons.push(button({
         label: `Rebuild ${r.name}`, icon: 'build', size: 'small', variant: 'primary', disabled: !r.canAfford,
-        key: r.key ? { key: r.key } : undefined,
+        key: r.key ? { key: r.key, literal: true } : undefined,
         tip: r.canAfford ? 'Choose the plane you lost and fold it again' : 'Not enough paper yet',
         attrs: { 'data-nav': 'dash-rebuild' },
       }).replace('</button>', `${priceHtml({ cost: r.cost, missing: r.canAfford ? 0 : Math.max(0, r.cost - v.paper) })}</button>`));

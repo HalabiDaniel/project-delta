@@ -1,4 +1,5 @@
 import { AIRCRAFT, AIRCRAFT_ORDER } from '../config';
+import { bind } from '../input/bindings';
 import type { PerformanceBreakdown } from '../director/Performance';
 import { CATEGORY_LABELS, type Category } from '../director/Templates';
 import { ACHIEVEMENTS, BEST_LABELS, clock, type ProgressData } from '../progress/Progress';
@@ -70,7 +71,7 @@ export class Logbook {
     this.el.hidden = true;
     this.el.innerHTML = `
       <section class="logbook-card ui-card" role="dialog" aria-labelledby="logbook-title" data-fold="none">
-        <div class="logbook-head"><h2 id="logbook-title">${SAY.logbook}</h2>${this.tabsHtml()}${button({ label: SAY.close, icon: 'close', key: { key: 'Esc', pad: 'east' }, attrs: { 'data-close': '', 'data-act': 'close-logbook' } })}</div>
+        <div class="logbook-head"><h2 id="logbook-title">${SAY.logbook}</h2>${this.tabsHtml()}${button({ label: SAY.close, icon: 'close', key: bind('back'), attrs: { 'data-close': '', 'data-act': 'close-logbook' } })}</div>
         ${TABS.map(([id]) => tabPanel({ tabsId: TABS_ID, tab: id, bodyHtml: '', selected: id === this.tab, className: 'logbook-body' })).join('')}
       </section>`;
     this.panels = Object.fromEntries(TABS.map(([id]) => [id, this.el.querySelector<HTMLElement>(`#${panelId(TABS_ID, id)}`)!])) as Record<Tab, HTMLElement>;
@@ -119,7 +120,7 @@ export class Logbook {
     return tabs({
       id: TABS_ID, label: SAY.logbook,
       tabs: TABS.map(([id, label, i]) => ({ id, label, icon: i, selected: id === this.tab })),
-      prev: { key: 'Q', pad: 'lb' }, next: { key: 'E', pad: 'rb' },
+      prev: { key: bind('prevAircraft').key, pad: 'lb' }, next: { key: bind('nextAircraft').key, pad: 'rb' },
     });
   }
 
