@@ -836,7 +836,7 @@ export const en = {
     notInMultiplayer: 'Not in multiplayer',
     disconnected: (error: string) => `Disconnected: ${error}`,
     server: (endpoint: string) => `Server: ${endpoint}`,
-    noLocalServer: (endpoint: string) => `No server at ${endpoint}. Start one with: npm run server`,
+    noLocalServer: (endpoint: string, command: string) => `No server at ${endpoint}. Start one with: ${command}`,
     noServer: "No server: the game server can't be reached. It may be restarting; try again in a moment.",
     reconnected: 'Reconnected',
     feedbackSent: 'Feedback sent. Thank you!',

@@ -597,7 +597,8 @@ body.pad-mode .ui-glyph:not([data-device]) { border-radius: var(--r-pill); borde
 
 /* ---- Tabs: a desk-coloured well; the chosen tab is a paper card on it ---------------------------- */
 .ui-tabs { display: inline-flex; align-items: center; gap: var(--s2); }
-.ui-tablist { display: inline-flex; gap: var(--s1); padding: var(--s1); border-radius: var(--radius-lg); background: var(--paper-2); }
+/* Longer tab names (another language) wrap onto a second row instead of pushing the row's neighbours out. */
+.ui-tablist { display: inline-flex; flex-wrap: wrap; min-width: 0; gap: var(--s1); padding: var(--s1); border-radius: var(--radius-lg); background: var(--paper-2); }
 .ui-tab {
   display: inline-flex;
   align-items: center;

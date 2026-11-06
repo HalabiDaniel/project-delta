@@ -25,6 +25,7 @@ const SKIP_FILES: Record<string, string> = {
 const ALLOW: Array<[file: string, text: RegExp, why: string]> = [
   ['ui/tokens.ts', /, (sans-serif|cursive)$/, 'CSS font stacks'],
   ['mp/MultiplayerGame.ts', /^already claimed$/, "the server's refusal code, compared, never shown"],
+  ['mp/MultiplayerGame.ts', /^npm run server$/, 'a shell command for the developer, shown as it is in every language'],
 ];
 
 function sources(dir: string): string[] {

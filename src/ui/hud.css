@@ -387,7 +387,8 @@ kbd.pad-hidden { display: none !important; }
    and zoom buttons on the rim. Small at the desk, full size in flight. */
 .minimap-wrap { position: relative; display: block; width: 176px; height: 176px; margin-top: var(--s3); pointer-events: auto; transition: width var(--motion-slide), height var(--motion-slide); }
 .minimap { display: block; width: 100% !important; height: 100% !important; border-radius: var(--r-pill); box-shadow: var(--shadow-hard); }
-.mm-n { position: absolute; top: -8px; left: 50%; width: 22px; height: 22px; margin-left: -11px; border: var(--stroke-line) solid var(--graphite); border-radius: var(--r-pill); background: var(--pencil-400); color: var(--graphite); font: 400 12px / 18px var(--font-display); text-align: center; }
+/* At least a circle; a longer word than "N" (another language) grows it into a pill, centred. */
+.mm-n { position: absolute; top: -8px; left: 50%; min-width: 22px; height: 22px; transform: translateX(-50%); white-space: nowrap; border: var(--stroke-line) solid var(--graphite); border-radius: var(--r-pill); background: var(--pencil-400); color: var(--graphite); font: 400 12px / 18px var(--font-display); text-align: center; }
 .mm-desk { position: absolute; left: -6px; bottom: 6px; padding: 0 var(--s2); border: var(--stroke-line) solid var(--ink); border-radius: var(--r-s); background: var(--paper-solid); box-shadow: var(--shadow-hard-sm); color: var(--ink); font: 400 var(--t-s) / 1.5 var(--font-display); }
 .mm-zoom { position: absolute; right: -6px; bottom: 4px; display: grid; gap: 3px; }
 .mm-zoom .ui-icon-button { width: 1.7em; height: 1.7em; font-size: var(--t-s); border-radius: var(--r-s); box-shadow: var(--shadow-hard-sm); }
@@ -798,7 +799,8 @@ kbd.pad-hidden { display: none !important; }
 .overlay-card, .welcome-card, .logbook-card { zoom: var(--overlay-scale, 1); }
 .overlay-card, .welcome-card, .logbook-card { position: relative; border-radius: var(--radius-lg); background: var(--paper-solid); box-shadow: 6px 6px 0 var(--graphite); }
 .overlay-card::before, .logbook-card::before { content: ''; position: absolute; top: 0; bottom: 0; left: var(--s7); width: 2px; background: var(--margin-red); pointer-events: none; }
-.overlay-card { width: min(62em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); max-height: calc((100vh - var(--s8)) / var(--overlay-scale, 1)); overflow-y: auto; padding: var(--s4) var(--s5) var(--s4) calc(var(--s8) + var(--s4)); }
+/* The height limit leaves room for the card's padding and border (content-box), as the logbook's does: a taller menu (longer text, 720p) scrolls inside the card instead of running off the screen. */
+.overlay-card { width: min(62em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); max-height: calc((100vh - var(--s8) * 2) / var(--overlay-scale, 1)); overflow-y: auto; padding: var(--s4) var(--s5) var(--s4) calc(var(--s8) + var(--s4)); }
 .overlay-card .ui-card-body, .welcome-card .ui-card-body { gap: var(--s3); }
 .menu-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s3); }
 .menu-head h2 { margin: 0; font: 400 var(--t-display-l) / 1 var(--font-display); font-size: calc(var(--t-xl) * 1.35); color: var(--ink); }
@@ -881,7 +883,7 @@ body.pad-mode .kbd-only { display: none !important; }
 .logbook-card { width: min(66em, calc((100vw - var(--s8)) / var(--overlay-scale, 1))); max-height: calc((100vh - var(--s8) * 2) / var(--overlay-scale, 1)); overflow-y: auto; padding: var(--s4) var(--s5) var(--s4) calc(var(--s8) + var(--s4)); }
 .logbook-head { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s2); }
 .logbook-head h2 { margin: 0; font: 400 var(--t-xl) / 1 var(--font-display); font-size: calc(var(--t-xl) * 1.35); }
-.logbook-head .ui-tabs { flex: 1; }
+.logbook-head .ui-tabs { flex: 1 1 0; min-width: 0; }
 .lb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); }
 .lb-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
 .logbook h3 { margin: var(--s3) 0 var(--s2); font: 400 var(--t-l) var(--font-display); }

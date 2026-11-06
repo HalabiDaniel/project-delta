@@ -467,7 +467,7 @@ export class MultiplayerGame {
     } catch {
       // A deployed game (VITE_SERVER_URL) never asks the player to start a server.
       const local = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.net.endpoint);
-      this.lobby.showRooms([], local ? T.mpGame.noLocalServer(this.net.endpoint) : T.mpGame.noServer, 'bad');
+      this.lobby.showRooms([], local ? T.mpGame.noLocalServer(this.net.endpoint, 'npm run server') : T.mpGame.noServer, 'bad');
     }
   }
 
