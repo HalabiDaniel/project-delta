@@ -192,6 +192,10 @@ later:
 
 ## Step 8: Invite your friend (and yourself)
 
+**Or skip invites altogether:** set `ACCESS` to `open` on the server (step 4). Then anyone with
+the game's address picks a username and plays, with no code and no terminal (this game runs that
+way since 2026-11-06). Set it back to `invite` whenever you want to keep strangers out.
+
 The invite codes are made on your computer, connected straight to the live database.
 
 1. In Railway, click the **Postgres** service → **Variables** (or **Connect**) and copy
@@ -331,11 +335,9 @@ long the players take to come back.
 
 ## Restore drill: result
 
-_Filled in after step 6c._
-
 | | |
 |---|---|
-| Date | |
-| Backup | |
-| `drill.done` | |
-| Checked by | |
+| Date | 2026-11-06 |
+| Backup | `paperwars/2026-11-06T20-47-09Z.dump` (40 kB, 17 tables), in `paperwars-backups` |
+| `drill.done` | `identical: true`: every table restored as it was live. (It said `ok: false` only because nobody had joined yet; an empty game now passes.) |
+| Checked by | The developer, in Railway's logs |

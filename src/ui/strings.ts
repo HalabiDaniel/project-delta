@@ -46,11 +46,14 @@ function storedLang(): string | null {
   }
 }
 
-/** Locale files next to en.ts, found at build time. */
-const LOCALE_FILES: Record<string, { default: LocaleDictionary }> = import.meta.glob<{ default: LocaleDictionary }>(
-  ['./locale/*.ts', '!./locale/en.ts', '!./locale/*.test.ts'],
-  { eager: true },
-);
+/**
+ * Locale files next to en.ts, found at build time. `import.meta.glob` exists only under Vite (the
+ * game, the tests); the multiplayer server runs this module under plain Node (through the
+ * tutorial's control labels), where it is English only.
+ */
+const LOCALE_FILES: Record<string, { default: LocaleDictionary }> = import.meta.env
+  ? import.meta.glob<{ default: LocaleDictionary }>(['./locale/*.ts', '!./locale/en.ts', '!./locale/*.test.ts'], { eager: true })
+  : {};
 
 /** The locale codes there are files for, besides English. */
 export const AVAILABLE_LOCALES: string[] = ['en', ...Object.keys(LOCALE_FILES).map((p) => p.replace(/^.*\/(.+)\.ts$/, '$1'))];
