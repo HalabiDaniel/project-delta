@@ -1001,6 +1001,10 @@ export class MultiplayerGame {
     if (m.economy) {
       this.resources.capacity = m.economy.capacity;
       this.resources.restore(m.economy.paper);
+      for (const s of m.economy.stores ?? []) {
+        this.resources.capacities[s.id] = s.capacity;
+        this.resources.restoreOf(s.id, s.amount);
+      }
       st.income.perMinute = m.economy.production;
       st.income.capacity = m.economy.capacity;
       if (this.lastPaper >= 0 && m.economy.paper !== this.lastPaper) this.hud.paperDelta(m.economy.paper - this.lastPaper);

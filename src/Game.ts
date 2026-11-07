@@ -30,12 +30,13 @@ import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
+import { applyBaseEconomy, applyCapacities, resourceViews, startingStock } from './systems/Economy';
 import { foldPose, GameState, type BuildKind, type CrashCause } from './systems/GameState';
 import { Input, MOUSE_LEFT } from './systems/Input';
 import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
 import { LocalStats } from './systems/LocalStats';
-import { ResourceManager } from './systems/ResourceManager';
+import { describeBundle, ResourceManager } from './systems/ResourceManager';
 import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
 import { STEER_SECONDS, Tutorial, tutorialEventFor } from './progress/Tutorial';
@@ -328,7 +329,7 @@ export class Game {
     const base = new Base(world.home, defenses, resources);
     if (saved?.base) base.load(saved.base);
     else base.startFresh();
-    resources.capacity = base.capacity;
+    applyCapacities(base, resources);
     const staticContext = {
       territories: world.territories,
       homeId: world.home.id,
@@ -371,6 +372,9 @@ export class Game {
 
     if (saved) {
       resources.restore(saved.paper);
+      // v0.0.18: a save from before ink and rubber balls starts with a share of what the base holds.
+      resources.restoreOf('ink', saved.ink ?? startingStock('ink', base.capacityOf('ink')));
+      resources.restoreOf('rubber', saved.rubber ?? startingStock('rubber', base.capacityOf('rubber')));
       ledger.load(saved.ledger.entries, saved.ledger.totals, new Map(saved.ledger.byAircraft), new Map(saved.ledger.byType));
       progress.data = saved.progress;
       if (saved.director) director.load(saved.director);
@@ -1007,13 +1011,13 @@ export class Game {
         this.alert('remove', `${BASE.buildings[e.kind].short} removed`, e.refund > 0 ? `+${e.refund}` : null, 'info', 1.8);
         break;
       case 'refused': {
-        const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
+        const what = { paper: 'Need paper', materials: 'Need ink or rubber', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
         hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad', 1.8);
         break;
       }
     }
     // Capacity and production change with the buildings.
-    this.resources.capacity = base.capacity;
+    applyCapacities(base, this.resources);
     this.requestSave();
   }
 
@@ -1053,6 +1057,8 @@ export class Game {
       version: SAVE_VERSION,
       savedAt: Date.now(),
       paper: this.resources.paper,
+      ink: this.resources.ink,
+      rubber: this.resources.rubber,
       aircraft: state.aircraft,
       hangar,
       maneuvers: [...state.maneuverChoice],
@@ -1160,10 +1166,8 @@ export class Game {
 
   private simulate(dt: number, mouse: { dx: number; dy: number }): void {
     const { world, plane, camera, state, base, resources } = this;
-    // T1's buildings set how fast paper comes in and how much the store holds.
-    state.income.perMinute = base.production;
-    state.income.capacity = base.capacity;
-    resources.capacity = base.capacity;
+    // T1's buildings set how fast paper, ink and rubber balls come in and how much the stores hold.
+    applyBaseEconomy(base, resources, state.incomes);
     state.tick(dt);
     base.recordIncome(state.income.lastPaid);
     this.progress.session.seconds += dt;
@@ -1826,7 +1830,7 @@ export class Game {
       this.effects.explosion(centre, 1.1, 'wreck');
       this.sounds.play('collapse');
       const p = this.projectOnScreen(centre);
-      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!', workshop: 'WORKSHOP DOWN!', storage: 'BOX DOWN!' }[i.spec.kind];
+      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!', workshop: 'WORKSHOP DOWN!', storage: 'BOX DOWN!', inkwell: 'INK WELL DOWN!' }[i.spec.kind];
       if (p) this.hud.pop(word, 'good', p);
       const t = i.spec.territoryId;
       const left = this.defenses.on(t).filter((x) => x.isWeapon && x.alive).length;
@@ -2431,6 +2435,17 @@ export class Game {
       noteTone = 'bad';
       tag = `−${buildCost - resources.paper}`;
       note = `Need ${buildCost} paper, you have ${resources.paper}.${wait !== null ? ` Ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.'}`;
+    } else if (state.phase === 'desk') {
+      // v0.0.18: a new plane may also take ink or rubber balls.
+      const materials = state.buildMaterialsFor(state.aircraft);
+      const short = resources.shortfall(materials);
+      if (Object.keys(short).length > 0) {
+        noteTone = 'bad';
+        tag = 'Ink';
+        note = `The ${name} also needs ${describeBundle(materials)}: ${describeBundle(short)} short. Build an ink well, or fly a mission that pays them.`;
+      } else if (Object.keys(materials).length > 0) {
+        note = `Also takes ${describeBundle(materials)}.`;
+      }
     }
 
     const landing = this.onApproach()
@@ -2469,6 +2484,7 @@ export class Game {
         protectedPaper: base.protectedPaper,
         streak: this.progress.data.streak.current,
         repairs: base.needsRepair.length,
+        resources: resourceViews(resources, state.incomes),
       },
       desk: {
         cost: buildCost, kind, name, note, tag, noteTone, progress: state.buildProgress,
@@ -3531,7 +3547,7 @@ function airList(air: { fighters: number; scouts: number; bombers: number; skill
 }
 
 /** Icons for installations, by kind. */
-const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell' };
 
 const EVENT_ICONS: Record<EventKind, IconName> = { raid: 'raid', 'high-value': 'supply', convoy: 'bomber', 'supply-run': 'escort' };
 

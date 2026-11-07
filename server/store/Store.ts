@@ -94,10 +94,17 @@ export interface TransactionInput {
   amount: number;
   reason: string;
   reference?: string | null;
+  /** v0.0.18: which balance it changes (paper when absent). */
+  resource?: LedgerResource;
 }
 
-export interface TransactionRecord extends Required<Omit<TransactionInput, 'reference'>> {
+/** The balances a transaction can change (v0.0.18). */
+export type LedgerResource = 'paper' | 'ink' | 'rubber';
+export const LEDGER_RESOURCES: readonly LedgerResource[] = ['paper', 'ink', 'rubber'];
+
+export interface TransactionRecord extends Required<Omit<TransactionInput, 'reference' | 'resource'>> {
   reference: string | null;
+  resource: LedgerResource;
   balanceAfter: number;
   createdAt: Date;
 }
@@ -117,6 +124,12 @@ export interface EconomyRecord {
   capacity: number;
   /** Paper a raid can never take (the protected reserve). */
   protected: number;
+  /**
+   * v0.0.18: ink and rubber balls. Null for a player from before them (or a new player) until the
+   * server gives them their first stock.
+   */
+  ink: number | null;
+  rubber: number | null;
 }
 
 // ---- What travels with the player (v0.0.12) -------------------------------------------------------
@@ -178,7 +191,7 @@ export const BASE_FORMAT = 1;
 export interface SavedBuilding {
   /** A slot id from BASE.slots ("D1", ...). */
   slot: string;
-  kind: 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage';
+  kind: 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage' | 'inkwell';
   level: number;
   health: number;
   data: Record<string, unknown>;
@@ -360,7 +373,7 @@ export interface Store {
 
   // ---- Paper and the transaction log ------------------------------------------------------------
 
-  balance(worldId: string, playerId: string): Promise<number>;
+  balance(worldId: string, playerId: string, resource?: LedgerResource): Promise<number>;
   /** The balance change and its log row in one transaction, at most once per key. */
   applyTransaction(tx: TransactionInput): Promise<TransactionResult>;
   transactions(worldId: string, playerId: string, limit?: number): Promise<TransactionRecord[]>;
@@ -478,6 +491,7 @@ export function checkTransaction(tx: TransactionInput): void {
   if (!Number.isSafeInteger(tx.amount)) throw new Error(`transaction amount must be a whole number, not ${tx.amount}`);
   if (typeof tx.key !== 'string' || tx.key.length === 0 || tx.key.length > 200) throw new Error('transaction key must be 1 to 200 characters');
   if (typeof tx.kind !== 'string' || tx.kind.length === 0 || tx.kind.length > 40) throw new Error('transaction kind must be 1 to 40 characters');
+  if (tx.resource !== undefined && !LEDGER_RESOURCES.includes(tx.resource)) throw new Error(`transaction resource must be paper, ink or rubber, not ${String(tx.resource)}`);
 }
 
 /** Shared validation: saved paper limits. */

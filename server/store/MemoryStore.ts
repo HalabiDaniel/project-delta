@@ -34,6 +34,7 @@ import {
   type Store,
   type TokenOrigin,
   type TransactionInput,
+  type LedgerResource,
   type TransactionRecord,
   type TransactionResult,
   type WorldRecord,
@@ -50,6 +51,11 @@ interface TransferRow {
   playerId: string;
   expiresAt: Date;
   used: boolean;
+}
+
+/** Paper keeps the original key ("world/player"); ink and rubber balls add the resource. */
+function balanceKey(worldId: string, playerId: string, resource: LedgerResource): string {
+  return resource === 'paper' ? `${worldId}/${playerId}` : `${worldId}/${playerId}/${resource}`;
 }
 
 /**
@@ -219,20 +225,21 @@ export class MemoryStore implements Store {
     return [...this.worlds.values()].map((w) => ({ ...w }));
   }
 
-  async balance(worldId: string, playerId: string): Promise<number> {
-    return this.balances.get(`${worldId}/${playerId}`) ?? 0;
+  async balance(worldId: string, playerId: string, resource: LedgerResource = 'paper'): Promise<number> {
+    return this.balances.get(balanceKey(worldId, playerId, resource)) ?? 0;
   }
 
   async applyTransaction(tx: TransactionInput): Promise<TransactionResult> {
     checkTransaction(tx);
-    const at = `${tx.worldId}/${tx.playerId}`;
+    const resource = tx.resource ?? 'paper';
+    const at = balanceKey(tx.worldId, tx.playerId, resource);
     const balance = this.balances.get(at) ?? 0;
     if (this.keys.has(`${tx.worldId}/${tx.key}`)) return { status: 'duplicate', balance };
     if (balance + tx.amount < 0) return { status: 'insufficient', balance };
     const after = balance + tx.amount;
     this.balances.set(at, after);
     this.keys.add(`${tx.worldId}/${tx.key}`);
-    this.log.push({ worldId: tx.worldId, playerId: tx.playerId, key: tx.key, kind: tx.kind, amount: tx.amount, reason: tx.reason, reference: tx.reference ?? null, balanceAfter: after, createdAt: new Date() });
+    this.log.push({ worldId: tx.worldId, playerId: tx.playerId, key: tx.key, kind: tx.kind, amount: tx.amount, reason: tx.reason, reference: tx.reference ?? null, resource, balanceAfter: after, createdAt: new Date() });
     return { status: 'applied', balance: after };
   }
 
@@ -248,7 +255,9 @@ export class MemoryStore implements Store {
     const at = `${worldId}/${playerId}`;
     if (!this.balances.has(at) && !this.limits.has(at)) return null;
     const l = this.limits.get(at) ?? { capacity: 0, protected: 0 };
-    return { paper: this.balances.get(at) ?? 0, capacity: l.capacity, protected: l.protected };
+    const ink = this.balances.get(balanceKey(worldId, playerId, 'ink'));
+    const rubber = this.balances.get(balanceKey(worldId, playerId, 'rubber'));
+    return { paper: this.balances.get(at) ?? 0, capacity: l.capacity, protected: l.protected, ink: ink ?? null, rubber: rubber ?? null };
   }
 
   async setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void> {

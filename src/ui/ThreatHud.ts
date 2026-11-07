@@ -5,7 +5,7 @@ import { attr, text, toggle, width } from './dom';
 import { icon, ICON_NAMES, type IconName } from './icons';
 import { SAY, T } from './strings';
 
-const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell' };
 
 export interface ThreatPanelView {
   territoryId: string;

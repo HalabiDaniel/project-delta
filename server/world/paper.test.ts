@@ -10,7 +10,8 @@ import { place, player, quietWorld, run } from './testkit';
  * minute, and nothing is produced while the player is away.
  */
 
-const sum = (changes: Array<{ amount: number }>) => changes.reduce((s, c) => s + c.amount, 0);
+/** Paper changes only: ink and rubber balls (v0.0.18) have balances of their own. */
+const sum = (changes: Array<{ amount: number; resource?: string }>) => changes.filter((c) => (c.resource ?? 'paper') === 'paper').reduce((s, c) => s + c.amount, 0);
 
 describe('the paper journal', () => {
   it('writes down every change in order, so the changes explain the balance', () => {

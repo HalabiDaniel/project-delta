@@ -192,7 +192,7 @@ export const en = {
     survive: 'Survive', escape: 'Escape', land: 'Land', ring: 'Ring', practice: 'Practice plane', reach: 'Reach', rocket: 'Rocket',
     fighter: 'Fighter', scout: 'Scout', bomber: 'Bomber', escort: 'Escort', patrol: 'Patrol',
     paper: 'Paper', rate: 'Paper per minute', capacity: 'Storage capacity', lock: 'Protected paper', refund: 'Refund', store: 'Paper store',
-    workshop: 'Paper workshop', storage: 'Storage box',
+    workshop: 'Paper workshop', storage: 'Storage box', inkwell: 'Ink well', rubber: 'Rubber balls',
     speed: 'Speed', altitude: 'Altitude', boost: 'Boost', health: 'Health', range: 'Range', ink: 'Ink', bombload: 'Bombs', rearm: 'Rearm',
     plane: 'Aircraft', heading: 'Direction',
     base: 'Base', repair: 'Repair', upgrade: 'Upgrade', build: 'Build', remove: 'Remove', slot: 'Empty slot', level: 'Level', shield: 'Defenses',
@@ -570,6 +570,16 @@ export const en = {
     full: 'Storage full: production stopped',
     boosted: 'Paper per minute (low reserves: faster)',
     perMinute: (resource: string) => `${resource} per minute`,
+    /** v0.0.18: ink and rubber balls. */
+    ink: 'Ink',
+    rubber: 'Rubber balls',
+    unitPaper: 'paper',
+    unitInk: 'ink',
+    unitRubber: 'rubber balls',
+    nothing: 'nothing',
+    needMaterials: (name: string, need: string, short: string) => `The ${name} also needs ${need}: ${short} short. Build an ink well, or fly a mission that pays them.`,
+    alsoTakes: (what: string) => `Also takes ${what}.`,
+    tagMaterials: 'Ink',
   },
 
   /** The plane cards (src/ui/Garage.ts). */

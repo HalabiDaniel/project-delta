@@ -1,3 +1,4 @@
+import { describeBundle } from '../systems/ResourceManager';
 import { emergencyPlane } from '../systems/GameState';
 import { dashboardView } from '../ui/dashboardView';
 import { failureText, nextStepText, paperBreakdown } from '../ui/reportText';
@@ -44,6 +45,8 @@ import { matchesPreset } from '../render/GraphicsSettings';
 import type { MultiplayerGame, RemoteAircraft } from './MultiplayerGame';
 
 const V = T.mpViews;
+/** Resource names for describing a bundle, from the dictionary. */
+const units = (): Record<string, string> => ({ paper: T.economy.unitPaper, ink: T.economy.unitInk, rubber: T.economy.unitRubber });
 const O = V.objective;
 const I = V.hint;
 /** A height or distance in metres, as the objectives write it ("120 m"). */
@@ -57,7 +60,7 @@ const AIRCRAFT_EDGE_RANGE = 140;
 const SIGHT_RANGE = 120;
 const CRASH_REPORT_DELAY = 1200;
 
-const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell' };
 
 interface Goal {
   point: pc.Vec3;
@@ -154,6 +157,17 @@ export class MpViews {
         noteTone = 'bad';
         tag = `−${paper(buildCost - g.resources.paper)}`;
         note = V.needPaper(paper(buildCost), paper(g.resources.paper), wait !== null ? seconds(Math.ceil(wait)) : null);
+      } else if (phase === 'desk') {
+        // v0.0.18: a new plane may also take ink or rubber balls.
+        const materials = g.priv.garage?.costs[st.aircraft]?.materials ?? {};
+        const short = g.resources.shortfall(materials);
+        if (Object.keys(short).length > 0) {
+          noteTone = 'bad';
+          tag = T.economy.tagMaterials;
+          note = T.economy.needMaterials(name, describeBundle(materials, units(), T.economy.nothing), describeBundle(short, units(), T.economy.nothing));
+        } else if (Object.keys(materials).length > 0) {
+          note = T.economy.alsoTakes(describeBundle(materials, units(), T.economy.nothing));
+        }
       }
     }
     const card = mission ? g.cards.get(mission) : undefined;
@@ -185,6 +199,7 @@ export class MpViews {
         protectedPaper: eco?.protectedPaper ?? 0,
         streak: 0,
         repairs: g.base?.needsRepair.length ?? 0,
+        resources: (eco?.stores ?? []).map((s) => ({ id: s.id, icon: s.id === 'ink' ? ('inkwell' as const) : ('rubber' as const), label: s.id === 'ink' ? T.economy.ink : T.economy.rubber, amount: s.amount, capacity: s.capacity, rate: s.rate })),
       },
       desk: {
         cost: buildCost,
@@ -195,7 +210,7 @@ export class MpViews {
         noteTone,
         progress: st?.buildProgress ?? 0,
         emergency: emergencyNow,
-        canBuild: !!st && !!mission && phase === 'desk' && (g.resources.canAfford(buildCost) || emergencyNow) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
+        canBuild: !!st && !!mission && phase === 'desk' && (g.resources.canAffordAll(st.buildPriceFor(st.aircraft)) || emergencyNow) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
       },
       swaps: g.priv.swaps ?? 0,
       welcome: null,
@@ -259,7 +274,7 @@ export class MpViews {
                 fit: mission ? st.suitability(st.aircraft, mission).level : 'possible',
                 cost: buildCost,
                 kind: phase === 'desk' ? st.buildKindFor(st.aircraft) : st.buildKind,
-                canBuild: !!mission && phase === 'desk' && g.resources.canAfford(buildCost) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
+                canBuild: !!mission && phase === 'desk' && g.resources.canAffordAll(st.buildPriceFor(st.aircraft)) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
               },
               lostPlane: g.lostPlane,
               onPad: phase !== 'desk',

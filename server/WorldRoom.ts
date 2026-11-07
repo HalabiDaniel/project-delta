@@ -593,7 +593,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       // The raids and kills the rules still look at (cooldowns, the repeat rule, the kill window).
       this.world.rememberPvp(pvp.map((r) => ({ id: r.id, kind: r.kind, attacker: r.attacker, victim: r.victim, success: r.success, at: r.at.getTime() })));
       const protection = progress ? { protectUntil: progress.protectUntil?.getTime() ?? null, shieldUntil: progress.shieldUntil?.getTime() ?? null } : undefined;
-      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, stint, planes: planesFrom(planes), ...progressFrom(progress), protection });
+      const error = this.world.claim(id, desk, save, { paper: economy?.paper ?? null, ink: economy?.ink ?? null, rubber: economy?.rubber ?? null, stint, planes: planesFrom(planes), ...progressFrom(progress), protection });
       if (error) {
         await this.keeper.release(account.id);
         return reply(desk, error);
@@ -605,6 +605,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       if (!economy) {
         this.writePaper(id, account.id, stint, [{ key: `start:${account.id}`, kind: 'reward', amount: ECONOMY.startingPaper, reason: 'Starting paper' }]);
       }
+      // v0.0.18: a first stock of ink and rubber balls, once per player (the key is theirs for good).
+      const first = this.world.takeFirstStock(id);
+      const stock = (['ink', 'rubber'] as const).filter((r) => (first[r] ?? 0) > 0).map((r) => ({ key: `stock:${account.id}:${r}`, kind: 'reward' as const, amount: first[r]!, reason: r === 'ink' ? 'First ink' : 'First rubber balls', resource: r }));
+      if (stock.length > 0) this.writePaper(id, account.id, stint, stock);
       // A new player's starting base is saved at once.
       if (!save) this.saveBase(id);
       reply(desk, null);
@@ -720,15 +724,15 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const worldId = this.worldId;
     if (!worldId) return;
     for (const c of changes) {
-      if (c.amount > 0) this.earned.set(id, (this.earned.get(id) ?? 0) + c.amount);
+      if (c.amount > 0 && (c.resource ?? 'paper') === 'paper') this.earned.set(id, (this.earned.get(id) ?? 0) + c.amount);
       this.keeper
-        .queue(playerId, (store) => store.applyTransaction({ worldId, playerId, key: c.key, kind: c.kind, amount: c.amount, reason: c.reason }))
+        .queue(playerId, (store) => store.applyTransaction({ worldId, playerId, key: c.key, kind: c.kind, amount: c.amount, reason: c.reason, resource: c.resource ?? 'paper' }))
         .then(
           (result) => {
             if (result.status === 'applied') return;
             this.log('warn', 'ledger.refused', { player: id, status: result.status, key: c.key, amount: c.amount });
             // Only the same placement is corrected: a later one loaded the store's balance itself.
-            if (stint !== null && this.world.stintOf(id) === stint) this.world.adjustPaper(id, -c.amount);
+            if (stint !== null && this.world.stintOf(id) === stint) this.world.adjustPaper(id, -c.amount, c.resource ?? 'paper');
           },
           (error) => this.log('error', 'ledger.error', { player: id, key: c.key, error }),
         );

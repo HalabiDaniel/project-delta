@@ -12,7 +12,7 @@ import type { PriceView, RaidAlertView } from './views';
  * the price chip shared with the build tray. Base management itself is src/ui/hud/DeskHud.ts.
  */
 export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
-  turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', store: 'store',
+  turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell', store: 'store',
 };
 
 const tip = (t: string): string => attrs(tooltipAttrs(t));

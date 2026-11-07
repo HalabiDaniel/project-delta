@@ -70,6 +70,8 @@ function modelFor(kind: string, friendly: boolean): BuildingModelId | null {
     case 'workshop':
     case 'storage':
       return kind;
+    case 'inkwell':
+      return 'ink';
     case 'supply':
       return friendly ? 'command' : 'ink';
     default:

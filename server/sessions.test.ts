@@ -285,7 +285,9 @@ describe('sessions', () => {
     for (const p of await store.listPlayers()) {
       const log = await store.transactions(worldId, p.id, 1000);
       expect(log.filter((t) => t.key.startsWith('start:')).length).toBe(1);
-      expect(await store.balance(worldId, p.id)).toBe(log.reduce((sum, t) => sum + t.amount, 0));
+      for (const r of ['paper', 'ink', 'rubber'] as const) {
+        expect(await store.balance(worldId, p.id, r)).toBe(log.filter((t) => t.resource === r).reduce((sum, t) => sum + t.amount, 0));
+      }
     }
     for (const b of bots) await b.leave();
   }, 25000);

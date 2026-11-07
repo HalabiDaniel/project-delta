@@ -387,6 +387,18 @@ export interface EconomyDTO {
   protectedPaper: number;
   vulnerable: number;
   production: number;
+  /** v0.0.18: ink and rubber balls, with their store limits, rates and protected reserves. */
+  stores?: StoreDTO[];
+}
+
+/** One store beyond paper (v0.0.18). */
+export interface StoreDTO {
+  id: 'ink' | 'rubber';
+  amount: number;
+  capacity: number;
+  /** Per minute right now (boost, full, upkeep and being offline included). */
+  rate: number;
+  protected: number;
 }
 
 export interface GarageDTO {
@@ -394,7 +406,8 @@ export interface GarageDTO {
   /** v0.0.16: the maneuver in the slot of the plane on the pad or in the air (else the chosen design's); null: none. */
   maneuver?: ManeuverId | null;
   hangar: Array<{ id: AircraftId; condition: 'ready' | 'recovered'; health: number }>;
-  costs: Record<AircraftId, { kind: BuildKind; cost: number }>;
+  /** `materials`: ink and rubber balls on top of the paper (v0.0.18; absent: none). */
+  costs: Record<AircraftId, { kind: BuildKind; cost: number; materials?: { ink?: number; rubber?: number } }>;
   emergency: boolean;
 }
 

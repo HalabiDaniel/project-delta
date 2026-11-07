@@ -30,6 +30,28 @@ export const ECONOMY = {
    * (it is not kept afterwards). Before v0.0.11 it was an emergency Dart.
    */
   emergency: { ammo: 35 },
+  /**
+   * v0.0.18: ink and rubber balls (GDD §4.2). A new player starts with these, and raids never take
+   * either below its protected reserve (storage boxes protect more on top). Provisional values, for
+   * the developer to approve against the simulator's reports.
+   */
+  startingInk: 60,
+  startingRubber: 12,
+  protectedInk: 20,
+  protectedRubber: 4,
+  /**
+   * Arming a plane at launch, and topping it up on the runway, draws on the territory's stores: ink
+   * for gun rounds, rubber balls for bombs (per bomb, by kind). Nobody is grounded by an empty store: a plane always
+   * takes off with `basicLoad` of its rounds and up to `freeBombs` bombs (when the mission needs
+   * them) for free, and simply carries less of anything the stores can't pay for.
+   */
+  arming: {
+    /** Gun rounds one ink buys. */
+    roundsPerInk: 10,
+    rubberPerBomb: { standard: 2, small: 1 } as Record<'standard' | 'small', number>,
+    basicLoad: 0.35,
+    freeBombs: 1,
+  },
   /** Transactions kept in the paper log. */
   ledgerSize: 60,
 } as const;
@@ -266,6 +288,12 @@ export interface AircraftSpec {
   /** Re-creasing (and repairing) one that landed safely. */
   refitCost: number;
   /**
+   * v0.0.18: ink and rubber balls folded into a new one on top of its paper `cost` (special
+   * weapons, markings, payload fittings). Not charged for a refit. The Swift needs none: the
+   * starter is always reachable with paper alone.
+   */
+  materials?: { ink?: number; rubber?: number };
+  /**
    * Seconds to fold a new one; `PLANE.buildTime` if not set. A refit takes `PLANE.refitTime`
    * scaled the same way (aircraft/Aircraft.ts `buildDuration`). Since v0.0.15.
    */
@@ -302,8 +330,9 @@ export interface AircraftSpec {
 
 export interface AircraftTraits {
   /**
-   * Stealth: defined in the data since v0.0.11, but it has no effect until the stealth system
-   * arrives in v0.0.18 (until then only `signature` makes a plane hard to spot).
+   * Stealth (v0.0.18, the radar signature system): the plane's signature drops further while it is
+   * quiet (STEALTH.quiet) and rocket locks on it take longer. Firing, opening the bomb bay or
+   * boosting reveals it for a moment. It is never invisible: within visual range it is always seen.
    */
   stealth?: boolean;
   /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
@@ -328,6 +357,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Fast recon',
     cost: 40,
     refitCost: 10,
+    materials: { ink: 4 },
     tagline: 'The fastest plane in the classroom. A light gun, no bombs: it looks, it runs.',
     flight: {
       minSpeed: 11, cruiseSpeed: 24, maxSpeed: 38,
@@ -355,6 +385,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Agile fighter',
     cost: 45,
     refitCost: 11,
+    materials: { ink: 10 },
     tagline: 'Turns tighter than anything else, with twin ink guns. No bombs: built to dogfight.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 33,
@@ -408,6 +439,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Bomber',
     cost: 75,
     refitCost: 19,
+    materials: { rubber: 6 },
     tagline: 'Slow, heavy and tough. Carries four bombs and turns like a barge.',
     flight: {
       minSpeed: 9, cruiseSpeed: 17, maxSpeed: 26,
@@ -439,6 +471,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Air superiority',
     cost: 72,
     refitCost: 16,
+    materials: { ink: 14 },
     buildTime: 3,
     tagline: 'The fastest fighter, the best climber and the heaviest guns. No bombs: it rules the air.',
     flight: {
@@ -467,6 +500,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Stealth multirole',
     cost: 80,
     refitCost: 18,
+    materials: { ink: 8, rubber: 3 },
     tagline: 'Hard to spot, good at everything: guns for a fight, two bombs for the target.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 31,
@@ -493,6 +527,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Ground attack',
     cost: 70,
     refitCost: 16,
+    materials: { ink: 12, rubber: 2 },
     tagline: 'Slow, armoured and loud. A spinning ink cannon and three mini bombs for low passes.',
     flight: {
       minSpeed: 8, cruiseSpeed: 17, maxSpeed: 26,
@@ -519,6 +554,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'VTOL fighter',
     cost: 70,
     refitCost: 16,
+    materials: { ink: 6, rubber: 2 },
     tagline: 'Flies slower than anything else with jets, and turns tight. Hover mode comes later.',
     flight: {
       minSpeed: 7, cruiseSpeed: 19, maxSpeed: 29,
@@ -545,6 +581,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Surveillance drone',
     cost: 50,
     refitCost: 10,
+    materials: { ink: 4 },
     tagline: 'A long, quiet glider that is hard to spot. Barely armed, no bombs.',
     flight: {
       minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
@@ -571,6 +608,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Supersonic bomber',
     cost: 105,
     refitCost: 23,
+    materials: { ink: 4, rubber: 6 },
     tagline: 'A bomber that can outrun fighters: swing wings, three bombs, a quick dash home.',
     flight: {
       minSpeed: 11, cruiseSpeed: 22, maxSpeed: 34,
@@ -597,6 +635,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Stealth bomber',
     cost: 120,
     refitCost: 26,
+    materials: { ink: 6, rubber: 8 },
     tagline: 'A flying wing defenses barely notice. Four bombs, no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
@@ -866,7 +905,7 @@ export const DEFENSES = {
   /** Weapons are placed so their reach stays clear of home and the first stretch after take-off. */
   departureClearance: 8,
   /** Share of the normal impact damage a plane takes flying into each kind. */
-  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, workshop: 0.75, storage: 0.7, barrier: 0.85 },
+  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, workshop: 0.75, storage: 0.7, inkwell: 0.7, barrier: 0.85 },
   /** Name and health labels show for installations this close. */
   labelRange: 110,
   /** The threat panel shows a defended territory once the plane is this close to its weapons' reach. */
@@ -1225,7 +1264,7 @@ export const SESSION = {
 } as const;
 
 /** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */
-export type BuildingKind = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage';
+export type BuildingKind = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage' | 'inkwell';
 /** defense – weapons. radar – the radar station. economy – workshops and storage. utility – anything but a radar. */
 export type SlotKind = 'defense' | 'radar' | 'economy' | 'utility';
 
@@ -1243,11 +1282,20 @@ export interface BuildingLevel {
   reloadTime?: number;
   /** Launchers: seconds between rockets. */
   reload?: number;
-  /** Workshops: extra paper per minute. */
+  /** Workshops: extra paper per minute. Ink wells (v0.0.18): ink per minute. */
   production?: number;
   /** Storage boxes: extra capacity, and extra paper protected from raids. */
   capacity?: number;
   protection?: number;
+  /** Storage boxes (v0.0.18): extra ink and rubber-ball capacity, and how much of each they protect. */
+  holds?: { ink: number; rubber: number };
+  guards?: { ink: number; rubber: number };
+  /**
+   * v0.0.18: ink or rubber balls on top of the paper `cost` (higher levels of some buildings), and
+   * the upkeep this level costs per minute, paid out of production (BASE.upkeep).
+   */
+  materials?: { ink?: number; rubber?: number };
+  upkeep?: { paper?: number; ink?: number };
 }
 
 export interface BuildingSpec {
@@ -1271,6 +1319,15 @@ export const BASE = {
   lowBoost: 3,
   /** …and times this while the paper store lies wrecked. */
   wreckedStore: 0.5,
+  /**
+   * v0.0.18: ink and rubber balls held with no storage boxes, and what comes in without any building:
+   * the crew scrapes ink from old pens and scavenges rubber balls. An ink well adds far more ink;
+   * rubber balls stay scarce (missions, deliveries and events pay them). Same low-balance boost.
+   */
+  inkCapacity: 150,
+  rubberCapacity: 30,
+  inkProduction: 1.5,
+  rubberProduction: 0.6,
   /** Without a radar, raiders are only noticed this close to T1 (m from its middle). */
   detection: 70,
   /** Share of the paper put into a building given back when it is removed (scaled by its health). */
@@ -1330,20 +1387,28 @@ export const BASE = {
       levels: [
         { cost: 80, health: 90, production: 1.5 },
         { cost: 60, health: 105, production: 3.5 },
-        { cost: 90, health: 120, production: 6 },
+        { cost: 90, health: 120, production: 6, materials: { ink: 20 }, upkeep: { ink: 0.6 } },
       ],
     },
     storage: {
       kind: 'storage', name: 'Storage box', short: 'Storage', slots: ['economy', 'utility'], purpose: 'Holds and protects more paper',
       levels: [
-        { cost: 50, health: 100, capacity: 200, protection: 25 },
-        { cost: 50, health: 115, capacity: 500, protection: 50 },
-        { cost: 80, health: 130, capacity: 900, protection: 80 },
+        { cost: 50, health: 100, capacity: 200, protection: 25, holds: { ink: 100, rubber: 10 }, guards: { ink: 10, rubber: 2 } },
+        { cost: 50, health: 115, capacity: 500, protection: 50, holds: { ink: 220, rubber: 24 }, guards: { ink: 20, rubber: 4 } },
+        { cost: 80, health: 130, capacity: 900, protection: 80, holds: { ink: 400, rubber: 40 }, guards: { ink: 35, rubber: 6 }, materials: { rubber: 4 }, upkeep: { paper: 0.4 } },
+      ],
+    },
+    inkwell: {
+      kind: 'inkwell', name: 'Ink well', short: 'Ink well', slots: ['economy', 'utility'], purpose: 'Ink for guns and turrets',
+      levels: [
+        { cost: 65, health: 85, production: 2.5 },
+        { cost: 50, health: 100, production: 5 },
+        { cost: 80, health: 115, production: 8, materials: { rubber: 4 }, upkeep: { paper: 0.5 } },
       ],
     },
   } as Record<BuildingKind, BuildingSpec>,
   /** The order buildings are listed in. */
-  order: ['turret', 'launcher', 'radar', 'workshop', 'storage'] as readonly BuildingKind[],
+  order: ['turret', 'launcher', 'radar', 'workshop', 'inkwell', 'storage'] as readonly BuildingKind[],
   /** Sorties during which key hints show on the HUD (after that, hold H). */
   hintSorties: 3,
 } as const;

@@ -10,7 +10,7 @@ import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
@@ -36,6 +36,8 @@ import {
 import { ownerOfSide, sharedWorld, territoryName, type SharedWorld } from '../../src/net/World';
 import { deskLabel, sameName } from '../../src/net/Username';
 import type { GameEvent } from '../../src/systems/GameState';
+import { applyBaseEconomy, applyCapacities, startingStock } from '../../src/systems/Economy';
+import type { Bundle, Resource } from '../../src/systems/ResourceManager';
 import { GameState } from '../../src/systems/GameState';
 import { seededRng, type Rng } from '../../src/systems/Random';
 import { launchPoint } from '../../src/world/Grid';
@@ -85,6 +87,12 @@ export interface PvpEvent {
 export interface PlayerCarry {
   /** Their paper as last saved; null or absent: a new player, who starts with ECONOMY.startingPaper. */
   paper?: number | null;
+  /**
+   * v0.0.18: their ink and rubber balls as last saved. Null or absent: they have never had any (a
+   * new player, or one from before v0.0.18), and get a first stock (`takeFirstStock`).
+   */
+  ink?: number | null;
+  rubber?: number | null;
   /** Names this placement in ledger keys (default: a new UUID). */
   stint?: string;
   /** The planes they own (none: a new player's empty hangar). */
@@ -177,6 +185,8 @@ export class ServerWorld {
   /** Wrecked AI installations and when they stand up again. */
   private readonly aiWrecks = new Map<string, number>();
   private readonly missionKeys = new WeakMap<Mission, string>();
+  /** v0.0.18: first stocks of ink and rubber balls given on placing, not yet taken for the ledger. */
+  private readonly firstStocks = new Map<string, Bundle>();
   /** Paper changes of players who have left, not yet taken for the ledger. */
   private readonly leftovers = new Map<string, PaperChange[]>();
   /** What players who have left were carrying, and their last missions' outcomes. */
@@ -392,8 +402,22 @@ export class ServerWorld {
     if (save) base.load(save);
     else base.startFresh();
     p.base = base;
-    p.resources.capacity = base.capacity;
+    applyCapacities(base, p.resources);
     if (carry.paper !== undefined && carry.paper !== null) p.resources.restore(carry.paper);
+    // v0.0.18: ink and rubber balls. A first stock for whoever has never had any: a new player's
+    // starting amounts, or, for a player from before v0.0.18, half of what their base holds.
+    const first: Bundle = {};
+    for (const r of ['ink', 'rubber'] as const) {
+      let amount: number;
+      const saved = carry[r];
+      if (saved !== undefined && saved !== null) amount = saved;
+      else {
+        amount = carry.paper === undefined || carry.paper === null ? (r === 'ink' ? ECONOMY.startingInk : ECONOMY.startingRubber) : startingStock(r, base.capacityOf(r));
+        first[r] = amount;
+      }
+      p.resources.restoreOf(r, amount);
+    }
+    this.firstStocks.set(id, first);
     p.journal = new PaperJournal(carry.stint ?? randomUUID(), p.resources, (source, label) => {
       if (p.cause) return p.cause;
       const m = p.state?.mission;
@@ -597,6 +621,13 @@ export class ServerWorld {
     return d;
   }
 
+  /** The first stock of ink and rubber balls the player was given on placing (once; empty after). */
+  takeFirstStock(id: string): Bundle {
+    const first = this.firstStocks.get(id) ?? {};
+    this.firstStocks.delete(id);
+    return first;
+  }
+
   /** Missions the player flew to the end since the last call (also after they left). */
   takeOutcomes(id: string): MissionOutcome[] {
     const left = this.leftOutcomes.get(id) ?? [];
@@ -660,11 +691,11 @@ export class ServerWorld {
    * world had already made (a duplicate key, or a debit it couldn't cover), so the world follows the
    * store. Returns the new balance.
    */
-  adjustPaper(id: string, delta: number): number | null {
+  adjustPaper(id: string, delta: number, resource: Resource = 'paper'): number | null {
     const p = this.pilots.get(id);
     if (!p?.journal) return null;
-    p.resources.restore(Math.max(0, p.resources.paper + Math.round(delta)));
-    return p.resources.paper;
+    p.resources.restoreOf(resource, Math.max(0, p.resources.amount(resource) + Math.round(delta)));
+    return p.resources.amount(resource);
   }
 
   /** The player's paper capacity and protected reserve right now (saved with their balance). */
@@ -836,9 +867,7 @@ export class ServerWorld {
     const f = frame ?? NEUTRAL_FRAME;
     // Their buildings set how fast paper comes in and how much the store holds. Paper is produced
     // only while the player is connected: nothing comes in while they are away.
-    st.income.perMinute = p.connected ? base.production : 0;
-    st.income.capacity = base.capacity;
-    p.resources.capacity = base.capacity;
+    applyBaseEconomy(base, p.resources, st.incomes, p.connected);
     st.tick(NET.step);
     base.recordIncome(st.income.lastPaid);
     p.journal?.tick(NET.step);
@@ -1770,7 +1799,7 @@ export class ServerWorld {
 
   private onBaseEvent(p: Pilot, e: BaseEvent): void {
     this.solidsCache = null;
-    if (p.base) p.resources.capacity = p.base.capacity;
+    if (p.base) applyCapacities(p.base, p.resources);
     switch (e.type) {
       case 'built':
         this.note(p, 'build', `${BASE.buildings[e.kind].short}`, `−${e.cost}`, 'good');
@@ -1785,7 +1814,7 @@ export class ServerWorld {
         this.note(p, 'remove', `${BASE.buildings[e.kind].short} removed`, e.refund > 0 ? `+${e.refund}` : null, 'info');
         break;
       case 'refused': {
-        const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
+        const what = { paper: 'Need paper', materials: 'Need ink or rubber', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
         this.note(p, e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad');
         break;
       }
@@ -1966,13 +1995,17 @@ export class ServerWorld {
       swaps: p.director?.swaps ?? 0,
       economy: {
         paper, capacity: base.capacity, rate: Math.round(income.ratePerMinute(paper) * 10) / 10, state: income.stateFor(paper),
-        progress: Math.round(income.progress * 100) / 100, protectedPaper: base.protectedPaper, vulnerable: base.vulnerable(), production: base.production,
+        progress: Math.round(income.progress * 100) / 100, protectedPaper: base.protectedPaper, vulnerable: base.vulnerable(), production: base.netProductionOf('paper'),
+        stores: (['ink', 'rubber'] as const).map((r) => ({
+          id: r, amount: p.resources.amount(r), capacity: base.capacityOf(r),
+          rate: Math.round(st.incomes[r].ratePerMinute(p.resources.amount(r)) * 10) / 10, protected: base.protectedOf(r),
+        })),
       },
       garage: {
         chosen: st.aircraft,
         maneuver: st.maneuverSlot,
         hangar: [...st.hangar].map(([id, h]) => ({ id, condition: h.condition, health: h.health })),
-        costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, { kind: st.buildKindFor(id), cost: st.buildCostFor(id) }])) as Record<AircraftId, { kind: 'fold' | 'refit' | 'rollout'; cost: number }>,
+        costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, { kind: st.buildKindFor(id), cost: st.buildCostFor(id), materials: st.buildMaterialsFor(id) }])) as Record<AircraftId, { kind: 'fold' | 'refit' | 'rollout'; cost: number; materials: { ink?: number; rubber?: number } }>,
         emergency: st.emergencyAvailable(),
       },
       plane: plane

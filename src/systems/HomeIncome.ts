@@ -1,5 +1,13 @@
 import { BASE, ECONOMY } from '../config';
-import type { ResourceManager } from './ResourceManager';
+import type { Resource, ResourceManager } from './ResourceManager';
+
+const DEFAULTS: Record<Resource, { perMinute: number; capacity: number; reserve: number }> = {
+  paper: { perMinute: BASE.production, capacity: BASE.capacity, reserve: ECONOMY.protectedPaper },
+  ink: { perMinute: BASE.inkProduction, capacity: BASE.inkCapacity, reserve: ECONOMY.protectedInk },
+  rubber: { perMinute: BASE.rubberProduction, capacity: BASE.rubberCapacity, reserve: ECONOMY.protectedRubber },
+};
+
+const LABELS: Record<Resource, string> = { paper: 'Home production', ink: 'Ink production', rubber: 'Rubber balls scavenged' };
 
 /** Rounding left over from adding up fractions of a sheet. */
 const CARRY_EPSILON = 1e-9;
@@ -12,6 +20,8 @@ const CARRY_EPSILON = 1e-9;
 export type IncomeState = 'producing' | 'boosted' | 'full';
 
 export interface IncomeOptions {
+  /** Which store it fills (v0.0.18). Paper unless told otherwise. */
+  resource?: Resource;
   /** Paper per minute (base production plus workshops). */
   perMinute?: number;
   /** Production stops at this balance. */
@@ -29,6 +39,7 @@ export interface IncomeOptions {
  * paused or in a background tab.
  */
 export class HomeIncome {
+  readonly resource: Resource;
   perMinute: number;
   capacity: number;
   reserve: number;
@@ -39,9 +50,11 @@ export class HomeIncome {
   lastPaid = 0;
 
   constructor(options: IncomeOptions = {}) {
-    this.perMinute = options.perMinute ?? BASE.production;
-    this.capacity = options.capacity ?? BASE.capacity;
-    this.reserve = options.reserve ?? ECONOMY.protectedPaper;
+    this.resource = options.resource ?? 'paper';
+    const defaults = DEFAULTS[this.resource];
+    this.perMinute = options.perMinute ?? defaults.perMinute;
+    this.capacity = options.capacity ?? defaults.capacity;
+    this.reserve = options.reserve ?? defaults.reserve;
     this.boost = options.boost ?? BASE.lowBoost;
   }
 
@@ -72,17 +85,18 @@ export class HomeIncome {
   /** Pays out any income due this frame. Returns the amount paid. */
   update(dt: number, resources: ResourceManager): number {
     this.lastPaid = 0;
-    if (!this.isProducing(resources.paper)) {
+    const r = this.resource;
+    if (!this.isProducing(resources.amount(r))) {
       this.carry = 0;
       return 0;
     }
-    this.carry += (this.ratePerMinute(resources.paper) * dt) / 60;
+    this.carry += (this.ratePerMinute(resources.amount(r)) * dt) / 60;
     // A hair under 1 is 1: fractional rates (3.5 a minute) mustn't lose a sheet to rounding.
-    while (this.carry >= 1 - CARRY_EPSILON && this.isProducing(resources.paper)) {
+    while (this.carry >= 1 - CARRY_EPSILON && this.isProducing(resources.amount(r))) {
       this.carry = Math.max(0, this.carry - 1);
-      this.lastPaid += resources.earn(1, 'income', 'Home production');
+      this.lastPaid += resources.earnOf(r, 1, 'income', LABELS[r]);
     }
-    if (!this.isProducing(resources.paper)) this.carry = 0;
+    if (!this.isProducing(resources.amount(r))) this.carry = 0;
     return this.lastPaid;
   }
 

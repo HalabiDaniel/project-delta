@@ -16,10 +16,10 @@ import type { BuildingModelId } from '../../assets/CustomModels';
 const D = (): typeof T.desk => T.desk;
 
 /** Which building model draws each kind (the tray's and inspector's art). */
-const MODEL: Record<BuildingKind | 'store', BuildingModelId> = { turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', store: 'command' };
-const ICONS: Record<BuildingKind | 'store', IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', store: 'store' };
+const MODEL: Record<BuildingKind | 'store', BuildingModelId> = { turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', inkwell: 'ink', store: 'command' };
+const ICONS: Record<BuildingKind | 'store', IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell', store: 'store' };
 type Category = 'defence' | 'support' | 'economy';
-const CATEGORY: Record<BuildingKind, Category> = { turret: 'defence', launcher: 'defence', radar: 'support', workshop: 'economy', storage: 'economy' };
+const CATEGORY: Record<BuildingKind, Category> = { turret: 'defence', launcher: 'defence', radar: 'support', workshop: 'economy', storage: 'economy', inkwell: 'economy' };
 
 /** One fit badge for the selected plane: Good fit, Possible, Can't do it. */
 export function fitTone(level: SuitabilityLevel): { label: string; tone: 'good' | 'warn' | 'hostile'; icon: IconName } {
@@ -179,7 +179,7 @@ export class DeskHud {
     const card = v.cards?.[v.selected] ?? null;
     const op = card?.operation ?? null;
     const o = v.base?.overview;
-    const key = JSON.stringify([fmt(e.paper), capped, e.capacity, num(e.rate, 1), e.state, Math.round((e.paper / Math.max(1, e.capacity)) * 10), e.protectedPaper, raid ? Math.ceil(raid.eta) : null, raid?.state, card?.title, op?.stage, op?.stages.length, build, o]);
+    const key = JSON.stringify([fmt(e.paper), capped, e.capacity, num(e.rate, 1), e.state, Math.round((e.paper / Math.max(1, e.capacity)) * 10), e.protectedPaper, (e.resources ?? []).map((r) => [r.amount, r.capacity, num(r.rate ?? 0, 1)]), raid ? Math.ceil(raid.eta) : null, raid?.state, card?.title, op?.stage, op?.stages.length, build, o]);
     if (this.keys.top === key) return;
     this.keys.top = key;
     const fill = e.capacity > 0 ? e.paper / e.capacity : 0;
@@ -189,6 +189,14 @@ export class DeskHud {
       icon: 'capacity', size: 'hud', tip: T.economy.storage(T.economy.paper),
       afterHtml: `${kmeter({ label: T.economy.storage(T.economy.paper), value: fill, segments: 5, hideLabel: true, tone: fill >= 1 ? 'hostile' : fill >= 0.9 ? 'warn' : 'good', className: 'chip-meter' })}<span class="chip-safe" data-tip="${esc(T.economy.protected)}">${icon('lock', 'icon pw-icon')}<b class="num">${esc(fmt(e.protectedPaper))}</b></span>`,
     });
+    // v0.0.18: ink and rubber balls, one compact chip each (amount, and the store's limit on hover).
+    const extras = (e.resources ?? [])
+      .map((r) => kchip({
+        icon: r.icon, value: fmt(r.amount), size: 'hud', className: 'resource-chip',
+        tone: r.capacity !== null && r.amount >= r.capacity ? 'warn' : 'plain',
+        tip: `${r.label}: ${fmt(r.amount)}${r.capacity !== null ? ` / ${fmt(r.capacity)}` : ''}${r.rate !== undefined ? ` · ${d.perMinute(num(r.rate, 1))}` : ''}`,
+      }))
+      .join('');
     const defence = raid
       ? kchip({ icon: 'raid', label: raid.state === 'released' ? STYLE_TEXT.bombsAway : d.raidIncoming, value: raid.state === 'inbound' ? clock(Math.max(0, raid.eta)) : undefined, size: 'hud', tone: 'hostile', attrs: { 'data-critical': '' } })
       : kchip({ icon: 'shield', label: d.allClear, size: 'hud', tone: 'good' });
@@ -198,7 +206,7 @@ export class DeskHud {
     const base = build && o
       ? kchip({ icon: 'base', size: 'hud', className: 'base-chip', label: '', afterHtml: `<span class="chip-part" data-tip="${esc(T.base.weaponsReady)}">${icon('shield', 'icon pw-icon')}<b class="num">${count(o.ready)}/${count(o.total)}</b></span><span class="chip-part" data-tip="${esc(T.base.radar)}">${icon('radar', 'icon pw-icon')}<b class="num">${o.radar === 'off' ? esc(T.say.offline) : esc(T.units.metres(count(Math.round(o.detection))))}</b></span><span class="chip-part" data-tip="${esc(T.base.baseCondition)}">${icon('health', 'icon pw-icon')}<b class="num">${esc(pct(o.integrity))}</b></span>` })
       : '';
-    this.el.top.innerHTML = `${counter}${income}${storage}${defence}${mission}${base}`;
+    this.el.top.innerHTML = `${counter}${income}${storage}${extras}${defence}${mission}${base}`;
   }
 
   /** "+50" / "−20" next to the paper, fading. */

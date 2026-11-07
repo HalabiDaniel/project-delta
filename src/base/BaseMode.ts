@@ -37,7 +37,11 @@ export function levelStats(kind: BuildingKind, level: number, from?: number): St
       return [
         { icon: 'capacity', value: `+${lv.capacity}`, label: 'Extra capacity', delta: delta(lv.capacity, prev?.capacity) },
         { icon: 'lock', value: `+${lv.protection}`, label: 'Extra paper protected from raids', delta: delta(lv.protection, prev?.protection) },
+        { icon: 'ink', value: `+${lv.holds?.ink ?? 0}`, label: 'Extra ink capacity', delta: delta(lv.holds?.ink, prev?.holds?.ink) },
+        { icon: 'bombload', value: `+${lv.holds?.rubber ?? 0}`, label: 'Extra rubber-ball capacity', delta: delta(lv.holds?.rubber, prev?.holds?.rubber) },
       ];
+    case 'inkwell':
+      return [{ icon: 'ink', value: `+${lv.production}/m`, label: 'Ink per minute', delta: delta(lv.production, prev?.production, '/m') }];
   }
 }
 

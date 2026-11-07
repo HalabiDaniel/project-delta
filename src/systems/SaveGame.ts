@@ -28,6 +28,12 @@ export interface SaveData {
   version: number;
   savedAt: number;
   paper: number;
+  /**
+   * v0.0.18: ink and rubber balls. Null in a save from before them: the game then starts the player
+   * with a share of what their base holds (startingStock in systems/Economy.ts).
+   */
+  ink: number | null;
+  rubber: number | null;
   /** The design chosen in the garage. */
   aircraft: AircraftId;
   /** Planes waiting at home: the player's saved loadouts. */
@@ -328,6 +334,8 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     version: SAVE_VERSION,
     savedAt: check.num(raw.savedAt, 'savedAt', 0, Number.MAX_SAFE_INTEGER, 0),
     paper: check.int(raw.paper, 'paper', 0, 1_000_000, ECONOMY.startingPaper),
+    ink: raw.ink === undefined || raw.ink === null ? null : check.int(raw.ink, 'ink', 0, 1_000_000, ECONOMY.startingInk),
+    rubber: raw.rubber === undefined || raw.rubber === null ? null : check.int(raw.rubber, 'rubber', 0, 1_000_000, ECONOMY.startingRubber),
     aircraft: check.oneOf(raw.aircraft, 'aircraft', AIRCRAFT_ORDER, STARTER_AIRCRAFT),
     hangar: check.list(raw.hangar, 'hangar', (h, i) => {
       if (!isObject(h)) return null;
@@ -355,7 +363,7 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     ledger: {
       entries: check.list(ledger.entries, 'ledger.entries', (e) => {
         if (!isObject(e)) return null;
-        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'refund', 'raid', 'reset'] as const, null);
+        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'refund', 'raid', 'reset', 'arm', 'supply', 'upkeep'] as const, null);
         if (!source) return null;
         return {
           at: check.num(e.at, 'ledger at', 0, Number.MAX_SAFE_INTEGER, 0),

@@ -223,15 +223,25 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       const p = await store.createPlayer(player('Lim'), h('tok-lim'), 'open');
       expect(await store.economy(world.id, p.id)).toBeNull();
       await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'start', kind: 'reward', amount: 100, reason: '' });
-      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 0, protected: 0 });
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 0, protected: 0, ink: null, rubber: null });
       await store.setEconomyLimits(world.id, p.id, 450, 40);
       await store.setEconomyLimits(world.id, p.id, 500, 45);
-      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45 });
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45, ink: null, rubber: null });
+      // v0.0.18: ink and rubber balls are balances of their own, in the same log.
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'stock:ink', kind: 'reward', amount: 60, reason: '', resource: 'ink' })).toEqual({ status: 'applied', balance: 60 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:1:ink', kind: 'arm', amount: -7, reason: '', resource: 'ink' })).toEqual({ status: 'applied', balance: 53 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:1:ink', kind: 'arm', amount: -7, reason: '', resource: 'ink' })).toEqual({ status: 'duplicate', balance: 53 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:2:rubber', kind: 'arm', amount: -1, reason: '', resource: 'rubber' })).toMatchObject({ status: 'insufficient' });
+      await expect(store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'x', kind: 'arm', amount: 1, reason: '', resource: 'gold' as never })).rejects.toThrow();
+      expect(await store.balance(world.id, p.id, 'ink')).toBe(53);
+      expect(await store.balance(world.id, p.id)).toBe(100);
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45, ink: 53, rubber: null });
+      expect((await store.transactions(world.id, p.id)).map((t) => t.resource)).toEqual(['ink', 'ink', 'paper']);
       await expect(store.setEconomyLimits(world.id, p.id, -1, 0)).rejects.toThrow();
       // Limits alone (a player whose first change hasn't been written yet) still count as a record.
       const q = await store.createPlayer(player('Lim2'), h('tok-lim2'), 'open');
       await store.setEconomyLimits(world.id, q.id, 300, 30);
-      expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30 });
+      expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30, ink: null, rubber: null });
     });
 
     it('keeps the planes a player owns, and destroys for good the ones no longer listed', async () => {
