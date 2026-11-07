@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AIRCRAFT, BASE, ECONOMY } from '../../src/config';
 import { PRODUCTION_EVERY } from './Paper';
 import { ServerWorld } from './ServerWorld';
-import { place, player, quietWorld, run } from './testkit';
+import { launch, place, player, quietWorld, run } from './testkit';
 
 /**
  * Paper on the way to the ledger (v0.0.12 phase 2): every change the rules make in the world is
@@ -32,6 +32,22 @@ describe('the paper journal', () => {
     expect(changes[0].key).toMatch(/^prod:[0-9a-f-]{36}:1$/);
     // Nothing is taken twice.
     expect(world.takePaper('a')).toEqual([]);
+  });
+
+  it('v0.0.18: folding and arming a plane write ink and rubber-ball changes of their own, keyed apart from paper', () => {
+    const world = quietWorld();
+    const a = player(world, 'a', 'T1');
+    const ink = a.resources.ink;
+    world.takePaper('a');
+    launch(world, a, 'falcon');
+    const changes = world.takePaper('a');
+    const inkChanges = changes.filter((c) => c.resource === 'ink');
+    // The Falcon's materials and its rounds, each a change of its own.
+    expect(inkChanges.map((c) => c.kind)).toEqual(['spend', 'arm']);
+    expect(inkChanges[0].amount).toBe(-AIRCRAFT.falcon.materials!.ink!);
+    for (const c of inkChanges) expect(c.key).toMatch(/:ink$/);
+    expect(new Set(changes.map((c) => c.key)).size).toBe(changes.length);
+    expect(ink + inkChanges.reduce((t, c) => t + c.amount, 0) + a.journal!.unflushedOf('ink')).toBe(a.resources.ink);
   });
 
   it('credits production once a minute, not paper by paper', () => {
@@ -101,9 +117,9 @@ describe('the paper journal', () => {
     expect(reward.key).toBe(`mission:${a.missionId(a.state!.mission!)}`);
     expect(reward.amount).toBe(a.state!.mission!.reward);
     const lostB = world.takePaper('b').filter((c) => c.kind === 'raid');
-    expect(lostB).toHaveLength(1);
-    expect(lostB[0].key).toBe(`raid:${attack.uid}:loss`);
-    expect(lostB[0].amount).toBeLessThan(0);
+    // v0.0.18: one change per resource, each keyed by the raid and its resource.
+    expect(lostB.map((c) => c.key)).toEqual([`raid:${attack.uid}:loss`, `raid:${attack.uid}:loss:ink`, `raid:${attack.uid}:loss:rubber`]);
+    for (const c of lostB) expect(c.amount).toBeLessThan(0);
   });
 
   it('follows the store when it refuses a change, without writing anything new', () => {

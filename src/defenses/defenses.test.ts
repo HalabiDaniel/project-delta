@@ -282,6 +282,45 @@ describe('sides', () => {
     for (const o of shots) expect(o).toMatchObject({ side: 'player', target: 'bandit' });
   });
 
+  it('v0.0.18: a player turret pays ink for each reload, and reloads slower (never not at all) with an empty store', () => {
+    const spec = buildingSpec(home, 'D1', 'turret', 1);
+    const ahead = { x: spec.x - Math.sin(spec.facing) * 20, z: spec.z - Math.cos(spec.facing) * 20 };
+    const run = (ink: number) => {
+      const net = new DefenseNetwork([spec], seededRng(3));
+      let store = ink;
+      const paid: number[] = [];
+      net.supply = (side, cost) => {
+        expect(side).toBe('player');
+        if (store < cost) return false;
+        store -= cost;
+        paid.push(cost);
+        return true;
+      };
+      const times: number[] = [];
+      for (let t = 0; t < 20; t += DT) if (net.update(DT, [aircraft('bandit', 'enemy', ahead.x, ahead.z)]).orders.length) times.push(t);
+      const mag = BASE.buildings.turret.levels[0].magazine!;
+      return { gap: times[mag] - times[mag - 1], paid, shots: times.length };
+    };
+    const stocked = run(100);
+    const dry = run(0);
+    expect(stocked.paid[0]).toBe(DEFENSES.ammo.magazine);
+    expect(dry.paid).toEqual([]);
+    expect(dry.gap).toBeGreaterThan(stocked.gap * 2);
+    expect(dry.shots).toBeGreaterThan(BASE.buildings.turret.levels[0].magazine!);
+  });
+
+  it("v0.0.18: the AI's own defenses never ask anyone's store", () => {
+    const net = new DefenseNetwork(layout.installations.filter((i) => i.kind === 'turret').slice(0, 1), seededRng(3));
+    let asked = 0;
+    net.supply = () => {
+      asked++;
+      return false;
+    };
+    const t = net.installations[0];
+    for (let s = 0; s < 30; s += DT) net.update(DT, [still(t.spec.x, 8, t.spec.z - 20)]);
+    expect(asked).toBe(0);
+  });
+
   it('a player turret empties its magazine, then pauses to reload; upgrades hit harder', () => {
     const spec = buildingSpec(home, 'D1', 'turret', 1);
     const net = new DefenseNetwork([spec], seededRng(3));

@@ -624,6 +624,20 @@ export class GameState {
    * A raider's bomb hit T1: `amount` paper is destroyed, never below `floor` (the protected
    * reserve). Returns what was actually lost.
    */
+  /**
+   * v0.0.18: a raid's bomb hit: each resource loses up to its amount, never below its floor (the
+   * protected reserve). Returns what was actually lost of each.
+   */
+  raidHitAll(losses: Bundle, floors: Bundle, label = 'Raid on T1'): Bundle {
+    const paper = this.raidHit(losses.paper ?? 0, floors.paper ?? 0, label);
+    const out: Bundle = { paper };
+    for (const r of ['ink', 'rubber'] as const) {
+      const lost = this.resources.loseOf(r, Math.max(0, Math.round(losses[r] ?? 0)), floors[r] ?? 0, label);
+      if (lost > 0) out[r] = lost;
+    }
+    return out;
+  }
+
   raidHit(amount: number, floor: number, label = 'Raid on T1'): number {
     const lost = this.resources.lose(Math.max(0, Math.round(amount)), floor, label);
     if (this.sortie && (this.phase === 'flying' || this.phase === 'landed')) this.sortie.paperLost += lost;

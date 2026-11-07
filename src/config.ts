@@ -892,6 +892,12 @@ export const DEFENSES = {
     storeRole: 'Your paper · raid target',
     storeHealth: 120,
   },
+  /**
+   * v0.0.18: a player's weapons reload from the territory's ink store (GDD §9.3): a turret's
+   * magazine, a launcher's next rocket. With the store empty they still reload, `dryFactor` times
+   * slower: an empty store degrades defenses, it never switches them off.
+   */
+  ammo: { magazine: 2, rocket: 3, dryFactor: 2.5 },
   /** Once a territory's radar is gone, its weapons only notice planes this much closer. */
   radarLostDetection: 0.7,
   /** Hysteresis: a weapon keeps a plane it is tracking out to this times its detection range. */
@@ -1134,6 +1140,14 @@ export const RAIDS = {
    * reserve), up to `max`: more when it hits the paper store itself than another building.
    */
   loss: { store: { share: 0.2, max: 80 }, building: { share: 0.1, max: 40 } },
+  /**
+   * v0.0.18: the same rule for ink and rubber balls, each with its own cap, so one raid touches
+   * every stock but never takes much of any. Protected reserves (ECONOMY, storage boxes) are safe.
+   */
+  lossOther: {
+    ink: { store: { share: 0.2, max: 40 }, building: { share: 0.1, max: 20 } },
+    rubber: { store: { share: 0.2, max: 8 }, building: { share: 0.1, max: 4 } },
+  },
   /** The first two raids come alone; after that, a raid has this chance of a fighter escort. */
   escortAfter: 2,
   escortChance: 0.3,

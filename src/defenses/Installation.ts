@@ -84,9 +84,17 @@ export class Installation {
   private readonly estimate = { x: 0, y: 0, z: 0 };
   private fresh = true;
 
+  /** v0.0.18: the last reload couldn't be paid for (the owner's ink store was empty): it ran slow. */
+  dry = false;
+
   constructor(
     readonly spec: InstallationSpec,
     private readonly rng: Rng = Math.random,
+    /**
+     * v0.0.18: pays `ink` for a reload from the owner's stores; false when they can't. Absent (the
+     * AI's defenses): always paid. An unpaid reload still happens, only slower (DEFENSES.ammo).
+     */
+    private readonly supply: ((ink: number) => boolean) | null = null,
   ) {
     this.durability = new Durability(spec.maxHealth);
     this.yaw = spec.facing;
@@ -95,6 +103,12 @@ export class Installation {
 
   get id(): string {
     return this.spec.id;
+  }
+
+  /** Pays for a reload: 1 when paid (or free), DEFENSES.ammo.dryFactor when the store was empty. */
+  private payReload(ink: number): number {
+    this.dry = this.supply !== null && !this.supply(ink);
+    return this.dry ? DEFENSES.ammo.dryFactor : 1;
   }
 
   /** Its territory is on alert: it gets a fix the moment it sees a plane, with no delay. */
@@ -283,7 +297,7 @@ export class Installation {
       this.cooldown = this.spec.stats?.interval ?? c.interval;
       this.sinceShot = 0;
       // A turret with a magazine reloads once it is empty.
-      if (Number.isFinite(this.rounds) && --this.rounds <= 0) this.reloading = this.spec.stats?.reloadTime ?? 3;
+      if (Number.isFinite(this.rounds) && --this.rounds <= 0) this.reloading = (this.spec.stats?.reloadTime ?? 3) * this.payReload(DEFENSES.ammo.magazine);
       // The faster the plane, the more the aim scatters.
       const speed = Math.hypot(target.vx, target.vy, target.vz);
       const sigma = c.spread + (c.speedSpread * Math.max(0, speed - DEFENSES.spreadFreeSpeed)) / 10;
@@ -298,7 +312,7 @@ export class Installation {
       this.state = 'locking';
       if (this.lock >= 1) {
         this.lock = 0;
-        this.cooldown = this.spec.stats?.reload ?? c.reload;
+        this.cooldown = (this.spec.stats?.reload ?? c.reload) * this.payReload(DEFENSES.ammo.rocket);
         this.sinceShot = 0;
         this.state = 'firing';
         return this.order('rocket', this.yaw, Math.max(this.pitch, 25 * DEG), c.rocket.launchSpeed, this.spec.stats?.damage);
@@ -353,6 +367,12 @@ export class DefenseNetwork {
   /** Per territory, the aircraft it currently knows about. */
   private readonly aware = new Map<string, Set<string>>();
 
+  /**
+   * v0.0.18: pays a player's defenses' reloads from their ink store (`side`: whose they are; `what`:
+   * for the ledger). Null (the default): every reload is free, as for the AI's defenses.
+   */
+  supply: ((side: Side, ink: number, what: string) => boolean) | null = null;
+
   constructor(specs: readonly InstallationSpec[], private readonly rng: Rng = Math.random) {
     for (const spec of specs) this.add(spec);
   }
@@ -364,7 +384,8 @@ export class DefenseNetwork {
   /** Puts up a new installation (a building the player just built), at `health` (default: full). */
   add(spec: InstallationSpec, health = spec.maxHealth): Installation {
     if (this.byId.has(spec.id)) this.remove(spec.id);
-    const i = new Installation(spec, this.rng);
+    const paid = spec.side === 'enemy' ? null : (ink: number) => this.supply?.(spec.side, ink, spec.name) ?? true;
+    const i = new Installation(spec, this.rng, paid);
     i.durability.health = Math.max(0, Math.min(spec.maxHealth, health));
     if (!i.alive) i.state = 'destroyed';
     this.installations.push(i);

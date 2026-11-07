@@ -6,7 +6,7 @@ import type { ZoneRef } from '../../src/aircraft/Bomb';
 import type { AiOrders, Contact } from '../../src/ai/AiAircraft';
 import { AirTraffic, type AirEvent, type AirSpawn } from '../../src/ai/AirTraffic';
 import { Base, STORE, type BaseEvent, type BaseSave } from '../../src/base/Base';
-import { chooseRaidTarget } from '../../src/base/Raids';
+import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
@@ -223,6 +223,11 @@ export class ServerWorld {
     this.shared = sharedWorld();
     this.territories = this.shared.territories;
     this.network = new DefenseNetwork(this.shared.layout.installations, this.rng);
+    // v0.0.18: a player's weapons reload from that player's ink store.
+    this.network.supply = (side, ink, what) => {
+      const owner = [...this.pilots.values()].find((p) => p.side === side);
+      return !owner || owner.resources.spendOf('ink', ink, `${what} reloaded`, 'supply');
+    };
     // The traffic's own "home" is only used for single-player's raids, which multiplayer doesn't
     // send: give it one far outside the world, and the real homes through AirInput.homes.
     const nowhere = new Territory('none', 1e5, 1e5, 1, null);
@@ -1434,8 +1439,9 @@ export class ServerWorld {
       if (victim?.state && victim.base) {
         const store = victim.base.store.spec;
         const onStore = Math.hypot(s.x - store.x, s.z - store.z) < 1;
-        const lost = victim.state.raidHit(this.attacks.loss(victim.base.vulnerable(), onStore), victim.base.protectedPaper, 'Raid hit your base');
-        this.note(victim, 'raid', 'Base hit', lost > 0 ? `−${lost}` : null, 'bad');
+        const { losses, floors } = raidLosses(victim.base, onStore);
+        const lost = victim.state.raidHitAll(losses, floors, 'Raid hit your base');
+        this.note(victim, 'raid', 'Base hit', lossText(lost), 'bad');
       }
     }
     if (b.tag) {
@@ -1474,10 +1480,13 @@ export class ServerWorld {
     const attacker = this.pilots.get(attack.attacker);
     const victim = this.pilots.get(attack.victim);
     let lost = 0;
+    let lostAll: Bundle = {};
     if (outcome === 'bombed' && victim?.state && victim.base) {
       const onStore = attack.target.installationId === victim.base.idOf(STORE);
       victim.cause = `raid:${attack.uid}:loss`;
-      lost = victim.state.raidHit(this.attacks.loss(victim.base.vulnerable(), onStore), victim.base.protectedPaper, `Raided by ${attacker?.name ?? 'a rival'}`);
+      const { losses, floors } = raidLosses(victim.base, onStore);
+      lostAll = victim.state.raidHitAll(losses, floors, `Raided by ${attacker?.name ?? 'a rival'}`);
+      lost = lostAll.paper ?? 0;
       victim.cause = null;
       victim.shieldUntil = this.time + PVP.raidShield;
       if (attacker) {
@@ -1492,10 +1501,10 @@ export class ServerWorld {
     const reward = attacker?.state?.mission?.status === 'succeeded' ? attacker.state.mission.reward : 0;
     if (victim) {
       victim.report = {
-        id: attack.id, role: 'defender', other: attacker?.name ?? '?', territoryId: attack.territoryId, outcome, paperLost: lost,
+        id: attack.id, role: 'defender', other: attacker?.name ?? '?', territoryId: attack.territoryId, outcome, paperLost: lost, inkLost: lostAll.ink ?? 0, rubberLost: lostAll.rubber ?? 0,
         reward: 0, structures: attack.structures, defenseReward,
       };
-      if (outcome === 'bombed') this.note(victim, 'raid', `Raided by ${attacker?.name ?? '?'}`, lost > 0 ? `−${lost}` : null, 'bad');
+      if (outcome === 'bombed') this.note(victim, 'raid', `Raided by ${attacker?.name ?? '?'}`, lossText(lostAll), 'bad');
       else if (outcome === 'repelled') this.note(victim, 'ok', 'Raid repelled', null, 'good');
     }
     if (attacker) {

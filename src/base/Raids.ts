@@ -2,6 +2,7 @@ import type { RaidOutcome } from '../ai/AirTraffic';
 import type { Strike } from '../ai/AiAircraft';
 import { RAIDS } from '../config';
 import type { Rng } from '../systems/Random';
+import type { Bundle } from '../systems/ResourceManager';
 import { STORE, type Base } from './Base';
 
 /** What a raid is aimed at: one of T1's structures. */
@@ -48,6 +49,30 @@ export function raidTargetFor(base: Base, key: string): RaidTarget {
     name: base.nameOf(key),
     strike: { territoryId: base.home.id, x: i.spec.x, y: base.home.top, z: i.spec.z, radius: RAIDS.hitRadius },
   };
+}
+
+/**
+ * v0.0.18: what a bomb on target destroys of each resource, and the floor each loss stops at (its
+ * protected reserve). Each resource has its own share and cap (RAIDS.loss, RAIDS.lossOther).
+ */
+export function raidLosses(base: Base, onStore: boolean): { losses: Bundle; floors: Bundle } {
+  const losses: Bundle = { paper: raidLoss(base.vulnerable(), onStore) };
+  const floors: Bundle = { paper: base.protectedPaper };
+  for (const r of ['ink', 'rubber'] as const) {
+    const rule = onStore ? RAIDS.lossOther[r].store : RAIDS.lossOther[r].building;
+    losses[r] = Math.min(rule.max, Math.round(base.vulnerableOf(r) * rule.share));
+    floors[r] = base.protectedOf(r);
+  }
+  return { losses, floors };
+}
+
+/** "−12 · −3 ink · −1 rubber" for an alert, or null when nothing was lost. */
+export function lossText(lost: Bundle): string | null {
+  const parts: string[] = [];
+  if ((lost.paper ?? 0) > 0) parts.push(`−${lost.paper}`);
+  if ((lost.ink ?? 0) > 0) parts.push(`−${lost.ink} ink`);
+  if ((lost.rubber ?? 0) > 0) parts.push(`−${lost.rubber} rubber`);
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 /** Paper a bomb on target destroys: a share of the vulnerable paper, more on the store itself, capped. */
@@ -98,6 +123,9 @@ export interface RaidReport {
   damaged: string[];
   destroyed: string[];
   paperLost: number;
+  /** v0.0.18: ink and rubber balls the raid destroyed. */
+  inkLost: number;
+  rubberLost: number;
   /** Paper the raid would have cost had its bomb landed (0 if it did). */
   prevented: number;
   /** Damage dealt to the raiders: by T1's defenses and by the player. */
@@ -119,6 +147,8 @@ export class RaidTracker {
   private defenseDamage = 0;
   private playerDamage = 0;
   private paperLost = 0;
+  private inkLost = 0;
+  private rubberLost = 0;
   private bombed = false;
 
   constructor(
@@ -154,9 +184,11 @@ export class RaidTracker {
     }
   }
 
-  hit(paperLost: number): void {
+  hit(paperLost: number, other: Bundle = {}): void {
     this.bombed = true;
     this.paperLost += paperLost;
+    this.inkLost += other.ink ?? 0;
+    this.rubberLost += other.rubber ?? 0;
   }
 
   finish(outcome: RaidOutcome, repairCost: number): RaidReport {
@@ -172,6 +204,8 @@ export class RaidTracker {
       damaged: [...this.damaged],
       destroyed: [...this.destroyed],
       paperLost: this.paperLost,
+      inkLost: this.inkLost,
+      rubberLost: this.rubberLost,
       prevented: this.bombed || outcome === 'cancelled' ? 0 : this.potentialLoss,
       defenseDamage: Math.round(this.defenseDamage),
       playerDamage: Math.round(this.playerDamage),

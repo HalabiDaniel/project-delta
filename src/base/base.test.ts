@@ -6,7 +6,7 @@ import { ResourceManager } from '../systems/ResourceManager';
 import { seededRng } from '../systems/Random';
 import { generateTerritories } from '../world/WorldGenerator';
 import { Base, STORE, type BaseEvent } from './Base';
-import { chooseRaidTarget, raidLoss, raidPace, RaidTracker, raidTargetFor } from './Raids';
+import { chooseRaidTarget, lossText, raidLoss, raidLosses, raidPace, RaidTracker, raidTargetFor } from './Raids';
 
 const territories = generateTerritories();
 const home = territories.find((t) => t.isHome)!;
@@ -282,5 +282,38 @@ describe('Raids on the base', () => {
     hit.hit(18);
     const h = hit.finish('bombed', 56);
     expect(h).toMatchObject({ repelled: false, paperLost: 18, prevented: 0, destroyed: ['Paper workshop'], damaged: [] });
+  });
+});
+
+describe('v0.0.18: raids touch every resource, each above its own reserve and under its own cap', () => {
+  it('a store hit takes a capped share of each vulnerable stock', () => {
+    const network = new DefenseNetwork(homeDefenses(home), seededRng(1));
+    const resources = new ResourceManager(1000, { ink: 1000, rubber: 1000 });
+    const base = new Base(home, network, resources);
+    base.startFresh();
+    const { losses, floors } = raidLosses(base, true);
+    expect(losses).toEqual({ paper: RAIDS.loss.store.max, ink: RAIDS.lossOther.ink.store.max, rubber: RAIDS.lossOther.rubber.store.max });
+    expect(floors).toEqual({ paper: ECONOMY.protectedPaper, ink: ECONOMY.protectedInk, rubber: ECONOMY.protectedRubber });
+  });
+
+  it('nothing at or below the protected reserves is ever at risk', () => {
+    const network = new DefenseNetwork(homeDefenses(home), seededRng(1));
+    const resources = new ResourceManager(ECONOMY.protectedPaper, { ink: ECONOMY.protectedInk, rubber: ECONOMY.protectedRubber });
+    const base = new Base(home, network, resources);
+    base.startFresh();
+    expect(raidLosses(base, true).losses).toEqual({ paper: 0, ink: 0, rubber: 0 });
+  });
+
+  it('says what was lost in a short line', () => {
+    expect(lossText({ paper: 12, ink: 3 })).toBe('−12 · −3 ink');
+    expect(lossText({ paper: 0 })).toBeNull();
+  });
+
+  it('the raid report counts ink and rubber balls lost', () => {
+    const { base } = setup();
+    base.startFresh();
+    const t = new RaidTracker(1, new Set(['r']), raidTargetFor(base, STORE), 10);
+    t.hit(10, { paper: 10, ink: 4, rubber: 1 });
+    expect(t.finish('bombed', 0)).toMatchObject({ paperLost: 10, inkLost: 4, rubberLost: 1 });
   });
 });

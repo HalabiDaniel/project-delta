@@ -494,6 +494,9 @@ export interface AttackReportDTO {
   territoryId: string;
   outcome: 'bombed' | 'repelled' | 'abandoned';
   paperLost: number;
+  /** v0.0.18: ink and rubber balls lost (absent: none). */
+  inkLost?: number;
+  rubberLost?: number;
   reward: number;
   structures: Array<{ name: string; destroyed: boolean }>;
   defenseReward: number;

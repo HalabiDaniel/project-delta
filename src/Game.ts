@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId, type Side } from './config';
 import { Base, STORE, type BaseEvent } from './base/Base';
 import { BaseMode } from './base/BaseMode';
-import { chooseRaidTarget, raidLoss, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
+import { chooseRaidTarget, lossText, raidLoss, raidLosses, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
 import type { AiAircraft, BombOrder, Contact, Strike } from './ai/AiAircraft';
 import { AirTraffic, type AirEvent, type Raid } from './ai/AirTraffic';
 import { leadPoint } from './ai/Gunnery';
@@ -323,6 +323,8 @@ export class Game {
     const { data: saved, problems } = await saves.load();
     if (problems.length > 0) console.warn('paperwars: problems with the saved game', problems);
     const resources = new ResourceManager();
+    // v0.0.18: T1's weapons reload from the ink store.
+    defenses.supply = (side, ink, what) => side !== 'player' || resources.spendOf('ink', ink, `${what} reloaded`, 'supply');
     const ledger = new Ledger();
     ledger.watch(resources);
     // T1 as a base: the paper store, and whatever the player has built (a new game starts with one turret).
@@ -1680,9 +1682,12 @@ export class Game {
     if (hostile && hit) {
       // A bomb on target destroys a share of the vulnerable paper; the protected reserve is safe.
       const key = tracker?.target.key ?? STORE;
-      const lost = this.state.raidHit(raidLoss(this.base.vulnerable(), key === STORE), this.base.protectedPaper, `Raid hit the ${(tracker?.target.name ?? 'paper store').toLowerCase()}`);
-      tracker?.hit(lost);
-      this.alert('raid', SAY.baseHit, lost > 0 ? `−${lost}` : null, 'bad', 3);
+      // v0.0.18: ink and rubber balls too, each above its own protected reserve and under its own cap.
+      const { losses, floors } = raidLosses(this.base, key === STORE);
+      const hit = this.state.raidHitAll(losses, floors, `Raid hit the ${(tracker?.target.name ?? 'paper store').toLowerCase()}`);
+      const lost = hit.paper ?? 0;
+      tracker?.hit(lost, hit);
+      this.alert('raid', SAY.baseHit, lossText(hit), 'bad', 3);
     }
     this.airTraffic.bombLanded(impact.tag, hit);
     if (!hostile) {

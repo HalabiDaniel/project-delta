@@ -519,6 +519,8 @@ export const en = {
     raidersShotDown: (byDefenses: number, byPlayer: number) => `Raiders shot down (defenses ${byDefenses}, you ${byPlayer})`,
     paperLost: 'Paper lost',
     paperSaved: 'Paper saved',
+    inkLost: 'Ink lost',
+    rubberLost: 'Rubber balls lost',
     hit: (names: readonly string[]) => `Hit: ${names.join(', ')}`,
     repairCost: 'Repair cost',
     defenseShare: (yours: string) => `Defenses' share of the damage (you: ${yours})`,
