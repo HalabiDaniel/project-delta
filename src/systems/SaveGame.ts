@@ -434,7 +434,7 @@ function validateEfficiency(v: unknown, check: Checker): Efficiency | null {
 }
 
 const ESCALATIONS: readonly Escalation[] = ['wingman', 'escorted', 'extra-target', 'return', 'tight-clock'];
-const SITUATIONAL: readonly Situational[] = ['high-value', 'alert', 'recovery', 'emergency'];
+const SITUATIONAL: readonly Situational[] = ['high-value', 'alert', 'recovery', 'emergency', 'short-ink', 'short-rubber'];
 const REGULAR_TYPES = MISSION_TYPES.filter((t) => !EVENT_TYPES.includes(t));
 /** History and records can also hold world events' missions. */
 const ALL_TYPES: readonly MissionType[] = [...MISSION_TYPES, ...EVENT_TYPES];

@@ -1512,6 +1512,17 @@ export const MISSIONS = {
   /** Extra paper per metre between the launch pad and the objective. */
   distanceReward: 0.05,
   /**
+   * v0.0.18: ink and rubber balls a mission pays with its paper, by type, before the tier's
+   * multiplier (TIERS). Combat pays ink back, bombing pays rubber balls back, deliveries pay well in
+   * one or the other (they are the natural way to top up). Rewards stay modest: paper rules.
+   */
+  supplies: {
+    bombing: { rubber: 2 }, precision: { rubber: 2 }, 'multi-bomb': { rubber: 3 }, return: { rubber: 2 }, fortified: { rubber: 3, ink: 4 },
+    'low-attack': { rubber: 2, ink: 4 }, suppression: { ink: 10 }, practice: { ink: 8 }, dogfight: { ink: 10 }, patrol: { ink: 8 },
+    'scout-intercept': { ink: 6 }, 'bomber-intercept': { ink: 8 }, escort: { ink: 8 }, combined: { ink: 6, rubber: 2 }, 'multi-stage': { ink: 6, rubber: 2 },
+    delivery: { ink: 18 }, survival: { ink: 6 }, shipment: { rubber: 3 }, convoy: { ink: 8 }, 'supply-run': { ink: 10, rubber: 3 },
+  } as Partial<Record<string, { ink?: number; rubber?: number }>>,
+  /**
    * Seconds a good run spends on the job itself, on top of the flight there at the reference
    * speed: the par time for a gold rating.
    */
@@ -1631,10 +1642,19 @@ export const DIRECTOR = {
     'high-value': { label: 'High value', detail: 'A temporary high-value target', reward: 1.5 },
     alert: { label: 'On alert', detail: 'The target territory is on alert', reward: 1.2 },
     recovery: { label: 'Recovery', detail: 'Low risk, pays enough for a new plane', reward: 1 },
+    'short-ink': { label: 'Ink run', detail: 'Pays extra ink: your store is low', reward: 1 },
+    'short-rubber': { label: 'Rubber run', detail: 'Pays extra rubber balls: your store is low', reward: 1 },
     emergency: { label: 'Emergency', detail: 'Defend home', reward: 1 },
   },
   /** A recovery mission always pays at least this: enough to fold a Falcon. */
   recoveryReward: 30,
+  /**
+   * v0.0.18: below these the safe card becomes a recovery card that pays the short resource (the
+   * extra on top of the type's own supplies), so a player low on ink or rubber balls tops up by flying.
+   */
+  shortInk: 25,
+  shortRubber: 4,
+  recoverySupplies: { ink: 30, rubber: 8 },
   /** Tight clock: the time limit is the par time times this, plus `tightExtra` seconds (existing limits shrink by `tightShrink`). */
   tightSlack: 1.7,
   tightExtra: 10,

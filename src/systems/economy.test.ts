@@ -4,6 +4,7 @@ import { AIRCRAFT, BASE, ECONOMY, STARTER_AIRCRAFT } from '../config';
 import { DefenseNetwork } from '../defenses/Installation';
 import { homeDefenses } from '../defenses/Layout';
 import { Mission, type MissionSpec } from '../missions/Mission';
+import { missionSupplies } from '../missions/MissionGenerator';
 import { generateTerritories } from '../world/WorldGenerator';
 import { applyBaseEconomy, armingFor, fullArmingCost, newIncomes, startingStock } from './Economy';
 import { GameState, type GameEvent } from './GameState';
@@ -231,5 +232,30 @@ describe('v0.0.18: arming from the stores', () => {
     expect(st.launch()).toBe(true);
     expect(r.all).toEqual({ paper: 0, ink: 5, rubber: 5 });
     expect(st.gun!.ammo).toBe(ECONOMY.emergency.ammo);
+  });
+});
+
+describe('v0.0.18: missions pay ink and rubber balls', () => {
+  it('combat pays ink, bombing pays rubber balls, harder tiers pay more', () => {
+    expect(missionSupplies('dogfight', 'easy').ink).toBeGreaterThan(0);
+    expect(missionSupplies('bombing', 'easy').rubber).toBeGreaterThan(0);
+    expect(missionSupplies('dogfight', 'hard').ink!).toBeGreaterThan(missionSupplies('dogfight', 'easy').ink!);
+    expect(missionSupplies('recon', 'easy')).toEqual({});
+    expect(missionSupplies('recon', 'easy', ['recovery', 'short-rubber']).rubber).toBeGreaterThan(0);
+  });
+
+  it('a completed mission pays its supplies once, with the paper', () => {
+    const r = new ResourceManager(1000, { ink: 100, rubber: 0 });
+    const spec = { ...BOMBING, bombs: 1, supplies: { rubber: 5 } };
+    const { st } = state(r, spec);
+    for (const i of Object.values(st.incomes)) i.perMinute = 0;
+    flyFrom(st, 'swift');
+    const rubber = r.rubber;
+    expect(st.dropBomb()).toBe(true);
+    st.resolveBomb(0);
+    expect(st.mission!.status).toBe('succeeded');
+    expect(r.rubber).toBe(rubber + 5);
+    st.resolveBomb(0);
+    expect(r.rubber).toBe(rubber + 5);
   });
 });

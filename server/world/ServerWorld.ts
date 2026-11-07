@@ -1857,7 +1857,7 @@ export class ServerWorld {
 
   private situation(p: Pilot): Situation {
     const costs = Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, p.state?.buildCostFor(id) ?? AIRCRAFT[id].cost])) as Record<AircraftId, number>;
-    return { paper: p.resources.paper, costs, airRoom: this.air.room, raidActive: false };
+    return { paper: p.resources.paper, ink: p.resources.ink, rubber: p.resources.rubber, costs, airRoom: this.air.room, raidActive: false };
   }
 
   // ---- Geometry -----------------------------------------------------------------------------------

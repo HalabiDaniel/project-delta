@@ -272,7 +272,7 @@ export class DeskHud {
     const cards = v.cards ?? [];
     const chosen = cards[v.selected];
     const swappable = !!chosen && chosen.slot !== 'event' && !chosen.operation?.active;
-    const key = JSON.stringify(['m', cards.map((c) => [c.title, c.reward, c.threat.level, c.fits.map((f) => `${f.level}${f.selected}`), c.target, c.operation?.stage, c.expires !== null]), v.selected, v.swaps, swappable, this.detailsOpen, v.phase]);
+    const key = JSON.stringify(['m', cards.map((c) => [c.title, c.reward, c.supplies, c.threat.level, c.fits.map((f) => `${f.level}${f.selected}`), c.target, c.operation?.stage, c.expires !== null]), v.selected, v.swaps, swappable, this.detailsOpen, v.phase]);
     if (!this.set('drawer', key, () => drawer({
       id: 'missions-drawer',
       title: d.missions,
@@ -308,7 +308,7 @@ export class DeskHud {
     return `<article class="m-card${selected ? ' tracked' : ''}" data-tip="${esc(tip)}">
       <button type="button" class="m-pick" data-act="pick" data-i="${i}" aria-pressed="${selected}" aria-label="${esc(T.common.dot([c.title, `+${fmt(c.reward)}`]))}">
         <span class="m-head"><span class="m-title">${esc(c.title)}</span>${selected ? kbadge({ label: d.tracking, tone: 'hostile', className: 'm-tracking' }) : glyph({ key: String(i + 1) }, { className: 'pw-key hint-key' })}</span>
-        <span class="m-row"><span class="m-target">${c.target ? `<i class="pw-dot" style="--dot:var(--hostile)"></i>${esc(T.common.labelSpaceValue(d.desk, c.target.replace(/^T/, '')))}` : `${icon('offline', 'icon pw-icon')}${esc(d.anywhere)}`}</span>${risk}<b class="m-reward num">+${esc(fmt(c.reward))}${icon('paper', 'icon pw-icon')}</b></span>
+        <span class="m-row"><span class="m-target">${c.target ? `<i class="pw-dot" style="--dot:var(--hostile)"></i>${esc(T.common.labelSpaceValue(d.desk, c.target.replace(/^T/, '')))}` : `${icon('offline', 'icon pw-icon')}${esc(d.anywhere)}`}</span>${risk}<b class="m-reward num">+${esc(fmt(c.reward))}${icon('paper', 'icon pw-icon')}${(c.supplies?.ink ?? 0) > 0 ? ` +${esc(fmt(c.supplies!.ink!))}${icon('inkwell', 'icon pw-icon')}` : ''}${(c.supplies?.rubber ?? 0) > 0 ? ` +${esc(fmt(c.supplies!.rubber!))}${icon('rubber', 'icon pw-icon')}` : ''}</b></span>
         ${fit ? `<span class="m-fit">${kbadge({ label: fit.label, tone: fit.tone, icon: fit.icon })}${c.expires !== null ? `<span class="m-expires num">${icon('clock', 'icon pw-icon')}<b>${esc(clock(c.expires))}</b></span>` : ''}</span>` : ''}
         ${progress}
       </button>

@@ -109,6 +109,8 @@ export interface MissionCardView {
   stars: number;
   multiplier: number;
   reward: number;
+  /** v0.0.18: ink and rubber balls paid with the paper (absent: none). */
+  supplies?: { ink?: number; rubber?: number };
   rewardNote: string;
   modifiers: Array<{ id: string; label: string; detail: string }>;
   recommended: boolean;

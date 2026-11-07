@@ -34,7 +34,7 @@ export type MissionType =
  * player's situation (a recovery mission, an emergency).
  */
 export type Escalation = 'wingman' | 'escorted' | 'extra-target' | 'return' | 'tight-clock';
-export type Situational = 'high-value' | 'alert' | 'recovery' | 'emergency';
+export type Situational = 'high-value' | 'alert' | 'recovery' | 'emergency' | 'short-ink' | 'short-rubber';
 export type ModifierId = Escalation | Situational;
 
 /** reward = B × D × M, rounded to 5. */
@@ -165,6 +165,11 @@ export interface MissionSpec {
   title: string;
   description: string;
   reward: number;
+  /**
+   * v0.0.18: ink and rubber balls paid with the paper on success (MISSIONS.supplies by type, scaled
+   * by the tier; more for a recovery card that pays what the player is short of).
+   */
+  supplies?: { ink?: number; rubber?: number };
   /** Bombs offered for this mission; a plane carries as many as its rack holds. Missions without bombing objectives offer none. */
   bombs: number;
   /** Seconds from launch, or null for no time limit. */
@@ -211,6 +216,11 @@ export class Mission {
 
   get reward(): number {
     return this.spec.reward;
+  }
+
+  /** Ink and rubber balls paid on success (v0.0.18). */
+  get supplies(): { ink?: number; rubber?: number } {
+    return this.spec.supplies ?? {};
   }
 
   get objectives(): readonly Objective[] {

@@ -162,6 +162,23 @@ describe('MissionDirector: recovery and variety', () => {
     }
   });
 
+  it('v0.0.18: a player short of ink gets a recovery card that pays ink on top', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const { d } = director(seed, { ink: 3, rubber: 50 });
+      const safe = d.deal()[0];
+      expect(d.offers[0].source).toBe('recovery');
+      expect(safe.spec.modifiers).toContain('short-ink');
+      expect(safe.spec.modifiers).not.toContain('short-rubber');
+      expect(safe.supplies.ink).toBeGreaterThanOrEqual(DIRECTOR.recoverySupplies.ink);
+    }
+  });
+
+  it('v0.0.18: plenty of ink and rubber balls is no reason for a recovery card', () => {
+    const { d } = director(1, { ink: 200, rubber: 50 });
+    d.deal();
+    expect(d.offers[0].source).not.toBe('recovery');
+  });
+
   it('a run of bombing missions makes other categories more likely', () => {
     const share = (recent: boolean) => {
       let bombing = 0;

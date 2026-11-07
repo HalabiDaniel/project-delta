@@ -717,6 +717,7 @@ function spec(type: MissionType, difficulty: Difficulty, tier: Tier, draft: Draf
     modifiers,
     rewardParts: reward,
     reward: rewardTotal(reward),
+    supplies: missionSupplies(type, tier, modifiers),
     par: parTime(type, draft.distance, parts),
     bombs: 0,
     timeLimit: null,
@@ -725,6 +726,22 @@ function spec(type: MissionType, difficulty: Difficulty, tier: Tier, draft: Draf
     codename: codename(rng),
     ...parts,
   };
+}
+
+/**
+ * v0.0.18: ink and rubber balls a mission pays: the type's supplies times the tier's multiplier,
+ * plus the recovery extra for a card that pays what the player is short of. Whole numbers only.
+ */
+export function missionSupplies(type: MissionType, tier: Tier, modifiers: readonly ModifierId[] = []): { ink?: number; rubber?: number } {
+  const base = MISSIONS.supplies[type] ?? {};
+  const m = TIERS[tier].multiplier;
+  const out: { ink?: number; rubber?: number } = {};
+  for (const r of ['ink', 'rubber'] as const) {
+    let v = Math.round((base[r] ?? 0) * m);
+    if (modifiers.includes(r === 'ink' ? 'short-ink' : 'short-rubber')) v += DIRECTOR.recoverySupplies[r];
+    if (v > 0) out[r] = v;
+  }
+  return out;
 }
 
 /**

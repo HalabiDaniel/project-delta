@@ -45,6 +45,9 @@ export interface Offer {
 /** What the director needs to know about the player and the sky right now. */
 export interface Situation {
   paper: number;
+  /** v0.0.18: ink and rubber balls in the stores (absent: plenty; older callers and tests). */
+  ink?: number;
+  rubber?: number;
   /** Paper needed to get each design onto the pad (fold, refit, or 0 to roll out a stowed one). */
   costs: Record<AircraftId, number>;
   /** Mission aircraft that can still go up (AI.maxActive minus raids and events in the air). */
@@ -420,7 +423,9 @@ export class MissionDirector {
       const c = weightedPick(this.rng, types.map((type) => ({ type, weight: TEMPLATES[type].weight * this.variety(type) })));
       types.splice(types.indexOf(c.type), 1);
       for (const t of needsTarget(c.type) ? shuffled(this.rng, safe) : [null]) {
-        const recipe: Recipe = { type: c.type, tier: 'easy', seed: this.seed(), target: t?.id, modifiers: ['recovery'], count: c.type === 'practice' ? 1 : undefined };
+        // v0.0.18: the card pays what the player is short of on top.
+        const short = shortOf(sit).map((r): Situational => (r === 'ink' ? 'short-ink' : 'short-rubber'));
+        const recipe: Recipe = { type: c.type, tier: 'easy', seed: this.seed(), target: t?.id, modifiers: ['recovery', ...short], count: c.type === 'practice' ? 1 : undefined };
         const mission = this.generate(recipe);
         if (!mission || this.ineligible(mission.spec, ctx, sit)) continue;
         const offer: Offer = {
@@ -501,6 +506,7 @@ export class MissionDirector {
     if (this.performance.struggling) why.push('several planes lost or missions failed lately');
     const affordable = AIRCRAFT_ORDER.filter((id) => sit.costs[id] <= sit.paper);
     if (affordable.every((id) => id === STARTER_AIRCRAFT)) why.push(affordable.length ? `only the ${AIRCRAFT[STARTER_AIRCRAFT].name} is affordable` : 'no plane is affordable');
+    for (const r of shortOf(sit)) why.push(r === 'ink' ? 'ink is running low' : 'rubber balls are running low');
     return why;
   }
 
@@ -571,6 +577,14 @@ export function mainTarget(spec: Pick<MissionSpec, 'objectives'>): string | null
 }
 
 /** Can the player get a plane onto the pad (with what they have) that can fly this mission? */
+/** v0.0.18: the resources the player is short of (below DIRECTOR.shortInk / shortRubber). */
+export function shortOf(sit: Pick<Situation, 'ink' | 'rubber'>): Array<'ink' | 'rubber'> {
+  const out: Array<'ink' | 'rubber'> = [];
+  if (sit.ink !== undefined && sit.ink < DIRECTOR.shortInk) out.push('ink');
+  if (sit.rubber !== undefined && sit.rubber < DIRECTOR.shortRubber) out.push('rubber');
+  return out;
+}
+
 export function flyable(spec: Pick<MissionSpec, 'type' | 'bombs' | 'objectives'>, sit: Pick<Situation, 'paper' | 'costs'>): boolean {
   const planes = AIRCRAFT_ORDER.filter((id) => sit.costs[id] <= sit.paper).map((id) => AIRCRAFT[id]);
   // With nothing affordable, the free emergency plane is what there is.

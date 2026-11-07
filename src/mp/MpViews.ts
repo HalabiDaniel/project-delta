@@ -306,6 +306,7 @@ export class MpViews {
       stars: tier.stars,
       multiplier: tier.multiplier,
       reward: m.reward,
+      supplies: m.supplies,
       rewardNote: parts ? V.rewardNote(count(parts.base), num(parts.difficulty, 2), fixed(parts.modifier, 2), parts.floor ? paper(parts.floor) : null) : card?.pvp ? V.pvpReward : '',
       modifiers: (m.spec.modifiers ?? []).map((id) => ({ id, label: DIRECTOR.modifiers[id].label, detail: DIRECTOR.modifiers[id].detail })),
       recommended: false,

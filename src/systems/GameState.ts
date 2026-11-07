@@ -834,6 +834,8 @@ export class GameState {
         this.sortie.paperEarned += added;
         this.sortie.paperOverflow += mission.reward - added;
       }
+      // v0.0.18: ink and rubber balls paid with it (same label: the same ledger key, per resource).
+      this.resources.earnAll(mission.supplies, 'reward', `Mission completed: ${mission.title}`);
       this.stats.successes++;
       this.emit({ type: 'mission-succeeded', reward: mission.reward });
     }

@@ -356,6 +356,8 @@ export class Game {
     let state: GameState | null = null;
     const situation = (): Situation => ({
       paper: resources.paper,
+      ink: resources.ink,
+      rubber: resources.rubber,
       costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, state?.buildCostFor(id) ?? AIRCRAFT[id].cost])) as Record<AircraftId, number>,
       airRoom: airTraffic.room,
       raidActive: airTraffic.activeRaid !== null,
@@ -2607,6 +2609,7 @@ export class Game {
       stars: tier.stars,
       multiplier: tier.multiplier,
       reward: m.reward,
+      supplies: m.supplies,
       rewardNote: parts
         ? `Reward = B ${Math.round(parts.base)} × D ${parts.difficulty} × M ${parts.modifier.toFixed(2)}${parts.floor ? ` (at least ${parts.floor})` : ''}`
         : '',
