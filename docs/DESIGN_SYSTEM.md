@@ -247,7 +247,7 @@ Every hint shows the binding for the device in use, and switches live.
   or button does, and `bind(action, padAction?)` returns the glyph spec to show for it
   (`bind('base')` = `{ key: 'B', pad: 'north' }`), `pair(a, b)` a combined hint ("Q / E" / "LB / RB"),
   `keyFor`, `padButtonFor`. `KEYBOARD_LABELS` and `padControlLabels` (tutorial, dashboard) derive from
-  them too, so rebinding (v0.0.19) updates every hint. Write `bind('…')`, never a key.
+  them too, so rebinding (v0.0.24) updates every hint. Write `bind('…')`, never a key.
 - Every key in `KEYMAP` has a `KEY_TO_PAD` entry ('' = hidden on a controller: reached with the
   highlight and A); a test checks it.
 - `padText` is a controller template ("{lb} / {rb}", "{lstick}", "{dpad}"): the pause menu's
@@ -363,7 +363,7 @@ own 3D world and models.
 | Base management | DeskHud | The slot inspector is a card on the right (BuildSlot details: level marks, health meter, stats, actions); the build tray a HUD tray of small paper cards; slot markers in the BuildSlot states |
 | Pause menu | Settings | A sheet with the red margin line, a big title, two columns (Game, Accessibility) of rows: name, a short description, a segmented choice |
 | Logbook | Achievements, Leaderboard | Sheet with the margin line; achievements as cards with a pencil disc (dashed while locked) and a progress bar; tables as the Scoreboard |
-| Lobby | Multiplayer | Sheet with the margin line, big title, 3px fields, rooms and desks as outlined cards (the lobby's redesign is v0.0.19) |
+| Lobby | Multiplayer | Sheet with the margin line, big title, 3px fields, rooms and desks as outlined cards (the lobby's redesign is v0.0.24) |
 | Sortie report | ResultDialog | Home safe / crumpled over a big coloured title, numbers in outlined wells, ruled rows |
 | Tips, tutorial | CoachMark | Taped sticky notes in Kalam, "Got it" |
 

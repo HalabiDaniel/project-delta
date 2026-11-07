@@ -5,7 +5,7 @@
  * Every hint the interface shows (key caps, controller glyphs, "Base (B)" tooltips, the pause
  * menu's controls grid, the tutorial's and tips' keys) asks `bind(action)` or `controlLabel` here
  * instead of naming a key, so one table decides both what a key does and what the hint says.
- * Rebinding (v0.0.19) changes these tables and every hint follows.
+ * Rebinding (v0.0.24) changes these tables and every hint follows.
  */
 
 import type { PadButton } from './Gamepad';

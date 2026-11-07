@@ -303,7 +303,7 @@ export interface MenuView {
 }
 
 /**
- * A resource beyond paper, for the economy strip (v0.0.20 adds ink and rubber balls): one more row
+ * A resource beyond paper, for the economy strip (v0.0.18 adds ink and rubber balls): one more row
  * of the same shape, no layout change.
  */
 export interface ResourceView {
