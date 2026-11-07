@@ -23,6 +23,11 @@ export const MAP = {
   // Added with the style guide (2026-11-06).
   trophy: 'trophy', users: 'users', pause: 'pause', plus: 'plus', minus: 'minus', check: 'check', back: 'chevron-left',
   map: 'map', swords: 'swords', sun: 'sun', moon: 'moon',
+  // Added with the v0.0.16 UI rebuild (menus, sign-in, multiplayer, settings).
+  play: 'play', arrowLeft: 'arrow-left', logIn: 'log-in', logOut: 'log-out', user: 'user', userPlus: 'user-plus',
+  eye: 'eye', eyeOff: 'eye-off', mail: 'mail', copy: 'copy', crown: 'crown', wifi: 'wifi', sliders: 'sliders-horizontal',
+  search: 'search', gamepad: 'gamepad-2', monitor: 'monitor', keyboard: 'keyboard', reset: 'rotate-ccw', move: 'move',
+  hangar: 'warehouse', award: 'award', heart: 'heart', chart: 'chart-line', send: 'send', timer: 'timer',
   // v0.0.16: the maneuver slot.
   maneuver: 'rotate-ccw',
 };

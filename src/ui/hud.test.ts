@@ -5,14 +5,9 @@ import { applyCombat, combatLevel } from './HUD';
 import { ConfirmDialog } from './components';
 import { confirmOpen, confirmThen, guardActions, installConfirmDialog, requestConfirm, type ConfirmHost } from './confirm';
 import { priceHtml } from './BaseHud';
-import { resourceRows } from './EconomyStrip';
-import { Logbook, type LogbookView } from './Logbook';
 import { CONFIRM_TEXT } from './strings';
 import { FocusManager, setFocusManager, type Rect } from '../input/FocusNav';
-import { emptyProgress } from '../progress/Progress';
-import { Ledger } from '../systems/Ledger';
-import { emptyBaseStats } from '../base/Base';
-import type { EconomyView, HudActions, HudView } from './views';
+import type { HudActions, HudView } from './views';
 import type { ThreatView } from './ThreatHud';
 import type { AirView } from './AirHud';
 
@@ -239,104 +234,7 @@ describe('costs show what is missing', () => {
   });
 });
 
-// ---- Resources: more without layout change ---------------------------------------------------------------
-
-describe('economy strip resources', () => {
-  it('lists paper first and any further resource as one more row of the same shape', () => {
-    const v: EconomyView = { paper: 100, capacity: 300, rate: 3.5, state: 'producing', progress: 0, protectedPaper: 50, streak: 0, repairs: 0 };
-    expect(resourceRows(v).map((r) => r.id)).toEqual(['paper']);
-    const more = resourceRows({ ...v, resources: [{ id: 'ink', icon: 'ink', label: 'Ink', amount: 40, capacity: 100, rate: 1 }] });
-    expect(more.map((r) => r.id)).toEqual(['paper', 'ink']);
-    expect(Object.keys(more[1])).toEqual(expect.arrayContaining(['id', 'icon', 'label', 'amount', 'capacity']));
-  });
-});
-
-// ---- Logbook tabs ------------------------------------------------------------------------------------
-
-function logbookView(): LogbookView {
-  const progress = emptyProgress();
-  return {
-    career: { missionsCompleted: 0, planesLost: 0, targetsDestroyed: 0, defensesDestroyed: 0, aircraftDestroyed: 0, favorite: null },
-    base: { stats: emptyBaseStats(), production: 3, capacity: 300, protectedPaper: 50, buildings: [] },
-    progress,
-    session: { missionsCompleted: 0, missionsFailed: 0, paperEarned: 0, paperSpent: 0, aircraftLost: 0, enemiesDestroyed: 0, best: '—', achievements: [], minutes: 0 },
-    ledger: new Ledger(),
-    performance: { rating: 0.5, indicators: {} as LogbookView['performance']['indicators'], missions: 0 },
-    skill: 0.5,
-    band: 'Medium',
-    recommended: 'Medium',
-  };
-}
-
 const rect = (): Rect => ({ left: 0, top: 0, right: 40, bottom: 20 });
-
-describe('logbook tabs', () => {
-  it('is built from the Tabs component; the focus manager switches tabs (Q / E, LB / RB) and the panel follows', () => {
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const nav = new FocusManager(document, { rectOf: rect, hitTest: false });
-    nav.setActive(true);
-    setFocusManager(nav);
-    const book = new Logbook(root, logbookView, () => book.toggle(false));
-    book.toggle(true);
-    const tabs = [...root.querySelectorAll<HTMLElement>('[role="tab"]')];
-    expect(tabs.map((t) => t.dataset.tab)).toEqual(['records', 'base', 'aircraft', 'paper', 'session']);
-    expect(root.querySelector('[role="tablist"]')).not.toBeNull();
-    // Opening puts the highlight on the chosen tab.
-    expect(nav.focused?.dataset.tab).toBe('records');
-    expect(nav.switchTab(1)).toBe(true);
-    expect(book.currentTab).toBe('base');
-    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
-    const visible = [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((p) => !p.hidden);
-    expect(visible.map((p) => p.id)).toEqual([tabs[1].getAttribute('aria-controls')]);
-    expect(visible[0].innerHTML).toContain('T1 now');
-    nav.switchTab(-1);
-    nav.switchTab(-1);
-    expect(book.currentTab).toBe('session');
-    book.toggle(false);
-  });
-
-  it('filters achievements and transactions', () => {
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const v = logbookView();
-    v.ledger.record(20, 120, 'income', 'Home production');
-    v.ledger.record(-15, 105, 'spend', 'Swift');
-    const book = new Logbook(root, () => v, () => undefined);
-    book.toggle(true);
-    const press = (sel: string) => root.querySelector<HTMLElement>(sel)!.click();
-    press('[data-filter="ach"][data-v="earned"]');
-    expect(root.querySelectorAll('.achievements li.got').length).toBe(0);
-    expect(root.querySelector('[data-filter="ach"][data-v="earned"]')?.getAttribute('aria-pressed')).toBe('true');
-    press('[data-tab="paper"]');
-    const rows = () => [...root.querySelectorAll('[role="tabpanel"]:not([hidden]) .lb-table')][0].querySelectorAll('tr').length;
-    expect(rows()).toBe(2);
-    press('[data-filter="paper"][data-v="out"]');
-    expect(rows()).toBe(1);
-    book.toggle(false);
-  });
-
-  it('closing returns the highlight to the control that opened it', () => {
-    document.body.innerHTML = '<button id="opener">L</button>';
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const nav = new FocusManager(document, { rectOf: rect, hitTest: false });
-    nav.setActive(true);
-    setFocusManager(nav);
-    const opener = document.getElementById('opener')!;
-    nav.reset('desk');
-    nav.focus(opener);
-    const book = new Logbook(root, logbookView, () => undefined);
-    book.toggle(true);
-    expect(nav.focused?.dataset.tab).toBe('records');
-    // The screen changes because the logbook opened: the opener is still what it returns to.
-    nav.reset('desk|logbook');
-    expect(nav.focused?.dataset.tab).toBe('records');
-    book.toggle(false);
-    nav.reset('desk');
-    expect(nav.focused).toBe(opener);
-  });
-});
 
 describe('focus: going back waits for the screen to draw its controls', () => {
   it('restores a control that shows again a frame after the screen change', () => {

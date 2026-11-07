@@ -11,7 +11,7 @@ import { GamepadSource } from './Gamepad';
 import { applyGlyphs, KEY_TO_PAD, padControlLabels, padHint } from './glyphs';
 import { glyph, iconButton } from '../ui/components';
 import { KEYBOARD_LABELS } from '../ui/controlLabels';
-import { controlsGridHtml, keyboardControls, padControls } from '../ui/Menus';
+import { controlsGridHtml, keyboardControls, padControls } from '../ui/keymap';
 import { withKeys } from '../ui/Alerts';
 import type { Input } from '../systems/Input';
 

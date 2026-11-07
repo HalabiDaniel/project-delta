@@ -5,15 +5,15 @@ import { applyTokens, tokenOptions } from './tokens';
 
 describe('accessibility settings (plan v0.0.15 §8)', () => {
   it('defaults: standard palette, 100% text, normal panels, motion follows the system, captions while muted, 16:9 HUD', () => {
-    expect(DEFAULT_ACCESS).toEqual({ theme: 'daylight', palette: 'standard', textScale: 1, highContrast: false, motion: 'auto', captions: 'auto', safeArea: true });
-    expect(TEXT_SCALES).toEqual([1, 1.15, 1.3]);
+    expect(DEFAULT_ACCESS).toEqual({ theme: 'daylight', palette: 'standard', textScale: 1, highContrast: false, motion: 'auto', captions: 'auto', safeArea: true, prompts: 'auto' });
+    expect(TEXT_SCALES).toEqual([0.9, 1, 1.15, 1.3]);
   });
 
   it('normalises field by field', () => {
     expect(normaliseAccess(undefined)).toEqual(DEFAULT_ACCESS);
     expect(normaliseAccess('x')).toEqual(DEFAULT_ACCESS);
-    expect(normaliseAccess({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false }))
-      .toEqual({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false });
+    expect(normaliseAccess({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false, prompts: 'playstation' }))
+      .toEqual({ theme: 'lightsOut', palette: 'colourblind', textScale: 1.15, highContrast: true, motion: 'reduced', captions: 'off', safeArea: false, prompts: 'playstation' });
     expect(normaliseAccess({ theme: 'dark', palette: 'deuter', textScale: 1.2, highContrast: 1, motion: 'slow', captions: true, safeArea: 'on' })).toEqual(DEFAULT_ACCESS);
   });
 

@@ -99,6 +99,8 @@ export class Lobby {
     const codeInput = el('code') as HTMLInputElement;
     codeInput.value = new URLSearchParams(window.location.search).get('invite') ?? '';
     codeInput.addEventListener('input', () => this.actions.setCode(codeInput.value.trim() || null));
+    // A code from the main menu's Join tab (?invite=) goes with the first join.
+    if (codeInput.value.trim()) this.actions.setCode(codeInput.value.trim());
     this.codeInput = codeInput;
     el('quick').addEventListener('click', () => this.actions.quick(this.name));
     el('refresh').addEventListener('click', () => this.actions.refresh());

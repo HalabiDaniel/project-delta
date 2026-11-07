@@ -1,3 +1,4 @@
+import { serverEndpoint } from '../net/endpoint';
 import { Client, type Room } from '@colyseus/sdk';
 import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, PROTOCOL_VERSION, packFrames, type Command, type Emote, type FeedbackDTO, type InputFrame, type JoinOptions, type QuickJoinDTO, type SessionListing, type TransferDTO, type WelcomeDTO } from '../net/protocol';
 import { WorldState } from '../net/schema';
@@ -110,12 +111,7 @@ export class NetClient {
    * (VITE_SERVER_URL, set in Vercel: v0.0.14), else the page's host on port 2567 (development).
    */
   static defaultEndpoint(): string {
-    const given = new URLSearchParams(window.location.search).get('server');
-    if (given) return given;
-    const built = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
-    if (built) return built.replace(/\/+$/, '');
-    const secure = window.location.protocol === 'https:';
-    return `${secure ? 'wss' : 'ws'}://${window.location.hostname || 'localhost'}:2567`;
+    return serverEndpoint();
   }
 
   /**

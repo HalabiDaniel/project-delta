@@ -2,7 +2,7 @@ import { attr, place, text, toggle, width, type ScreenPoint } from './dom';
 import { level, metres } from './format';
 import { bar } from './components';
 import { icon, ICON_NAMES } from './icons';
-import { STATE_LABELS } from './strings';
+import { STATE_LABELS, T } from './strings';
 import type { HudView, TargetLabelView, TerritoryLabel } from './views';
 
 const STATE_ICONS = { alert: 'warn', 'under-attack': 'raid', disabled: 'offline' } as const;
@@ -12,6 +12,9 @@ const STATE_ICONS = { alert: 'warn', 'under-attack': 'raid', disabled: 'offline'
  * (or an arrow at the screen edge), territory tags, tags over targets and defenses with their
  * health, hit markers, comic words and damage numbers.
  */
+/** Neutral desks further than this (metres, on the ground) get no label. */
+const LABEL_RANGE = 170;
+
 export class WorldLabels {
   private readonly el: Record<string, HTMLElement> = {};
   private readonly labelEls = new Map<string, HTMLElement>();
@@ -24,7 +27,7 @@ export class WorldLabels {
       /* html */ `
       <div class="labels" data-w="labels"></div>
       <div class="target-labels" data-w="target-labels"></div>
-      <div class="target-indicator" role="img" data-w="target"><span class="ti-arrow" data-w="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-icon" data-w="ti-icon"></span><b class="ti-dist num" data-w="ti-dist"></b></div>
+      <div class="target-indicator" role="img" data-w="target"><span class="ti-arrow" data-w="ti-arrow"></span><span class="ti-diamond"></span><span class="ti-icon" data-w="ti-icon"></span><b class="ti-label" data-w="ti-dist"></b></div>
       <div class="reticle nose" data-w="nose"><span class="hit-x"></span></div>
       <div class="reticle aim" data-w="aim"></div>
       <div class="pops" data-w="pops"></div>`,
@@ -88,7 +91,7 @@ export class WorldLabels {
     attr(el, 'data-tone', t.tone);
     attr(el, 'aria-label', t.label);
     this.el['ti-arrow'].style.transform = `rotate(${t.angle}rad)`;
-    text(this.el['ti-dist'], metres(t.distance));
+    text(this.el['ti-dist'], t.tone === 'home' ? T.flight.homeMarker(metres(t.distance)) : T.flight.targetMarker(metres(t.distance)));
     const iconEl = this.el['ti-icon'];
     if (iconEl.dataset.icon !== t.icon) {
       iconEl.dataset.icon = t.icon;
@@ -96,9 +99,21 @@ export class WorldLabels {
     }
   }
 
-  private renderLabels(labels: TerritoryLabel[]): void {
+  private renderLabels(all: TerritoryLabel[]): void {
     const seen = new Set<string>();
+    // Desk labels only for the target, home and desks in range (v0.0.16); overlapping ones stack.
+    const labels = all
+      .filter((l) => l.role !== 'neutral' || l.distance === undefined || l.distance <= LABEL_RANGE)
+      .sort((a, b) => a.y - b.y);
+    const placed: Array<{ x: number; y: number }> = [];
     for (const label of labels) {
+      let y = label.y;
+      for (let tries = 0; tries < 6; tries++) {
+        const hit = placed.find((p) => Math.abs(p.x - label.x) < 56 && Math.abs(p.y - y) < 24);
+        if (!hit) break;
+        y = hit.y + 26;
+      }
+      placed.push({ x: label.x, y });
       let el = this.labelEls.get(label.id);
       if (!el) {
         el = document.createElement('div');
@@ -113,7 +128,7 @@ export class WorldLabels {
         el.innerHTML = `${label.role === 'home' ? icon('home') : label.role === 'objective' ? '<i class="tl-diamond"></i>' : ''}<b>${label.id}</b>${state}`;
         el.className = `territory-label ${label.role} state-${label.state}`;
       }
-      el.style.transform = `translate(${label.x}px, ${label.y}px)`;
+      el.style.transform = `translate(${label.x}px, ${y}px)`;
       toggle(el, true);
       seen.add(label.id);
     }

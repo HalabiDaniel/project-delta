@@ -41,16 +41,16 @@ interface StepSpec {
 }
 
 export const TUTORIAL_STEPS: readonly StepSpec[] = [
-  { id: 'card', title: 'Pick a mission', text: () => `Each card is a job, with its reward and its defenses. Pick one with ${controlLabel('selectCard')} or a click.`, keys: ['selectCard'], done: ['card-selected'], where: 'desk' },
-  { id: 'plane', title: 'Choose a plane', text: () => `The badges say which planes fit the card. Browse with ${controlLabel('prevPlane')} / ${controlLabel('nextPlane')}.`, keys: ['prevPlane', 'nextPlane'], done: ['plane-selected'], where: 'desk' },
-  { id: 'fold', title: 'Fold it', text: () => `Folding costs paper; a plane you bring home only needs a cheap refit. Press ${controlLabel('fold')}.`, keys: ['fold'], done: ['folded'], where: 'desk' },
-  { id: 'launch', title: 'Launch', text: () => `When the plane is on the pad, ${controlLabel('launch')} launches it.`, keys: ['launch'], done: ['launched'], where: 'desk' },
-  { id: 'steer', title: 'Fly', text: () => `${controlLabel('steer')} steers: the ring shows where you aim. ${controlLabel('throttle')} sets the speed, ${controlLabel('boost')} boosts.`, keys: ['steer', 'throttle', 'boost'], done: ['steered'], where: 'air' },
-  { id: 'fire', title: 'Fire ink', text: () => `Hold ${controlLabel('fire')} to fire the ink guns at the ringed targets.`, keys: ['fire'], done: ['fired'], where: 'air' },
-  { id: 'bomb', title: 'Drop a bomb', text: () => `${controlLabel('bomb')} drops a bomb. It keeps your speed, so release before you are over the target.`, keys: ['bomb'], done: ['bomb-dropped'], where: 'air' },
-  { id: 'land', title: 'Land at home', text: () => 'Fly back to your desk and touch down on the runway: slow, a gentle descent, wings level.', keys: [], done: ['landed'], where: 'air' },
-  { id: 'turnaround', title: 'Rearm or end', text: () => `${controlLabel('rearm')} rearms for another run, ${controlLabel('endSortie')} ends the sortie and shows the report.`, keys: ['rearm', 'endSortie'], done: ['rearmed', 'sortie-ended'], where: 'landed' },
-  { id: 'base', title: 'Build your base', text: () => `Paper also builds defenses, workshops and storage. ${controlLabel('base')} opens base management.`, keys: ['base'], done: ['base-opened'], where: 'desk', strict: true },
+  { id: 'card', title: 'Pick a mission', text: () => `Pick a mission card: press ${controlLabel('selectCard')} or click it.`, keys: ['selectCard'], done: ['card-selected'], where: 'desk' },
+  { id: 'plane', title: 'Choose a plane', text: () => `Choose a plane that fits the card with ${controlLabel('prevPlane')} / ${controlLabel('nextPlane')}.`, keys: ['prevPlane', 'nextPlane'], done: ['plane-selected'], where: 'desk' },
+  { id: 'fold', title: 'Fold it', text: () => `Fold your plane with ${controlLabel('fold')}: it costs paper.`, keys: ['fold'], done: ['folded'], where: 'desk' },
+  { id: 'launch', title: 'Launch', text: () => `The plane is on the pad: press ${controlLabel('launch')} to launch.`, keys: ['launch'], done: ['launched'], where: 'desk' },
+  { id: 'steer', title: 'Fly', text: () => `${controlLabel('steer')} steers, ${controlLabel('throttle')} sets speed, ${controlLabel('boost')} boosts.`, keys: ['steer', 'throttle', 'boost'], done: ['steered'], where: 'air' },
+  { id: 'fire', title: 'Fire ink', text: () => `Hold ${controlLabel('fire')} to fire ink at the ringed targets.`, keys: ['fire'], done: ['fired'], where: 'air' },
+  { id: 'bomb', title: 'Drop a bomb', text: () => `Press ${controlLabel('bomb')} to drop a bomb just before the target.`, keys: ['bomb'], done: ['bomb-dropped'], where: 'air' },
+  { id: 'land', title: 'Land at home', text: () => 'Fly home and land on your runway: slow, gentle and wings level.', keys: [], done: ['landed'], where: 'air' },
+  { id: 'turnaround', title: 'Rearm or end', text: () => `Press ${controlLabel('rearm')} to rearm, or ${controlLabel('endSortie')} to end the sortie.`, keys: ['rearm', 'endSortie'], done: ['rearmed', 'sortie-ended'], where: 'landed' },
+  { id: 'base', title: 'Build your base', text: () => `Press ${controlLabel('base')} to build defences and workshops with paper.`, keys: ['base'], done: ['base-opened'], where: 'desk', strict: true },
 ];
 
 export const TUTORIAL_VERSION = 1;

@@ -1,18 +1,17 @@
 import type { LoadProgress } from '../assets/AssetLibrary';
 import { esc } from './dom';
+import { brand, kmeter, panel } from './kit';
 import { T } from './strings';
+import './screens/screens.css';
 
 /**
- * The loading screen (v0.0.11): a sheet of paper with a progress bar while the models load, so a
- * slow connection shows progress instead of a blank page. If any model fails to load, the game
- * still starts on its built-in stand-ins and the screen says so for a moment before it fades.
- *
- * Self-contained (inline styles): it shows before the HUD and its stylesheet exist.
+ * The loading screen of the multiplayer page (single-player shows the same screen through its
+ * front end, src/ui/screens/Frontend.ts): the wooden desk, the logo top left, and a 420px panel
+ * in the lower third with a segmented meter and one line ("Folding planes… 18 / 25"). If a model
+ * fails to load the game still starts on its stand-ins; the line says so for a moment.
  */
 export class LoadingScreen {
   private readonly el: HTMLElement | null;
-  private readonly bar: HTMLElement | null = null;
-  private readonly label: HTMLElement | null = null;
 
   constructor(parent: HTMLElement | null = typeof document === 'undefined' ? null : document.body) {
     if (!parent) {
@@ -20,57 +19,54 @@ export class LoadingScreen {
       return;
     }
     const el = document.createElement('div');
-    el.className = 'loading-screen';
+    el.className = 'front loading-screen';
     el.setAttribute('role', 'progressbar');
     el.setAttribute('aria-label', T.loading.label);
     el.setAttribute('aria-valuemin', '0');
     el.setAttribute('aria-valuemax', '100');
-    Object.assign(el.style, {
-      position: 'fixed',
-      inset: '0',
-      display: 'grid',
-      placeItems: 'center',
-      background: '#bcdbf5',
-      zIndex: '50',
-      transition: 'opacity 0.4s',
-      font: '600 16px/1.4 system-ui, sans-serif',
-      color: '#1f2937',
-    } satisfies Partial<CSSStyleDeclaration>);
-    el.innerHTML = `
-      <div style="background:#fffdf6;border:2px solid #1f2937;border-radius:6px;padding:22px 26px;min-width:260px;max-width:80vw;box-shadow:4px 5px 0 rgba(31,41,55,.25);transform:rotate(-0.6deg)">
-        <div style="font-size:22px;font-weight:800;margin-bottom:12px">paperwars.io</div>
-        <div style="height:12px;border:2px solid #1f2937;border-radius:3px;background:#fff;overflow:hidden">
-          <div data-bar style="height:100%;width:0;background:#3a7cf0;transition:width .15s"></div>
-        </div>
-        <div data-label style="margin-top:8px;font-weight:500;font-size:13px;color:#4b5563">${esc(T.loading.folding)}</div>
-      </div>`;
+    el.innerHTML = `<div class="front-stage"><div class="front-scene-screen"><div class="front-brand">${brand(T.front.brand)}</div>${panel({ className: 'boot-panel', bodyHtml: `${this.meter(0)}<p class="boot-line" data-label>${esc(T.loading.folding)}</p>` })}</div></div>`;
     parent.appendChild(el);
     this.el = el;
-    this.bar = el.querySelector('[data-bar]');
-    this.label = el.querySelector('[data-label]');
+    const fit = () => {
+      const s = Math.max(0.6, Math.min(2.4, Math.min(window.innerWidth / 1440, window.innerHeight / 900)));
+      el.style.setProperty('--fs', String(s));
+      el.style.setProperty('--stage-w', `${window.innerWidth / s}px`);
+      el.style.setProperty('--stage-h', `${window.innerHeight / s}px`);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+  }
+
+  private meter(v: number): string {
+    return kmeter({ label: T.front.loading, value: v, segments: 20, hideLabel: true, className: 'boot-meter' });
   }
 
   progress(p: LoadProgress): void {
     const pct = loadPercent(p);
-    if (this.bar) this.bar.style.width = `${pct}%`;
+    const m = this.el?.querySelector('.boot-meter');
+    if (m) m.outerHTML = this.meter(pct / 100);
     this.el?.setAttribute('aria-valuenow', String(pct));
-    if (this.label) this.label.textContent = p.total > 0 ? T.loading.models(p.done, p.total) : T.loading.folding;
+    const label = this.el?.querySelector('[data-label]');
+    if (label) label.textContent = p.total > 0 ? T.front.folding(String(p.done), String(p.total)) : T.loading.folding;
   }
 
   /** Loading finished: fades out, after a short note if some models fell back to stand-ins. */
   done(failures: readonly string[] = []): void {
     const el = this.el;
     if (!el) return;
-    if (this.bar) this.bar.style.width = '100%';
+    const m = el.querySelector('.boot-meter');
+    if (m) m.outerHTML = this.meter(1);
     const hold = failures.length > 0 ? 1800 : 0;
-    if (failures.length > 0 && this.label) {
-      this.label.textContent = T.loading.standIns(failures.length);
+    const label = el.querySelector('[data-label]');
+    if (failures.length > 0 && label) {
+      label.textContent = T.loading.standIns(failures.length);
       console.warn('paperwars: models that fell back to stand-ins', failures);
     }
     setTimeout(() => {
+      el.classList.add('leaving');
       el.style.opacity = '0';
       el.style.pointerEvents = 'none';
-      setTimeout(() => el.remove(), 450);
+      setTimeout(() => el.remove(), 250);
     }, hold);
   }
 }

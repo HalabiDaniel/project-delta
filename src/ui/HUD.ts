@@ -2,21 +2,13 @@ import type { RaidReport } from '../base/Raids';
 import { bind } from '../input/bindings';
 import { AirHud } from './AirHud';
 import { Alerts, Tips, type AlertOptions, type AlertTone } from './Alerts';
-import { ConfirmDialog, glyph, iconButton } from './components';
+import { ConfirmDialog, glyph } from './components';
 import { guardActions, installConfirmDialog } from './confirm';
-import { Dashboard } from './Dashboard';
-import { TutorialPanel } from './TutorialPanel';
-import { BaseHud, RaidHud } from './BaseHud';
-import { bindButton, esc, toggle, type ScreenPoint } from './dom';
-import { EconomyStrip } from './EconomyStrip';
-import { Garage } from './Garage';
+import { RaidHud } from './BaseHud';
+import { esc, toggle, type ScreenPoint } from './dom';
 import type { IconName } from './icons';
-import { Menus } from './Menus';
 import { MiniMap, miniMapFrame } from './MiniMap';
-import { SAY, T } from './strings';
-import { MissionPanel } from './MissionPanel';
-import { PlaneHud } from './PlaneHud';
-import { ReportCard } from './ReportCard';
+import { T } from './strings';
 import { ThreatHud } from './ThreatHud';
 import type { HudActions, HudView } from './views';
 import { WorldLabels } from './WorldLabels';
@@ -25,16 +17,22 @@ import { Captions } from './Captions';
 import { applyLayout, layoutFor } from './layout';
 import type { SoundName } from './Sounds';
 import { applyTokens } from './tokens';
+import { DeskHud } from './hud/DeskHud';
+import { FlightHud } from './hud/FlightHud';
+import { CoachMarks, PauseMenu, ResultPanel, Toasts } from './hud/Overlays';
+import type { DeskState, SettingsTab } from './flow';
+import type { KitTone } from './kit';
 import './hud.css';
 // The design system's shared rules: the focus ring, the focus tooltip, reduced motion, components.
 import './components.css';
+import './hud/hud2.css';
 
 export type { ScreenPoint } from './dom';
 export type * from './views';
 export type { AlertTone } from './Alerts';
 
-/** The fixed zones (see the class comment). */
-export type HudZone = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br' | 'centre';
+/** The fixed zones (see the class comment). `right` holds the drawers and the build inspector. */
+export type HudZone = 'tl' | 'tc' | 'tr' | 'bl' | 'bc' | 'br' | 'centre' | 'right';
 
 /** The multiplayer game (?mp, ?invite) shares the HUD; Reset becomes Leave classroom there. */
 const MULTIPLAYER = typeof window !== 'undefined' && ['mp', 'invite'].some((k) => new URLSearchParams(window.location.search).has(k));
@@ -60,46 +58,50 @@ export function applyCombat(root: HTMLElement, level: 0 | 1 | 2): void {
   root.classList.toggle('combat-hot', level === 2);
 }
 
+/** What the multiplayer layer adds to the status bar. */
+export interface MatchStatus {
+  players: number;
+  maxPlayers: number;
+  sessionLeft: number | null;
+}
+
 /**
- * The HUD, laid out in fixed zones so the eye always knows where to look (the developer's style
- * guide, 2026-11-06, docs/style-guide/screens/FlightHud and DeskHud):
- *   top left      the paper counter and production chips (with the base / logbook / menu buttons
- *                 at home), the objective card under it in flight, the home dashboard at the desk
- *   top centre    the raid alert, the threat panel, alerts, tips and the tutorial
- *   top right     in flight: the pause chip (multiplayer: players, session clock, kill feed);
- *                 at the desk: Fold / Launch and the mission cards; in base mode: the inspector
- *   bottom left   the plane's condition: hull and range meters (the garage inspector or build tray at home)
- *   bottom centre speed, altitude, boost and the maneuver slot (the garage tray, ground crew)
- *   bottom right  weapons, then the mini-map in the corner
- * The centre stays clear for flying and aiming. Each module draws its own part from the view.
+ * The match HUD (v0.0.16, after the approved design canvas). Every edge element sits on one safe
+ * margin, clamp(16px, 2vw, 32px), from the window or from the centred 16:9 area ("16:9 HUD"); top
+ * widgets share one top line and bottom widgets one bottom line.
+ *   desk     top bar (tl), Menu (tr), the dock (bc), drawers and the build inspector (right), the
+ *            build tray over the dock (bc) — src/ui/hud/DeskHud.ts
+ *   flight   mission card (tl), alert slot (tc), status bar and kill feed (tr), plane card (bl),
+ *            action tiles (bc), mini-map (br) — src/ui/hud/FlightHud.ts
+ *   overlays the result card, Pause (with Settings over the match), the session drawer, toasts and
+ *            the tutorial's coach marks — src/ui/hud/Overlays.ts
+ * The centre 40% of the screen stays clear in flight. Each module draws its own part from the view.
  */
 export class HUD {
   private readonly world: WorldLabels;
-  private readonly economy: EconomyStrip;
-  private readonly missions: MissionPanel;
-  private readonly plane: PlaneHud;
-  private readonly report: ReportCard;
-  private readonly baseHud: BaseHud;
   private readonly raids: RaidHud;
-  private readonly menus: Menus;
   private readonly alerts: Alerts;
   private readonly tips: Tips;
   private readonly minimap: MiniMap;
-  private readonly garage: Garage;
   private readonly threats: ThreatHud;
   private readonly air: AirHud;
-  private readonly dashboard: Dashboard;
-  private readonly tutorial: TutorialPanel;
+  private readonly desk: DeskHud;
+  private readonly flight: FlightHud;
+  private readonly result: ResultPanel;
+  private readonly pause: PauseMenu;
+  private readonly coach: CoachMarks;
+  private readonly toasts: Toasts;
   private readonly zones: Record<HudZone, HTMLElement>;
   private readonly flash: HTMLElement;
   private readonly lockHint: HTMLElement;
-  private readonly flightChips: HTMLElement;
   private readonly captions: Captions;
   /** Keep the zones in a 16:9 area on ultrawide screens (an accessibility setting). */
   private safeArea = DEFAULT_ACCESS.safeArea;
   private accessKey = '';
   private lastRender = performance.now();
   private lastView: HudView | null = null;
+  /** Multiplayer's players and session clock, for the status bar. */
+  matchStatus: MatchStatus | null = null;
   /** The confirm dialog for destructive actions (src/ui/confirm.ts). */
   readonly confirmDialog: ConfirmDialog;
   /** The actions with End sortie, Reset / Leave and Abandon behind the confirm dialog (for keyboard shortcuts too). */
@@ -118,35 +120,27 @@ export class HUD {
     const layer = div(root, 'world-layer');
     this.flash = div(root, 'damage-flash');
     const zone = (name: string) => div(root, `zone zone-${name}`);
-    this.zones = { tl: zone('tl'), tc: zone('tc'), tr: zone('tr'), bl: zone('bl'), bc: zone('bc'), br: zone('br'), centre: zone('centre') };
+    this.zones = { tl: zone('tl'), tc: zone('tc'), tr: zone('tr'), bl: zone('bl'), bc: zone('bc'), br: zone('br'), centre: zone('centre'), right: zone('right') };
     this.world = new WorldLabels(layer);
     this.air = new AirHud(layer);
     this.threats = new ThreatHud(layer, this.zones.tc);
-    this.economy = new EconomyStrip(this.zones.tl, { base: actions.toggleBase, logbook: actions.openLogbook, menu: actions.openMenu });
-    // In flight, the chips top right: the pause key (multiplayer adds players and the session clock).
-    this.flightChips = div(this.zones.tr, 'flight-chips');
-    this.flightChips.innerHTML = iconButton({ icon: 'pause', name: SAY.menu, tipKey: bind('back', 'pause'), className: 'pause-chip pad-skip', key: bind('back', 'pause'), attrs: { 'data-act': 'pause' } });
-    bindButton(this.flightChips.querySelector<HTMLElement>('[data-act="pause"]')!, actions.openMenu);
-    this.baseHud = new BaseHud({ world: layer, tc: this.zones.tc, tr: this.zones.tr, bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br }, actions);
     this.raids = new RaidHud(this.zones.tc);
+    this.toasts = new Toasts(this.zones.tc);
     this.alerts = new Alerts(this.zones.tc);
     this.tips = new Tips(this.zones.tc);
-    // The objective card sits under the paper counter, top left (the developer's style guide, 2026-11-06).
-    this.missions = new MissionPanel(this.zones.tr, this.zones.tl, { select: actions.select, swap: actions.swap, abandon: actions.abandonOperation });
-    const garageCards = div(this.zones.bc, 'garage-row');
-    const inspector = div(this.zones.bl, 'inspector ui-card');
-    this.garage = new Garage(garageCards, inspector, actions.selectAircraft);
-    this.plane = new PlaneHud({ tr: this.zones.tr, bl: this.zones.bl, bc: this.zones.bc, br: this.zones.br, centre: this.zones.centre }, { ...actions, base: actions.toggleBase });
-    // The mini-map, bottom right under the weapons: round, with a rim, N, the desk you are over and zoom.
+    this.desk = new DeskHud({ tl: this.zones.tl, tr: this.zones.tr, bc: this.zones.bc, right: this.zones.right, world: layer }, actions);
+    this.flight = new FlightHud(
+      { tl: this.zones.tl, tc: this.zones.tc, tr: this.zones.tr, bl: this.zones.bl, bc: this.zones.bc },
+      actions,
+      (i, text, tone) => this.toasts.show(i, text, tone),
+    );
+    // The mini-map, bottom right: round, with a rim, N, the desk you are over and zoom inside the rim.
     this.minimap = new MiniMap(miniMapFrame(this.zones.br));
-    this.report = new ReportCard(this.zones.centre, actions.continueToDesk);
-    this.dashboard = new Dashboard(this.zones.tl, { quickRebuild: actions.quickRebuild, quickRepair: actions.quickRepair, toggleBase: actions.toggleBase });
-    this.tutorial = new TutorialPanel(this.zones.tc, actions.skipTutorial);
-    this.menus = new Menus(root, actions);
-    // Sound captions, above the instruments (they scale with the zone).
+    this.result = new ResultPanel(root, actions.continueToDesk);
+    this.pause = new PauseMenu(root, this.zones.right, actions);
+    // Sound captions, above the action tiles.
     this.captions = new Captions(this.zones.bc);
-    // Zones and overlays grow with the window (on top of the HUD size setting), in CSS pixels, so
-    // 1080p isn't a sea of tiny panels and 4K isn't tiny text; ultrawide can keep a 16:9 area.
+    this.coach = new CoachMarks(root, actions.skipTutorial);
     window.addEventListener('resize', () => this.fit());
     this.fit();
     // Reduced motion on "auto" follows the system setting, also when it changes.
@@ -154,7 +148,7 @@ export class HUD {
       this.accessKey = '';
     });
     this.lockHint = div(root, 'hint lock-hint');
-    this.lockHint.innerHTML = `${glyph({ key: bind('back').key })} → ${esc(T.hud.lockClick)}`;
+    this.lockHint.innerHTML = `${glyph({ key: bind('back').key })}<span>${esc(T.hud.lockClick)}</span>`;
     this.lockHint.dataset.tip = T.hud.lockTip;
   }
 
@@ -179,9 +173,50 @@ export class HUD {
     }
   }
 
+  /** The cards' art (plane and building thumbnails). */
+  setArt(fn: (key: string) => string | null): void {
+    this.desk.setArt(fn);
+  }
+
   /** A sound played: its caption, when captions are on (Sounds.onCue). */
   caption(name: SoundName, angle: number | null = null): void {
     this.captions.sound(name, angle);
+  }
+
+  // ---- Desk states and overlays (keys from the game) ---------------------------------------------
+
+  /** The desk state the dock shows. */
+  deskState(): DeskState {
+    return this.lastView ? this.desk.state(this.lastView) : 'idle';
+  }
+
+  /** H / Tab (and 1–3, Q / E with `toggle` false): open the Hangar or Missions drawer. */
+  openDesk(panel: 'hangar' | 'missions', toggleIt = true): void {
+    this.desk.open(panel, toggleIt);
+  }
+
+  /** L: the session drawer. */
+  toggleSession(): void {
+    this.pause.toggleSession();
+  }
+
+  /** Esc: closes Settings, a drawer or the session drawer first. True when something closed. */
+  back(): boolean {
+    if (this.pause.closeSettings()) return true;
+    if (this.pause.isSessionOpen) {
+      this.pause.toggleSession(false);
+      return true;
+    }
+    return this.desk.close();
+  }
+
+  /** Settings opened over the match (Pause → Settings / Controls). */
+  openSettings(tab: SettingsTab): void {
+    this.pause.openSettings(tab);
+  }
+
+  get settingsOpen(): boolean {
+    return this.pause.isSettingsOpen;
   }
 
   render(v: HudView): void {
@@ -190,43 +225,46 @@ export class HUD {
     this.lastRender = now;
     this.lastView = v;
     const flying = v.phase === 'flying' && !v.paused;
-    const atHome = v.phase === 'desk' || v.phase === 'building' || v.phase === 'ready' || v.phase === 'landed';
     this.root.classList.toggle('in-flight', flying);
     this.root.classList.toggle('base-mode', v.baseMode);
     this.root.classList.toggle('hints', v.hints);
     this.root.classList.toggle('paused', v.paused);
+    this.root.dataset.desk = this.desk.state(v);
+    this.root.classList.toggle('drawer-open', this.desk.drawerOpen || this.pause.isSessionOpen || (v.baseMode && v.base?.inspector != null));
     this.setAccess(v.menu.settings.access, v.menu.settings.muted);
     // In a fight, the less urgent parts of the HUD step back.
     applyCombat(this.root, combatLevel(v));
 
-    this.economy.render(v.economy, { buttons: atHome && !v.paused && v.result === null, base: v.baseMode, baseAvailable: atHome, full: v.baseMode, repairs: v.economy.repairs });
-    this.missions.render(v);
-    this.garage.render(v.paused || v.baseMode ? null : v.garage);
-    this.plane.render(v);
-    this.report.render(v.result, v.paused);
-    this.baseHud.render(v.baseMode ? v.base : null, v.paused);
+    this.desk.render(v);
+    this.flight.render(v, this.matchStatus);
+    this.result.render(v.result, v.paused);
     this.raids.render(v.paused ? null : v.raid, v.paused);
-    this.menus.render(v);
+    this.pause.render(v);
     this.world.render(v);
     this.threats.render(flying ? v.threat : null);
     this.air.render(v.paused ? null : v.air);
     this.minimap.render(v.minimap, dt);
-    toggle(this.flightChips, flying);
-    this.dashboard.render(v.paused || v.baseMode || v.result !== null || v.welcome !== null ? null : v.dashboard);
-    this.tutorial.render(v.tutorial, v.paused || v.result !== null || v.welcome !== null);
+    toggle(this.zones.br, (v.phase === 'flying' || v.phase === 'landed') && !v.paused && v.result === null && !v.baseMode);
     this.alerts.update();
     this.tips.update();
     this.captions.update();
+    this.coach.render(v);
     toggle(this.lockHint, flying && !v.pointerLocked);
   }
 
-  /** An alert below the objective: an icon, a few words and at most one number. */
+  /** A short note: a toast, top centre (critical ones keep the alert queue's priority). */
   alert(iconName: IconName, title: string, value: string | null, tone: AlertTone, seconds?: number, opts?: AlertOptions): void {
-    this.alerts.show(iconName, title, value, tone, seconds, opts);
+    if (opts?.critical) {
+      this.alerts.show(iconName, title, value, tone, seconds, opts);
+      return;
+    }
+    const kit: KitTone = tone === 'good' ? 'good' : tone === 'bad' ? 'hostile' : tone === 'warn' ? 'warn' : 'plain';
+    this.toasts.show(iconName, title, kit, value ?? undefined);
   }
 
-  /** A first-time tip. */
+  /** A first-time tip (only when the tutorial is not running: one note at a time). */
   tip(text: string, keys: string[] = []): void {
+    if (this.lastView?.tutorial) return;
     this.tips.show(text, keys);
   }
 
@@ -235,7 +273,8 @@ export class HUD {
   }
 
   paperDelta(delta: number): void {
-    this.economy.delta(delta);
+    this.desk.delta(delta);
+    this.flight.delta(delta);
   }
 
   pop(word: string, tone: 'good' | 'bad' | 'info', at: ScreenPoint): void {
@@ -267,8 +306,8 @@ export class HUD {
   }
 
   /**
-   * One of the fixed zones, for panels added from outside the HUD (the multiplayer layer, v0.0.15
-   * phase 5): what goes in a zone scales with the HUD size and the window, from that zone's corner.
+   * One of the fixed zones, for panels added from outside the HUD (the multiplayer layer): what
+   * goes in a zone scales with the HUD size and the window, from that zone's corner.
    */
   zone(name: HudZone): HTMLElement {
     return this.zones[name];

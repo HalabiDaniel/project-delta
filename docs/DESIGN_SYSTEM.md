@@ -459,3 +459,35 @@ world events (`src/director`), single-player alerts and tips and the SP report l
 match them). The fonts are the latin subsets, so letters outside Western European languages (and
 some pseudo accents) fall back to the system font; a locale beyond them adds the `latin-ext` (or
 other) subsets in `src/ui/fonts.ts`.
+
+## 12. The v0.0.16 kit and screens
+
+The approved design canvas ("paperwars.io screens") rebuilt the layouts. See
+[UI_REBUILD.md](UI_REBUILD.md) for what moved where and the gaps that remain.
+
+| File | What it holds |
+|---|---|
+| `src/ui/kit.ts`, `src/ui/kit.css` | Panel, Button (primary, paper, danger, quiet), icon button, Chip (52px HUD, 36px panel), Badge, Segmented, Toggle (`role="switch"`), Meter (segmented, `setMeter`), Tabs (pill or vertical), Drawer, Dock and dock button, Tray, StatusBar, Feed row, Toast, ResultCard, CoachMark, Field, checkbox, Card (`selectCard`: art and footer, selected, locked), key-value and settings rows, avatar, stepper, swatches, paper pill |
+| `src/ui/flow.ts` | The screen state machine and where Back goes |
+| `src/ui/screens/Frontend.ts`, `screens.css` | Loading, Login, Create account, Main menu, Play solo, Multiplayer (Quick play, Host, Join), Leaderboard, Achievements and Records, Credits |
+| `src/ui/screens/SettingsScreen.ts` | Settings, from the Main menu and over the match from Pause |
+| `src/ui/hud/DeskHud.ts`, `FlightHud.ts`, `Overlays.ts`, `hud2.css` | The match HUD: desk states, flight, result, pause, session drawer, toasts, coach marks |
+| `src/world/Showcase.ts` | The living desk scene and the card thumbnails |
+| `src/net/services.ts` | The account, matchmaking, rooms and leaderboard interfaces, with their current implementations |
+
+Rules:
+
+- **Borders and shadows.**
+  - Borders are 2px (`--stroke-card`). Only `.primary`, `[aria-pressed='true']` cards and the
+    focus ring use 3px (`--stroke-strong`, `--focus-width`).
+  - Shadows are 4px on panels (`--shadow-hard`) and 3px on chips and buttons (`--shadow-chip`).
+    Nested elements get no shadow.
+- **Sizes.**
+  - HUD sizes come from the 1440 × 900 frame. Each zone scales by
+    `--k = --ui-scale × --fit-scale` from its own corner, and `--fit-scale` never goes under 1.
+  - Every edge widget sits on `--m = clamp(16px, 2% of the safe width, 32px)`.
+  - Menu screens are drawn on a 1440 × 900 stage and scaled to fit the window. The stage keeps the
+    window's aspect, so pieces anchored to an edge stay at that edge.
+- **Text budget.** Each element gets a title and at most one secondary line. Explanations go in a
+  `data-tip`, behind Details, or in a coach mark. Key caps sit on the button they trigger, as
+  `.hint-key`, and show only while hints are on.

@@ -36,6 +36,8 @@ export const MOUSE_RIGHT = 2;
  * holds pointer lock so the mouse can steer without the cursor leaving the window.
  */
 export class Input {
+  /** Tab is a game key (Missions) only in a match; on the menus it moves focus (v0.0.16). */
+  tabIsGame = true;
   private readonly held = new Set<string>();
   private readonly buttons = new Set<number>();
   private dx = 0;
@@ -49,8 +51,10 @@ export class Input {
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
       if (!GAME_KEYS.has(e.code)) return;
-      // Keys typed into a form control (the developer panel's) are not for the game.
+      // Keys typed into a form control (the developer panel's, the menus' fields) are not for the game.
       if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Outside a match Tab moves the browser's focus through the menus' forms.
+      if (e.code === 'Tab' && !this.tabIsGame) return;
       if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scrolling, button activation or focus moves
       if (e.code === 'AltLeft') e.preventDefault(); // no browser menu bar
       this.held.add(e.code);
