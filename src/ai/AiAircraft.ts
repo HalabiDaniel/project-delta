@@ -28,8 +28,11 @@ import { beyondEdge, headingTo, terrainAhead } from './Navigation';
  */
 export type AiState = 'patrol' | 'alert' | 'attack' | 'reposition' | 'evade' | 'disengage' | 'bomb-run' | 'egress' | 'leave';
 
-/** Why it is in the air: background traffic, a mission's, a raid on T1, or a world event's (a convoy, a supply run). */
-export type AiPurpose = 'ambient' | 'mission' | 'raid' | 'event';
+/**
+ * Why it is in the air: background traffic, a mission's, a raid on T1, a world event's (a convoy, a
+ * supply run), or a player's bought escort (v0.0.19), which flies on its owner's wing for one sortie.
+ */
+export type AiPurpose = 'ambient' | 'mission' | 'raid' | 'event' | 'escort';
 
 /** What a bomber is after: a point on the ground, and how close its bomb must land. */
 export interface Strike {
@@ -67,6 +70,20 @@ export interface AiOrders {
   lifetime?: number;
   /** Cruising speed, when it should be slower than the design's (raiders take their time). */
   speed?: number;
+  /**
+   * v0.0.19 escorts: weaker than a human-flown plane of the same type. Its health is the design's
+   * times `health`, its rounds do `gunFactor` of the design's damage (both default 1).
+   */
+  health?: number;
+  gunFactor?: number;
+  /** v0.0.19: other sides it treats as friends (a player's escort: their session allies). */
+  friends?: Side[];
+  /** v0.0.19 escorts: never quieter than this to radar (escorts add no stealth to a sortie). */
+  signature?: number;
+  /** v0.0.19 escorts: which side of the leader's wing it holds (1 right, -1 left; default right). */
+  wing?: 1 | -1;
+  /** v0.0.19 escorts: it never chases into these areas (offline players' desks). */
+  keepOut?: ReadonlyArray<{ x: number; z: number; half: number }>;
 }
 
 /** Another aircraft, as a pilot sees it. */
@@ -190,7 +207,7 @@ export class AiAircraft {
     this.spec = AIRCRAFT[aiDesignFor(orders.role, orders.aircraft)];
     this.skill = AI.skill[orders.skill];
     this.model = new FlightModel(this.spec);
-    this.durability = new Durability(this.spec.maxHealth);
+    this.durability = new Durability(Math.max(1, Math.round(this.spec.maxHealth * (orders.health ?? 1))));
     this.gun = new Gun(this.spec.gun);
     this.bombs = orders.strike ? this.spec.bombs.capacity : 0;
     this.route = orders.route.map((p) => ({ ...p }));
@@ -222,6 +239,11 @@ export class AiAircraft {
     return !this.durability.destroyed;
   }
 
+  /** Its own side, or one it was told is friendly (v0.0.19: a player's allies, for their escorts). */
+  friendly(side: Side): boolean {
+    return side === this.side || (this.orders.friends?.includes(side) ?? false);
+  }
+
   get position(): Vec3 {
     return this.model.position;
   }
@@ -237,7 +259,7 @@ export class AiAircraft {
     const v = this.model.getVelocity(this.v);
     return {
       id: this.id, side: this.side, x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z,
-      signature: this.spec.signature, radius: this.spec.hitRadius, shielded: false, role: this.role,
+      signature: Math.max(this.spec.signature, this.orders.signature ?? 0), radius: this.spec.hitRadius, shielded: false, role: this.role,
     };
   }
 
@@ -621,7 +643,8 @@ export class AiAircraft {
     const fx = bomber.vx / speed;
     const fz = bomber.vz / speed;
     const [right, up, back] = AI.formation;
-    const slot = { x: bomber.x - fz * right - fx * back, y: bomber.y + up, z: bomber.z + fx * right - fz * back };
+    const side = right * (this.orders.wing ?? 1);
+    const slot = { x: bomber.x - fz * side - fx * back, y: bomber.y + up, z: bomber.z + fx * side - fz * back };
     const gap = (slot.x - p.x) * fx + (slot.z - p.z) * fz;
     return { ...headingTo(p, { x: slot.x + fx * 20, y: slot.y, z: slot.z + fz * 20 }, 0.4), speed: Math.max(this.spec.flight.minSpeed, speed + gap * 0.4), boost: false, fire: false, drop: false, done: false };
   }
@@ -644,13 +667,13 @@ export class AiAircraft {
     // Whoever just shot at us comes first.
     if (this.lastHitBy && this.sinceHit < 3) {
       const shooter = find(world, this.lastHitBy);
-      if (shooter && shooter.side !== this.side && !shooter.shielded && this.mayChase(world, shooter)) return shooter;
+      if (shooter && !this.friendly(shooter.side) && !shooter.shielded && this.mayChase(world, shooter)) return shooter;
     }
     let best: Contact | null = null;
     let bestScore = Infinity;
     const bomber = this.orders.escort ? find(world, this.orders.escort) : null;
     for (const c of world.contacts) {
-      if (c.side === this.side || c.shielded || c.id === own.id) continue;
+      if (this.friendly(c.side) || c.shielded || c.id === own.id) continue;
       if (!this.mayChase(world, c)) continue;
       // v0.0.18: within visual range anything is seen, whatever its signature.
       const range = Math.max(STEALTH.visual, AI.detection * c.signature);
@@ -677,6 +700,8 @@ export class AiAircraft {
     const bomber = this.orders.escort ? find(world, this.orders.escort) : null;
     if (bomber && dist(bomber, c) > AI.leash) return false;
     if (this.side === 'enemy' && this.purpose !== 'raid' && homeUnder(world, c.x, c.z)) return false;
+    // v0.0.19: an escort never follows anyone into an offline player's territory.
+    if (this.orders.keepOut?.some((k) => Math.abs(c.x - k.x) < k.half && Math.abs(c.z - k.z) < k.half)) return false;
     return true;
   }
 
@@ -685,7 +710,7 @@ export class AiAircraft {
     let best: Contact | null = null;
     let bestDistance = Infinity;
     for (const c of world.contacts) {
-      if (c.side === this.side || c.id === own.id) continue;
+      if (this.friendly(c.side) || c.id === own.id) continue;
       const d = dist(own, c);
       if (d <= Math.max(STEALTH.visual, range * c.signature) && d < bestDistance) {
         best = c;
@@ -699,7 +724,7 @@ export class AiAircraft {
   private onMyTail(world: AiWorld, own: Contact): boolean {
     const fwd = this.model.getForward(this.f);
     for (const c of world.contacts) {
-      if (c.side === this.side || c.id === own.id) continue;
+      if (this.friendly(c.side) || c.id === own.id) continue;
       const d = dist(own, c);
       if (d > 40) continue;
       const toThem = { x: c.x - own.x, y: c.y - own.y, z: c.z - own.z };
@@ -716,7 +741,7 @@ export class AiAircraft {
     const p = this.model.position;
     const fwd = this.model.getForward(this.f);
     for (const c of world.contacts) {
-      if (c.side === this.side || c.shielded || c.id === own.id) continue;
+      if (this.friendly(c.side) || c.shielded || c.id === own.id) continue;
       const d = dist(p, c);
       if (d > this.gun.spec.range * AI.gunReach) continue;
       if (angleBetween(fwd, { x: c.x - p.x, y: c.y - p.y, z: c.z - p.z }) > this.skill.fireCone * 2 + Math.atan2(c.radius, d)) continue;
@@ -881,7 +906,7 @@ export class AiAircraft {
       kind: 'ink', source: this.id, side: this.side, target: this.targetId,
       x: muzzle.x, y: muzzle.y, z: muzzle.z,
       vx: dir.x * g.speed + v.x, vy: dir.y * g.speed + v.y, vz: dir.z * g.speed + v.z,
-      damage: g.damage, travel: g.range, radius: WEAPONS.projectileRadius,
+      damage: g.damage * (this.orders.gunFactor ?? 1), travel: g.range, radius: WEAPONS.projectileRadius,
     }];
   }
 

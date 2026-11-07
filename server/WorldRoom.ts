@@ -31,7 +31,7 @@ import { refusal, type Authenticated } from './identity/Identity';
 import { economyWorld, services } from './services';
 import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRecord } from './store/Store';
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
-import { ECONOMY, PVP, SESSION } from '../src/config';
+import { ECONOMY, PVP, RIVALRY, SESSION } from '../src/config';
 import { log, type Level, type LogFields } from './log';
 import { LIMITS, RateLimit } from './RateLimit';
 import pkg from '../package.json' with { type: 'json' };
@@ -46,6 +46,8 @@ import { planesFrom, progressFrom } from './world/carry';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 import { dailyAward, type MeritEvent } from './world/Merit';
 import { RankKeeper, isTierPromotion, type Promotion } from './world/RankKeeper';
+import { reputationOf } from './world/Rivalry';
+import { SocialBook } from './world/Social';
 import type { PromotionDTO } from '../src/net/protocol';
 
 /** A session's settings, given by the server only (a client can't create a room). */
@@ -81,7 +83,8 @@ export interface RoomMetadata {
 let opened = 0;
 
 /** How far back raids and kills are loaded for a placed player (s): as far as any rule looks. */
-const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow);
+/** v0.0.19: rivalries remember further back than the fairness windows (RIVALRY.memory). */
+const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow, RIVALRY.memory);
 
 /** The longest real time one simulation callback may catch up on (a stalled event loop doesn't snowball). */
 const MAX_CATCH_UP = 0.25;
@@ -636,6 +639,22 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     this.writePvp();
     this.writeMerit(this.world.takeMerit());
+    // v0.0.19: the director's decisions, for the developer (the log, and the admin endpoint's panel).
+    for (const d of this.world.takeDecisions()) this.log('info', `director.${d.kind}`, { text: d.text, players: d.players.join(','), at: d.at });
+    this.writeReports();
+    this.writeFarmFlags();
+  }
+
+  /** v0.0.19: pairs the anti-farming rules flagged, for the developer (the log and farm_flags; never a ban). */
+  private writeFarmFlags(): void {
+    const worldId = this.worldId;
+    for (const f of this.world.takeFarmFlags()) {
+      this.log('warn', 'farming.flag', { a: f.a, b: f.b, reason: f.reason, detail: f.detail });
+      if (!worldId) continue;
+      services()
+        .store.addFarmFlag({ worldId, aId: this.known.get(f.a) ?? null, bId: this.known.get(f.b) ?? null, reason: f.reason, data: { detail: f.detail, a: f.a, b: f.b, session: this.roomId } })
+        .catch((error: unknown) => this.log('error', 'farming.error', { error }));
+    }
   }
 
   // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
@@ -699,6 +718,18 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id) return;
     if (!data || typeof data !== 'object' || JSON.stringify(data).length > 512) return this.bad(client, 'rank');
     if (this.ranks.setPrefs(id, data)) this.showRank(id);
+  }
+
+  /** v0.0.19: player reports, kept for the developer (by account; the moderation queue is v0.0.26). */
+  private writeReports(): void {
+    for (const r of this.world.takeReports()) {
+      const reporterId = this.known.get(r.reporter) ?? null;
+      const reportedId = this.known.get(r.reported) ?? null;
+      services()
+        .store.addReport({ reporterId, reportedId, reason: r.reason, session: this.roomId, context: { ...r.context, reporter: r.reporter, reported: r.reported, title: this.title } })
+        .then(() => this.log('info', 'report', { reporter: r.reporter, reported: r.reported, reason: r.reason }))
+        .catch((error: unknown) => this.log('error', 'report.error', { reporter: r.reporter, error }));
+    }
   }
 
   /** Raids and kills between players, kept for the rules that outlive a session. */
@@ -973,6 +1004,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ps.defends = p.stats.defends;
       ps.missions = p.stats.missions;
       ps.score = p.stats.score;
+      ps.ally = world.alliances.of(id)?.id ?? 0;
+      ps.rep = reputationOf(p.social) ?? '';
       ps.ping = Math.round(p.rtt * 1000);
       ps.phase = Math.max(0, PHASES.indexOf(p.state?.phase ?? 'desk'));
       const m = p.flight.model;
@@ -1002,6 +1035,12 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       const phase = p.state?.phase;
       plane.bombs = phase === 'flying' || phase === 'landed' ? (p.state?.bombsLoaded ?? 0) : 0;
       plane.emergency = p.state?.emergency ?? false;
+      // v0.0.19: the Ghost's bay doors, open around a release.
+      plane.bay = !!p.state?.plane?.traits?.bay && world.time - p.bayOpenAt < 2;
+      // v0.0.19: an ink splat on the plane, and who threw it.
+      const ink = SocialBook.left(world.social.planeInk.get(id), world.time);
+      plane.ink = ink?.seconds ?? 0;
+      plane.inkBy = ink?.by ?? '';
     }
     // AI aircraft.
     const seen = new Set<string>();
@@ -1063,6 +1102,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ts.safe = !!p && (!p.connected || p.leaving || world.time < p.protectUntil || world.time < p.shieldUntil || world.time - p.arrivedAt < world.arrivalGrace);
       ts.state = DESK_STATES.indexOf(world.deskState(t.id));
       ts.alert = !!owner && !!world.attacks.on(owner);
+      // v0.0.19: ink on the owner's rival banner.
+      const ink = owner ? SocialBook.left(world.social.bannerInk.get(t.id), world.time) : null;
+      ts.ink = ink?.seconds ?? 0;
+      ts.inkBy = ink?.by ?? '';
     }
   }
 

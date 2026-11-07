@@ -56,6 +56,8 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   // v0.0.16: the maneuver in flight, changing it at home.
   Alt: '{south}',
   T: '{rs}',
+  // v0.0.19: escorts (home) and their orders (in the air).
+  G: '{down}',
   // v0.0.17: the profile at the desk.
   P: '{up}',
   LMB: '{rt}',
@@ -73,6 +75,12 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   Z: '{up}',
   C: '{left}',
   V: '{right}',
+  // v0.0.19: the extra emotes are keyboard-only (the controller has three on the d-pad); the players panel is ← at home.
+  N: '',
+  J: '',
+  K: '',
+  I: '',
+  O: '{left}',
   '1 – 3': '{lt} / {rt}',
   '1 – 4': '{lt} / {rt}',
   // Reached with the highlight and A on a controller: the hint hides.

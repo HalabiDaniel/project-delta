@@ -42,6 +42,9 @@ export class Dressing {
   /** The runway's model (homes only), when it has loaded; otherwise it is drawn as tape. */
   private readonly runwayModel: BuildingRig | null = null;
   private hangarLevel = 1;
+  /** v0.0.19: a claimed desk's rival banner, and the ink splat on it while someone's mark lasts. */
+  private banner: pc.Entity | null = null;
+  private bannerInk: pc.Entity | null = null;
 
   constructor(
     private readonly app: pc.AppBase,
@@ -65,6 +68,7 @@ export class Dressing {
     this.buildSurface();
     this.buildLandmark();
     this.buildDetails();
+    this.buildBanner();
     if (runway && BuildingRig.available(assets.models, 'runway')) {
       // The lab's runway, stretched to the gameplay's runway and flattened so wheels sit on the desk.
       const rig = new BuildingRig(assets.models, 'runway');
@@ -117,6 +121,39 @@ export class Dressing {
     if (ownership === this.ownership) return;
     this.ownership = ownership;
     this.buildSurface();
+    this.buildBanner();
+  }
+
+  /**
+   * v0.0.19: the owner's rival banner, a tall paper flag at the desk's banner point (bannerPoint in
+   * net/World.ts, where banner mischief aims), in the owner's colours. Homes only.
+   */
+  private buildBanner(): void {
+    this.banner?.destroy();
+    this.banner = null;
+    this.bannerInk = null;
+    const pennant = PENNANT[this.ownership];
+    if (!this.runway || !pennant) return;
+    const t = this.territory;
+    const flag = new Model().add(paperFlag(pennant, 11));
+    const entity = flag.toEntity(this.device, 'rival-banner', { castShadows: true });
+    this.root.addChild(entity);
+    entity.setPosition(t.x - t.half * 0.72, t.top, t.z + t.half * 0.72);
+    entity.setEulerAngles(0, 45, 0);
+    // The splat: a blob of black ink across the pennant, shown while a mark lasts.
+    const ink = new Model();
+    ink.part('ink/black').cylinder(0.75, 0.08, { sides: 9 }, { at: [1, 11 * 0.78, 0], rot: [90, 0, 0] });
+    ink.part('ink/black').cylinder(0.35, 0.08, { sides: 7 }, { at: [1.8, 11 * 0.78 + 0.5, 0], rot: [90, 0, 0] });
+    const inkEntity = ink.toEntity(this.device, 'banner-ink', { castShadows: false });
+    entity.addChild(inkEntity);
+    inkEntity.enabled = false;
+    this.banner = entity;
+    this.bannerInk = inkEntity;
+  }
+
+  /** v0.0.19: show (or wash off) the ink splat on the banner. */
+  setBannerInk(on: boolean): void {
+    if (this.bannerInk && this.bannerInk.enabled !== on) this.bannerInk.enabled = on;
   }
 
   private get device(): pc.GraphicsDevice {

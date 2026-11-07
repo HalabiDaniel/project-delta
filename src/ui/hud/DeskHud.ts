@@ -250,7 +250,8 @@ export class DeskHud {
     const n = v.cards?.length ?? 0;
     // v0.0.16: the maneuver for the next take-off, chosen here (on the pad or before folding).
     const pick = v.phase !== 'landed' ? v.maneuverPicker ?? null : null;
-    const key = JSON.stringify([st, v.phase, d.kind, d.name, d.cost, d.canBuild, d.emergency, Math.round(d.progress * 20), n, v.base?.canFly, d.note, pick?.current?.id ?? null, pick?.canChange, pick?.count]);
+    const escorts = v.phase !== 'landed' && v.escorts?.where === 'home' ? v.escorts : null;
+    const key = JSON.stringify([st, v.phase, d.kind, d.name, d.cost, d.canBuild, d.emergency, Math.round(d.progress * 20), n, v.base?.canFly, d.note, pick?.current?.id ?? null, pick?.canChange, pick?.count, escorts?.label, escorts?.cost, escorts?.canChange]);
     this.set('dock', key, () => dock({
       label: D().dock,
       itemsHtml: [
@@ -260,6 +261,8 @@ export class DeskHud {
         pick?.current
           ? kbutton({ label: T.maneuver.button(pick.current.name), icon: 'maneuver', size: 'l', key: bind('maneuverNext'), hintKey: true, disabled: !pick.canChange, tip: T.maneuver.pickInfo(pick.current.summary, pick.current.inspiredBy), afterHtml: pick.count > 1 ? `<span class="dock-cost num">${esc(T.maneuver.of(pick.index + 1, pick.count))}</span>` : '', className: 'maneuver-pick', attrs: { 'data-act': 'maneuver-next' } })
           : '',
+        // v0.0.19 multiplayer: the escorts for the next sortie.
+        escorts ? kbutton({ label: escorts.label, icon: 'escort', size: 'l', key: bind('escortNext'), hintKey: true, disabled: !escorts.canChange, tip: escorts.tip, afterHtml: escorts.cost ? `<span class="dock-cost num">${esc(escorts.cost)}</span>` : '', className: 'escort-pick', attrs: { 'data-act': 'escort-next' } }) : '',
       ].join(''),
       mainHtml: this.mainButton(v),
     }));
@@ -536,6 +539,8 @@ export class DeskHud {
         return a.toggleBase();
       case 'maneuver-next':
         return a.cycleManeuver?.(1);
+      case 'escort-next':
+        return a.cycleEscort?.();
       case 'choose':
         return a.base.choose(b.dataset.kind as BuildingKind);
       case 'slot':

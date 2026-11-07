@@ -503,6 +503,8 @@ export interface HudView {
   ground: GroundView | null;
   /** v0.0.16: the maneuver picker, at home with a plane chosen (on the pad or landed). */
   maneuverPicker?: ManeuverPickerView | null;
+  /** v0.0.19 multiplayer: the escorts chosen for the next sortie (home), or their order (in the air). */
+  escorts?: EscortView | null;
   landing: LandingView | null;
   boundary: { state: BoundaryState; countdown: number };
   result: ResultView | null;
@@ -523,6 +525,17 @@ export interface HudView {
   dashboard: DashboardView | null;
   /** The launch pad on screen (the hangar's outline around the plane on the runway). */
   pad?: ScreenPoint | null;
+}
+
+/** v0.0.19: the escort button: what is chosen (home) or ordered (in the air). */
+export interface EscortView {
+  where: 'home' | 'air';
+  /** "Escorts: Guard + Wingman", "No escorts", "Escorts: Follow me". */
+  label: string;
+  tip: string;
+  /** What the chosen escorts cost (home), e.g. "30 paper · 12 ink". */
+  cost: string | null;
+  canChange: boolean;
 }
 
 export interface HudActions {
@@ -569,6 +582,8 @@ export interface HudActions {
   rearmAndGo(): void;
   /** v0.0.16: at home, put the next (or previous) maneuver in the slot. */
   cycleManeuver?(dir: 1 | -1): void;
+  /** v0.0.19 multiplayer: at home, the next choice of escorts; in the air, their next order. */
+  cycleEscort?(): void;
   base: {
     selectSlot(id: string): void;
     choose(kind: BuildingKind): void;

@@ -336,6 +336,7 @@ export const en = {
       boost: 'Boost',
       maneuver: 'Maneuver',
       maneuverPick: 'Change maneuver (home)',
+      escorts: 'Escorts (home) · escort orders',
       throttleBank: 'Throttle / bank',
       confirmLaunch: 'Confirm, launch',
       back: 'Back',
@@ -675,6 +676,25 @@ export const en = {
   },
 
   /** v0.0.16: the maneuver slot (src/ui/PlaneHud.ts) and its picker at the pad. */
+  /** v0.0.19: AI escorts, bought for one sortie (plan v0.0.19 §1). */
+  escort: {
+    none: 'No escorts',
+    button: (names: string) => `Escorts: ${names}`,
+    plus: (a: string, b: string) => `${a} + ${b}`,
+    tip: (detail: string) => `${detail} Bought when you launch, for one sortie: they leave when it ends and are never refunded.`,
+    noneTip: 'Buy up to two AI escorts for your next sortie. They are weaker than a real pilot and can\'t complete objectives.',
+    order: (name: string) => `Escorts: ${name}`,
+    orderTip: (count: number) => `${count === 1 ? 'Your escort follows' : 'Your escorts follow'} this order. Press again for the next one.`,
+    orders: { follow: 'Follow me', attack: 'Attack my target', protect: 'Protect the bomber', cover: 'Cover my retreat' } as Record<string, string>,
+    names: { wingman: 'Paper Wingman', guard: 'Guard Falcon', spotter: 'Spotter' } as Record<string, string>,
+    short: { wingman: 'Wingman', guard: 'Guard', spotter: 'Spotter' } as Record<string, string>,
+    details: {
+      wingman: 'Follows you, draws fire from defenses, light guns.',
+      guard: 'Goes after hostile aircraft near you; protects bombers.',
+      spotter: 'Marks hostile aircraft near you on the mini-map.',
+    } as Record<string, string>,
+  },
+
   maneuver: {
     slot: 'Maneuver',
     none: 'No maneuvers',
@@ -818,8 +838,38 @@ export const en = {
   /** The multiplayer HUD: kill feed, scoreboard, connection, raid cards, tags (src/mp/MpHud.ts). */
   mpHud: {
     weapons: { ink: 'Ink', rocket: 'Rocket', bomb: 'Bomb', ram: 'Collision', crash: 'Crashed' },
-    emotes: { waggle: 'Waggle', confetti: 'Confetti', heart: 'Heart' },
+    emotes: { waggle: 'Waggle', confetti: 'Confetti', heart: 'Heart', salute: 'Salute', laugh: 'Laugh', tease: 'Tease', splat: 'Ink splat' },
     you: 'You',
+    /** v0.0.19: reputation, nemesis and allies on the scoreboard. */
+    reputation: { raider: 'Raider', defender: 'Defender', ace: 'Ace', helper: 'Helper' } as Record<string, string>,
+    reputationTip: { raider: 'Known for raids that get through', defender: 'Known for seeing raiders off', ace: 'Known for shooting players down', helper: 'Known for helping others' } as Record<string, string>,
+    nemesis: 'Nemesis',
+    inked: 'Ink splat',
+    /** v0.0.19: the players panel (O / ← at home). */
+    playersTitle: 'Players',
+    playersKey: 'Players: alliances, mute and report',
+    offerAlly: 'Offer alliance',
+    offerAllyTip: 'An alliance for this session: no friendly fire, shared radar, no raids between you',
+    offerSent: 'Offer sent',
+    accept: 'Accept',
+    declineOffer: 'Decline',
+    leave: 'Leave alliance',
+    mute: 'Mute',
+    unmute: 'Unmute',
+    muteTip: "Hide their emotes and ink, for good. They aren't told.",
+    report: 'Report',
+    reported: 'Reported',
+    reportTip: 'Tell the developer about this player. Pick a reason.',
+    reportReasons: { cheating: 'Cheating', harassment: 'Harassment', griefing: 'Griefing', name: 'Offensive name', farming: 'Farming rewards', other: 'Something else' } as Record<string, string>,
+    welcome: 'Escorts on my bombers',
+    welcomes: { allies: 'Allies', anyone: 'Anyone', none: 'Nobody' } as Record<string, string>,
+    record: (wins: number, losses: number) => `${wins}–${losses}`,
+    recordTip: 'Your record against them: your wins and theirs',
+    nobodyElse: 'Nobody else is here yet.',
+    nemesisTip: (wins: number, losses: number) => `They have beaten you ${losses} time${losses === 1 ? '' : 's'}; you have beaten them ${wins}.`,
+    ally: 'Ally',
+    allyTip: 'Allied with you for this session: no friendly fire, shared radar',
+    alliance: (n: number) => `Alliance ${n}`,
     pilot: 'Pilot',
     desk: 'Desk',
     score: 'Score',
@@ -875,6 +925,15 @@ export const en = {
     /** `who` is the attacker's name tag. */
     raiding: (who: string) => `${who} is raiding your desk`,
     raidIncoming: 'Raid incoming',
+    /** v0.0.19: challenges, strikes and escorts on the raid card. */
+    challenged: (who: string) => `${who} challenged you over your desk`,
+    challenge: 'Challenge!',
+    challengeTip: 'Take off and win the dogfight over your desk',
+    decline: 'Decline',
+    declineTip: "Staying home costs a little paper (never your reserve)",
+    striking: (who: string) => `${who} is strafing your desk`,
+    escorts: (n: number) => (n === 1 ? '1 escort' : `${n} escorts`),
+    escortsTip: 'Escorts flying with the raider (AI and players)',
     yourRaid: 'Your raid',
     /** `who` is the victim's name tag. */
     raidOn: (who: string) => `Raid on ${who}`,
@@ -975,6 +1034,8 @@ export const en = {
     survived: 'Survived',
     shotDownBy: (name: string) => `Shot down by ${name}`,
     crashed: 'Lost: crashed',
+    /** v0.0.19: the raid report's line, with what decided it. */
+    raidDecided: (victim: string, decided: string, lost: string | null) => `Raid on ${victim}: ${decided}${lost ? `; they lost ${lost} paper` : ''}`,
     raidReport: (victim: string, outcome: 'bombed' | 'repelled' | 'off', lost: string | null) =>
       `Raid on ${victim}: ${outcome === 'bombed' ? `got through${lost ? `, they lost ${lost} paper` : ''}` : outcome === 'repelled' ? 'repelled' : 'called off'}`,
     land: (desk: string) => `${desk} · Land`,
@@ -1048,7 +1109,18 @@ export const en = {
       recon: (name: string) => `Fly low over ${name}'s base for a while. Their guns will notice.`,
       hunt: (name: string) => `${name} is in the air. Shoot them down before the clock runs out.`,
       intercept: (name: string) => `${name} is raiding your base. Get up there and shoot them down; your guns help over home.`,
-    },
+      // v0.0.19
+      bounty: (name: string) => `The director put a bounty on ${name}. Everyone who helps shares the pot, by how much they did.`,
+      escort: (name: string) => `Fly with ${name}'s bomber and keep it in the air. Paid once, if it gets its bombs on target.`,
+      defend: (name: string) => `${name}'s base is being raided. Help them shoot the raider down; they keep priority on the reward.`,
+      joint: (name: string) => `A joint attack: you and another pilot have the same target on ${name}. Shared by what each of you did.`,
+      strike: (name: string) => `Strafe ${name}'s infrastructure low, with guns and rockets. Their guns are awake.`,
+      challenge: (name: string) => `Call ${name} out to a dogfight over their own desk. If they don't show up, they pay a little.`,
+      challenged: (name: string) => `${name} challenged you to a dogfight over your desk. Take off and win it; staying home costs a little paper.`,
+      mischief: (name: string) => `Harmless mischief on ${name}'s desk. Nothing gets broken, nothing gets taken.`,
+    } as Record<string, (name: string) => string>,
+    /** v0.0.19: why the director offered a card ("Rematch with Bo"). */
+    why: (why: string) => `Why: ${why}.`,
     air: (fighters: number, scouts: number, bombers: number, skill: string) =>
       `Air: ${[fighters ? `${fighters} fighter${fighters > 1 ? 's' : ''}` : '', scouts ? `${scouts} scout${scouts > 1 ? 's' : ''}` : '', bombers ? `${bombers} bomber${bombers > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} (${skill.toLowerCase()})`,
     airThreat: 'Air threat',

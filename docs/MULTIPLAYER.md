@@ -273,10 +273,166 @@ the rules allow one, flown like any bombing mission, and scored by the server:
 - Kill feed with session news (joined, claimed, lost connection, back, left, raids that got
   through), a scoreboard on **Tab** (score, kills, assists, deaths, raids, defenses, missions,
   status, ping) and the connection chip (status, ping, players, protection time left).
-- Emotes in flight: **Z** wing waggle, **C** paper confetti, **V** an ink heart over the plane.
-- There is no text chat, and no friends, alliances or accounts (by the plan).
+- Emotes in flight: **Z** wing waggle, **C** paper confetti, **V** an ink heart over the plane
+  (v0.0.19 adds four more: see below).
+- There is no text chat, friends list or accounts (by the plan); alliances last one session (v0.0.19).
 
 Score: kill 10, assist 4, raid that got through 15, raider stopped 10, mission done 5.
+
+## Advanced multiplayer (v0.0.19)
+
+Everything below is decided by the server and every number lives in `src/config.ts` (provisional:
+the developer approves them; the [plan](roadmap/v0.0.19.md) has the reasons). The tests that pin
+each rule are named in brackets.
+
+### AI escorts (`ESCORTS`, `server/world/Escorts.ts`) [escorts.test.ts]
+
+| Escort | Plane | Pilot | Cost | Does |
+|---|---|---|---|---|
+| Paper Wingman | Swift | rookie | 16 paper + 5 ink | Follows, draws defenses' fire, light guns |
+| Guard Falcon | Falcon | regular | 30 paper + 12 ink | Goes after hostile aircraft near its owner |
+| Spotter | Dart | rookie | 12 paper | Marks hostiles within 90 m on its owner's mini-map |
+
+- Chosen at home (**G**, or d-pad ↓; the dock's escort button), **bought at launch**, at most **2 per
+  sortie** and **12 in the air per session**. Removed the moment the sortie ends (landing, crash,
+  recall, the pilot dropping or leaving), survived or not; never refunded.
+- Weaker than a human: **60 % health, 55 % gun damage**, rookie or regular pilots; never quieter to
+  radar than signature 1 (escorts add no stealth), never a drone.
+- Orders, sent as commands and carried out by the server: **follow me**, **attack my target** (the
+  hostile nearest the owner's nose within 110 m), **protect the bomber** (the owner's own bomber, or
+  the one they escort), **cover my retreat** (anything within 70 m behind the owner). **G** in the air
+  gives the next order.
+- An escort's round **never finishes a target its owner's mission needs** (it leaves it on 1 health),
+  so escorts can't complete objectives; they drop no bombs and scout nothing. They never chase into
+  an offline player's desk and never start raids. Shooting one down pays **3**, fixed.
+- Escorts are ordinary AI aircraft in the shared world, interpolated like any other.
+
+### The multiplayer director (`SITUATION`, `BOUNTIES`; `Situation.ts`, `Bounties.ts`) [director.test.ts]
+
+- **Situation**, per player, every second: resources, planes, the director's record of their last
+  ten missions, preferred mission types, raids launched and kills on weaker players in the last
+  30 minutes, **threat**, base condition, **strength** (paper + 1.5 × ink + 3 × rubber + 40 per
+  plane + 25 per standing weapon) and strength over the session's median.
+- **Threat** comes only from aggression: +1 per raid launched, +1.5 per kill on a player below 70 %
+  of the killer's strength; it halves every 20 minutes and is saved with the player
+  (`progress.social`), so a restart changes nothing.
+- **Tiers**: *newcomer* (fewer than 8 sorties and under 0.8 × the median), *advanced* (1.6 × the
+  median, or 60 sorties and above it), *intermediate* otherwise. An advanced player is **never
+  offered a raid on a newcomer** unless the newcomer attacked them within 15 minutes; an
+  intermediate (or newcomer) raiding someone stronger is paid **+25 % per tier** of difference.
+- **Bounties**, one per target, three a session, ten minutes before the next on the same player,
+  never on an offline or protected player, never because of wealth:
+
+  | Bounty | Placed when | Pot |
+  |---|---|---|
+  | Destroy their bomber | A player with threat ≥ 2 raids in a bomber | 60 |
+  | Prevent their raid | A player's second raid within 30 min | 55 (the defender keeps at least half) |
+  | Damage their exposed installation | An advanced player with threat ≥ 3, not shielded or under raid | 45 |
+  | Intercept them | 3 kills on weaker players within 30 min | 70 |
+
+  Plus 6 per point of threat, at most 120. The card pays 5; the **pot is split by damage
+  contribution** (the plane's damage log, or damage to the installation), shares under 10 %
+  dropped, the target and their allies excluded, decayed by the anti-farming rules, **paid once**
+  (`bounty:<uid>:<player>` in the ledger). A plane bounty ends when its target lands; every bounty
+  lasts at most 5 minutes. A Specter pilot who had the target in their reveal within 20 s counts as a
+  contributor worth 15 % of the damage.
+- **Decisions** (bounties placed, paid, ended; tiers changing; rematches; joint attacks; alliances;
+  farming flags) go to the server log as `director.*` and to `GET /admin/director`.
+
+### Alliances for a session (`ALLIANCES`, `Alliances.ts`) [coop.test.ts]
+
+- Offered from the **players panel** (**O**, or d-pad ← at home) and accepted by the other player;
+  at most **3** members and never more than **half the players online** (at least 2); no merging two
+  alliances; 4 offers a minute; an offer waits 60 s. Ends with the session or when a member leaves.
+- Allies **can't damage each other** (planes, escorts or base guns), aren't offered raids, hunts,
+  scouting or challenges on each other, **see each other's raids** and **share radar contacts** (what
+  any ally's working radar sees shows on your mini-map). Former allies keep the peace for **60 s**.
+
+### Cooperation offers (`COOP`, `Coop.ts`) [coop.test.ts]
+
+- **Escort another player's bomber**: while a player flies a bombing mission (a raid included),
+  players they welcome (allies by default; *anyone* or *nobody* in the players panel) get an escort
+  card, never on a raid against themselves or an ally. It completes when the bomber's mission
+  succeeds and pays **30 × the share of the flight spent within 45 m of the bomber** (nothing below
+  40 %), once.
+- **Joint defense**: when a base is raided, its owner's allies and players whose desk is within
+  140 m get a card to help; helpers share **30** by damage on the raider; the defender keeps their own
+  defense reward.
+- **Joint attack**: a player at 1.6 × the session's median strength, not protected, can be the
+  target of one joint attack at a time (15 minutes before the next on them): two intermediate players
+  who may attack them get the same card (their bomber in the air, or a forward defense within every
+  raid protection), sharing **70** by damage; the target gets a card to hold their desk.
+- Cooperation cards count within the board's two rival cards; the director's own three cards are
+  untouched.
+
+### Three kinds of raid, and deeper raids (`RAID_KINDS`) [raids.test.ts]
+
+Bases can only be damaged through a raid card. Every kind is an `Attack`, so **every protection
+applies to the whole raid** (new player, arrival grace, shield, pair cooldown, repeat factor, offline,
+busy), and the loss cap applies once.
+
+| Kind | Asks for | Pays | The defender |
+|---|---|---|---|
+| Bombing | One structure, or **two** on a base with three or more standing (+15 each extra) | As before | Intercept card; guns fire |
+| Staged | Knock out a radar, turret or launcher, **then** bomb the store; **150 s per stage** | +15; stage one alone pays 30 % | Intercept card; guns fire |
+| Strike | Wreck two structures with guns and rockets, low | 50, no resources taken | Guns fire; may take off |
+| Challenge | A dogfight over the defender's own desk | 50 to the winner | 90 s to take off, 180 s to fight; declining or not showing costs 8 % of vulnerable paper (at most 25, never the reserve) and pays the challenger 40 % |
+
+- A challenge is only offered against a player at their desk, and the challenger can't touch the base.
+- The defender is told **how many escorts** (AI and human) fly with the raider when it is detected.
+- Both sides' reports list each stage and say what decided the raid.
+
+### Reputation and rivalries (`RIVALRY`, `Rivalry.ts`) [rivalry.test.ts]
+
+- `pvp_records` now keeps assists, defenses, cooperation, bounty shares, challenges and mischief
+  besides raids and kills; each player's are read back for **14 days** when they join.
+- **Nemesis**: whoever has beaten you (kills, raids, challenges, defenses) most often, at least
+  twice, the most recent breaking a tie. Shown on the scoreboard and in the players panel.
+- The director makes raid and hunt cards **3× likelier** against your nemesis ("Rematch with Bo")
+  and **2×** against someone who raided you in the last 30 minutes ("Payback"), only among the
+  players the protections allow; the card says why.
+- **Reputation**: raider, defender, ace or helper, whichever count is highest (at least 3), saved with
+  the player. Never changes combat.
+
+### Playful social interaction, mute and report (`SOCIAL`, `Social.ts`) [social.test.ts]
+
+- Seven emotes (waggle, confetti, heart, salute, laugh, tease, ink splat; Z C V N J K I), 1.5 s
+  apart. An **ink splat** marks the plane within 35 m ahead with ink that fades after 20 s.
+- Claimed desks fly a **rival banner**; banner mischief leaves ink on it for 90 s.
+- **Mischief cards** (15 paper): ink their banner (a hoop at it), buzz their desk without a scratch
+  (the first hit from them ends it), or fly a maneuver through a hoop over their desk. Nothing is
+  destroyed or taken. Never on offline, new or arriving players or on anyone who muted you; one per
+  pair per 10 minutes, three per target per 30 minutes, counted from launch.
+- **Mute** a player's emotes and ink, for good (`progress.social.mutes`, at most 64): the server
+  stops sending their emotes to you; your client hides their ink.
+- **Report** a player with a reason (cheating, harassment, griefing, offensive name, farming,
+  something else; no free text): once per player, five per session, stored in `player_reports` and
+  listed by `GET /admin/reports`.
+
+### Anti-farming (`FARMING`, `src/systems/Farming.ts`) [farming.test.ts, longrun.test.ts]
+
+- Every reward one player earns from another (kills, assists, raids, bounty shares, escort and
+  cooperation payouts, challenges, mischief, escort kills) is a **flow**. Each new flow from the same
+  player within 30 minutes pays 100, 100, 100, 80, 60, 45, 30, 15 %, then nothing, on top of each
+  source's own repeat rule.
+- **Patterns**, both directions together: six kills with 85 % going one way, ten kills traded in
+  turns, four planes worth 60+ lost by one to the other, three raids nobody defended, two bounty
+  shares on each other, 400 paper earned by one from the other. A pattern **pauses rewards between
+  the pair for 30 minutes** (and deals no raid, hunt, challenge or mischief cards between them) and is
+  logged (`farming.flag`, `farm_flags`, `GET /admin/reports`). Never an automatic ban.
+- The long-run simulator's exploiter and farmer pairs earn less than steady play under these rules.
+
+### The Ghost and the Specter (`AIRCRAFT`, `DRONES`, `PVP.bayWarning`) [ghost-specter.test.ts]
+
+- **Ghost**: signature 0.38 (the lowest), stealth, an internal bay that reveals it by +1.1 when it
+  opens; 3 bombs, 95 health, cruise 18; 130 paper + 8 ink + 10 rubber, the longest fold. On a raid on
+  a player the bay opens first: the defender is warned (on detection or the bay opening, whichever is
+  first) and **no release counts for 6 s after the warning**.
+- **Specter**: unarmed, cruise 16, 45 health, 35 paper and nothing else, recon twice as fast. It
+  damages nothing (not even by ramming) and is unsuitable for kill and wreck cards. It **reveals
+  hostile aircraft and defenses within 140 m** to its pilot, their allies and cooperators, and to the
+  pilots flying a bounty whose target it has in view: position only, a union, never stacked.
+  Shooting one down pays **5**, fixed. Neither plane is ever an AI escort.
 
 ## Connections
 
@@ -426,7 +582,7 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 - World events (shipments, convoys, supply runs, AI raids on homes) and operations' world-event
   cards are single-player only; missions that send AI raiders at your home still work.
 - Medals, records, streaks, the logbook and the local save aren't used in multiplayer.
-- Escorting another player's bomber isn't a mission yet (escort missions with an AI bomber are).
+- (Escorting another player's bomber is a cooperation card since v0.0.19.)
 - `npm audit` reports advisories in `@colyseus/auth`'s dependencies (`grant`, `elliptic`), which
   the auth module pulls in although the game doesn't use it.
 
@@ -434,8 +590,8 @@ it sends (`LATENCY=150 npm run server`) for trying it by hand.
 
 1. **The rules in `PVP` (src/config.ts)**: protection and shield times, the raid reward and the
    repeat rule, bounties, aggression time, and the score weights are first guesses for playtesting.
-2. **Free-for-all**: everyone is hostile to everyone (no friendly fire question yet). Alliances or
-   teams would change the hostility rule in one place (`ServerWorld.hostile`) and the AI's sides.
+2. **Free-for-all, with session alliances (v0.0.19)**: everyone is hostile to everyone but their
+   allies (`ServerWorld.peaceful`: no friendly fire, bases hold fire, escorts treat allies as friends).
 3. **Raids only through raid cards**: bases can't be damaged outside a raid. Simple and fair, but it
    means a turret shooting at a trespasser can't be shot back unless you are raiding it.
 4. **The centre stays the AI's**: or it could become claimable with a special runway.

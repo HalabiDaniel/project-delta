@@ -650,3 +650,44 @@ delete from schema_migrations where version = 9;
 ```
 
 The paper ledger is untouched either way.
+
+## v0.0.19: social data, rivalries, reports and farming flags
+
+- **`progress.social`** (migration `0011`): each player's threat, recent kills on weaker players,
+  mutes and reputation counts (`server/world/SocialData.ts`), saved with their progress and checked
+  field by field whenever it is read back (`cleanSocial`). Empty for everyone until their first
+  session after the upgrade; a save without it keeps the one saved before (as `profile`).
+- **`pvp_records.kind`** also accepts `assist`, `defend`, `coop`, `bounty`, `challenge` and
+  `mischief`: what rivalries and reputation are made of, and the reward flows the anti-farming rules
+  watch. Each record keeps its id in `data` and is written once. A joining player's records from the
+  last 14 days are read back (`RIVALRY.memory`; the fairness windows only look at their own spans).
+- **`player_reports`**: reporter, reported, reason (a category), session and context (both players'
+  names and their record together). For the developer (`GET /admin/reports`); the moderation queue
+  is v0.0.26.
+- **`farm_flags`**: pairs the anti-farming rules flagged, with the reason. For the developer; never a
+  ban.
+- Ledger keys for the new rewards, each paid once: `escort:<mission>:<n>` (an escort bought),
+  `escort-kill:<escort>`, `bounty:<uid>:<player>`, `joint:<uid>:<player>`, `coop-escort:<mission>`,
+  `coop-defend:<raid>:<player>`, `challenge:<raid>:forfeit` and `:won`, `raid:<raid>:partial`.
+- Same contract tests for both stores (reports, farming flags, the new kinds, `social`), and the
+  migration test runs `0011`.
+
+### Running the migration on the private server
+
+As for v0.0.18: `npm run db:backup`, rehearse on a copy, deploy (`0011` applies on start in one
+transaction). Nothing existing changes: it only adds a column, two tables and wider kinds.
+
+### Rolling back
+
+Restore the backup, or by hand:
+
+```sql
+drop table farm_flags;
+drop table player_reports;
+delete from pvp_records where kind not in ('raid', 'kill');
+alter table pvp_records drop constraint pvp_records_kind_check;
+alter table pvp_records add constraint pvp_records_kind_check check (kind in ('raid', 'kill'));
+alter table progress drop column social;
+delete from schema_migrations where version = 11;
+```
+

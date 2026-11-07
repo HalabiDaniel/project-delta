@@ -607,6 +607,22 @@ textarea.mp-input { resize: vertical; font-weight: 500; }
 .mp-board-card .ui-card-title { font-size: var(--t-xl); }
 .mp-board-card .ui-card-body { color: var(--ink); }
 
+/* ---- v0.0.19: the players panel (O / ← at home): alliances, mute and report ------------------- */
+.mp-players { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; pointer-events: none; }
+.mp-players .mp-players-card { pointer-events: auto; width: min(44em, 94vw); max-height: 80vh; overflow: auto; padding: var(--s4) var(--s5); border-radius: var(--radius-lg); box-shadow: 6px 6px 0 var(--graphite); animation: none; }
+.mp-welcome { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-bottom: var(--s3); color: var(--ink-2); font-weight: 700; }
+.mp-welcome > span { display: inline-flex; align-items: center; gap: var(--s1); margin-right: auto; }
+.mp-player-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.mp-player-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2); border: var(--stroke-line) solid var(--graphite); border-left: 6px solid var(--owner); border-radius: var(--r-s); background: var(--paper); }
+.mp-player-row .mp-pilot { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); margin-right: auto; }
+.mp-player-acts { display: inline-flex; flex-wrap: wrap; gap: var(--s1); }
+.mp-report-reasons { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: var(--s1); padding-top: var(--s1); }
+.mp-record { color: var(--ink-2); font-weight: 800; }
+.mp-players-foot { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s3); }
+.mp-empty { color: var(--ink-3); }
+.mp-tag-ink { color: var(--ink); }
+.mp-tag-ink[hidden] { display: none; }
+
 /* ---- Tags in the world: other players' planes and desks --------------------------------------- */
 .mp-tag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: calc(-1 * var(--s2)); will-change: transform; }
 .mp-tag-name { display: inline-flex; align-items: center; gap: var(--s1); padding: 1px var(--s2); border-radius: var(--r-pill); background: var(--paper); border: var(--stroke-line) solid var(--owner); box-shadow: 2px 2px 0 var(--graphite); color: var(--ink); font: 800 var(--t-xs) / 1.4 var(--font); white-space: nowrap; }

@@ -33,6 +33,11 @@ export const PlaneState = schema(
     fold: t.uint8().default(255),
     bombs: t.uint8().default(0),
     emergency: t.boolean().default(false),
+    /** v0.0.19: a bay bomber's bay doors are open (the Ghost: opening for a release, or just after one). */
+    bay: t.boolean().default(false),
+    /** v0.0.19: seconds of ink splat left on it, and who threw it ('' for none): muted players' splats aren't drawn. */
+    ink: t.uint8().default(0),
+    inkBy: t.string().default(''),
   },
   'PlaneState',
 );
@@ -64,6 +69,10 @@ export const PlayerState = schema(
     rank: t.string().default(''),
     /** v0.0.17: the title the player chose to show ('' for none). */
     title: t.string().default(''),
+    /** v0.0.19: their alliance for this session (0: none). */
+    ally: t.uint8().default(0),
+    /** v0.0.19: what they are known for ('raider', 'defender', 'ace', 'helper'; '' for nothing yet). */
+    rep: t.string().default(''),
   },
   'PlayerState',
 );
@@ -129,6 +138,9 @@ export const TerritoryState = schema(
     label: t.string().default(''),
     /** Its place in the lifecycle (index into DESK_STATES, v0.0.13). */
     state: t.uint8().default(0),
+    /** v0.0.19: seconds of ink left on its owner's rival banner, and who marked it ('' for none). */
+    ink: t.uint8().default(0),
+    inkBy: t.string().default(''),
   },
   'TerritoryState',
 );

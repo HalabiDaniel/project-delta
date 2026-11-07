@@ -71,6 +71,8 @@ export class FlightHud {
       tile('home', 'home', f.home, bind('service'), false),
       // v0.0.16: the maneuver in the slot, its readiness, and a note (why a press did nothing, the air brake, a loop).
       `<div class="action-tile maneuver-tile" data-f="t-maneuver" role="group" aria-label="${esc(T.maneuver.slot)}"><span class="mv-note" data-f="mv-note" hidden></span>${icon('maneuver', 'icon pw-icon')}<span class="action-label" data-f="mv-name"></span><span class="mv-ready"><i data-f="mv-ready"></i></span>${glyph(bind('maneuver'), { className: 'pw-key' })}</div>`,
+      // v0.0.19 multiplayer: the escorts' order (the order wheel: the key gives the next order).
+      `<div class="action-tile escort-tile" data-f="t-escort" role="group" aria-label="${esc(T.menus.controls.escorts)}">${icon('escort', 'icon pw-icon')}<span class="action-label" data-f="esc-order"></span>${glyph(bind('escortNext'), { className: 'pw-key' })}</div>`,
     ].join(''));
     this.el.landing = add(zones.bc, 'landing-checks', `
       ${kchip({ icon: 'speed', value: '', attrs: { 'data-f': 'lg-speed', 'data-tip': T.plane.speedCheck(num(LANDING.maxSpeed)) } })}
@@ -141,6 +143,12 @@ export class FlightHud {
       this.text('bomb-n', count(a.bombs.loaded));
       this.el['t-bomb'].dataset.state = a.bombs.capacity === 0 || a.bombs.loaded === 0 ? 'empty' : a.bombs.ready ? 'ok' : 'low';
       this.el['t-boost'].dataset.state = f?.boost.state === 'active' ? 'on' : f?.boost.state === 'cooldown' ? 'low' : 'ok';
+    }
+    const order = flying && v.escorts?.where === 'air' ? v.escorts : null;
+    toggle(this.el['t-escort'], order !== null);
+    if (order) {
+      this.text('esc-order', order.label);
+      if (this.el['t-escort'].dataset.tip !== order.tip) this.el['t-escort'].dataset.tip = order.tip;
     }
     const mv = flying ? f?.maneuver : undefined;
     toggle(this.el['t-maneuver'], !!mv);
@@ -275,6 +283,8 @@ export class FlightHud {
         return a.takeOff();
       case 'maneuver-next':
         return a.cycleManeuver?.(1);
+      case 'escort-next':
+        return a.cycleEscort?.();
     }
   }
 }

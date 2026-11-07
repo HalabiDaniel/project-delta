@@ -1,7 +1,7 @@
 /**
  * v0.0.18: the long-run economy simulator from the command line (src/sim/LongRun.ts).
  *
- *   npm run sim -- --days 7 --seed 1 --players steady,steady,aggressive,newcomer,idle,exploiter,exploiter
+ *   npm run sim -- --days 7 --seed 1 --players steady,steady,aggressive,newcomer,idle,exploiter,exploiter,farmer,farmer
  *   npm run sim -- --json report.json --csv report.csv
  *
  * Prints a summary and the flags (runaway leader, dead end, exploit beats play); exits with code 1
@@ -17,7 +17,7 @@ const opt = (name: string, fallback: string) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
 };
-const players = opt('players', 'steady,steady,aggressive,newcomer,idle,exploiter,exploiter').split(',').map((p) => p.trim()) as LongRunProfile[];
+const players = opt('players', 'steady,steady,aggressive,newcomer,idle,exploiter,exploiter,farmer,farmer').split(',').map((p) => p.trim()) as LongRunProfile[];
 for (const p of players) if (!LONG_RUN_PROFILES.includes(p)) throw new Error(`Unknown profile "${p}": use ${LONG_RUN_PROFILES.join(', ')}`);
 const days = Number(opt('days', '7'));
 const seed = Number(opt('seed', '1'));
@@ -50,6 +50,9 @@ console.log('');
 console.log(`Leader ÷ median: ${report.leaderGap}`);
 console.log(`Flags: runaway leader ${report.flags.runawayLeader ? 'YES' : 'no'} · dead end ${report.flags.deadEnd ? 'YES' : 'no'} · exploit beats play ${report.flags.exploitBeatsPlay ? 'YES' : 'no'}`);
 for (const n of report.flags.notes) console.log(`  - ${n}`);
+// v0.0.19: what the anti-farming rules did.
+console.log(`Anti-farming: ${report.farming.flags.length} pair flag(s), ${report.farming.withheld} paper held back`);
+for (const f of report.farming.flags.slice(0, 10)) console.log(`  - ${f.a} / ${f.b}: ${f.reason} (day ${Math.floor(f.at / 86400) + 1})`);
 const json = opt('json', '');
 if (json) writeFileSync(json, JSON.stringify(report, null, 2));
 const csv = opt('csv', '');

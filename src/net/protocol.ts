@@ -1,4 +1,4 @@
-import { AIRCRAFT_ORDER, BASE, MANEUVER_ORDER, SESSION, type AircraftId, type BuildingKind, type ManeuverId } from '../config';
+import { AIRCRAFT_ORDER, BASE, ESCORT_ORDER, ESCORT_ORDERS, MANEUVER_ORDER, SESSION, type AircraftId, type BuildingKind, type EscortKind, type EscortOrder, type ManeuverId } from '../config';
 import type { BaseSave } from '../base/Base';
 import type { RaidReport } from '../base/Raids';
 import type { MissionFailure, MissionSpec, MissionStatus } from '../missions/Mission';
@@ -16,7 +16,7 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
@@ -285,7 +285,21 @@ export type Command =
   | { a: 'base-upgrade'; slot: string }
   | { a: 'base-repair'; key: string }
   | { a: 'base-repair-all' }
-  | { a: 'base-remove'; slot: string };
+  | { a: 'base-remove'; slot: string }
+  /** v0.0.19: the escorts to buy at the next launch (empty: none; at most ESCORTS.perSortie). */
+  | { a: 'escorts'; kinds: EscortKind[] }
+  /** v0.0.19: an order to the escorts in the air (the order wheel). */
+  | { a: 'escort-order'; o: EscortOrder }
+  /** v0.0.19: alliances for the session: offer one to a player, accept or decline theirs, or leave yours. */
+  | { a: 'ally'; o: 'offer' | 'accept' | 'decline' | 'leave'; id?: string }
+  /** v0.0.19: who may fly escort on your bombing missions. */
+  | { a: 'coop'; w: 'allies' | 'anyone' | 'none' }
+  /** v0.0.19: decline a challenge to a dogfight (it costs what not showing up costs). */
+  | { a: 'challenge-decline' }
+  /** v0.0.19: mute (or unmute) another player's emotes and ink markings, for good. */
+  | { a: 'mute'; id: string; on: boolean }
+  /** v0.0.19: report another player, with a reason (kept for the developer). */
+  | { a: 'report'; id: string; reason: ReportReason };
 
 const BUILDINGS = Object.keys(BASE.buildings) as BuildingKind[];
 const SLOT_IDS = new Set<string>(BASE.slots.map((s) => s.id));
@@ -301,6 +315,7 @@ export function parseCommand(raw: unknown): Command | null {
       return AIRCRAFT_ORDER.includes(c.id as AircraftId) ? { a: 'aircraft', id: c.id as AircraftId } : null;
     case 'maneuver':
       return MANEUVER_ORDER.includes(c.id as ManeuverId) ? { a: 'maneuver', id: c.id as ManeuverId } : null;
+    case 'challenge-decline':
     case 'build':
     case 'launch':
     case 'rearm':
@@ -317,6 +332,22 @@ export function parseCommand(raw: unknown): Command | null {
       return SLOT_IDS.has(c.slot as string) ? { a: c.a, slot: c.slot as string } : null;
     case 'base-repair':
       return c.key === 'store' || SLOT_IDS.has(c.key as string) ? { a: 'base-repair', key: c.key as string } : null;
+    case 'escorts':
+      return Array.isArray(c.kinds) && c.kinds.length <= 4 && c.kinds.every((k) => ESCORT_ORDER.includes(k as EscortKind)) ? { a: 'escorts', kinds: c.kinds as EscortKind[] } : null;
+    case 'escort-order':
+      return ESCORT_ORDERS.includes(c.o as EscortOrder) ? { a: 'escort-order', o: c.o as EscortOrder } : null;
+    case 'ally': {
+      const o = c.o as string;
+      if (o === 'leave') return { a: 'ally', o };
+      if ((o === 'offer' || o === 'accept' || o === 'decline') && typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id)) return { a: 'ally', o, id: c.id };
+      return null;
+    }
+    case 'coop':
+      return c.w === 'allies' || c.w === 'anyone' || c.w === 'none' ? { a: 'coop', w: c.w } : null;
+    case 'mute':
+      return typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id) && typeof c.on === 'boolean' ? { a: 'mute', id: c.id, on: c.on } : null;
+    case 'report':
+      return typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id) && REPORT_REASONS.includes(c.reason as ReportReason) ? { a: 'report', id: c.id, reason: c.reason as ReportReason } : null;
     default:
       return null;
   }
@@ -331,9 +362,16 @@ export function cleanName(raw: unknown, fallback = 'Pilot'): string {
 
 // ---- Emotes ---------------------------------------------------------------------------------------
 
-/** Playful gestures: a wing waggle, a burst of paper confetti, an ink heart. */
-export type Emote = 'waggle' | 'confetti' | 'heart';
-export const EMOTES: readonly Emote[] = ['waggle', 'confetti', 'heart'];
+/**
+ * Playful gestures: a wing waggle, a burst of paper confetti, an ink heart; v0.0.19 adds a salute,
+ * a laugh, a tease and an ink splat (it marks the aircraft ahead with ink that fades).
+ */
+export type Emote = 'waggle' | 'confetti' | 'heart' | 'salute' | 'laugh' | 'tease' | 'splat';
+export const EMOTES: readonly Emote[] = ['waggle', 'confetti', 'heart', 'salute', 'laugh', 'tease', 'splat'];
+
+/** v0.0.19: why a player is reported (no free text: the moderation queue is v0.0.26). */
+export const REPORT_REASONS = ['cheating', 'harassment', 'griefing', 'name', 'farming', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
 
 // ---- Player colours -------------------------------------------------------------------------------
 
@@ -433,12 +471,65 @@ export interface PlaneDTO {
   stopped: boolean;
 }
 
-/** What kind of player-versus-player card it is, and against whom. */
+/**
+ * What kind of player-versus-player card it is, and against whom. v0.0.19 adds bounties (`bounty`:
+ * the bounty's id).
+ */
 export interface PvpTag {
-  kind: 'raid' | 'recon' | 'hunt' | 'intercept';
+  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint' | 'strike' | 'challenge' | 'challenged' | 'mischief';
   target: string;
   name: string;
   territoryId: string | null;
+  /** v0.0.19: the bounty, or the joint attack, this card is for. */
+  bounty?: number;
+  joint?: number;
+  /** v0.0.19: a mischief card's kind. */
+  mischief?: 'banner' | 'flyby' | 'stunt';
+  /** v0.0.19: a raid card's kind (bombing or staged; strikes and challenges have their own card kinds). */
+  raid?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  /** v0.0.19: why the director offered it, in words ("Rematch with Bo"), when there is a reason to tell. */
+  why?: string;
+}
+
+/** v0.0.19: an open bounty, as everyone in the session sees it. */
+export interface BountyDTO {
+  id: number;
+  kind: 'bomber' | 'raid' | 'installation' | 'ace';
+  target: string;
+  targetName: string;
+  pot: number;
+  /** Seconds left. */
+  left: number;
+  reason: string;
+}
+
+/** v0.0.19: who you have fought (and helped), from your side. */
+export interface RivalsDTO {
+  /** Whoever has beaten you most often (null: nobody often enough). */
+  nemesis: { id: string; name: string; wins: number; losses: number } | null;
+  list: Array<{ id: string; name: string; wins: number; losses: number; helps: number }>;
+  /** What you are known for (null: nothing yet), and the counts behind it. */
+  reputation: 'raider' | 'defender' | 'ace' | 'helper' | null;
+  counts: { raids: number; defends: number; kills: number; helps: number };
+}
+
+/** v0.0.19: your alliance for the session. */
+export interface AllianceDTO {
+  /** Its number (null: not in one), and its members (public ids, you included). */
+  id: number | null;
+  members: string[];
+  /** Players who offered you an alliance, waiting for your answer; players you offered one to. */
+  offers: string[];
+  sent: string[];
+  /** Who may fly escort on your bombing missions. */
+  welcome: 'allies' | 'anyone' | 'none';
+}
+
+/** v0.0.19: how the director sees you. */
+export interface SituationDTO {
+  tier: 'newcomer' | 'intermediate' | 'advanced';
+  /** Threat, rounded to one decimal: how aggressive you have been lately. */
+  threat: number;
 }
 
 export interface CardDTO {
@@ -491,6 +582,11 @@ export interface AttackDTO {
   /** Seconds since it started. */
   age: number;
   distance: number | null;
+  /** v0.0.19: the kind of raid, and the escorts flying with the raider (once detected). */
+  kind?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  escorts?: number;
+  /** v0.0.19 staged raids: the stage under way (0, 1; 2: both done). */
+  stage?: number;
 }
 
 export interface ResultDTO {
@@ -514,7 +610,15 @@ export interface AttackReportDTO {
   role: 'attacker' | 'defender';
   other: string;
   territoryId: string;
-  outcome: 'bombed' | 'repelled' | 'abandoned';
+  /**
+   * v0.0.19 adds: struck (a strike got through), won (the challenger won the dogfight), declined (the
+   * challenged player didn't show up), draw (a challenge nobody won).
+   */
+  outcome: 'bombed' | 'repelled' | 'abandoned' | 'struck' | 'won' | 'declined' | 'draw';
+  /** v0.0.19: the kind of raid, each stage and whether it was done, and what decided it, in words. */
+  kind?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  stages?: Array<{ label: string; done: boolean }>;
+  decided?: string;
   paperLost: number;
   /** v0.0.18: ink and rubber balls lost (absent: none). */
   inkLost?: number;
@@ -546,6 +650,34 @@ export interface MeDTO {
   result?: ResultDTO | null;
   report?: AttackReportDTO | null;
   raid?: RaidReport | null;
+  /** v0.0.19: your escorts: chosen for the next sortie, and in the air. */
+  escorts?: EscortsDTO;
+  /** v0.0.19: the bounties open in the session, and how the director sees you. */
+  bounties?: BountyDTO[];
+  situation?: SituationDTO;
+  /** v0.0.19: your alliance for this session, the offers waiting, and who may escort your bombers. */
+  alliance?: AllianceDTO;
+  /** v0.0.19: your nemesis, your rivals and your reputation. */
+  rivals?: RivalsDTO;
+  /** v0.0.19: the players you muted (public ids), and the players you already reported this session. */
+  mutes?: string[];
+  reported?: string[];
+  /**
+   * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
+   * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.
+   */
+  reveal?: string[];
+}
+
+/** v0.0.19: your escorts. */
+export interface EscortsDTO {
+  /** Chosen for the next sortie, and what they cost together. */
+  plan: EscortKind[];
+  cost: { paper?: number; ink?: number; rubber?: number };
+  /** The order they are flying under. */
+  order: EscortOrder;
+  /** In the air now: their AI aircraft ids and kinds. */
+  active: Array<{ id: string; kind: EscortKind }>;
 }
 
 /** The pilot's own flight, sent with every patch while it flies: for reconciliation. */

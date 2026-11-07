@@ -12,6 +12,7 @@ import { emergencyPlane } from '../systems/GameState';
 import { seededRng, type Rng } from '../systems/Random';
 import { RESOURCES, ResourceManager, type Bundle, type PaperSource, type Resource } from '../systems/ResourceManager';
 import type { Territory } from '../world/Territory';
+import { FarmWatch } from '../systems/Farming';
 
 /**
  * v0.0.18 §7: the long-run economy simulator. Several simulated players with different habits play
@@ -31,9 +32,11 @@ import type { Territory } from '../world/Territory';
  * aggressive – raids other players whenever the rules allow, hard cards.
  * idle       – logs in for a few minutes a day.
  * exploiter  – abandons every mission and trades raids with a second account (an exploit check).
+ * farmer     – v0.0.19: two accounts that do nothing but shoot each other's planes down for the
+ *              kill reward, in turns (the anti-farming check, plan v0.0.19 §7C).
  */
-export type LongRunProfile = 'newcomer' | 'steady' | 'aggressive' | 'idle' | 'exploiter';
-export const LONG_RUN_PROFILES: readonly LongRunProfile[] = ['newcomer', 'steady', 'aggressive', 'idle', 'exploiter'];
+export type LongRunProfile = 'newcomer' | 'steady' | 'aggressive' | 'idle' | 'exploiter' | 'farmer';
+export const LONG_RUN_PROFILES: readonly LongRunProfile[] = ['newcomer', 'steady', 'aggressive', 'idle', 'exploiter', 'farmer'];
 
 interface Habits {
   /** Minutes online per day. */
@@ -45,6 +48,8 @@ interface Habits {
   /** Builds and upgrades when paper allows. */
   builds: boolean;
   abandons: boolean;
+  /** v0.0.19: trades kills with the other farmer instead of flying cards. */
+  farms?: boolean;
 }
 
 const HABITS: Record<LongRunProfile, Habits> = {
@@ -53,6 +58,7 @@ const HABITS: Record<LongRunProfile, Habits> = {
   aggressive: { minutes: 60, base: 'successful', raids: 0.5, builds: true, abandons: false },
   idle: { minutes: 8, base: 'struggling', raids: 0, builds: false, abandons: false },
   exploiter: { minutes: 60, base: 'average', raids: 0.6, builds: false, abandons: true },
+  farmer: { minutes: 60, base: 'average', raids: 0, builds: false, abandons: true, farms: true },
 };
 
 const SUIT: Record<SuitabilityLevel, number> = { recommended: 0.06, good: 0, possible: -0.15, unsuitable: -1 };
@@ -119,6 +125,8 @@ export interface LongRunReport {
   /** Leader's worth ÷ the median worth of the players who play (not idle), at the end. */
   leaderGap: number;
   flags: { runawayLeader: boolean; deadEnd: boolean; exploitBeatsPlay: boolean; notes: string[] };
+  /** v0.0.19: what the anti-farming rules did: pairs flagged (and why), and the rewards they held back. */
+  farming: { flags: Array<{ a: string; b: string; reason: string; at: number }>; withheld: number };
 }
 
 /** Paper value of a unit of each resource, for comparing players (provisional, like the economy). */
@@ -154,6 +162,7 @@ export function simulateLongRun(opts: LongRunOptions): LongRunReport {
   const rng = seededRng(opts.seed);
   const sims: Sim[] = opts.players.map((profile, i) => makeSim(`${profile}-${i + 1}`, profile, opts.homes[i % opts.homes.length], opts.ctx, seededRng(opts.seed * 131 + i * 17)));
   const raidHistory: Array<{ attacker: string; victim: string; at: number }> = [];
+  const farm: Farm = { watch: new FarmWatch(), withheld: 0, kills: [], flags: [] };
   let clock = 0;
 
   for (let day = 1; day <= opts.days; day++) {
@@ -182,7 +191,7 @@ export function simulateLongRun(opts: LongRunOptions): LongRunReport {
           continue;
         }
         const others = sims.filter((o) => o !== s && left.has(o.id));
-        const took = sortie(s, others, raidHistory, clock);
+        const took = sortie(s, others, raidHistory, clock, farm);
         nextSortie.set(s.id, took);
         if (s.habits.builds) build(s);
       }
@@ -200,7 +209,7 @@ export function simulateLongRun(opts: LongRunOptions): LongRunReport {
     s.report.meritPerHour = hours > 0 ? Math.round((s.merit / hours) * 10) / 10 : 0;
     return s.report;
   });
-  const playing = players.filter((p) => p.profile !== 'idle' && p.profile !== 'exploiter');
+  const playing = players.filter((p) => p.profile !== 'idle' && p.profile !== 'exploiter' && p.profile !== 'farmer');
   const worths = playing.map((p) => p.days[p.days.length - 1]?.worth ?? 0).sort((a, b) => a - b);
   const median = worths.length > 0 ? worths[Math.floor(worths.length / 2)] : 1;
   const leaderGap = worths.length > 0 ? Math.round((worths[worths.length - 1] / Math.max(1, median)) * 100) / 100 : 1;
@@ -210,7 +219,7 @@ export function simulateLongRun(opts: LongRunOptions): LongRunReport {
   const deadEnd = players.some((p) => p.longestStuck >= STUCK);
   if (deadEnd) notes.push(`${players.filter((p) => p.longestStuck >= STUCK).map((p) => p.id).join(', ')} had no card to fly for ${STUCK}+ sorties.`);
   const steady = players.filter((p) => p.profile === 'steady').map((p) => p.gainPerHour);
-  const exploit = players.filter((p) => p.profile === 'exploiter').map((p) => p.gainPerHour);
+  const exploit = players.filter((p) => p.profile === 'exploiter' || p.profile === 'farmer').map((p) => p.gainPerHour);
   const best = (xs: number[]) => (xs.length ? Math.max(...xs) : -Infinity);
   const exploitBeatsPlay = exploit.length > 0 && steady.length > 0 && best(exploit) > Math.min(...steady);
   if (exploitBeatsPlay) notes.push(`Exploiting earns ${best(exploit)}/h against ${Math.min(...steady)}/h for steady play.`);
@@ -227,7 +236,10 @@ export function simulateLongRun(opts: LongRunOptions): LongRunReport {
     u!.share = Math.round((u!.flown / Math.max(1, flown)) * 1000) / 1000;
     u!.winRate = Math.round((u!.wins / Math.max(1, u!.flown)) * 100) / 100;
   }
-  return { options: { players: opts.players, days: opts.days, seed: opts.seed }, players, planes, leaderGap, flags: { runawayLeader, deadEnd, exploitBeatsPlay, notes } };
+  return {
+    options: { players: opts.players, days: opts.days, seed: opts.seed }, players, planes, leaderGap, flags: { runawayLeader, deadEnd, exploitBeatsPlay, notes },
+    farming: { flags: farm.flags, withheld: Math.round(farm.withheld) },
+  };
 }
 
 function makeSim(id: string, profile: LongRunProfile, home: Territory, ctx: MissionContext, rng: Rng): Sim {
@@ -260,12 +272,26 @@ function makeSim(id: string, profile: LongRunProfile, home: Territory, ctx: Miss
   };
 }
 
+/** v0.0.19: the anti-farming rules as the server applies them, over the whole run. */
+interface Farm {
+  watch: FarmWatch;
+  /** Paper the decay and the pauses held back. */
+  withheld: number;
+  /** Kills for PVP.killRepeat (killer, victim, clock). */
+  kills: Array<{ killer: string; victim: string; at: number }>;
+  flags: Array<{ a: string; b: string; reason: string; at: number }>;
+}
+
 /** One sortie (or raid) for `s`. Returns the seconds it took, desk time included. */
-function sortie(s: Sim, others: Sim[], history: Array<{ attacker: string; victim: string; at: number }>, clock: number): number {
+function sortie(s: Sim, others: Sim[], history: Array<{ attacker: string; victim: string; at: number }>, clock: number, farm: Farm): number {
   const desk = 25;
+  if (s.habits.farms) {
+    const partner = others.find((o) => o.habits.farms);
+    if (partner) return desk + farmKill(s, partner, clock, farm);
+  }
   if (others.length > 0 && s.rng() < s.habits.raids) {
-    const victim = pickVictim(s, others, history, clock);
-    if (victim) return desk + raid(s, victim, history, clock);
+    const victim = pickVictim(s, others, history, clock, farm);
+    if (victim) return desk + raid(s, victim, history, clock, farm);
   }
   const shape = simulatedProfile(s.habits.base);
   const roll = s.rng();
@@ -355,10 +381,36 @@ function bestPlane(s: Sim, spec: Parameters<typeof assessSuitability>[1]): { pla
   return none && level !== 'unsuitable' ? { plane, level, emergency: true } : null;
 }
 
+/**
+ * v0.0.19: a farmer shoots its partner's plane down for the kill reward. The partner had to fold a
+ * real plane (an emergency Swift pays nothing), the kill pays PVP.killBase plus PVP.killShare of
+ * its cost, less for each repeat on the same victim (PVP.killRepeat), and the anti-farming rules
+ * decay it further and pause it once the pair looks like farming.
+ */
+function farmKill(s: Sim, v: Sim, clock: number, farm: Farm): number {
+  const plane = AIRCRAFT.swift;
+  // The partner folds a fresh plane to be shot down in (if it can't, the kill would pay nothing).
+  if (!v.resources.canAffordAll({ paper: plane.cost })) return 60;
+  v.resources.spend(plane.cost, `Folded ${plane.name}`);
+  while (farm.kills.length > 0 && clock - farm.kills[0].at > PVP.killWindow) farm.kills.shift();
+  const before = farm.kills.filter((k) => k.killer === s.id && k.victim === v.id).length;
+  farm.kills.push({ killer: s.id, victim: v.id, at: clock });
+  const full = (PVP.killBase + PVP.killShare * plane.cost) * PVP.killRepeat[Math.min(before, PVP.killRepeat.length - 1)];
+  const paid = Math.round(full * farm.watch.factor(s.id, v.id, clock));
+  farm.withheld += full - paid;
+  if (paid > 0) s.resources.earn(paid, 'bonus', 'Kill reward');
+  const flag = farm.watch.record({ earner: s.id, from: v.id, kind: 'kill', amount: Math.max(1, paid), at: clock, cost: plane.cost });
+  if (flag) farm.flags.push({ a: flag.a, b: flag.b, reason: flag.reason, at: clock });
+  s.report.sorties++;
+  return 90;
+}
+
 /** Someone the rules let `s` raid right now (an exploiter only ever raids the other exploiter). */
-function pickVictim(s: Sim, others: Sim[], history: Array<{ attacker: string; victim: string; at: number }>, clock: number): Sim | null {
+function pickVictim(s: Sim, others: Sim[], history: Array<{ attacker: string; victim: string; at: number }>, clock: number, farm: Farm): Sim | null {
   const ok = others.filter((v) => {
     if (s.profile === 'exploiter' && v.profile !== 'exploiter') return false;
+    // v0.0.19: no raids between a pair whose rewards are paused.
+    if (farm.watch.isPaused(s.id, v.id, clock)) return false;
     if (clock < v.shieldUntil) return false;
     const last = [...history].reverse().find((h) => h.attacker === s.id && h.victim === v.id);
     return !last || clock - last.at >= PVP.pairCooldown;
@@ -367,7 +419,7 @@ function pickVictim(s: Sim, others: Sim[], history: Array<{ attacker: string; vi
 }
 
 /** A raid by `s` on `v`: the game pays the attacker, the defender loses a capped share. Returns its seconds. */
-function raid(s: Sim, v: Sim, history: Array<{ attacker: string; victim: string; at: number }>, clock: number): number {
+function raid(s: Sim, v: Sim, history: Array<{ attacker: string; victim: string; at: number }>, clock: number, farm: Farm): number {
   const recent = history.filter((h) => h.attacker === s.id && h.victim === v.id && clock - h.at < PVP.farmWindow).length;
   const factor = PVP.repeat[Math.min(recent, PVP.repeat.length - 1)];
   // An exploiter's partner doesn't defend; a real player sometimes does.
@@ -379,8 +431,13 @@ function raid(s: Sim, v: Sim, history: Array<{ attacker: string; victim: string;
     const { losses, floors } = raidLosses(v.base, s.rng() < 0.5 && v.base.status(STORE) !== 'destroyed');
     for (const r of RESOURCES) v.resources.loseOf(r, losses[r] ?? 0, floors[r] ?? 0, 'Raid');
     const weapons = v.base.readiness.ready;
-    const reward = Math.round(((PVP.raidReward + PVP.raidPerWeapon * weapons) * (v.base.vulnerable() < PVP.poorTarget ? PVP.poorFactor : 1) * factor) / 5) * 5;
+    const full = Math.round(((PVP.raidReward + PVP.raidPerWeapon * weapons) * (v.base.vulnerable() < PVP.poorTarget ? PVP.poorFactor : 1) * factor) / 5) * 5;
+    // v0.0.19: decayed (and paused) by the anti-farming rules, as the server does it.
+    const reward = Math.round((full * farm.watch.factor(s.id, v.id, clock)) / 5) * 5;
+    farm.withheld += full - reward;
     if (reward > 0) s.resources.earn(reward, 'reward', 'Raid reward');
+    const flag = farm.watch.record({ earner: s.id, from: v.id, kind: 'raid', amount: Math.max(1, reward), at: clock, defended: v.profile !== 'exploiter' && s.rng() < 0.5 });
+    if (flag) farm.flags.push({ a: flag.a, b: flag.b, reason: flag.reason, at: clock });
     s.merit += Math.round(MERIT.raid * factor);
     v.shieldUntil = clock + PVP.raidShield;
     v.report.raidsSuffered++;

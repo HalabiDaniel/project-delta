@@ -1,0 +1,1683 @@
+{
+  "options": {
+    "players": [
+      "steady",
+      "steady",
+      "aggressive",
+      "newcomer",
+      "idle",
+      "exploiter",
+      "exploiter",
+      "farmer",
+      "farmer"
+    ],
+    "days": 7,
+    "seed": 1
+  },
+  "players": [
+    {
+      "id": "steady-1",
+      "profile": "steady",
+      "days": [
+        {
+          "day": 1,
+          "paper": 228,
+          "ink": 296,
+          "rubber": 14,
+          "worth": 404,
+          "merit": 240,
+          "rankIndex": 7
+        },
+        {
+          "day": 2,
+          "paper": 2100,
+          "ink": 795,
+          "rubber": 56,
+          "worth": 2610,
+          "merit": 557,
+          "rankIndex": 12
+        },
+        {
+          "day": 3,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 100,
+          "worth": 2775,
+          "merit": 811,
+          "rankIndex": 15
+        },
+        {
+          "day": 4,
+          "paper": 2038,
+          "ink": 931,
+          "rubber": 107,
+          "worth": 2718,
+          "merit": 1024,
+          "rankIndex": 17
+        },
+        {
+          "day": 5,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 105,
+          "worth": 2785,
+          "merit": 1260,
+          "rankIndex": 18
+        },
+        {
+          "day": 6,
+          "paper": 2100,
+          "ink": 948,
+          "rubber": 110,
+          "worth": 2794,
+          "merit": 1569,
+          "rankIndex": 20
+        },
+        {
+          "day": 7,
+          "paper": 2100,
+          "ink": 927,
+          "rubber": 103,
+          "worth": 2770,
+          "merit": 1804,
+          "rankIndex": 21
+        }
+      ],
+      "sorties": 254,
+      "successes": 173,
+      "raidsMade": 30,
+      "raidsSuffered": 12,
+      "recoveries": [
+        26,
+        105,
+        236,
+        809,
+        375,
+        645,
+        203,
+        94,
+        177,
+        126,
+        800,
+        144
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 1799,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 7436
+          },
+          "reward": {
+            "in": 7804,
+            "out": 0
+          },
+          "bonus": {
+            "in": 440,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 607
+          }
+        },
+        "ink": {
+          "spend": {
+            "in": 0,
+            "out": 448
+          },
+          "arm": {
+            "in": 0,
+            "out": 1861
+          },
+          "production": {
+            "in": 2244,
+            "out": 0
+          },
+          "reward": {
+            "in": 1257,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 325
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 184,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 114
+          },
+          "arm": {
+            "in": 0,
+            "out": 71
+          },
+          "reward": {
+            "in": 155,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 63
+          }
+        }
+      },
+      "gainPerHour": 373.7,
+      "meritPerHour": 257.7,
+      "planes": {
+        "falcon": {
+          "flown": 117,
+          "wins": 79
+        },
+        "thug": {
+          "flown": 29,
+          "wins": 18
+        },
+        "dart": {
+          "flown": 59,
+          "wins": 42
+        },
+        "widewing": {
+          "flown": 49,
+          "wins": 34
+        }
+      }
+    },
+    {
+      "id": "steady-2",
+      "profile": "steady",
+      "days": [
+        {
+          "day": 1,
+          "paper": 621,
+          "ink": 276,
+          "rubber": 36,
+          "worth": 831,
+          "merit": 252,
+          "rankIndex": 8
+        },
+        {
+          "day": 2,
+          "paper": 2089,
+          "ink": 664,
+          "rubber": 77,
+          "worth": 2575,
+          "merit": 512,
+          "rankIndex": 12
+        },
+        {
+          "day": 3,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 104,
+          "worth": 2783,
+          "merit": 769,
+          "rankIndex": 15
+        },
+        {
+          "day": 4,
+          "paper": 2077,
+          "ink": 950,
+          "rubber": 96,
+          "worth": 2744,
+          "merit": 1046,
+          "rankIndex": 17
+        },
+        {
+          "day": 5,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 110,
+          "worth": 2795,
+          "merit": 1303,
+          "rankIndex": 19
+        },
+        {
+          "day": 6,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 107,
+          "worth": 2789,
+          "merit": 1607,
+          "rankIndex": 20
+        },
+        {
+          "day": 7,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 101,
+          "worth": 2777,
+          "merit": 1881,
+          "rankIndex": 22
+        }
+      ],
+      "sorties": 267,
+      "successes": 188,
+      "raidsMade": 19,
+      "raidsSuffered": 16,
+      "recoveries": [
+        50,
+        39,
+        480,
+        170,
+        408,
+        159,
+        153,
+        755,
+        1600,
+        361,
+        499,
+        900,
+        600,
+        391,
+        211,
+        null
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 1889,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 7740
+          },
+          "reward": {
+            "in": 8280,
+            "out": 0
+          },
+          "bonus": {
+            "in": 491,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 920
+          }
+        },
+        "ink": {
+          "spend": {
+            "in": 0,
+            "out": 472
+          },
+          "arm": {
+            "in": 0,
+            "out": 1827
+          },
+          "production": {
+            "in": 2460,
+            "out": 0
+          },
+          "reward": {
+            "in": 1206,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 477
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 202,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 122
+          },
+          "arm": {
+            "in": 0,
+            "out": 95
+          },
+          "reward": {
+            "in": 199,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 95
+          }
+        }
+      },
+      "gainPerHour": 374.7,
+      "meritPerHour": 268.7,
+      "planes": {
+        "dart": {
+          "flown": 58,
+          "wins": 49
+        },
+        "falcon": {
+          "flown": 119,
+          "wins": 83
+        },
+        "thug": {
+          "flown": 18,
+          "wins": 7
+        },
+        "widewing": {
+          "flown": 60,
+          "wins": 40
+        },
+        "jumper": {
+          "flown": 12,
+          "wins": 9
+        }
+      }
+    },
+    {
+      "id": "aggressive-3",
+      "profile": "aggressive",
+      "days": [
+        {
+          "day": 1,
+          "paper": 235,
+          "ink": 447,
+          "rubber": 33,
+          "worth": 525,
+          "merit": 300,
+          "rankIndex": 9
+        },
+        {
+          "day": 2,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 86,
+          "worth": 2747,
+          "merit": 594,
+          "rankIndex": 13
+        },
+        {
+          "day": 3,
+          "paper": 2097,
+          "ink": 949,
+          "rubber": 110,
+          "worth": 2792,
+          "merit": 843,
+          "rankIndex": 15
+        },
+        {
+          "day": 4,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 110,
+          "worth": 2795,
+          "merit": 1105,
+          "rankIndex": 17
+        },
+        {
+          "day": 5,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 110,
+          "worth": 2795,
+          "merit": 1388,
+          "rankIndex": 19
+        },
+        {
+          "day": 6,
+          "paper": 2100,
+          "ink": 950,
+          "rubber": 110,
+          "worth": 2795,
+          "merit": 1643,
+          "rankIndex": 21
+        },
+        {
+          "day": 7,
+          "paper": 2029,
+          "ink": 919,
+          "rubber": 102,
+          "worth": 2693,
+          "merit": 1870,
+          "rankIndex": 22
+        }
+      ],
+      "sorties": 123,
+      "successes": 91,
+      "raidsMade": 101,
+      "raidsSuffered": 3,
+      "recoveries": [
+        405,
+        400,
+        null
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 1337,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 4337
+          },
+          "reward": {
+            "in": 4919,
+            "out": 0
+          },
+          "bonus": {
+            "in": 170,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 160
+          }
+        },
+        "ink": {
+          "spend": {
+            "in": 0,
+            "out": 146
+          },
+          "arm": {
+            "in": 0,
+            "out": 875
+          },
+          "reward": {
+            "in": 693,
+            "out": 0
+          },
+          "production": {
+            "in": 1267,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 80
+          }
+        },
+        "rubber": {
+          "spend": {
+            "in": 0,
+            "out": 48
+          },
+          "reward": {
+            "in": 53,
+            "out": 0
+          },
+          "production": {
+            "in": 109,
+            "out": 0
+          },
+          "arm": {
+            "in": 0,
+            "out": 8
+          },
+          "raid": {
+            "in": 0,
+            "out": 16
+          }
+        }
+      },
+      "gainPerHour": 362.7,
+      "meritPerHour": 267.1,
+      "planes": {
+        "dart": {
+          "flown": 29,
+          "wins": 26
+        },
+        "widewing": {
+          "flown": 26,
+          "wins": 18
+        },
+        "falcon": {
+          "flown": 56,
+          "wins": 40
+        },
+        "thug": {
+          "flown": 12,
+          "wins": 7
+        }
+      }
+    },
+    {
+      "id": "newcomer-4",
+      "profile": "newcomer",
+      "days": [
+        {
+          "day": 1,
+          "paper": 113,
+          "ink": 53,
+          "rubber": 21,
+          "worth": 182,
+          "merit": 100,
+          "rankIndex": 4
+        },
+        {
+          "day": 2,
+          "paper": 129,
+          "ink": 144,
+          "rubber": 37,
+          "worth": 275,
+          "merit": 201,
+          "rankIndex": 7
+        },
+        {
+          "day": 3,
+          "paper": 422,
+          "ink": 296,
+          "rubber": 39,
+          "worth": 648,
+          "merit": 330,
+          "rankIndex": 9
+        },
+        {
+          "day": 4,
+          "paper": 784,
+          "ink": 454,
+          "rubber": 50,
+          "worth": 1111,
+          "merit": 409,
+          "rankIndex": 10
+        },
+        {
+          "day": 5,
+          "paper": 1110,
+          "ink": 602,
+          "rubber": 39,
+          "worth": 1489,
+          "merit": 519,
+          "rankIndex": 12
+        },
+        {
+          "day": 6,
+          "paper": 2100,
+          "ink": 879,
+          "rubber": 59,
+          "worth": 2658,
+          "merit": 640,
+          "rankIndex": 13
+        },
+        {
+          "day": 7,
+          "paper": 1957,
+          "ink": 937,
+          "rubber": 57,
+          "worth": 2540,
+          "merit": 729,
+          "rankIndex": 14
+        }
+      ],
+      "sorties": 169,
+      "successes": 101,
+      "raidsMade": 0,
+      "raidsSuffered": 4,
+      "recoveries": [
+        49,
+        300,
+        43,
+        null
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 1510,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 5410
+          },
+          "reward": {
+            "in": 5462,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 50
+          },
+          "bonus": {
+            "in": 345,
+            "out": 0
+          }
+        },
+        "ink": {
+          "production": {
+            "in": 1685,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 300
+          },
+          "arm": {
+            "in": 0,
+            "out": 1049
+          },
+          "reward": {
+            "in": 581,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 40
+          }
+        },
+        "rubber": {
+          "reward": {
+            "in": 94,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 82
+          },
+          "arm": {
+            "in": 0,
+            "out": 86
+          },
+          "production": {
+            "in": 126,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 7
+          }
+        }
+      },
+      "gainPerHour": 681.7,
+      "meritPerHour": 208.3,
+      "planes": {
+        "dart": {
+          "flown": 66,
+          "wins": 40
+        },
+        "widewing": {
+          "flown": 29,
+          "wins": 20
+        },
+        "falcon": {
+          "flown": 61,
+          "wins": 36
+        },
+        "thug": {
+          "flown": 12,
+          "wins": 4
+        },
+        "jumper": {
+          "flown": 1,
+          "wins": 1
+        }
+      }
+    },
+    {
+      "id": "idle-5",
+      "profile": "idle",
+      "days": [
+        {
+          "day": 1,
+          "paper": 44,
+          "ink": 62,
+          "rubber": 8,
+          "worth": 91,
+          "merit": 18,
+          "rankIndex": 0
+        },
+        {
+          "day": 2,
+          "paper": 72,
+          "ink": 33,
+          "rubber": 11,
+          "worth": 111,
+          "merit": 48,
+          "rankIndex": 2
+        },
+        {
+          "day": 3,
+          "paper": 133,
+          "ink": 32,
+          "rubber": 11,
+          "worth": 171,
+          "merit": 84,
+          "rankIndex": 3
+        },
+        {
+          "day": 4,
+          "paper": 200,
+          "ink": 38,
+          "rubber": 17,
+          "worth": 253,
+          "merit": 117,
+          "rankIndex": 4
+        },
+        {
+          "day": 5,
+          "paper": 300,
+          "ink": 38,
+          "rubber": 15,
+          "worth": 349,
+          "merit": 156,
+          "rankIndex": 5
+        },
+        {
+          "day": 6,
+          "paper": 232,
+          "ink": 20,
+          "rubber": 15,
+          "worth": 272,
+          "merit": 165,
+          "rankIndex": 6
+        },
+        {
+          "day": 7,
+          "paper": 224,
+          "ink": 56,
+          "rubber": 18,
+          "worth": 288,
+          "merit": 192,
+          "rankIndex": 6
+        }
+      ],
+      "sorties": 51,
+      "successes": 28,
+      "raidsMade": 0,
+      "raidsSuffered": 1,
+      "recoveries": [
+        71
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 237,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 1376
+          },
+          "reward": {
+            "in": 1203,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 5
+          },
+          "bonus": {
+            "in": 65,
+            "out": 0
+          }
+        },
+        "ink": {
+          "production": {
+            "in": 99,
+            "out": 0
+          },
+          "arm": {
+            "in": 0,
+            "out": 279
+          },
+          "reward": {
+            "in": 313,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 132
+          },
+          "raid": {
+            "in": 0,
+            "out": 5
+          }
+        },
+        "rubber": {
+          "spend": {
+            "in": 0,
+            "out": 20
+          },
+          "arm": {
+            "in": 0,
+            "out": 14
+          },
+          "production": {
+            "in": 33,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 2
+          },
+          "reward": {
+            "in": 9,
+            "out": 0
+          }
+        }
+      },
+      "gainPerHour": 143.6,
+      "meritPerHour": 205.7,
+      "planes": {
+        "widewing": {
+          "flown": 6,
+          "wins": 3
+        },
+        "swift": {
+          "flown": 3,
+          "wins": 2
+        },
+        "falcon": {
+          "flown": 17,
+          "wins": 10
+        },
+        "dart": {
+          "flown": 24,
+          "wins": 13
+        },
+        "thug": {
+          "flown": 1,
+          "wins": 0
+        }
+      }
+    },
+    {
+      "id": "exploiter-6",
+      "profile": "exploiter",
+      "days": [
+        {
+          "day": 1,
+          "paper": 2,
+          "ink": 1,
+          "rubber": 25,
+          "worth": 53,
+          "merit": 30,
+          "rankIndex": 1
+        },
+        {
+          "day": 2,
+          "paper": 3,
+          "ink": 1,
+          "rubber": 30,
+          "worth": 64,
+          "merit": 53,
+          "rankIndex": 2
+        },
+        {
+          "day": 3,
+          "paper": 4,
+          "ink": 1,
+          "rubber": 27,
+          "worth": 59,
+          "merit": 91,
+          "rankIndex": 3
+        },
+        {
+          "day": 4,
+          "paper": 3,
+          "ink": 0,
+          "rubber": 28,
+          "worth": 59,
+          "merit": 114,
+          "rankIndex": 4
+        },
+        {
+          "day": 5,
+          "paper": 43,
+          "ink": 12,
+          "rubber": 30,
+          "worth": 109,
+          "merit": 152,
+          "rankIndex": 5
+        },
+        {
+          "day": 6,
+          "paper": 4,
+          "ink": 1,
+          "rubber": 30,
+          "worth": 65,
+          "merit": 167,
+          "rankIndex": 6
+        },
+        {
+          "day": 7,
+          "paper": 38,
+          "ink": 1,
+          "rubber": 26,
+          "worth": 91,
+          "merit": 205,
+          "rankIndex": 7
+        }
+      ],
+      "sorties": 760,
+      "successes": 0,
+      "raidsMade": 16,
+      "raidsSuffered": 32,
+      "recoveries": [
+        16,
+        8,
+        69,
+        29,
+        25,
+        883,
+        35,
+        312,
+        200,
+        28,
+        26,
+        284,
+        16,
+        200,
+        203,
+        25,
+        20,
+        108,
+        2,
+        19,
+        211,
+        7,
+        26,
+        192,
+        16,
+        254,
+        274,
+        251,
+        38,
+        107,
+        307,
+        48
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 4338,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 4805
+          },
+          "reward": {
+            "in": 405,
+            "out": 0
+          }
+        },
+        "ink": {
+          "spend": {
+            "in": 0,
+            "out": 14
+          },
+          "arm": {
+            "in": 0,
+            "out": 1916
+          },
+          "production": {
+            "in": 1872,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 1
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 131,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 117
+          }
+        }
+      },
+      "gainPerHour": -9,
+      "meritPerHour": 29.3,
+      "planes": {
+        "falcon": {
+          "flown": 71,
+          "wins": 0
+        },
+        "dart": {
+          "flown": 85,
+          "wins": 0
+        },
+        "swift": {
+          "flown": 604,
+          "wins": 0
+        }
+      }
+    },
+    {
+      "id": "exploiter-7",
+      "profile": "exploiter",
+      "days": [
+        {
+          "day": 1,
+          "paper": 7,
+          "ink": 1,
+          "rubber": 30,
+          "worth": 68,
+          "merit": 46,
+          "rankIndex": 2
+        },
+        {
+          "day": 2,
+          "paper": 3,
+          "ink": 1,
+          "rubber": 30,
+          "worth": 64,
+          "merit": 61,
+          "rankIndex": 2
+        },
+        {
+          "day": 3,
+          "paper": 14,
+          "ink": 1,
+          "rubber": 30,
+          "worth": 75,
+          "merit": 99,
+          "rankIndex": 4
+        },
+        {
+          "day": 4,
+          "paper": 4,
+          "ink": 0,
+          "rubber": 30,
+          "worth": 64,
+          "merit": 114,
+          "rankIndex": 4
+        },
+        {
+          "day": 5,
+          "paper": 6,
+          "ink": 1,
+          "rubber": 26,
+          "worth": 59,
+          "merit": 152,
+          "rankIndex": 5
+        },
+        {
+          "day": 6,
+          "paper": 8,
+          "ink": 2,
+          "rubber": 30,
+          "worth": 69,
+          "merit": 175,
+          "rankIndex": 6
+        },
+        {
+          "day": 7,
+          "paper": 46,
+          "ink": 6,
+          "rubber": 26,
+          "worth": 101,
+          "merit": 205,
+          "rankIndex": 7
+        }
+      ],
+      "sorties": 758,
+      "successes": 0,
+      "raidsMade": 16,
+      "raidsSuffered": 35,
+      "recoveries": [
+        9,
+        21,
+        109,
+        4,
+        11,
+        27,
+        1814,
+        112,
+        28,
+        2067,
+        63,
+        286,
+        46,
+        458,
+        17,
+        null,
+        18,
+        201,
+        25,
+        47,
+        135,
+        77,
+        25,
+        154,
+        105,
+        44,
+        27,
+        163,
+        311,
+        30,
+        1326,
+        56,
+        279,
+        283,
+        35
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 4339,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 4798
+          },
+          "reward": {
+            "in": 405,
+            "out": 0
+          }
+        },
+        "ink": {
+          "spend": {
+            "in": 0,
+            "out": 14
+          },
+          "arm": {
+            "in": 0,
+            "out": 1907
+          },
+          "production": {
+            "in": 1870,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 3
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 148,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 134
+          }
+        }
+      },
+      "gainPerHour": -7.6,
+      "meritPerHour": 29.3,
+      "planes": {
+        "dart": {
+          "flown": 82,
+          "wins": 0
+        },
+        "falcon": {
+          "flown": 74,
+          "wins": 0
+        },
+        "swift": {
+          "flown": 602,
+          "wins": 0
+        }
+      }
+    },
+    {
+      "id": "farmer-8",
+      "profile": "farmer",
+      "days": [
+        {
+          "day": 1,
+          "paper": 37,
+          "ink": 128,
+          "rubber": 30,
+          "worth": 161,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 2,
+          "paper": 39,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 174,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 3,
+          "paper": 38,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 173,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 4,
+          "paper": 51,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 186,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 5,
+          "paper": 52,
+          "ink": 134,
+          "rubber": 30,
+          "worth": 179,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 6,
+          "paper": 37,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 172,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 7,
+          "paper": 38,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 173,
+          "merit": 0,
+          "rankIndex": 0
+        }
+      ],
+      "sorties": 218,
+      "successes": 0,
+      "raidsMade": 0,
+      "raidsSuffered": 12,
+      "recoveries": [
+        980,
+        81,
+        68,
+        280,
+        467,
+        1143,
+        1923,
+        733,
+        227,
+        269,
+        1502,
+        59
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 3247,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 3330
+          },
+          "bonus": {
+            "in": 25,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 4
+          }
+        },
+        "ink": {
+          "production": {
+            "in": 287,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 197
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 61,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 43
+          }
+        }
+      },
+      "gainPerHour": 2.7,
+      "meritPerHour": 0,
+      "planes": {}
+    },
+    {
+      "id": "farmer-9",
+      "profile": "farmer",
+      "days": [
+        {
+          "day": 1,
+          "paper": 52,
+          "ink": 130,
+          "rubber": 30,
+          "worth": 177,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 2,
+          "paper": 37,
+          "ink": 133,
+          "rubber": 29,
+          "worth": 162,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 3,
+          "paper": 52,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 187,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 4,
+          "paper": 52,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 187,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 5,
+          "paper": 52,
+          "ink": 141,
+          "rubber": 30,
+          "worth": 183,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 6,
+          "paper": 52,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 187,
+          "merit": 0,
+          "rankIndex": 0
+        },
+        {
+          "day": 7,
+          "paper": 52,
+          "ink": 150,
+          "rubber": 30,
+          "worth": 187,
+          "merit": 0,
+          "rankIndex": 0
+        }
+      ],
+      "sorties": 222,
+      "successes": 0,
+      "raidsMade": 0,
+      "raidsSuffered": 13,
+      "recoveries": [
+        595,
+        336,
+        1563,
+        300,
+        74,
+        254,
+        1850,
+        600,
+        362,
+        467,
+        2678,
+        373,
+        1034
+      ],
+      "longestStuck": 0,
+      "flows": {
+        "paper": {
+          "production": {
+            "in": 3199,
+            "out": 0
+          },
+          "bonus": {
+            "in": 25,
+            "out": 0
+          },
+          "spend": {
+            "in": 0,
+            "out": 3270
+          },
+          "raid": {
+            "in": 0,
+            "out": 2
+          }
+        },
+        "ink": {
+          "production": {
+            "in": 320,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 230
+          }
+        },
+        "rubber": {
+          "production": {
+            "in": 69,
+            "out": 0
+          },
+          "raid": {
+            "in": 0,
+            "out": 51
+          }
+        }
+      },
+      "gainPerHour": 4.7,
+      "meritPerHour": 0,
+      "planes": {}
+    }
+  ],
+  "planes": {
+    "falcon": {
+      "flown": 515,
+      "wins": 248,
+      "share": 0.216,
+      "winRate": 0.48
+    },
+    "thug": {
+      "flown": 72,
+      "wins": 36,
+      "share": 0.03,
+      "winRate": 0.5
+    },
+    "dart": {
+      "flown": 403,
+      "wins": 170,
+      "share": 0.169,
+      "winRate": 0.42
+    },
+    "widewing": {
+      "flown": 170,
+      "wins": 115,
+      "share": 0.071,
+      "winRate": 0.68
+    },
+    "jumper": {
+      "flown": 13,
+      "wins": 10,
+      "share": 0.005,
+      "winRate": 0.77
+    },
+    "swift": {
+      "flown": 1209,
+      "wins": 2,
+      "share": 0.508,
+      "winRate": 0
+    }
+  },
+  "leaderGap": 1,
+  "flags": {
+    "runawayLeader": false,
+    "deadEnd": false,
+    "exploitBeatsPlay": false,
+    "notes": []
+  },
+  "farming": {
+    "flags": [
+      {
+        "a": "farmer-8",
+        "b": "farmer-9",
+        "reason": "kills",
+        "at": 500
+      },
+      {
+        "a": "exploiter-7",
+        "b": "exploiter-6",
+        "reason": "undefended",
+        "at": 753
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 2334
+      },
+      {
+        "a": "exploiter-7",
+        "b": "exploiter-6",
+        "reason": "undefended",
+        "at": 3203
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 4203
+      },
+      {
+        "a": "exploiter-6",
+        "b": "exploiter-7",
+        "reason": "undefended",
+        "at": 5636
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 6043
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 7923
+      },
+      {
+        "a": "exploiter-6",
+        "b": "exploiter-7",
+        "reason": "undefended",
+        "at": 8101
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 9763
+      },
+      {
+        "a": "exploiter-7",
+        "b": "exploiter-6",
+        "reason": "undefended",
+        "at": 10529
+      },
+      {
+        "a": "farmer-8",
+        "b": "farmer-9",
+        "reason": "kills",
+        "at": 11649
+      },
+      {
+        "a": "exploiter-6",
+        "b": "exploiter-7",
+        "reason": "undefended",
+        "at": 12968
+      },
+      {
+        "a": "farmer-8",
+        "b": "farmer-9",
+        "reason": "kills",
+        "at": 13489
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 15361
+      },
+      {
+        "a": "exploiter-7",
+        "b": "exploiter-6",
+        "reason": "undefended",
+        "at": 15448
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 17201
+      },
+      {
+        "a": "exploiter-6",
+        "b": "exploiter-7",
+        "reason": "undefended",
+        "at": 17874
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 19074
+      },
+      {
+        "a": "exploiter-7",
+        "b": "exploiter-6",
+        "reason": "undefended",
+        "at": 20415
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 20914
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 22784
+      },
+      {
+        "a": "exploiter-6",
+        "b": "exploiter-7",
+        "reason": "undefended",
+        "at": 23175
+      },
+      {
+        "a": "farmer-9",
+        "b": "farmer-8",
+        "reason": "kills",
+        "at": 24624
+      }
+    ],
+    "withheld": 1249
+  }
+}

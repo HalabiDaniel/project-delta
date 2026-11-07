@@ -17,6 +17,8 @@ export type Action =
   | 'throttleUp' | 'throttleDown' | 'bankLeft' | 'bankRight' | 'boost' | 'firePrimary' | 'fireSecondary' | 'modifier'
   // v0.0.16: fly the maneuver in the slot; at the pad, change which one is in the slot
   | 'maneuver' | 'maneuverNext'
+  // v0.0.19: at home, choose the escorts for the next sortie; in the air, give them the next order
+  | 'escortNext'
   // Sortie flow
   | 'confirm' | 'launch' | 'back' | 'pause' | 'fold' | 'service' | 'swap' | 'remove' | 'upgrade'
   // Selection
@@ -25,7 +27,9 @@ export type Action =
   // Screens
   | 'base' | 'logbook' | 'sound' | 'dev' | 'hints' | 'scoreboard' | 'hangar' | 'missions' | 'profile'
   // Multiplayer
-  | 'emote1' | 'emote2' | 'emote3';
+  | 'emote1' | 'emote2' | 'emote3'
+  // v0.0.19: four more emotes (keyboard; the emote bar takes clicks) and the players panel
+  | 'emote4' | 'emote5' | 'emote6' | 'emote7' | 'players';
 
 /** Where the player is, which decides what the controller's buttons do. */
 export type InputContext = 'flight' | 'home' | 'menu';
@@ -35,22 +39,22 @@ export const KEYMAP: Readonly<Record<string, Action>> = {
   KeyW: 'throttleUp', KeyS: 'throttleDown', KeyA: 'bankLeft', KeyD: 'bankRight',
   ShiftLeft: 'boost', ShiftRight: 'boost',
   // Left Alt flies the maneuver (not Ctrl: Ctrl+W closes the tab, and W is the throttle). T changes it at the pad.
-  AltLeft: 'maneuver', KeyT: 'maneuverNext',
+  AltLeft: 'maneuver', KeyT: 'maneuverNext', KeyG: 'escortNext',
   Enter: 'confirm', NumpadEnter: 'confirm', Space: 'launch', Escape: 'back',
   KeyF: 'fold', KeyR: 'service', KeyX: 'swap', Delete: 'remove', KeyU: 'upgrade',
   KeyQ: 'prevAircraft', KeyE: 'nextAircraft',
   KeyB: 'base', KeyL: 'logbook', KeyM: 'sound', Backquote: 'dev', KeyH: 'hangar', Tab: 'missions', KeyP: 'profile',
-  KeyZ: 'emote1', KeyC: 'emote2', KeyV: 'emote3',
+  KeyZ: 'emote1', KeyC: 'emote2', KeyV: 'emote3', KeyN: 'emote4', KeyJ: 'emote5', KeyK: 'emote6', KeyI: 'emote7', KeyO: 'players',
   Digit0: 'pick0', Digit1: 'pick1', Digit2: 'pick2', Digit3: 'pick3', Digit4: 'pick4', Digit5: 'pick5', Digit6: 'pick6', Digit7: 'pick7',
   Numpad0: 'pick0', Numpad1: 'pick1', Numpad2: 'pick2', Numpad3: 'pick3', Numpad4: 'pick4', Numpad5: 'pick5', Numpad6: 'pick6', Numpad7: 'pick7',
 };
 
 /** Controller: per context, button → action on press. */
 export const PAD_PRESS: Readonly<Record<InputContext, Partial<Record<PadButton, Action>>>> = {
-  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3', south: 'maneuver' },
+  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3', south: 'maneuver', down: 'escortNext' },
   home: {
     south: 'confirm', east: 'back', west: 'service', north: 'base', lb: 'prevAircraft', rb: 'nextAircraft',
-    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause', rs: 'maneuverNext', up: 'profile',
+    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause', rs: 'maneuverNext', up: 'profile', down: 'escortNext', left: 'players',
   },
   menu: { south: 'confirm', east: 'back', menu: 'pause', view: 'logbook', up: 'profile' },
 };

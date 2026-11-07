@@ -269,7 +269,7 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.progress(world.id, p.id)).toBeNull();
       const record = { stats: { kills: 3, sorties: 9 }, director: { swaps: 2, offers: [] }, garage: { aircraft: 'falcon', board: { safe: randomUUID() } } };
       await store.saveProgress(world.id, p.id, record);
-      expect(await store.progress(world.id, p.id)).toEqual({ ...record, profile: null, protectUntil: null, shieldUntil: null });
+      expect(await store.progress(world.id, p.id)).toEqual({ ...record, profile: null, social: null, protectUntil: null, shieldUntil: null });
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 4, sorties: 10 } });
       expect((await store.progress(world.id, p.id))?.stats).toEqual({ kills: 4, sorties: 10 });
       // v0.0.18: the multiplayer profile (medals, records, achievements), kept when a save has none.
@@ -278,6 +278,11 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 5, sorties: 11 } });
       expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
+      // v0.0.19: threat, mutes and reputation, kept the same way.
+      const social = { threat: 2.5, threatAt: 1_700_000_000_000, weakKills: [], mutes: ['abc'], reputation: { raids: 1, defends: 2, kills: 3, helps: 4 } };
+      await store.saveProgress(world.id, p.id, { ...record, social });
+      await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 6, sorties: 12 } });
+      expect((await store.progress(world.id, p.id))?.social).toEqual(social);
       const outcome = { id: randomUUID(), template: 'strike', state: 'completed' as const, outcome: null, reward: 60, spec: { title: 'Strike' } };
       expect(await store.recordMission(world.id, p.id, outcome)).toBe(true);
       expect(await store.recordMission(world.id, p.id, { ...outcome, reward: 999 })).toBe(false);
@@ -328,6 +333,11 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(ofA.map((r) => r.id)).toEqual([raid.id, kill.id]);
       expect(ofA[0]).toMatchObject({ kind: 'raid', attacker: a.publicId, victim: b.publicId, success: true });
       expect((await store.pvpRecords(world.id, b.id, since)).map((r) => r.id)).toEqual([raid.id, kill.id]);
+      // v0.0.19: what rivalries are made of goes in the same table, read back the same way.
+      const kinds = ['assist', 'defend', 'coop', 'bounty', 'challenge', 'mischief'] as const;
+      const more = kinds.map((kind, i) => ({ id: randomUUID(), kind, attacker: a.id, victim: b.id, success: true, at: new Date(Date.now() - 20_000 + i) }));
+      for (const r of more) await store.addPvpRecord(world.id, r);
+      expect((await store.pvpRecords(world.id, a.id, since)).map((r) => r.kind)).toEqual(['raid', 'kill', ...kinds]);
     });
 
     it('keeps protections as clock times with the progress', async () => {
@@ -395,6 +405,22 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       await store.placeBase(p.id, 'srv/c', 'T5', 60);
       expect(await store.releaseBase(p.id)).toBe(true);
       expect((await store.base(p.id))?.placement).toBeNull();
+    });
+
+    it('keeps player reports and anti-farming flags for the developer (v0.0.19)', async () => {
+      const world = await store.openWorld('reports');
+      const a = await store.createPlayer(player('Teller'), h('token-teller'), 'open');
+      const b = await store.createPlayer(player('Told'), h('token-told'), 'open');
+      const before = new Date(Date.now() - 1000);
+      await store.addReport({ reporterId: a.id, reportedId: b.id, reason: 'harassment', session: 'room-1', context: { record: { wins: 1, losses: 3 } } });
+      const reports = (await store.reports(before)).filter((r) => r.reporterId === a.id);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({ reportedId: b.id, reason: 'harassment', session: 'room-1', reporterName: expect.any(String), reportedName: expect.any(String), context: { record: { wins: 1, losses: 3 } } });
+      expect(await store.reports(new Date(Date.now() + 60_000))).toEqual([]);
+      await store.addFarmFlag({ worldId: world.id, aId: a.id, bId: b.id, reason: 'kills', data: { flows: 5 } });
+      const flags = (await store.farmFlags(before)).filter((f) => f.aId === a.id);
+      expect(flags).toHaveLength(1);
+      expect(flags[0]).toMatchObject({ bId: b.id, reason: 'kills', data: { flows: 5 } });
     });
 
     it('keeps playtest feedback with its context, and reads it back since a date (v0.0.14)', async () => {

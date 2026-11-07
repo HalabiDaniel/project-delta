@@ -63,3 +63,11 @@ export const TERRITORY_NAMES: Record<string, string> = {
 export function territoryName(id: string): string {
   return TERRITORY_NAMES[id] ?? id;
 }
+
+/**
+ * v0.0.19: where a player's rival banner flies over their desk: near the back corner, above the
+ * platform, clear of the building slots. The server aims banner mischief at it; the client draws it.
+ */
+export function bannerPoint(t: { x: number; z: number; half: number; top: number }): { x: number; y: number; z: number } {
+  return { x: t.x - t.half * 0.72, y: t.top + 9, z: t.z + t.half * 0.72 };
+}

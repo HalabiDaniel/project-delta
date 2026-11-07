@@ -1,4 +1,16 @@
-# paperwars.io: v0.0.18 (economy and content depth), on top of v0.0.17 (player ranks), v0.0.16 (flight maneuvers), v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.19 (advanced multiplayer), on top of v0.0.18 (economy and content depth), v0.0.17 (player ranks), v0.0.16 (flight maneuvers), v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.19: advanced multiplayer (coded; next, the developer approves the rules and numbers and
+> plays them with the invited friend).** Buy up to two weaker **AI escorts** for a sortie and give them
+> orders; a multiplayer **director** that knows each player's situation and tier and places fair
+> **bounties** on aggressive players, shared by contribution; **alliances for a session**;
+> **cooperation** (escort another player's bomber, joint defense, joint attacks on a much stronger
+> player); **staged raids, strikes and challenges** next to multi-structure bombing raids;
+> **rivalries** (a nemesis, rematch and payback cards) and **reputation**; seven emotes, **ink
+> splats**, rival banners and harmless **mischief**, with **mute and report**; **anti-farming** across
+> every reward between two players; and the **Ghost** and **Specter** finalised. See
+> [v0.0.19: advanced multiplayer](#v0019-advanced-multiplayer), the [plan](docs/roadmap/v0.0.19.md)
+> and the rules in [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md#advanced-multiplayer-v0019).
 
 > **v0.0.18: economy and content depth (coded; next, the developer approves the numbers and
 > playtests with the invited friend).** **Ink** and **rubber balls** join paper as real territory
@@ -376,6 +388,138 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.19: advanced multiplayer
+
+Built from the [plan](docs/roadmap/v0.0.19.md), one phase per commit. Every rule is decided by the
+server, every number is provisional and lives in `src/config.ts`, and
+[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md#advanced-multiplayer-v0019) lists them all.
+
+### AI escorts (section 1)
+
+- **Paper Wingman** (Swift, rookie; 16 paper + 5 ink), **Guard Falcon** (Falcon, regular; 30 + 12 ink)
+  and **Spotter** (Dart, rookie; 12 paper, marks hostiles within 90 m on your mini-map). Chosen at the
+  desk with **G** (d-pad ↓) or the dock's escort button, bought at launch, **two per sortie**, twelve
+  per session.
+- Weaker than a human (60 % health, 55 % gun damage), never stealthy, never drones; removed the moment
+  the sortie ends, survived or not, never refunded. Shooting one down pays 3.
+- Orders on **G** in the air: follow me, attack my target, protect the bomber, cover my retreat. The
+  server flies them with the ordinary AI pilots (`server/world/Escorts.ts`).
+- Escorts can't complete objectives (their rounds never finish a target their owner's mission needs),
+  never chase into an offline player's desk, never start raids.
+
+### The multiplayer director and bounties (section 2)
+
+- Each player's **situation** (resources, planes, record, preferred missions, raids, kills on weaker
+  players, threat, base condition, strength against the session's median) and **tier** (newcomer,
+  intermediate, advanced). Threat comes only from aggression, decays, and is saved with the player
+  (migration `0011`, `progress.social`).
+- Advanced players aren't offered raids on newcomers (unless the newcomer struck first);
+  intermediates are paid more for taking on stronger players.
+- **Bounties** on a raiding bomber, a repeated raider (the defender keeps priority), a dominant
+  player's forward defense, or a player on a streak of kills on weaker players. One per target, three
+  per session, never on offline or protected players; the pot is split by damage, paid once.
+- Director decisions go to the server log (`director.*`) and `GET /admin/director`.
+
+### Alliances and cooperation (section 3, "Also B")
+
+- **Alliances for the session** from the players panel (**O**, or d-pad ← at home): up to three, at
+  most half the session; no friendly fire, shared radar contacts, each other's raids on the map, no
+  raids or challenges between allies, and a minute's peace after leaving.
+- **Escort another player's bomber** (allies by default, *anyone* or *nobody* in the players panel),
+  paid by the share of the flight spent at its side; **joint defense** for neighbours and allies of a
+  raided player; **joint attacks** by two intermediate players on a much stronger one. All opt-in,
+  paid once, shared by contribution, within every protection.
+
+### Deeper raids and three kinds of raid (section 4, "Also A")
+
+- Raid cards come as **bombing raids** (two standing structures on a well-built base), **staged raids**
+  (suppress a radar or turret, then bomb the store, each stage on its own clock; stage one alone pays
+  a little), **strikes** (wreck two structures with guns and rockets, no resources taken) and
+  **challenges** (a dogfight over the defender's own desk, only when they are at it; not showing up
+  costs a little vulnerable paper). Every kind obeys every raid rule, applied to the whole raid.
+- The defender is told how many escorts fly with the raider; reports say what each stage did and
+  what decided the raid. A raid bomb now counts for each marked structure.
+
+### Reputation and rivalries (section 5)
+
+- Assists, defenses, cooperation, bounty shares, challenges and mischief join raids and kills in
+  `pvp_records`; a rivalry book built from them (two weeks' memory) knows your record against every
+  player and your **nemesis**.
+- Rematch (your nemesis) and payback (someone who raided you) cards are likelier and say why, always
+  within the protections. **Reputation** (raider, defender, ace, helper) shows on the scoreboard;
+  it never changes combat.
+
+### Playful social interaction, mute and report (section 6)
+
+- Four more emotes (salute, laugh, tease, **ink splat** on N J K I; the splat marks the plane ahead
+  with ink that fades), **rival banners** on claimed desks, and **mischief cards** (ink a banner, buzz a
+  desk without a scratch, show off with a maneuver over it): nothing destroyed or taken, rate-limited,
+  never on offline, new or arriving players or on anyone who muted you.
+- **Mute** (for good) and **report** (a reason, no free text; `player_reports`, `GET /admin/reports`)
+  in the players panel.
+
+### Anti-farming (section 7)
+
+`src/systems/Farming.ts`, shared by the server and the simulator: every reward one player earns from
+another decays after the third in 30 minutes, across every source; patterns that look like farming
+pause rewards between the pair for 30 minutes and are logged (`farm_flags`), never banned. The
+simulator's new **farmer** pair (kills traded in turns) and the v0.0.18 raid-trading exploiters both
+earn less than steady play and are flagged (`npm run sim`, `src/sim/longrun.test.ts`).
+
+### The Ghost and the Specter (section 8)
+
+- **Ghost**: the lowest signature, stealth, an internal bay that gives it away sharply when it opens;
+  three bombs, slow and fragile; the dearest bomber in paper, ink and rubber with the longest fold. On
+  a raid the bay opens first and no release counts until 6 s after the defender's warning.
+- **Specter**: unarmed, cheap in paper only, slow, recon twice as fast; damages nothing, not even by
+  ramming. Its reveal (hostile aircraft and defenses within 140 m) reaches its pilot, their allies and
+  cooperators, and the pilots hunting a bounty it has in view; shooting it down pays 5.
+- Placeholder take-off cues (a hush for the Ghost, a thin whine for the Specter) until v0.0.25.
+
+### Bots and load (section 9)
+
+Bots buy escorts, raiders fly bombing raids, staged raids and strikes (a Thug strafes, then bombs)
+and welcome escorts, and a helper role takes cooperation cards. `npm run loadtest` ends with an
+eight-seat run of the v0.0.19 systems (every bot with two escorts):
+
+| Run | Server step avg / max (ms of 16.7) | Down / up per player (KB/s) | Escorts in the air (peak) | What happened |
+|---|---|---|---|---|
+| 8 bots, v0.0.18 behaviour (the standard run) | 0.40 / 1.4 | 10.3 / 1.2 | 0 | Dogfights |
+| 8 bots, the v0.0.19 run, 30 s | 0.68 / 10.7 | 17.1 / 1.2 | 11 | Everyone launched with escorts; too short for a raid |
+| 8 bots, the v0.0.19 run, 60 s | 0.48 / 3.8 | 12.4 / 1.2 | 12 (the session cap) | 2 bombing raids, 5 kills |
+| 8 bots, the v0.0.19 run, 150 s | 0.41 / 3.3 | 10.8 / 1.2 | 12 | 2 bombing raids, no bounty or cooperation card flown |
+
+Every run stays far inside the 16.7 ms step and the bandwidth budget; with twelve escorts up the
+download per player rose by up to 7 KB/s in the busiest 30 s (escorts are ordinary AI aircraft in
+the schema). The whole table, including 2, 16 and 2 × 8 players and a poor network, is in
+[docs/checkpoints/0.0.19-advanced-multiplayer/](docs/checkpoints/0.0.19-advanced-multiplayer/README.md).
+The bots' raids are rare and slow (they wait for a card the protections allow, and fly it badly), so
+bounties and cooperation were exercised by the tests rather than the load run.
+
+### Decisions for the developer
+
+- The escort roster, costs and cap; the bounty objectives and pots; the cooperation rules and pays;
+  the raid kinds and their numbers; the emotes and mischief cards; the anti-farming thresholds; the
+  Ghost's and Specter's stats and the drone rules (`ESCORTS`, `SITUATION`, `BOUNTIES`, `ALLIANCES`,
+  `COOP`, `RAID_KINDS`, `RIVALRY`, `SOCIAL`, `FARMING`, `DRONES`, `PVP.bayWarning`).
+- Interpretations to confirm: a staged raid that fails stage one pays nothing and one that completes
+  stage one but not the store pays 30 % (the plan's sentence reads either way); a Specter can't fly a
+  kill-bounty card, so it earns bounty credit by spotting the target on any sortie; the Guard Falcon
+  flies a Falcon airframe but with no stealth.
+- The anti-farming decay in a two-player session: rewards from the same opponent shrink after the
+  third in 30 minutes, which two real rivals may notice in a long duel.
+
+### Not done yet
+
+- The **two-player playtest** (a Ghost raid against a defender, then cooperation with one flying a
+  Specter), on the private server, and the migration `0011` rehearsal on a copy of the live database.
+- **Art and animation**: the Ghost's bay doors (the bay state is synced, the model has no doors yet),
+  the Specter's wing flex and sensor dome, escort markers in the 3D world (they are marked on the
+  mini-map), and the ink splat as a decal on the plane (it shows on the name tag and on banners).
+- A real **order wheel**: orders cycle on one key, with the current order on an action tile.
+- **Supply runs and deliveries to another player's desk** (left over from v0.0.18): the cooperation
+  settings exist now, the missions don't.
 
 ## v0.0.18: economy and content depth
 
@@ -2250,7 +2394,7 @@ The road to the first public release is planned version by version in
 | [v0.0.16](docs/roadmap/v0.0.16.md) | Flight maneuvers |
 | [v0.0.17](docs/roadmap/v0.0.17.md) | Player ranks |
 | [v0.0.18](docs/roadmap/v0.0.18.md) | Economy and content depth |
-| [v0.0.19](docs/roadmap/v0.0.19.md) | Advanced multiplayer |
+| [v0.0.19](docs/roadmap/v0.0.19.md) | Advanced multiplayer (coded) |
 | [v0.0.20](docs/roadmap/v0.0.20.md) | Maps: nine indoor and outdoor maps |
 | [v0.0.21](docs/roadmap/v0.0.21.md) | World conditions: fans, wind, rain, day and night, lights out |
 | [v0.0.22](docs/roadmap/v0.0.22.md) | World scale |
@@ -2263,6 +2407,6 @@ The road to the first public release is planned version by version in
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
 The roadmap was last reordered on 2026-11-07 (see [the roadmap](docs/roadmap/README.md)).
-**v0.0.18 (economy and content depth) is the latest version; next up is v0.0.19 (advanced multiplayer).** From v0.1.0 on,
+**v0.0.19 (advanced multiplayer) is the latest version; next up is v0.0.20 (maps).** From v0.1.0 on,
 0.1.x releases are small improvements, 0.x.0 releases are major versions, and 1.0.0 is the first
 full version.

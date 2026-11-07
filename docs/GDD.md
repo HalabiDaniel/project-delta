@@ -249,8 +249,8 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Lancer | B-1B Lancer | Supersonic bomber | 0.0.25 |
 | Lightning | F-35 | Stealth multirole | 0.0.18 |
 | Thug | A-10 Thunderbolt II | Ground attack | 0.0.18 |
-| Ghost | B-2 Spirit | Stealth bomber | 0.0.19 |
-| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.19 |
+| Ghost | B-2 Spirit | Stealth bomber | 0.0.19 (finalised) |
+| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.19 (finalised) |
 | Jumper | AV-8B Harrier | VTOL fighter | 0.0.22 |
 | Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.22 |
 | Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.22 |
@@ -968,7 +968,7 @@ Ink and rubber balls as real resources (§4.2), upkeep and caps against snowball
 
 ### Version 0.0.19: Advanced Multiplayer
 
-AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.19](roadmap/v0.0.19.md).
+AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.19](roadmap/v0.0.19.md). **Coded:** everything above, plus staged and multi-structure raids and a players panel; left for later: the Ghost's bay doors and the Specter's wing flex as art, escort markers in the 3D world, a real order wheel, and the supply runs and deliveries left over from v0.0.18. The rules and numbers await the developer's approval and the two-player playtest.
 
 ### Version 0.0.20: Maps
 

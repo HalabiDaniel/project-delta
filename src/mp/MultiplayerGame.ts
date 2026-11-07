@@ -1,6 +1,6 @@
 import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, ESCORT_ORDERS, ESCORT_PLANS, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type BombKind, type Side } from '../config';
 import { cycleManeuver as cycleManeuverIn } from '../aircraft/maneuvers';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
@@ -27,6 +27,8 @@ import {
   DESK_STATES,
   PLAYER_COLOURS,
   planeOwner,
+  REPORT_REASONS,
+  type ReportReason,
   type CardDTO,
   type Command,
   type Emote,
@@ -73,7 +75,7 @@ import { PaperShading } from '../render/shading/PaperShading';
 import { installMaterials, MaterialLibrary } from '../render/materials/MaterialLibrary';
 import { FeedbackForm } from './FeedbackForm';
 import { Lobby, type ClaimView } from './Lobby';
-import { MpHud, type IncomingView, type MpHudView, type ScoreRow, type TerritoryTagView } from './MpHud';
+import { MpHud, type IncomingView, type MpHudView, type PlayerRowView, type PlayersPanelView, type ScoreRow, type TerritoryTagView } from './MpHud';
 import { loadMpSettings, saveMpSettings, type MpSettings } from './MpSettings';
 import { presenceOf } from './presence';
 import { deskLabel } from '../net/Username';
@@ -85,6 +87,11 @@ import { NetClient } from './NetClient';
 import { MpViews } from './MpViews';
 
 /** What a player is doing, by the phase number the server sends. */
+/** v0.0.19: the emote each emote key sends. */
+const EMOTE_ACTIONS: Partial<Record<string, Emote>> = {
+  emote1: 'waggle', emote2: 'confetti', emote3: 'heart', emote4: 'salute', emote5: 'laugh', emote6: 'tease', emote7: 'splat',
+};
+
 const PHASE_WORDS: readonly string[] = (({ desk, building, ready, flying, landed, result, down }) => [desk, building, ready, flying, landed, result, down])(T.mpGame.phase);
 
 const STEP = NET.step;
@@ -173,6 +180,9 @@ export class MultiplayerGame {
   readonly network: DefenseNetwork;
   me: string | null = null;
   paused = false;
+  /** v0.0.19: the players panel (O / ← at home) is open, and whose report reasons are showing. */
+  playersOpen = false;
+  reportingFor: string | null = null;
   /** The F8 feedback form (set right after construction). */
   feedback!: FeedbackForm;
   /** v0.0.17: our rank, the profile card and the promotion ceremony. */
@@ -325,6 +335,7 @@ export class MultiplayerGame {
       selectAircraft: (id) => game?.send({ a: 'aircraft', id }),
       rearm: () => game?.send({ a: 'rearm' }),
       cycleManeuver: (dir) => game?.cycleManeuver(dir),
+      cycleEscort: () => game?.cycleEscort(),
       takeOff: () => game?.takeOff(),
       endSortie: () => game?.send({ a: 'end' }),
       continueToDesk: () => game?.send({ a: 'continue' }),
@@ -362,7 +373,20 @@ export class MultiplayerGame {
     const mpHud = new MpHud(
       hudRoot,
       { tl: hud.zone('tl'), tc: hud.zone('tc'), tr: hud.zone('tr'), centre: hud.zone('centre') },
-      { emote: (e) => game?.net.emote(e), intercept: () => game?.intercept() },
+      {
+        emote: (e) => game?.net.emote(e), intercept: () => game?.intercept(), decline: () => game?.send({ a: 'challenge-decline' }),
+        // v0.0.19: the players panel.
+        ally: (o, id) => game?.send(o === 'leave' ? { a: 'ally', o } : { a: 'ally', o, id: id ?? '' }),
+        mute: (id, on) => game?.send({ a: 'mute', id, on }),
+        report: (id, reason) => {
+          if (!game || !(REPORT_REASONS as readonly string[]).includes(reason)) return;
+          game.send({ a: 'report', id, reason: reason as ReportReason });
+          game.reportingFor = null;
+        },
+        reporting: (id) => game && (game.reportingFor = id || null),
+        welcome: (w) => game?.send({ a: 'coop', w }),
+        closePlayers: () => game && (game.playersOpen = false),
+      },
     );
     const lobby = new Lobby(hudRoot, {
       quick: (name) => void game?.enter(() => game!.net.quickJoin(name)),
@@ -746,6 +770,28 @@ export class MultiplayerGame {
     }
   }
 
+  /**
+   * v0.0.19: at home, the next choice of escorts for the next sortie (ESCORT_PLANS, round and
+   * round); in the air, the next order to the escorts flying (the order wheel).
+   */
+  cycleEscort(): void {
+    const phase = this.state?.phase;
+    const e = this.priv.escorts;
+    if (!phase || !e) return;
+    if (phase === 'flying') {
+      if (e.active.length === 0) return;
+      const next = ESCORT_ORDERS[(ESCORT_ORDERS.indexOf(e.order) + 1) % ESCORT_ORDERS.length];
+      this.send({ a: 'escort-order', o: next });
+      this.sounds.play('pop', { caption: false });
+      return;
+    }
+    if (phase !== 'desk' && phase !== 'building' && phase !== 'ready' && !(phase === 'landed' && this.priv.plane?.stopped)) return;
+    const now = JSON.stringify(e.plan);
+    const i = ESCORT_PLANS.findIndex((p) => JSON.stringify(p) === now);
+    this.send({ a: 'escorts', kinds: [...ESCORT_PLANS[(i + 1) % ESCORT_PLANS.length]] });
+    this.sounds.play('pop', { caption: false });
+  }
+
   launchPlane(): void {
     if (this.state?.phase !== 'ready') return;
     this.send({ a: 'launch' });
@@ -805,7 +851,8 @@ export class MultiplayerGame {
 
   /** The interception card (put first by the server while we are raided), if one is on offer. */
   private interceptOffer(): number {
-    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept');
+    // v0.0.19: answering a challenge is the same one press, on the challenged card.
+    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept' || this.cards.get(m)?.pvp?.kind === 'challenged');
   }
 
   /**
@@ -917,8 +964,13 @@ export class MultiplayerGame {
       if (phase !== 'flying') this.hud.toggleSession();
       return;
     }
-    if (action === 'emote1' || action === 'emote2' || action === 'emote3') {
-      this.net.emote(action === 'emote1' ? 'waggle' : action === 'emote2' ? 'confetti' : 'heart');
+    const emote = EMOTE_ACTIONS[action];
+    if (emote) {
+      this.net.emote(emote);
+      return;
+    }
+    if (action === 'players') {
+      this.playersOpen = !this.playersOpen;
       return;
     }
     if (this.baseMode?.open) {
@@ -969,6 +1021,8 @@ export class MultiplayerGame {
         return;
       case 'maneuverNext':
         return this.cycleManeuver(1);
+      case 'escortNext':
+        return this.cycleEscort();
       case 'service':
         if (phase === 'landed') this.send({ a: 'rearm' });
         else if (phase === 'flying') this.hud.alert('home', T.mpGame.rearmAtHome, null, 'info', 1.6);
@@ -1125,7 +1179,12 @@ export class MultiplayerGame {
       this.noteTutorial('folded');
       this.lostPlane = null;
     }
-    if (phase === 'flying' && (before === 'ready' || before === 'building')) this.noteTutorial('launched');
+    if (phase === 'flying' && (before === 'ready' || before === 'building')) {
+      this.noteTutorial('launched');
+      // v0.0.19: placeholder engine cues for the Ghost and the Specter (final sounds: v0.0.25).
+      if (st.plane?.id === 'ghost') this.sounds.play('hush', { caption: false });
+      if (st.plane?.id === 'specter') this.sounds.play('whine', { caption: false });
+    }
     if (phase === 'landed') this.noteTutorial('landed');
     if (phase === 'debrief' && before === 'landed') this.noteTutorial('sortie-ended');
     if (phase === 'crashed' && st.plane && !this.priv.result?.sortie.emergency) this.lostPlane = st.plane.id;
@@ -1397,7 +1456,9 @@ export class MultiplayerGame {
         this.onDamage(e);
         break;
       case 'drop':
+        // v0.0.19: our own drops only come from the server for a bay bomber (the Ghost's bay can hold a release back).
         if (e.o !== this.me) this.bombs.release({ x: e.p[0], y: e.p[1], z: e.p[2] }, { x: e.v[0], y: e.v[1], z: e.v[2] }, e.kind as BombKind, true, `srv:${e.o}`);
+        else if (this.state?.plane?.traits?.bay) this.bombs.release({ x: e.p[0], y: e.p[1], z: e.p[2] }, { x: e.v[0], y: e.v[1], z: e.v[2] }, e.kind as BombKind, true, 'own');
         break;
       case 'boom': {
         const point = at(e.p);
@@ -1642,7 +1703,7 @@ export class MultiplayerGame {
   private cosmeticBomb(): void {
     const st = this.state!;
     const spec = st.plane;
-    if (!spec || this.cosmeticBombs <= 0 || st.bombCooldown > 0) return;
+    if (!spec || this.cosmeticBombs <= 0 || st.bombCooldown > 0 || spec.traits?.bay) return;
     this.cosmeticBombs--;
     const m = this.predictor.model;
     const slots = PLANE_SHAPES[spec.id].bombSlots;
@@ -1711,6 +1772,9 @@ export class MultiplayerGame {
     this.plane.animate(dt);
     // Home hangars: ours grows with the planes we keep in it; rivals' show their first level.
     for (const [id, d] of this.dressings) d.updateHangar(dt, id === this.home?.id ? (st?.hangar.size ?? 0) : 0);
+    // v0.0.19: ink on rival banners (not from players you muted).
+    const muted = new Set(this.priv.mutes ?? []);
+    this.room?.state.territories.forEach((t, id) => this.dressings.get(id)?.setBannerInk(t.ink > 0 && !muted.has(t.inkBy)));
 
     // The camera, as single-player's.
     const baseOpen = !!this.baseMode?.open;
@@ -1779,7 +1843,7 @@ export class MultiplayerGame {
   // ---- Multiplayer HUD ----------------------------------------------------------------------------
 
   /** The raid card: the attacker, and from the raid alert the ETA, direction, our guns and reward. */
-  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null }): IncomingView {
+  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null; kind?: IncomingView['kind']; escorts?: number }): IncomingView {
     const r = this.views.raidAlertView();
     return {
       attacker: a.attackerName,
@@ -1792,7 +1856,30 @@ export class MultiplayerGame {
       total: r?.total ?? this.base?.readiness.total ?? 0,
       reward: r?.reward ?? 0,
       response: this.interceptResponse(),
+      kind: a.kind,
+      escorts: a.escorts,
     };
+  }
+
+  /** v0.0.19: the players panel: everyone else, your alliance and record with them, mute and report. */
+  private playersPanel(): PlayersPanelView {
+    const s = this.room?.state;
+    const a = this.priv.alliance;
+    const rivals = this.priv.rivals;
+    const mutes = new Set(this.priv.mutes ?? []);
+    const reported = new Set(this.priv.reported ?? []);
+    const rows: PlayerRowView[] = [];
+    s?.players.forEach((p, id) => {
+      if (id === this.me) return;
+      const r = rivals?.list.find((x) => x.id === id);
+      rows.push({
+        id, name: p.name, colour: p.colour, rep: p.rep || null, nemesis: rivals?.nemesis?.id === id, wins: r?.wins ?? 0, losses: r?.losses ?? 0,
+        alliance: a?.members.includes(id) ? 'ally' : a?.offers.includes(id) ? 'asked' : a?.sent.includes(id) ? 'offered' : 'none',
+        muted: mutes.has(id), reported: reported.has(id),
+      });
+    });
+    rows.sort((x, y) => x.name.localeCompare(y.name));
+    return { rows, welcome: a?.welcome ?? 'allies', reporting: this.reportingFor, inAlliance: (a?.members.length ?? 0) > 0 };
   }
 
   // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
@@ -1846,6 +1933,8 @@ export class MultiplayerGame {
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
             status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield, rank: this.insigniaOf(id),
+            rep: p.rep || null, ally: p.ally, allied: id !== this.me && !!this.priv.alliance?.members.includes(id),
+            nemesis: this.priv.rivals?.nemesis?.id === id ? { wins: this.priv.rivals.nemesis.wins, losses: this.priv.rivals.nemesis.losses } : null,
             presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)
@@ -1862,7 +1951,8 @@ export class MultiplayerGame {
       if (d > 260) continue;
       tags.push({
         id, x: screen.x, y: screen.y, name: p.name, colour: p.colour, health: r.durability.fraction, far: Math.min(1, Math.max(0, (d - 30) / 200)),
-        hostile: true, plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null, rank: this.insigniaOf(id),
+        hostile: !this.priv.alliance?.members.includes(id), plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null, rank: this.insigniaOf(id),
+        inked: (s?.planes.get(id)?.ink ?? 0) > 0 && !(this.priv.mutes ?? []).includes(s?.planes.get(id)?.inkBy ?? ''),
       });
     }
     const territories: TerritoryTagView[] = [];
@@ -1898,6 +1988,7 @@ export class MultiplayerGame {
       emoteKeys: this.state?.phase === 'flying',
       sessionLeft: s ? s.left : null,
       closing: (s?.session ?? 0) > 0,
+      playersPanel: this.playersOpen ? this.playersPanel() : null,
     };
   }
 }

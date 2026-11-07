@@ -97,6 +97,11 @@ export function assessSuitability(aircraft: AircraftSpec, spec: Pick<MissionSpec
   const balanced = (SUITABILITY.balanced as readonly MissionType[]).includes(spec.type);
   const score = total === 0 ? 3 : balanced ? Math.min(5, weakest + 1) : sum / total;
 
+  // v0.0.19: an unarmed plane (the Specter) can't shoot anything down, nor wreck anything without bombs.
+  const unarmed = aircraft.gun.ammo <= 0 || aircraft.gun.damage <= 0;
+  if (unarmed && spec.objectives.some((o) => o.kind === 'intercept' || (o.kind === 'destroy' && aircraft.bombs.capacity === 0))) {
+    return { level: 'unsuitable', score, reason: 'Unarmed', bombLoad: load };
+  }
   if (load < targets) {
     const rack = aircraft.bombs.capacity;
     return {

@@ -347,6 +347,19 @@ export interface AircraftTraits {
   stealth?: boolean;
   /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
   reconRate?: number;
+  /**
+   * v0.0.19: an internal bomb bay (the Ghost). Opening it reveals the plane sharply (STEALTH.reveal.bay,
+   * far more than an ordinary drop), and on a raid on a player the bay opens and the defender is
+   * warned PVP.bayWarning seconds before any release counts.
+   */
+  bay?: boolean;
+  /**
+   * v0.0.19: an unarmed surveillance drone (the Specter). It can't damage anything, not even by
+   * ramming; it reveals hostile aircraft and defenses within DRONES.reveal on its pilot's mini-map and
+   * on the maps of whoever its pilot cooperates with; shooting it down pays DRONES.killReward, fixed.
+   * It can complete reconnaissance objectives.
+   */
+  drone?: boolean;
 }
 
 /** New players start with this design chosen; it is also the pattern of the free emergency plane. */
@@ -591,32 +604,33 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'swift',
     maneuvers: ['paperPivot', 'craneFlip', 'updraftRoll', 'slipRoll'],
   },
+  // v0.0.19: final role and stats. Unarmed, slow, long-winged; it sees for everyone it works with.
   specter: {
     id: 'specter',
     name: 'Specter',
     role: 'recon',
     roleLabel: 'Surveillance drone',
-    cost: 50,
-    refitCost: 10,
-    materials: { ink: 4 },
-    tagline: 'A long, quiet glider that is hard to spot. Barely armed, no bombs.',
+    cost: 35,
+    refitCost: 8,
+    tagline: 'An unarmed drone with very long wings. It sees far and shares what it sees: hostile planes and defenses show on your map, and on your partners\'.',
     flight: {
-      minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
-      throttleAccel: 12, speedResponse: 2, pitchSpeedEffect: 7,
-      maxTurnRate: 1.15, maxPitchRate: 0.95, aimGain: 2.6, rollResponse: 4.5, pitchResponse: 4.5, maxBank: 48 * DEG,
-      boostSpeed: 10, boostResponse: 4, boostDuration: 1.2, boostCooldown: 4,
+      minSpeed: 7, cruiseSpeed: 16, maxSpeed: 24,
+      throttleAccel: 10, speedResponse: 1.8, pitchSpeedEffect: 6,
+      maxTurnRate: 1.0, maxPitchRate: 0.85, aimGain: 2.4, rollResponse: 3.6, pitchResponse: 4, maxBank: 42 * DEG,
+      boostSpeed: 8, boostResponse: 3.5, boostDuration: 1.2, boostCooldown: 4.5,
       collisionRadius: 0.8,
     },
-    maxHealth: 60,
-    gun: { barrels: 1, ammo: 30, interval: 0.2, damage: 4, speed: 60, range: 60 },
-    gunLabel: 'Light ink gun',
+    maxHealth: 45,
+    gun: { barrels: 1, ammo: 0, interval: 1, damage: 0, speed: 60, range: 1 },
+    gunLabel: 'Unarmed',
     bombs: { capacity: 0, kind: 'small' },
-    signature: 0.55,
-    hitRadius: 1.15,
+    signature: 0.7,
+    hitRadius: 1.2,
     accent: [0.6, 0.62, 0.66],
     inspiration: 'RQ-4 Global Hawk',
     shape: 'dart',
     maneuvers: ['slipRoll', 'spiralDrill', 'paperPivot'],
+    traits: { drone: true, reconRate: 2 },
   },
   lancer: {
     id: 'lancer',
@@ -645,15 +659,17 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'widewing',
     maneuvers: [],
   },
+  // v0.0.19: final role and stats. The quietest thing in the sky until its bay opens; fragile once found.
   ghost: {
     id: 'ghost',
     name: 'Ghost',
     role: 'bomber',
     roleLabel: 'Stealth bomber',
-    cost: 120,
-    refitCost: 26,
-    materials: { ink: 6, rubber: 8 },
-    tagline: 'A flying wing defenses barely notice. Four bombs, no dogfighting.',
+    cost: 130,
+    refitCost: 30,
+    materials: { ink: 8, rubber: 10 },
+    buildTime: 4.5,
+    tagline: 'A flying wing defenses barely notice, until its bay opens. Three bombs, slow and fragile once found: no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
       throttleAccel: 9, speedResponse: 1.2, pitchSpeedEffect: 10,
@@ -661,16 +677,17 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       boostSpeed: 10, boostResponse: 3.5, boostDuration: 1, boostCooldown: 4.5,
       collisionRadius: 1,
     },
-    maxHealth: 140,
+    maxHealth: 95,
     gun: { barrels: 1, ammo: 30, interval: 0.22, damage: 5, speed: 60, range: 60 },
     gunLabel: 'Defensive ink gun',
-    bombs: { capacity: 4, kind: 'standard' },
-    signature: 0.5,
+    bombs: { capacity: 3, kind: 'standard' },
+    signature: 0.38,
     hitRadius: 1.45,
     accent: [0.3, 0.3, 0.34],
     inspiration: 'B-2 Spirit',
     shape: 'widewing',
     maneuvers: [],
+    traits: { stealth: true, bay: true },
   },
 };
 
@@ -684,7 +701,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
  */
 export const STEALTH = {
   quiet: 0.8,
-  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2 },
+  /** v0.0.19: `bay`: the Ghost's internal bay opening (much louder than an ordinary drop). */
+  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2, bay: 1.1 },
   revealTime: 3,
   maxLock: 1.8,
   visual: 28,
@@ -1066,7 +1084,7 @@ export const AI: {
    * flies the role's default above. Bombers need a bomb bay, so the Raptor only ever flies as a
    * fighter (v0.0.15).
    */
-  designs: { scout: ['dart'], fighter: ['falcon', 'raptor'], bomber: ['widewing'] },
+  designs: { scout: ['dart', 'specter'], fighter: ['falcon', 'raptor'], bomber: ['widewing', 'ghost'] },
   roleLabels: { scout: 'Scout', fighter: 'Fighter', bomber: 'Bomber' },
   skill: {
     easy: {
@@ -1262,6 +1280,8 @@ export const PVP = {
   cards: 2,
   /** Wrecked AI installations stand up again after this long (seconds). */
   aiRebuild: 120,
+  /** v0.0.19: a bay bomber on a raid on a player opens its bay (and the defender is warned) this long before any release counts. */
+  bayWarning: 6,
   /** Scoreboard points. */
   score: { kill: 10, assist: 4, raid: 15, defend: 10, mission: 5 },
   /** A player just placed on a desk can't be the target of a new raid for this long (v0.0.13, provisional). */
@@ -1271,6 +1291,293 @@ export const PVP = {
    * "in combat" (v0.0.13, provisional): if its pilot is gone for good, it is lost, with no kill reward.
    */
   combatWindow: 10,
+} as const;
+
+/**
+ * v0.0.19 (plan §2A–B, GDD §11.2–11.5): the multiplayer director's view of each player. Strength
+ * is what a player could bring to a fight (resources, planes, defenses), compared with the
+ * session's median to sort players into tiers. Threat is how aggressive they have been lately
+ * (raids launched, kills on weaker players), decaying with a half-life; it survives restarts with the
+ * player. Bounties look at threat, never at wealth alone. Provisional values.
+ * The rules that use them are in server/world/Situation.ts.
+ */
+export const SITUATION = {
+  /** Strength: resources count by these weights, each plane in the hangar by `plane`, each standing weapon by `weapon`. */
+  weights: { paper: 1, ink: 1.5, rubber: 3, plane: 40, weapon: 25 },
+  /** A newcomer: fewer than `newcomerSorties` sorties flown and below `newcomerStrength` of the median. */
+  newcomerSorties: 8,
+  newcomerStrength: 0.8,
+  /** Advanced: at least `advancedStrength` times the session's median strength, or `advancedSorties` sorties and above the median. */
+  advancedStrength: 1.6,
+  advancedSorties: 60,
+  /** Threat added per raid launched, per kill on a weaker player (strength below `weaker` of the killer's), and its half-life (seconds). */
+  raidThreat: 1,
+  weakKillThreat: 1.5,
+  weaker: 0.7,
+  halfLife: 1200,
+  /**
+   * An advanced player can't be offered a raid on a newcomer (protection from disproportionate
+   * attacks, GDD §11.3), unless that newcomer attacked them within `retaliation` seconds.
+   */
+  retaliation: 900,
+  /** An intermediate player raiding a stronger one is paid this much more per tier of difference (GDD §11.4). */
+  underdogBonus: 0.25,
+  /** Director decisions kept for the developer's debug panel. */
+  logSize: 100,
+} as const;
+
+/** v0.0.19: what a bounty asks for (plan §2C). */
+export type BountyKind = 'bomber' | 'raid' | 'installation' | 'ace';
+
+/**
+ * v0.0.19 (plan §2C, GDD §11.6): bounties. The director places one only on a fair objective, only
+ * because of aggression or demonstrated threat (never wealth), never on an offline or protected
+ * player, at most one per target and `maxOpen` in a session. The pot is shared by contribution
+ * (damage dealt, from the damage log), paid once by the server; the target and their allies get
+ * nothing from it. Provisional values. The rules that use them are in server/world/Bounties.ts.
+ */
+export const BOUNTIES = {
+  /** The pot for each kind, before the target's threat adds `perThreat` a point (capped at `maxPot`). */
+  pot: { bomber: 60, raid: 55, installation: 45, ace: 70 } as Record<BountyKind, number>,
+  perThreat: 6,
+  maxPot: 120,
+  /** What flying the bounty card itself pays on success, on top of a share of the pot. */
+  cardReward: 5,
+  /** Triggers: an active raid by a player with this much threat (bomber); this many raids by one player within `window` (raid); this many kills on weaker players within `window` (ace); this much threat on an advanced player (installation). */
+  bomberThreat: 2,
+  repeatRaids: 2,
+  streak: 3,
+  installationThreat: 3,
+  window: 1800,
+  /** A bounty lasts this long at most (seconds); a plane bounty also ends when its target lands. */
+  duration: 300,
+  /** After a bounty on a player ends, the next waits this long. */
+  targetCooldown: 600,
+  /** Open bounties in one session at once. */
+  maxOpen: 3,
+  /** Contributors who dealt less than this share of the damage get nothing (no tag-and-run). */
+  minShare: 0.1,
+  /** The defender's guaranteed share of a "prevent a raid" pot, if they contributed at all. */
+  defenderShare: 0.5,
+} as const;
+
+/**
+ * v0.0.19 (plan "Also B"): alliances that last only for the current session. An offer is sent from
+ * the scoreboard and accepted by the other player; it ends when the session ends or either side
+ * leaves. Allies can't damage each other, share radar contacts, see each other's raids, and can't
+ * raid, challenge or farm each other. Provisional values. The rules are in server/world/Alliances.ts.
+ */
+export const ALLIANCES = {
+  /** At most this many players in one alliance… */
+  maxSize: 3,
+  /** …and never more than this share of the players online (at least two), so no alliance dominates. */
+  sessionShare: 0.5,
+  /** After leaving, former allies can't attack each other for this long (seconds). */
+  leaveCooldown: 60,
+  /** An offer waits this long for an answer (seconds). */
+  offerTime: 60,
+  /** One player can send this many offers a minute. */
+  offersPerMinute: 4,
+} as const;
+
+/**
+ * v0.0.19 (plan §3, GDD §11.7): cooperation offers between players: escorting another player's
+ * bomber, joint defense of a raided base, and joint attacks on a powerful player. Opt-in for both
+ * sides, paid once by the server, shared by contribution, within every protection. Provisional
+ * values. The rules that use them are in server/world/Coop.ts.
+ */
+export const COOP = {
+  /** Flying a cooperation card itself pays this on success (the rest is paid by contribution). */
+  cardReward: 5,
+  /** Escorting a bomber: paid on success, scaled by the share of the flight spent within `escortRange` of it (none below `minPresence`). */
+  escortReward: 30,
+  escortRange: 45,
+  minPresence: 0.4,
+  /** Joint defense: offered to players whose desk is within `defenseRange` of the raided one (and allies anywhere); helpers share `defensePot` by damage on the raider. */
+  defenseRange: 140,
+  defensePot: 30,
+  /** Joint attack: a pot shared by the two attackers, by damage; at most `maxJoint` at once, the next on a target after `jointCooldown`. */
+  jointPot: 70,
+  jointTime: 300,
+  maxJoint: 1,
+  jointCooldown: 900,
+  /** The target of a joint attack must be this many times the session's median strength. */
+  jointStrength: 1.6,
+} as const;
+
+/**
+ * v0.0.19 (plan §7, GDD §8.7, §13.6): anti-farming. Every reward that flows between two players
+ * (kills, assists, raids, bounties, escorts, cooperation, challenges, mischief) is watched per pair,
+ * both directions together. Each new flow within `window` pays `decay[n]` of itself (the same idea as
+ * PVP.killRepeat and PVP.repeat, across every source), and a pattern that looks like farming pauses
+ * rewards between the pair for `pause` seconds and is logged for the developer: never an automatic
+ * ban. Provisional values. The rules are in src/systems/Farming.ts.
+ */
+export const FARMING = {
+  window: 1800,
+  /** Counted per direction (what one earns from the other), so two real rivals trading blows keep their rewards longer. */
+  decay: [1, 1, 1, 0.8, 0.6, 0.45, 0.3, 0.15, 0] as readonly number[],
+  pause: 1800,
+  /**
+   * Patterns within `window`: `kills` kills between the pair with at least `oneSided` of them going one
+   * way; `losses` expensive planes (cost ≥ `expensive`) lost by one to the other; `undefended` raids
+   * nobody defended; `bounties` bounty shares on each other; `flowCap` paper earned by one from the other.
+   */
+  kills: 6,
+  oneSided: 0.85,
+  /** …or this many kills between them whichever way they went (kills traded in turns). */
+  traded: 10,
+  losses: 4,
+  expensive: 60,
+  undefended: 3,
+  bounties: 2,
+  flowCap: 400,
+} as const;
+
+/**
+ * v0.0.19 (plan §8C): the Specter's rules. Its reveal shows positions only, never a lock; it doesn't
+ * stack between several Specters (the union is shown). A Specter pilot who had a bounty's target in
+ * their reveal within `creditWindow` seconds counts as a contributor worth `creditShare` of the damage
+ * dealt (once), and their reveal goes to whoever flies that bounty's card. Shooting a Specter down
+ * pays `killReward`, fixed.
+ */
+export const DRONES = {
+  reveal: 140,
+  creditShare: 0.15,
+  creditWindow: 20,
+  killReward: 5,
+} as const;
+
+/** v0.0.19: harmless mischief on another player's desk (plan §6B, GDD §7.2). */
+export type MischiefKind = 'banner' | 'flyby' | 'stunt';
+
+/**
+ * v0.0.19 (plan §6, GDD §7.2, §12.4): playful, non-destructive interactions with safety tools.
+ * Ink splats fade; mischief never destroys resources or buildings, is rate-limited per target and
+ * never aimed at offline or newly arrived players, or at anyone who muted you. Mutes are kept per
+ * player for good; reports (a reason, no free text) are kept for the developer. Provisional values.
+ * The rules that use them are in server/world/Social.ts.
+ */
+export const SOCIAL = {
+  /** A splat emote marks the nearest aircraft within `splatRange` ahead (inside `splatCone`); ink fades after `inkFade` seconds. */
+  splatRange: 35,
+  splatCone: 0.75,
+  inkFade: 20,
+  /** A banner marked with ink stays marked this long. */
+  bannerInk: 90,
+  /** Mischief cards: reward, time limit, the low pass's ceiling, and the limits (one per pair per `perPair` s, `perTarget` per target per `targetWindow` s). */
+  mischief: { reward: 15, time: 180, perPair: 600, perTarget: 3, targetWindow: 1800 },
+  /** Reports one player can send in a session, and per reported player. */
+  reportsPerSession: 5,
+  reportsPerTarget: 1,
+} as const;
+
+/** v0.0.19: what a player is known for (plan §5B). */
+export type ReputationKind = 'raider' | 'defender' | 'ace' | 'helper';
+
+/**
+ * v0.0.19 (plan §5, GDD §12.3): reputation and rivalries. Every notable interaction between two
+ * players is recorded (pvp_records) and remembered for `memory` seconds; the "nemesis" is whoever
+ * has beaten a player most often (at least `nemesisMin` times), the most recent breaking a tie. The
+ * director weighs rematch and payback cards towards rivals, always within the protections, and
+ * says why. Reputation never changes combat. Provisional values. The rules are in server/world/Rivalry.ts.
+ */
+export const RIVALRY = {
+  memory: 14 * 24 * 3600,
+  nemesisMin: 2,
+  /** A raid or hunt card's target is this many times likelier to be your nemesis, or someone who raided you within `payback` seconds. */
+  rematchWeight: 3,
+  paybackWeight: 2,
+  payback: 1800,
+  /** A reputation needs at least this many of what it is about, and the label is the one with the most. */
+  reputationMin: 3,
+} as const;
+
+/** v0.0.19: the kinds of raid on another player's base (plan "Also A", §4). */
+export type RaidKind = 'bombing' | 'staged' | 'strike' | 'challenge';
+
+/**
+ * v0.0.19 (plan "Also A", §4): deeper raids. Bases can only be damaged through a raid card; every
+ * kind obeys the raid rules in PVP (protections, shields, pair cooldowns, repeat factors, loss caps),
+ * applied to the whole raid, never per stage. Provisional values. The rules that use them are in
+ * server/world/ServerWorld.ts (raids between players) and server/world/PvpMissions.ts (the cards).
+ */
+export const RAID_KINDS = {
+  /** How often each kind is offered, where the victim's base allows it. */
+  weights: { bombing: 0.4, staged: 0.2, strike: 0.2, challenge: 0.2 } as Record<RaidKind, number>,
+  /** A bombing raid asks for this many structures when the base has at least `multiFrom` standing, and pays `perTarget` more for each extra one. */
+  multiTargets: 2,
+  multiFrom: 3,
+  perTarget: 15,
+  /** Staged raids: suppress a radar or turret, then bomb the store. Each stage has this clock (seconds). */
+  stageTime: 150,
+  /** Stage one done but the store not hit: this share of the reward, never worth failing for on purpose. */
+  stagePartial: 0.3,
+  /** Strikes: wreck or damage this many structures (not the store) with guns and rockets, low. Pays this, takes no resources. */
+  strikeTargets: 2,
+  strikeReward: 50,
+  strikeTime: 240,
+  /**
+   * Challenges: the defender has `answer` seconds to take off, then `fight` seconds to settle it over
+   * their desk. The winner is paid `reward`; a no-show (or a decline) pays the challenger `noShow` of
+   * it and costs the defender `forfeit.share` of their vulnerable paper, at most `forfeit.max`
+   * (never the protected reserve).
+   */
+  challenge: { answer: 90, fight: 180, reward: 50, noShow: 0.4, forfeit: { share: 0.08, max: 25 } },
+} as const;
+
+/** v0.0.19: the AI escort aircraft a player can buy for one sortie. */
+export type EscortKind = 'wingman' | 'guard' | 'spotter';
+export const ESCORT_ORDER: readonly EscortKind[] = ['wingman', 'guard', 'spotter'];
+/** v0.0.19: the choices the escort button steps through at home, round and round. */
+export const ESCORT_PLANS: ReadonlyArray<readonly EscortKind[]> = [
+  [], ['wingman'], ['guard'], ['spotter'], ['wingman', 'wingman'], ['guard', 'wingman'], ['guard', 'guard'], ['guard', 'spotter'], ['wingman', 'spotter'],
+];
+/** v0.0.19: the orders a player gives their escorts (the order wheel). */
+export type EscortOrder = 'follow' | 'attack' | 'protect' | 'cover';
+export const ESCORT_ORDERS: readonly EscortOrder[] = ['follow', 'attack', 'protect', 'cover'];
+
+/**
+ * v0.0.19 (plan §1, GDD §10): purchasable, single-use AI escorts. Bought at launch, removed when the
+ * sortie ends whether they survived or not, never refunded, capped at two per sortie, flown by
+ * rookie or regular AI pilots with less health and weaker guns than a human-flown plane of the same
+ * type. Built only from conventional aircraft: no stealth (their radar signature is never below
+ * `minSignature`) and no drones. Provisional: the developer approves the roster, costs and cap.
+ * The rules that use them are in server/world/Escorts.ts.
+ */
+export const ESCORTS = {
+  roster: {
+    wingman: {
+      label: 'Paper Wingman', short: 'Wingman', aircraft: 'swift' as AircraftId, role: 'fighter' as AiRole, skill: 'easy' as Difficulty,
+      cost: { paper: 16, ink: 5 }, detail: 'Follows you, draws fire from defenses, light guns.',
+    },
+    guard: {
+      label: 'Guard Falcon', short: 'Guard', aircraft: 'falcon' as AircraftId, role: 'fighter' as AiRole, skill: 'medium' as Difficulty,
+      cost: { paper: 30, ink: 12 }, detail: 'Goes after hostile aircraft near you; protects bombers.',
+    },
+    spotter: {
+      label: 'Spotter', short: 'Spotter', aircraft: 'dart' as AircraftId, role: 'scout' as AiRole, skill: 'easy' as Difficulty,
+      cost: { paper: 12 }, detail: 'Marks hostile aircraft near you on the mini-map. Unarmed in a fight.',
+    },
+  } as Record<EscortKind, { label: string; short: string; aircraft: AircraftId; role: AiRole; skill: Difficulty; cost: { paper: number; ink?: number; rubber?: number }; detail: string }>,
+  /** At most this many escorts on one sortie (GDD §10.3). */
+  perSortie: 2,
+  /** At most this many escorts in the air in one session, so bandwidth stays predictable (GDD §16.4). */
+  perSession: 12,
+  /** Weaker than a human: this share of the design's health, and of its guns' damage. */
+  health: 0.6,
+  gunFactor: 0.55,
+  /** Escorts are never quieter to radar than this (escorts add no stealth). */
+  minSignature: 1,
+  /** Shooting down someone's escort pays this, fixed, and nothing else (escorts can't be farmed). */
+  killReward: 3,
+  /** A spotter marks hostile aircraft within this distance of itself on its owner's mini-map. */
+  spotterReveal: 90,
+  /** Orders: "attack my target" picks the hostile nearest the owner's nose within this range and cone. */
+  attackRange: 110,
+  attackCone: 0.5,
+  /** "Cover my retreat": escorts go after anything hostile this close behind their owner. */
+  coverRange: 70,
 } as const;
 
 /**
