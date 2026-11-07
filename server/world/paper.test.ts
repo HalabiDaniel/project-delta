@@ -91,7 +91,7 @@ describe('the paper journal', () => {
   });
 
   it('keys a mission reward by the mission, and a raid loss by the raid', () => {
-    const world = new ServerWorld({ seed: 1, ambient: false, newPlayerProtection: 0, arrivalGrace: 0 });
+    const world = new ServerWorld({ seed: 1, ambient: false, newPlayerProtection: 0, arrivalGrace: 0, raidKinds: ['bombing'] });
     const a = player(world, 'a', 'T1', 'Ann');
     const b = player(world, 'b', 'T3', 'Bo');
     b.resources.restore(400);
@@ -107,10 +107,13 @@ describe('the paper journal', () => {
     expect(world.command('a', { a: 'launch' })).toBe(true);
     const attack = world.attacks.on('b')!;
     run(world, 4);
-    place(a, attack.target.x, 6, attack.target.z, 0);
-    a.flight.model.speed = 9;
-    run(world, 0.05, (id) => (id === 'a' ? { bomb: true } : {}));
-    run(world, 2);
+    // v0.0.19: a well-built base can ask for more than one structure: each gets its bomb.
+    for (const t of attack.targets) {
+      place(a, t.x, 6, t.z, 0);
+      a.flight.model.speed = 9;
+      run(world, 0.05, (id) => (id === 'a' ? { bomb: true } : {}));
+      run(world, 2);
+    }
     expect(a.state!.mission!.status).toBe('succeeded');
     const paidA = world.takePaper('a');
     const reward = paidA.find((c) => c.kind === 'reward')!;

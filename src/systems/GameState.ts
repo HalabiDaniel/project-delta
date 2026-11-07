@@ -876,6 +876,14 @@ export class GameState {
     }
   }
 
+  /**
+   * v0.0.19 multiplayer: the server fails the mission in flight for a reason of its own (a staged
+   * raid's stage clock ran out). Nothing happens to a mission already over.
+   */
+  failNow(reason: MissionFailure): void {
+    if (this.mission?.isActive) this.failMission(reason);
+  }
+
   private failMission(reason: MissionFailure): void {
     if (this.mission?.fail(reason)) {
       this.stats.failures++;

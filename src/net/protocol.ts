@@ -293,7 +293,9 @@ export type Command =
   /** v0.0.19: alliances for the session: offer one to a player, accept or decline theirs, or leave yours. */
   | { a: 'ally'; o: 'offer' | 'accept' | 'decline' | 'leave'; id?: string }
   /** v0.0.19: who may fly escort on your bombing missions. */
-  | { a: 'coop'; w: 'allies' | 'anyone' | 'none' };
+  | { a: 'coop'; w: 'allies' | 'anyone' | 'none' }
+  /** v0.0.19: decline a challenge to a dogfight (it costs what not showing up costs). */
+  | { a: 'challenge-decline' };
 
 const BUILDINGS = Object.keys(BASE.buildings) as BuildingKind[];
 const SLOT_IDS = new Set<string>(BASE.slots.map((s) => s.id));
@@ -309,6 +311,7 @@ export function parseCommand(raw: unknown): Command | null {
       return AIRCRAFT_ORDER.includes(c.id as AircraftId) ? { a: 'aircraft', id: c.id as AircraftId } : null;
     case 'maneuver':
       return MANEUVER_ORDER.includes(c.id as ManeuverId) ? { a: 'maneuver', id: c.id as ManeuverId } : null;
+    case 'challenge-decline':
     case 'build':
     case 'launch':
     case 'rearm':
@@ -458,13 +461,15 @@ export interface PlaneDTO {
  * the bounty's id).
  */
 export interface PvpTag {
-  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint';
+  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint' | 'strike' | 'challenge' | 'challenged';
   target: string;
   name: string;
   territoryId: string | null;
   /** v0.0.19: the bounty, or the joint attack, this card is for. */
   bounty?: number;
   joint?: number;
+  /** v0.0.19: a raid card's kind (bombing or staged; strikes and challenges have their own card kinds). */
+  raid?: 'bombing' | 'staged' | 'strike' | 'challenge';
   /** v0.0.19: why the director offered it, in words ("Rematch with Bo"), when there is a reason to tell. */
   why?: string;
 }
@@ -550,6 +555,11 @@ export interface AttackDTO {
   /** Seconds since it started. */
   age: number;
   distance: number | null;
+  /** v0.0.19: the kind of raid, and the escorts flying with the raider (once detected). */
+  kind?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  escorts?: number;
+  /** v0.0.19 staged raids: the stage under way (0, 1; 2: both done). */
+  stage?: number;
 }
 
 export interface ResultDTO {
@@ -573,7 +583,15 @@ export interface AttackReportDTO {
   role: 'attacker' | 'defender';
   other: string;
   territoryId: string;
-  outcome: 'bombed' | 'repelled' | 'abandoned';
+  /**
+   * v0.0.19 adds: struck (a strike got through), won (the challenger won the dogfight), declined (the
+   * challenged player didn't show up), draw (a challenge nobody won).
+   */
+  outcome: 'bombed' | 'repelled' | 'abandoned' | 'struck' | 'won' | 'declined' | 'draw';
+  /** v0.0.19: the kind of raid, each stage and whether it was done, and what decided it, in words. */
+  kind?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  stages?: Array<{ label: string; done: boolean }>;
+  decided?: string;
   paperLost: number;
   /** v0.0.18: ink and rubber balls lost (absent: none). */
   inkLost?: number;

@@ -1385,6 +1385,39 @@ export const COOP = {
   jointStrength: 1.6,
 } as const;
 
+/** v0.0.19: the kinds of raid on another player's base (plan "Also A", §4). */
+export type RaidKind = 'bombing' | 'staged' | 'strike' | 'challenge';
+
+/**
+ * v0.0.19 (plan "Also A", §4): deeper raids. Bases can only be damaged through a raid card; every
+ * kind obeys the raid rules in PVP (protections, shields, pair cooldowns, repeat factors, loss caps),
+ * applied to the whole raid, never per stage. Provisional values. The rules that use them are in
+ * server/world/ServerWorld.ts (raids between players) and server/world/PvpMissions.ts (the cards).
+ */
+export const RAID_KINDS = {
+  /** How often each kind is offered, where the victim's base allows it. */
+  weights: { bombing: 0.4, staged: 0.2, strike: 0.2, challenge: 0.2 } as Record<RaidKind, number>,
+  /** A bombing raid asks for this many structures when the base has at least `multiFrom` standing, and pays `perTarget` more for each extra one. */
+  multiTargets: 2,
+  multiFrom: 3,
+  perTarget: 15,
+  /** Staged raids: suppress a radar or turret, then bomb the store. Each stage has this clock (seconds). */
+  stageTime: 150,
+  /** Stage one done but the store not hit: this share of the reward, never worth failing for on purpose. */
+  stagePartial: 0.3,
+  /** Strikes: wreck or damage this many structures (not the store) with guns and rockets, low. Pays this, takes no resources. */
+  strikeTargets: 2,
+  strikeReward: 50,
+  strikeTime: 240,
+  /**
+   * Challenges: the defender has `answer` seconds to take off, then `fight` seconds to settle it over
+   * their desk. The winner is paid `reward`; a no-show (or a decline) pays the challenger `noShow` of
+   * it and costs the defender `forfeit.share` of their vulnerable paper, at most `forfeit.max`
+   * (never the protected reserve).
+   */
+  challenge: { answer: 90, fight: 180, reward: 50, noShow: 0.4, forfeit: { share: 0.08, max: 25 } },
+} as const;
+
 /** v0.0.19: the AI escort aircraft a player can buy for one sortie. */
 export type EscortKind = 'wingman' | 'guard' | 'spotter';
 export const ESCORT_ORDER: readonly EscortKind[] = ['wingman', 'guard', 'spotter'];

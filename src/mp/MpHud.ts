@@ -105,6 +105,9 @@ export interface IncomingView {
   reward: number;
   /** What one press does now: fold the interception card, launch, take off (null in flight). */
   response: { key: string; label: string } | null;
+  /** v0.0.19: the kind of raid (a challenge offers Decline), and the escorts with the raider (once detected). */
+  kind?: 'bombing' | 'staged' | 'strike' | 'challenge';
+  escorts?: number;
 }
 
 export interface MpHudView {
@@ -130,6 +133,8 @@ export interface MpHudActions {
   emote(e: Emote): void;
   /** The raid card's one press: fold the interception card (or launch / take off). */
   intercept(): void;
+  /** v0.0.19: decline a challenge. */
+  decline?(): void;
 }
 
 /** Where the multiplayer panels go: the HUD's zones, so they scale with the HUD size and the window. */
@@ -270,6 +275,7 @@ export class MpHud {
     this.board.hidden = true;
     this.raid.addEventListener('click', (e) => {
       if ((e.target as Element).closest('[data-act="intercept"]')) actions.intercept();
+      if ((e.target as Element).closest('[data-act="decline"]')) actions.decline?.();
     });
     this.raid.addEventListener('mousedown', (e) => e.preventDefault());
   }
@@ -469,11 +475,15 @@ export function incomingHtml(r: IncomingView): string {
     stat({ icon: 'paper', value: `+${paper(r.reward)}`, label: H.defenseReward }),
   ].join('');
   const radar = r.detected ? '' : chip({ label: H.notOnRadar, icon: 'radar', tone: 'warn' });
+  const escorts = r.escorts ? chip({ label: H.escorts(r.escorts), icon: 'escort', tone: 'hostile', tip: H.escortsTip }) : '';
+  const challenge = r.kind === 'challenge';
   const action = r.response
-    ? button({ label: r.response.label, icon: 'fighter', variant: 'primary', key: { key: r.response.key }, attrs: { 'data-act': 'intercept' }, tip: H.interceptTip })
+    ? button({ label: r.response.label, icon: 'fighter', variant: 'primary', key: { key: r.response.key }, attrs: { 'data-act': 'intercept' }, tip: challenge ? H.challengeTip : H.interceptTip })
     : '';
-  const body = `<div class="mp-raid-who">${around(H.raiding(WHO), who(r.attacker, r.colour, 'bomber'))}${radar}</div><div class="mp-raid-facts">${facts}</div>${action ? `<div class="mp-raid-act">${action}</div>` : ''}`;
-  return card({ title: H.raidIncoming, icon: 'raid', tone: 'hostile', state: 'critical', bodyHtml: body, elevation: 'floating', className: 'mp-raid-card', attrs: { 'data-raid': 'incoming' } });
+  const decline = challenge ? button({ label: H.decline, icon: 'close', variant: 'secondary', attrs: { 'data-act': 'decline' }, tip: H.declineTip }) : '';
+  const line = challenge ? H.challenged(WHO) : r.kind === 'strike' ? H.striking(WHO) : H.raiding(WHO);
+  const body = `<div class="mp-raid-who">${around(line, who(r.attacker, r.colour, challenge ? 'fighter' : 'bomber'))}${radar}${escorts}</div><div class="mp-raid-facts">${challenge ? '' : facts}</div>${action || decline ? `<div class="mp-raid-act">${action}${decline}</div>` : ''}`;
+  return card({ title: challenge ? H.challenge : H.raidIncoming, icon: challenge ? 'fighter' : 'raid', tone: 'hostile', state: 'critical', bodyHtml: body, elevation: 'floating', className: 'mp-raid-card', attrs: { 'data-raid': 'incoming' } });
 }
 
 export function outgoingHtml(o: { victim: string; colour: number }): string {

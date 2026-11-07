@@ -895,6 +895,15 @@ export const en = {
     /** `who` is the attacker's name tag. */
     raiding: (who: string) => `${who} is raiding your desk`,
     raidIncoming: 'Raid incoming',
+    /** v0.0.19: challenges, strikes and escorts on the raid card. */
+    challenged: (who: string) => `${who} challenged you over your desk`,
+    challenge: 'Challenge!',
+    challengeTip: 'Take off and win the dogfight over your desk',
+    decline: 'Decline',
+    declineTip: "Staying home costs a little paper (never your reserve)",
+    striking: (who: string) => `${who} is strafing your desk`,
+    escorts: (n: number) => (n === 1 ? '1 escort' : `${n} escorts`),
+    escortsTip: 'Escorts flying with the raider (AI and players)',
     yourRaid: 'Your raid',
     /** `who` is the victim's name tag. */
     raidOn: (who: string) => `Raid on ${who}`,
@@ -995,6 +1004,8 @@ export const en = {
     survived: 'Survived',
     shotDownBy: (name: string) => `Shot down by ${name}`,
     crashed: 'Lost: crashed',
+    /** v0.0.19: the raid report's line, with what decided it. */
+    raidDecided: (victim: string, decided: string, lost: string | null) => `Raid on ${victim}: ${decided}${lost ? `; they lost ${lost} paper` : ''}`,
     raidReport: (victim: string, outcome: 'bombed' | 'repelled' | 'off', lost: string | null) =>
       `Raid on ${victim}: ${outcome === 'bombed' ? `got through${lost ? `, they lost ${lost} paper` : ''}` : outcome === 'repelled' ? 'repelled' : 'called off'}`,
     land: (desk: string) => `${desk} · Land`,

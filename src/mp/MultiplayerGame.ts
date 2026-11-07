@@ -363,7 +363,7 @@ export class MultiplayerGame {
     const mpHud = new MpHud(
       hudRoot,
       { tl: hud.zone('tl'), tc: hud.zone('tc'), tr: hud.zone('tr'), centre: hud.zone('centre') },
-      { emote: (e) => game?.net.emote(e), intercept: () => game?.intercept() },
+      { emote: (e) => game?.net.emote(e), intercept: () => game?.intercept(), decline: () => game?.send({ a: 'challenge-decline' }) },
     );
     const lobby = new Lobby(hudRoot, {
       quick: (name) => void game?.enter(() => game!.net.quickJoin(name)),
@@ -828,7 +828,8 @@ export class MultiplayerGame {
 
   /** The interception card (put first by the server while we are raided), if one is on offer. */
   private interceptOffer(): number {
-    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept');
+    // v0.0.19: answering a challenge is the same one press, on the challenged card.
+    return this.offers.findIndex((m) => this.cards.get(m)?.pvp?.kind === 'intercept' || this.cards.get(m)?.pvp?.kind === 'challenged');
   }
 
   /**
@@ -1804,7 +1805,7 @@ export class MultiplayerGame {
   // ---- Multiplayer HUD ----------------------------------------------------------------------------
 
   /** The raid card: the attacker, and from the raid alert the ETA, direction, our guns and reward. */
-  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null }): IncomingView {
+  private incomingView(a: { attacker: string; attackerName: string; detected: boolean; distance: number | null; kind?: IncomingView['kind']; escorts?: number }): IncomingView {
     const r = this.views.raidAlertView();
     return {
       attacker: a.attackerName,
@@ -1817,6 +1818,8 @@ export class MultiplayerGame {
       total: r?.total ?? this.base?.readiness.total ?? 0,
       reward: r?.reward ?? 0,
       response: this.interceptResponse(),
+      kind: a.kind,
+      escorts: a.escorts,
     };
   }
 

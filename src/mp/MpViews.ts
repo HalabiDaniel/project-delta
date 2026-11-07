@@ -487,7 +487,7 @@ export class MpViews {
       failure: succeeded ? null : failureText(r.failure ?? null),
       paper: paperBreakdown({ reward: succeeded ? r.reward : 0, missionTitle: r.missionTitle, bonuses: [], earned: s.paperEarned, spent: s.paperSpent, lost: s.paperLost, overflow: s.paperOverflow }),
       next: nextStepText({ succeeded, recovered: r.recovered, aircraftName: s.emergency ? emergencyPlane().name : spec.name, refitCost: spec.refitCost, cost: spec.cost, repairs: g.base?.needsRepair.length ?? 0 }),
-      operation: report && report.role === 'attacker' ? V.raidReport(report.other, report.outcome === 'bombed' ? 'bombed' : report.outcome === 'repelled' ? 'repelled' : 'off', report.paperLost > 0 ? paper(report.paperLost) : null) : null,
+      operation: report && report.role === 'attacker' && report.decided ? V.raidDecided(report.other, report.decided, report.paperLost > 0 ? paper(report.paperLost) : null) : report && report.role === 'attacker' ? V.raidReport(report.other, report.outcome === 'bombed' ? 'bombed' : report.outcome === 'repelled' ? 'repelled' : 'off', report.paperLost > 0 ? paper(report.paperLost) : null) : null,
     };
   }
 

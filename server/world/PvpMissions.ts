@@ -1,4 +1,4 @@
-import { BOUNTIES, COOP, MISSIONS, PVP, RAIDS, type AiRole } from '../../src/config';
+import { BOUNTIES, COOP, MISSIONS, PVP, RAID_KINDS, RAIDS, type AiRole } from '../../src/config';
 import type { Bounty } from './Bounties';
 import type { JointAttack } from './Coop';
 import type { MissionSpec } from '../../src/missions/Mission';
@@ -26,27 +26,110 @@ export interface RaidTarget {
   z: number;
 }
 
-export function raidMission(victimName: string, victimHome: Territory, target: RaidTarget, reward: number): MissionSpec {
+/**
+ * A bombing raid: one structure, or (v0.0.19) several on a well-built base, chosen from what is
+ * actually standing on it. All of them must be hit.
+ */
+export function raidMission(victimName: string, victimHome: Territory, target: RaidTarget | RaidTarget[], reward: number): MissionSpec {
   const place = territoryName(victimHome.id);
+  const targets = Array.isArray(target) ? target : [target];
+  const names = targets.map((t) => t.name.toLowerCase());
+  const what = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
   return {
-    type: 'bombing',
+    type: targets.length > 1 ? 'multi-bomb' : 'bombing',
     difficulty: 'medium',
     tier: 'hard',
     title: `Raid ${victimName}`,
-    description: `Bomb ${victimName}'s ${target.name.toLowerCase()} on ${place} (${victimHome.id}). Their guns are awake, and they may come up to meet you.`,
+    description: `Bomb ${victimName}'s ${what} on ${place} (${victimHome.id}). Their guns are awake, and they may come up to meet you.`,
     reward,
-    bombs: 4,
+    bombs: Math.min(6, 2 + 2 * targets.length),
     timeLimit: PVP.raidTime,
     ordered: false,
-    objectives: [
-      {
-        kind: 'bomb',
-        territoryId: victimHome.id,
-        zone: { x: target.x, z: target.z, radius: RAIDS.hitRadius, top: victimHome.top + MISSIONS.targetHeight },
-        precision: false,
-      },
-    ],
+    objectives: targets.map((t) => ({
+      kind: 'bomb' as const,
+      territoryId: victimHome.id,
+      zone: { x: t.x, z: t.z, radius: RAIDS.hitRadius, top: victimHome.top + MISSIONS.targetHeight },
+      precision: false,
+    })),
     codename: `Raid on ${place}`,
+  };
+}
+
+/**
+ * v0.0.19: a staged raid: suppress a radar or turret first (wreck it, guns, rockets or bombs), then
+ * bomb the store. Each stage has its own clock (RAID_KINDS.stageTime), kept by the server.
+ */
+export function stagedRaidMission(victimName: string, victimHome: Territory, first: RaidTarget, store: RaidTarget, reward: number): MissionSpec {
+  const place = territoryName(victimHome.id);
+  return {
+    type: 'multi-stage',
+    difficulty: 'hard',
+    tier: 'hard',
+    title: `Staged raid on ${victimName}`,
+    description: `Two stages on ${place}: first knock out ${victimName}'s ${first.name.toLowerCase()}, then bomb their store. ${RAID_KINDS.stageTime} s for each stage. Stage one alone pays a little; the store pays the rest.`,
+    reward,
+    bombs: 4,
+    timeLimit: RAID_KINDS.stageTime * 2,
+    ordered: true,
+    objectives: [
+      { kind: 'destroy', territoryId: victimHome.id, targets: [first.installationId], count: 1 },
+      { kind: 'bomb', territoryId: victimHome.id, zone: { x: store.x, z: store.z, radius: RAIDS.hitRadius, top: victimHome.top + MISSIONS.targetHeight }, precision: false },
+    ],
+    codename: `Two-step on ${place}`,
+  };
+}
+
+/** v0.0.19: a strike: wreck infrastructure low, with guns and rockets. Takes no resources. */
+export function strikeMission(victimName: string, victimHome: Territory, targets: RaidTarget[], reward: number): MissionSpec {
+  const place = territoryName(victimHome.id);
+  return {
+    type: 'low-attack',
+    difficulty: 'hard',
+    tier: 'hard',
+    title: `Strike ${victimName}`,
+    description: `Fly in low over ${place} and wreck ${victimName}'s ${targets.map((t) => t.name.toLowerCase()).join(' and ')} with guns and rockets. Their guns are awake; they may take off to meet you.`,
+    reward,
+    bombs: 0,
+    timeLimit: RAID_KINDS.strikeTime,
+    ordered: false,
+    objectives: [{ kind: 'destroy', territoryId: victimHome.id, targets: targets.map((t) => t.installationId), count: targets.length }],
+    codename: `Strike on ${place}`,
+  };
+}
+
+/** v0.0.19: a challenge: call another player out to a dogfight over their own desk. */
+export function challengeMission(victimId: string, victimName: string, victimHome: Territory, noShowReward: number): MissionSpec {
+  const c = RAID_KINDS.challenge;
+  return {
+    type: 'dogfight',
+    difficulty: 'hard',
+    tier: 'hard',
+    title: `Challenge ${victimName}`,
+    description: `Call ${victimName} out over their own desk on ${territoryName(victimHome.id)}. They have ${c.answer} s to take off. Win the dogfight for ${c.reward}; if they don't show, you get ${noShowReward}.`,
+    reward: noShowReward,
+    bombs: 0,
+    timeLimit: c.answer + c.fight,
+    ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: victimHome.id, targets: [planeId(victimId)], count: 1, what: 'aircraft' }],
+    codename: `Showdown over ${territoryName(victimHome.id)}`,
+  };
+}
+
+/** v0.0.19: the challenged player's card: take off and win the dogfight over your desk. */
+export function challengedMission(challengerId: string, challengerName: string, home: Territory): MissionSpec {
+  const c = RAID_KINDS.challenge;
+  return {
+    type: 'dogfight',
+    difficulty: 'hard',
+    tier: 'hard',
+    title: `${challengerName} challenged you`,
+    description: `${challengerName} is calling you out over your desk. Take off within ${c.answer} s and shoot them down for ${c.reward}. Staying home costs you a little paper (never your reserve).`,
+    reward: c.reward,
+    bombs: 0,
+    timeLimit: c.answer + c.fight,
+    ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: home.id, targets: [planeId(challengerId)], count: 1, what: 'aircraft' }],
+    codename: `Answer ${challengerName}`,
   };
 }
 

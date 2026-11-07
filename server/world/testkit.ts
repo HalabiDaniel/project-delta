@@ -9,8 +9,9 @@ import { ServerWorld, type ServerWorldOptions } from './ServerWorld';
  * "clients" that send one input frame per step the way the browser does.
  */
 export function quietWorld(seed = 1, options: ServerWorldOptions = {}): ServerWorld {
-  // No arrival grace unless a test asks for one: raids between players start at once.
-  return new ServerWorld({ seed, ambient: false, arrivalGrace: 0, ...options });
+  // No arrival grace unless a test asks for one: raids between players start at once. Raid cards are
+  // plain bombing raids unless a test asks for the v0.0.19 kinds.
+  return new ServerWorld({ seed, ambient: false, arrivalGrace: 0, raidKinds: ['bombing'], ...options });
 }
 
 export function player(world: ServerWorld, id: string, territory: string, name = id): Pilot {

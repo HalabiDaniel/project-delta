@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { raidLoss } from '../../src/base/Raids';
-import { PVP } from '../../src/config';
+import { PVP, type RaidKind } from '../../src/config';
 import type { RaidTarget } from './PvpMissions';
 
 /** What the rules need to know about a player to decide whether their base may be raided. */
@@ -46,6 +46,17 @@ export interface Attack {
   structures: Array<{ name: string; destroyed: boolean }>;
   /** The defender (personally) put shots into the attacker's plane. */
   defended: boolean;
+  /** v0.0.19: what kind of raid, and every structure it asks for (`target` is the first). */
+  kind: RaidKind;
+  targets: RaidTarget[];
+  /** v0.0.19 staged raids: the stage under way (0, 1; 2 when both are done) and when it started (world time). */
+  stage: number;
+  stageStarted: number;
+  /** v0.0.19 challenges: the defender has taken off to answer it. */
+  answered: boolean;
+  /** v0.0.19: escorts (AI and human) flying with the attacker when the raid was detected, and when that was. */
+  escorts: number;
+  detectedAt: number | null;
 }
 
 export interface RaidRecord {
@@ -109,8 +120,11 @@ export class AttackBook {
     return raidLoss(vulnerable, onStore);
   }
 
-  start(attacker: string, victim: string, territoryId: string, target: RaidTarget, now: number): Attack {
-    const attack: Attack = { id: this.nextId++, uid: randomUUID(), attacker, victim, territoryId, started: now, target, detected: false, structures: [], defended: false };
+  start(attacker: string, victim: string, territoryId: string, target: RaidTarget, now: number, kind: RaidKind = 'bombing', targets: RaidTarget[] = [target]): Attack {
+    const attack: Attack = {
+      id: this.nextId++, uid: randomUUID(), attacker, victim, territoryId, started: now, target, detected: false, structures: [], defended: false,
+      kind, targets, stage: 0, stageStarted: now, answered: false, escorts: 0, detectedAt: null,
+    };
     this.active.push(attack);
     return attack;
   }

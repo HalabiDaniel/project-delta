@@ -169,11 +169,18 @@ export interface ProgressRecord {
   shieldUntil?: Date | null;
 }
 
-/** A raid or a kill between two players, for the cooldowns, the repeat rule and the kill-farming window. */
+/** v0.0.19: what happened between two players (pvp_records.kind). */
+export type PvpKind = 'raid' | 'kill' | 'assist' | 'defend' | 'coop' | 'bounty' | 'challenge' | 'mischief';
+export const PVP_KINDS: readonly PvpKind[] = ['raid', 'kill', 'assist', 'defend', 'coop', 'bounty', 'challenge', 'mischief'];
+
+/**
+ * A raid or a kill between two players, for the cooldowns, the repeat rule and the kill-farming
+ * window; v0.0.19 adds the rest of what rivalries and the anti-farming rules look at (PvpKind).
+ */
 export interface PvpRecord {
   /** Unique (a UUID): the same record is never counted twice. */
   id: string;
-  kind: 'raid' | 'kill';
+  kind: PvpKind;
   /** Player ids (UUIDs) when written; public ids when read back (what the world knows players by). */
   attacker: string;
   victim: string;
