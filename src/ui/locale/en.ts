@@ -1069,6 +1069,13 @@ export const en = {
     privacy: 'privacy notice',
     createAccountBtn: 'Create account',
     already: 'Already a pilot?',
+    backToMenu: 'Main menu',
+    google: 'Google',
+    github: 'GitHub',
+    discord: 'Discord',
+    signInWith: (p: string) => `Sign in with ${p}`,
+    signUpWith: (p: string) => `Sign up with ${p}`,
+    socialUnavailable: (p: string) => `${p} sign-in arrives with online accounts.`,
     errors: {
       email: 'Enter your email, like you@example.com',
       at: 'That email is missing an @',

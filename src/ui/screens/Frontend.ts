@@ -101,6 +101,15 @@ function deskLayout(desks: number, compact = false): string {
 type MpTab = 'quick' | 'host' | 'join';
 type QuickState = { kind: 'finding'; started: number } | { kind: 'joining'; title: string; players: number; capacity: number; id: string; at: number } | { kind: 'offline' } | { kind: 'stopped' };
 
+type SocialProvider = 'google' | 'github' | 'discord';
+
+/** Brand marks for the sign-in providers (filled, so they read at button size). */
+const SOCIAL_SVG: Readonly<Record<SocialProvider, string>> = {
+  google: '<svg class="icon social-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.96 10.96 0 0 0 12 1 11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/></svg>',
+  github: '<svg class="icon social-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>',
+  discord: '<svg class="icon social-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#5865F2" d="M20.32 4.37A19.8 19.8 0 0 0 15.4 2.85a13.7 13.7 0 0 0-.63 1.29 18.4 18.4 0 0 0-5.53 0 12.6 12.6 0 0 0-.64-1.29 19.7 19.7 0 0 0-4.92 1.52C.53 9.05-.32 13.6.1 18.09a19.9 19.9 0 0 0 6.04 3.05c.49-.66.92-1.36 1.3-2.1a12.9 12.9 0 0 1-2.04-.98c.17-.12.34-.25.5-.38a14.2 14.2 0 0 0 12.2 0c.16.13.33.26.5.38-.65.39-1.33.71-2.05.98.38.74.81 1.44 1.3 2.1a19.8 19.8 0 0 0 6.05-3.05c.5-5.2-.84-9.71-3.58-13.72zM8.02 15.33c-1.18 0-2.16-1.09-2.16-2.42s.95-2.42 2.16-2.42 2.18 1.1 2.16 2.42c0 1.33-.95 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.95-2.42 2.16-2.42 2.18 1.1 2.16 2.42c0 1.33-.94 2.42-2.16 2.42z"/></svg>',
+};
+
 /**
  * Every screen outside a match, on one layer over the living desk scene: Loading, Login, Create
  * account, the main menu, Play solo, Multiplayer (Quick play, Host, Join), Leaderboard,
@@ -117,6 +126,8 @@ export class Frontend {
   private progressText = '';
   private progress = 0;
   // Form state
+  /** The provider named in the "not yet" note after a social button is pressed. */
+  private socialNote = '';
   private login = { email: '', password: '', show: false, keep: true, error: '' as string };
   private signup = { callsign: '', email: '', password: '', show: false, agree: false, touched: { callsign: false, email: false, password: false }, error: '' };
   private solo: SoloSetup = loadSolo();
@@ -231,6 +242,12 @@ export class Frontend {
       this.game.backToPause();
       return true;
     }
+    if (this.flow.screen === 'login' || this.flow.screen === 'signup') {
+      if (!this.game.account.current()) this.game.account.continueAsGuest();
+      this.socialNote = '';
+      this.flow.go('menu');
+      return true;
+    }
     return this.flow.back();
   }
 
@@ -296,7 +313,7 @@ export class Frontend {
       const el = document.getElementById(id) as HTMLInputElement | null;
       if (el) {
         el.focus({ preventScroll: true });
-        if (caret !== null && el.type !== 'email') el.setSelectionRange(caret, caret);
+        if (caret !== null) el.setSelectionRange(caret, caret);
       }
     }
   }
@@ -341,20 +358,34 @@ export class Frontend {
     const f = F();
     const l = this.login;
     const pw = kiconButton({ icon: l.show ? 'eyeOff' : 'eye', name: l.show ? f.hidePassword : f.showPassword, variant: 'quiet', attrs: { 'data-act': 'toggle-password' } });
-    return `<div class="front-scene-screen">${this.brand()}
+    return `<div class="front-scene-screen">${this.brand()}${this.authBack()}
       ${panel({ className: 'auth-panel', margin: true, label: f.welcomeBack, tag: 'section', bodyHtml: `
         <h1 class="auth-title">${esc(f.welcomeBack)}</h1>
         <p class="auth-sub">${esc(f.loginSub)}</p>
         <form class="auth-form" novalidate>
-          ${field({ id: 'login-email', label: f.email, type: 'email', value: l.email, placeholder: f.emailPlaceholder, icon: 'mail', autocomplete: 'email', error: l.error === 'email' ? f.errors.email : undefined })}
+          ${field({ id: 'login-email', label: f.email, attrs: { inputmode: 'email' }, value: l.email, placeholder: f.emailPlaceholder, icon: 'mail', autocomplete: 'email', error: l.error === 'email' ? f.errors.email : undefined })}
           ${field({ id: 'login-password', label: f.password, type: l.show ? 'text' : 'password', value: l.password, placeholder: f.passwordPlaceholder, icon: 'lock', autocomplete: 'current-password', trailingHtml: pw, error: l.error === 'unknown' ? f.errors.unknown : l.error === 'password' ? f.errors.passwordEmpty : undefined })}
           <div class="auth-row">${checkbox({ id: 'login-keep', labelHtml: esc(f.keepSignedIn), checked: l.keep })}<button type="button" class="pw-link" data-act="forgot">${esc(f.forgot)}</button></div>
           ${l.error === 'reset' ? `<p class="auth-note" role="status">${icon('info', 'icon pw-icon')}<span>${esc(f.resetUnavailable)}</span></p>` : ''}
           ${kbutton({ label: f.signIn, icon: 'logIn', variant: 'primary', size: 'xl', block: true, attrs: { 'data-act': 'sign-in', 'data-nav-default': '' } })}
           ${divider(f.or)}
+          ${this.socialHtml(f.signInWith)}
           ${kbutton({ label: f.guest, icon: 'user', size: 'l', block: true, attrs: { 'data-act': 'guest' } })}
           <p class="auth-switch">${esc(f.newHere)} <button type="button" class="pw-link" data-act="to-signup">${esc(f.createAccount)}</button></p>
         </form>` })}</div>`;
+  }
+
+  /** Back to the main menu from Login / Create account (as a guest when nobody is signed in). */
+  private authBack(): string {
+    return `<div class="auth-back">${kbutton({ label: F().backToMenu, icon: 'arrowLeft', size: 's', attrs: { 'data-act': 'back' } })}</div>`;
+  }
+
+  /** Three small "continue with" buttons: Google, GitHub, Discord. */
+  private socialHtml(withLabel: (provider: string) => string): string {
+    const f = F();
+    const btn = (id: SocialProvider, name: string) =>
+      `<button type="button" class="pw-btn social-btn" data-variant="paper" data-size="m" data-social="${id}" data-act="social" aria-label="${esc(withLabel(name))}" title="${esc(withLabel(name))}">${SOCIAL_SVG[id]}<span class="pw-label">${esc(name)}</span></button>`;
+    return `<div class="social-row">${btn('google', f.google)}${btn('github', f.github)}${btn('discord', f.discord)}</div>${this.socialNote ? `<p class="auth-note" role="status">${icon('info', 'icon pw-icon')}<span>${esc(f.socialUnavailable(this.socialNote))}</span></p>` : ''}`;
   }
 
   private signupHtml(): string {
@@ -370,17 +401,19 @@ export class Frontend {
     const emailError = s.touched.email && emailIssue ? (emailIssue === 'domain' ? f.errors.domain : emailIssue === 'at' ? f.errors.at : f.errors.email) : undefined;
     const callsignError = s.touched.callsign && !callsignOk ? f.callsignHelp : undefined;
     const pwError = s.touched.password && s.password.length < PASSWORD_MIN ? f.errors.passwordShort(PASSWORD_MIN) : undefined;
-    return `<div class="front-scene-screen">${this.brand()}
+    return `<div class="front-scene-screen">${this.brand()}${this.authBack()}
       ${panel({ className: 'auth-panel', margin: true, label: f.makePilot, bodyHtml: `
         <h1 class="auth-title">${esc(f.makePilot)}</h1>
         <p class="auth-sub">${esc(f.signupSub)}</p>
         <form class="auth-form" novalidate>
           ${field({ id: 'signup-callsign', label: f.callsign, value: s.callsign, placeholder: f.callsignPlaceholder, icon: 'user', autocomplete: 'nickname', maxLength: 16, help: callsignError ? undefined : f.callsignHelp, error: callsignError, valid: callsignOk, validLabel: f.valid })}
-          ${field({ id: 'signup-email', label: f.email, type: 'email', value: s.email, placeholder: f.emailPlaceholder, icon: 'mail', autocomplete: 'email', error: emailError })}
+          ${field({ id: 'signup-email', label: f.email, attrs: { inputmode: 'email' }, value: s.email, placeholder: f.emailPlaceholder, icon: 'mail', autocomplete: 'email', error: emailError })}
           ${field({ id: 'signup-password', label: f.password, type: s.show ? 'text' : 'password', value: s.password, placeholder: f.passwordNew, icon: 'lock', autocomplete: 'new-password', trailingHtml: pw, belowHtml: meter, error: pwError })}
           ${checkbox({ id: 'signup-agree', checked: s.agree, labelHtml: f.agree(`<a class="pw-link" href="#" data-act="terms">${esc(f.terms)}</a>`, `<a class="pw-link" href="#" data-act="privacy">${esc(f.privacy)}</a>`) })}
           ${s.error ? `<p class="auth-error" role="alert">${esc(s.error)}</p>` : ''}
           ${kbutton({ label: f.createAccountBtn, icon: 'check', variant: 'primary', size: 'xl', block: true, attrs: { 'data-act': 'sign-up', 'data-nav-default': '' } })}
+          ${divider(f.or)}
+          ${this.socialHtml(f.signUpWith)}
           <p class="auth-switch">${esc(f.already)} <button type="button" class="pw-link" data-act="to-login">${esc(f.signIn)}</button></p>
         </form>` })}</div>`;
   }
@@ -816,11 +849,20 @@ export class Frontend {
         this.flow.go('menu');
         return;
       case 'to-signup':
+        this.socialNote = '';
         this.flow.go('signup');
         return;
       case 'to-login':
+        this.socialNote = '';
         this.flow.go('login');
         return;
+      case 'social': {
+        const f = F();
+        const id = el.dataset.social as SocialProvider | undefined;
+        this.socialNote = id === 'google' ? f.google : id === 'github' ? f.github : id === 'discord' ? f.discord : '';
+        this.redraw();
+        return;
+      }
       case 'sign-up': {
         const s = this.signup;
         s.touched = { callsign: true, email: true, password: true };
