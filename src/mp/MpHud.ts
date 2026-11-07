@@ -45,6 +45,8 @@ export interface NameTagView extends ScreenPoint {
   hostile: boolean;
   plane: string;
   emote: Emote | null;
+  /** v0.0.19: an ink splat on the plane (not shown from players you muted); allies wear friend colours. */
+  inked?: boolean;
 }
 
 /** The tag over another player's desk: "{username}'s desk", where they are, and whether it is safe or under attack. */
@@ -115,6 +117,31 @@ export interface IncomingView {
   escorts?: number;
 }
 
+/** v0.0.19: one row of the players panel. */
+export interface PlayerRowView {
+  id: string;
+  name: string;
+  colour: number;
+  rep: string | null;
+  nemesis: boolean;
+  /** Your record against them. */
+  wins: number;
+  losses: number;
+  /** none, ally, offered (you sent one), asked (they sent you one). */
+  alliance: 'none' | 'ally' | 'offered' | 'asked';
+  muted: boolean;
+  reported: boolean;
+}
+
+/** v0.0.19: the players panel. */
+export interface PlayersPanelView {
+  rows: PlayerRowView[];
+  welcome: 'allies' | 'anyone' | 'none';
+  /** The player whose report reasons are showing, if any. */
+  reporting: string | null;
+  inAlliance: boolean;
+}
+
 export interface MpHudView {
   status: ConnectionStatus;
   ping: number;
@@ -132,6 +159,8 @@ export interface MpHudView {
   /** Seconds of the session left (v0.0.13), and whether joining has closed (the end is near). */
   sessionLeft: number | null;
   closing: boolean;
+  /** v0.0.19: the players panel, while open. */
+  playersPanel?: PlayersPanelView | null;
 }
 
 export interface MpHudActions {
@@ -140,6 +169,13 @@ export interface MpHudActions {
   intercept(): void;
   /** v0.0.19: decline a challenge. */
   decline?(): void;
+  /** v0.0.19: the players panel's buttons. */
+  ally?(o: 'offer' | 'accept' | 'decline' | 'leave', id?: string): void;
+  mute?(id: string, on: boolean): void;
+  report?(id: string, reason: string): void;
+  reporting?(id: string | null): void;
+  welcome?(w: 'allies' | 'anyone' | 'none'): void;
+  closePlayers?(): void;
 }
 
 /** Where the multiplayer panels go: the HUD's zones, so they scale with the HUD size and the window. */
@@ -155,8 +191,13 @@ export const EMOTES: ReadonlyArray<{ id: Emote; icon: IconName; name: string; ke
   { id: 'waggle', icon: 'plane', name: T.mpHud.emotes.waggle, key: bind('emote1') },
   { id: 'confetti', icon: 'level', name: T.mpHud.emotes.confetti, key: bind('emote2') },
   { id: 'heart', icon: 'health', name: T.mpHud.emotes.heart, key: bind('emote3') },
+  // v0.0.19
+  { id: 'salute', icon: 'award', name: T.mpHud.emotes.salute, key: bind('emote4') },
+  { id: 'laugh', icon: 'sun', name: T.mpHud.emotes.laugh, key: bind('emote5') },
+  { id: 'tease', icon: 'swords', name: T.mpHud.emotes.tease, key: bind('emote6') },
+  { id: 'splat', icon: 'inkwell', name: T.mpHud.emotes.splat, key: bind('emote7') },
 ];
-const EMOTE_ICON: Record<Emote, IconName> = { waggle: 'plane', confetti: 'level', heart: 'health' };
+const EMOTE_ICON: Record<Emote, IconName> = { waggle: 'plane', confetti: 'level', heart: 'health', salute: 'award', laugh: 'sun', tease: 'swords', splat: 'inkwell' };
 const FEED_LINES = 4;
 const FEED_SECONDS = 6;
 
@@ -253,6 +294,8 @@ export class MpHud {
   private readonly landing: HTMLElement;
   private landingTimer: ReturnType<typeof setTimeout> | undefined;
   private lastBoard = '';
+  private readonly playersEl: HTMLElement;
+  private lastPlayers = '';
   private lastRaid = '';
   private lastNet = '';
   private lastConnection = '';
@@ -287,6 +330,25 @@ export class MpHud {
     zones.tr.appendChild(this.feed);
     this.board = div(zones.centre, 'mp-board');
     this.board.hidden = true;
+    // v0.0.19: the players panel.
+    this.playersEl = div(zones.centre, 'mp-players');
+    this.playersEl.hidden = true;
+    this.playersEl.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('[data-act]');
+      if (!b || (b as HTMLButtonElement).disabled) return;
+      const id = b.dataset.id;
+      switch (b.dataset.act) {
+        case 'ally-offer': return actions.ally?.('offer', id);
+        case 'ally-accept': return actions.ally?.('accept', id);
+        case 'ally-decline': return actions.ally?.('decline', id);
+        case 'ally-leave': return actions.ally?.('leave');
+        case 'mute': return actions.mute?.(id!, b.dataset.on === '1');
+        case 'report-open': return actions.reporting?.(id ?? null);
+        case 'report': return actions.report?.(id!, b.dataset.reason!);
+        case 'welcome': return actions.welcome?.(b.dataset.w as 'allies' | 'anyone' | 'none');
+        case 'close-players': return actions.closePlayers?.();
+      }
+    });
     this.raid.addEventListener('click', (e) => {
       if ((e.target as Element).closest('[data-act="intercept"]')) actions.intercept();
       if ((e.target as Element).closest('[data-act="decline"]')) actions.decline?.();
@@ -300,6 +362,7 @@ export class MpHud {
     this.renderTags(v.tags);
     this.renderTerritories(v.territories);
     this.renderBoard(v.scoreboard);
+    this.renderPlayers(v.playersPanel ?? null);
     this.renderRaid(v);
     if (this.emotes.hidden === v.emoteKeys) this.emotes.hidden = !v.emoteKeys;
   }
@@ -387,7 +450,7 @@ export class MpHud {
       let el = this.tags.get(t.id);
       if (!el) {
         el = div(this.tagLayer, 'mp-tag');
-        el.innerHTML = `<span class="mp-tag-name">${icon('fighter', 'icon mp-swatch')}<span class="mp-insignia-slot"></span><b></b></span><span class="mp-tag-bar"></span><span class="mp-tag-emote"></span>`;
+        el.innerHTML = `<span class="mp-tag-name">${icon('fighter', 'icon mp-swatch')}<span class="mp-insignia-slot"></span><b></b><span class="mp-tag-ink" hidden>${icon('inkwell', 'icon', esc(H.inked))}</span></span><span class="mp-tag-bar"></span><span class="mp-tag-emote"></span>`;
         this.tags.set(t.id, el);
       }
       el.style.transform = `translate(${t.x}px, ${t.y}px) translate(-50%, -100%) scale(${1 - t.far * 0.35})`;
@@ -397,6 +460,8 @@ export class MpHud {
       const slot = el.querySelector<HTMLElement>('.mp-insignia-slot')!;
       const rankHtml = insigniaSlot(t.rank);
       if (slot.innerHTML !== rankHtml) slot.innerHTML = rankHtml;
+      const ink = el.querySelector<HTMLElement>('.mp-tag-ink')!;
+      if (ink.hidden === !!t.inked) ink.hidden = !t.inked;
       const name = el.querySelector('b')!;
       const label = H.tag(t.name, t.plane);
       if (name.textContent !== label) name.textContent = label;
@@ -459,6 +524,15 @@ export class MpHud {
     this.board.innerHTML = card({ title: H.scoreboard, icon: 'kills', bodyHtml: scoreboardHtml(rows), elevation: 'floating', className: 'mp-board-card' });
   }
 
+  private renderPlayers(p: PlayersPanelView | null): void {
+    if (this.playersEl.hidden === !!p) this.playersEl.hidden = !p;
+    if (!p) return;
+    const key = JSON.stringify(p);
+    if (key === this.lastPlayers) return;
+    this.lastPlayers = key;
+    this.playersEl.innerHTML = playersPanelHtml(p);
+  }
+
   private renderRaid(v: MpHudView): void {
     const html = v.incoming ? incomingHtml(v.incoming) : v.outgoing ? outgoingHtml(v.outgoing) : '';
     if (html === this.lastRaid) return;
@@ -477,6 +551,35 @@ export function territoryTagHtml(t: TerritoryTagView): string {
   const effects = t.deskEffects ?? [];
   const flags = effects.length > 0 ? ` data-desk-effects="${esc(effects.join(' '))}"` : '';
   return `<span class="mp-terr-plate"${flags}>${icon('home', 'icon mp-swatch')}${insigniaSlot(t.rank)}<b>${esc(t.label)}</b></span>${presence}${safe}${raid}`;
+}
+
+/** v0.0.19: the players panel: alliances, mute and report, and who may escort your bombers. */
+export function playersPanelHtml(p: PlayersPanelView): string {
+  const welcome = (['allies', 'anyone', 'none'] as const)
+    .map((w) => button({ label: H.welcomes[w], size: 'small', variant: p.welcome === w ? 'primary' : 'secondary', attrs: { 'data-act': 'welcome', 'data-w': w, 'aria-pressed': String(p.welcome === w) } }))
+    .join('');
+  const rows = p.rows.map((r) => {
+    const ally =
+      r.alliance === 'ally' ? chip({ label: H.ally, icon: 'users', tone: 'friend', tip: H.allyTip })
+      : r.alliance === 'asked' ? `${button({ label: H.accept, icon: 'check', size: 'small', variant: 'primary', attrs: { 'data-act': 'ally-accept', 'data-id': r.id } })}${button({ label: H.declineOffer, size: 'small', attrs: { 'data-act': 'ally-decline', 'data-id': r.id } })}`
+      : r.alliance === 'offered' ? chip({ label: H.offerSent, icon: 'clock', tone: 'plain' })
+      : button({ label: H.offerAlly, icon: 'users', size: 'small', tip: H.offerAllyTip, attrs: { 'data-act': 'ally-offer', 'data-id': r.id } });
+    const mute = button({ label: r.muted ? H.unmute : H.mute, icon: r.muted ? 'sound' : 'mute', size: 'small', tip: H.muteTip, attrs: { 'data-act': 'mute', 'data-id': r.id, 'data-on': r.muted ? '0' : '1' } });
+    const report = r.reported
+      ? chip({ label: H.reported, icon: 'check', tone: 'plain' })
+      : button({ label: H.report, icon: 'warn', size: 'small', tip: H.reportTip, attrs: { 'data-act': 'report-open', 'data-id': p.reporting === r.id ? '' : r.id, 'aria-expanded': String(p.reporting === r.id) } });
+    const reasons = p.reporting === r.id
+      ? `<div class="mp-report-reasons" role="group" aria-label="${esc(H.reportTip)}">${Object.entries(H.reportReasons).map(([k, label]) => button({ label, size: 'small', attrs: { 'data-act': 'report', 'data-id': r.id, 'data-reason': k } })).join('')}</div>`
+      : '';
+    const record = r.wins + r.losses > 0 ? `<span class="num mp-record" data-tip="${esc(H.recordTip)}">${esc(H.record(r.wins, r.losses))}</span>` : '';
+    return `<li class="mp-player-row" data-id="${esc(r.id)}" style="--owner:${colourCss(r.colour)}">
+      <span class="mp-pilot">${icon('fighter', 'icon mp-swatch')}<b>${esc(r.name)}</b>${r.nemesis ? chip({ label: H.nemesis, icon: 'swords', tone: 'hostile' }) : ''}${r.rep ? chip({ label: H.reputation[r.rep] ?? r.rep, tone: 'plain' }) : ''}${record}</span>
+      <span class="mp-player-acts">${ally}${mute}${report}</span>${reasons}</li>`;
+  }).join('');
+  const body = `<div class="mp-welcome" role="group" aria-label="${esc(H.welcome)}"><span>${icon('escort', 'icon')}${esc(H.welcome)}</span>${welcome}</div>
+    <ul class="mp-player-list">${rows || `<li class="mp-empty">${esc(H.nobodyElse)}</li>`}</ul>
+    <div class="mp-players-foot">${p.inAlliance ? button({ label: H.leave, icon: 'logOut', size: 'small', attrs: { 'data-act': 'ally-leave' } }) : ''}${button({ label: T.say.close, icon: 'close', size: 'small', key: bind('players'), attrs: { 'data-act': 'close-players', 'data-nav-default': '' } })}</div>`;
+  return card({ title: H.playersTitle, icon: 'users', bodyHtml: body, elevation: 'floating', className: 'mp-players-card' });
 }
 
 /** The raid card: the attacker, ETA, direction, distance, our guns, the reward, and the one-press interception. */

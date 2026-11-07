@@ -47,6 +47,7 @@ import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 import { dailyAward, type MeritEvent } from './world/Merit';
 import { RankKeeper, isTierPromotion, type Promotion } from './world/RankKeeper';
 import { reputationOf } from './world/Rivalry';
+import { SocialBook } from './world/Social';
 import type { PromotionDTO } from '../src/net/protocol';
 
 /** A session's settings, given by the server only (a client can't create a room). */
@@ -640,6 +641,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.writeMerit(this.world.takeMerit());
     // v0.0.19: the director's decisions, for the developer (the log, and the admin endpoint's panel).
     for (const d of this.world.takeDecisions()) this.log('info', `director.${d.kind}`, { text: d.text, players: d.players.join(','), at: d.at });
+    this.writeReports();
   }
 
   // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
@@ -703,6 +705,18 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     if (!id) return;
     if (!data || typeof data !== 'object' || JSON.stringify(data).length > 512) return this.bad(client, 'rank');
     if (this.ranks.setPrefs(id, data)) this.showRank(id);
+  }
+
+  /** v0.0.19: player reports, kept for the developer (by account; the moderation queue is v0.0.26). */
+  private writeReports(): void {
+    for (const r of this.world.takeReports()) {
+      const reporterId = this.known.get(r.reporter) ?? null;
+      const reportedId = this.known.get(r.reported) ?? null;
+      services()
+        .store.addReport({ reporterId, reportedId, reason: r.reason, session: this.roomId, context: { ...r.context, reporter: r.reporter, reported: r.reported, title: this.title } })
+        .then(() => this.log('info', 'report', { reporter: r.reporter, reported: r.reported, reason: r.reason }))
+        .catch((error: unknown) => this.log('error', 'report.error', { reporter: r.reporter, error }));
+    }
   }
 
   /** Raids and kills between players, kept for the rules that outlive a session. */
@@ -1008,6 +1022,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       const phase = p.state?.phase;
       plane.bombs = phase === 'flying' || phase === 'landed' ? (p.state?.bombsLoaded ?? 0) : 0;
       plane.emergency = p.state?.emergency ?? false;
+      // v0.0.19: an ink splat on the plane, and who threw it.
+      const ink = SocialBook.left(world.social.planeInk.get(id), world.time);
+      plane.ink = ink?.seconds ?? 0;
+      plane.inkBy = ink?.by ?? '';
     }
     // AI aircraft.
     const seen = new Set<string>();
@@ -1069,6 +1087,10 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ts.safe = !!p && (!p.connected || p.leaving || world.time < p.protectUntil || world.time < p.shieldUntil || world.time - p.arrivedAt < world.arrivalGrace);
       ts.state = DESK_STATES.indexOf(world.deskState(t.id));
       ts.alert = !!owner && !!world.attacks.on(owner);
+      // v0.0.19: ink on the owner's rival banner.
+      const ink = owner ? SocialBook.left(world.social.bannerInk.get(t.id), world.time) : null;
+      ts.ink = ink?.seconds ?? 0;
+      ts.inkBy = ink?.by ?? '';
     }
   }
 

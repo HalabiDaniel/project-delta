@@ -17,8 +17,12 @@ import {
   SAVE_FORMAT,
   type AircraftRecord,
   checkFeedback,
+  type FarmFlagRecord,
   type FeedbackRecord,
+  type NewFarmFlag,
   type NewFeedback,
+  type NewReport,
+  type ReportRecord,
   type BasePlacement,
   type MissionOutcome,
   type ProgressRecord,
@@ -549,6 +553,51 @@ export class PgStore implements Store {
       id: Number(r.id), worldId: (r.world_id as string | null) ?? null, playerId: (r.player_id as string | null) ?? null, playerName: (r.player_name as string | null) ?? null,
       category: r.category as FeedbackCategory, body: String(r.body), repro: (r.repro as string | null) ?? null, rating: r.rating === null ? null : Number(r.rating),
       context: (r.context as Record<string, unknown>) ?? {}, createdAt: r.created_at as Date,
+    }));
+  }
+
+  // ---- Reports and farming flags (v0.0.19) --------------------------------------------------------
+
+  async addReport(r: NewReport): Promise<void> {
+    await this.db.query(
+      `insert into player_reports (reporter_id, reported_id, reason, session, context) values ($1, $2, $3, $4, $5::jsonb)`,
+      [r.reporterId && isUuid(r.reporterId) ? r.reporterId : null, r.reportedId && isUuid(r.reportedId) ? r.reportedId : null, r.reason.slice(0, 32), r.session?.slice(0, 120) ?? null, JSON.stringify(r.context)],
+    );
+  }
+
+  async reports(since?: Date): Promise<ReportRecord[]> {
+    const { rows } = await this.db.query(
+      `select r.*, coalesce(a.username, a.display_name) as reporter_name, coalesce(b.username, b.display_name) as reported_name
+         from player_reports r left join players a on a.id = r.reporter_id left join players b on b.id = r.reported_id
+        where $1::timestamptz is null or r.created_at >= $1
+        order by r.created_at, r.id`,
+      [since ?? null],
+    );
+    return rows.map((r) => ({
+      id: Number(r.id), reporterId: (r.reporter_id as string | null) ?? null, reportedId: (r.reported_id as string | null) ?? null, reason: String(r.reason),
+      session: (r.session as string | null) ?? null, context: (r.context as Record<string, unknown>) ?? {}, reporterName: (r.reporter_name as string | null) ?? null,
+      reportedName: (r.reported_name as string | null) ?? null, createdAt: r.created_at as Date,
+    }));
+  }
+
+  async addFarmFlag(f: NewFarmFlag): Promise<void> {
+    await this.db.query(
+      `insert into farm_flags (world_id, a_id, b_id, reason, data) values ($1, $2, $3, $4, $5::jsonb)`,
+      [f.worldId, f.aId && isUuid(f.aId) ? f.aId : null, f.bId && isUuid(f.bId) ? f.bId : null, f.reason.slice(0, 200), JSON.stringify(f.data)],
+    );
+  }
+
+  async farmFlags(since?: Date): Promise<FarmFlagRecord[]> {
+    const { rows } = await this.db.query(
+      `select f.*, coalesce(a.username, a.display_name) as a_name, coalesce(b.username, b.display_name) as b_name
+         from farm_flags f left join players a on a.id = f.a_id left join players b on b.id = f.b_id
+        where $1::timestamptz is null or f.created_at >= $1
+        order by f.created_at, f.id`,
+      [since ?? null],
+    );
+    return rows.map((r) => ({
+      id: Number(r.id), worldId: String(r.world_id), aId: (r.a_id as string | null) ?? null, bId: (r.b_id as string | null) ?? null, reason: String(r.reason),
+      data: (r.data as Record<string, unknown>) ?? {}, aName: (r.a_name as string | null) ?? null, bName: (r.b_name as string | null) ?? null, createdAt: r.created_at as Date,
     }));
   }
 

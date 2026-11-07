@@ -407,6 +407,22 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect((await store.base(p.id))?.placement).toBeNull();
     });
 
+    it('keeps player reports and anti-farming flags for the developer (v0.0.19)', async () => {
+      const world = await store.openWorld('reports');
+      const a = await store.createPlayer(player('Teller'), h('token-teller'), 'open');
+      const b = await store.createPlayer(player('Told'), h('token-told'), 'open');
+      const before = new Date(Date.now() - 1000);
+      await store.addReport({ reporterId: a.id, reportedId: b.id, reason: 'harassment', session: 'room-1', context: { record: { wins: 1, losses: 3 } } });
+      const reports = (await store.reports(before)).filter((r) => r.reporterId === a.id);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({ reportedId: b.id, reason: 'harassment', session: 'room-1', reporterName: expect.any(String), reportedName: expect.any(String), context: { record: { wins: 1, losses: 3 } } });
+      expect(await store.reports(new Date(Date.now() + 60_000))).toEqual([]);
+      await store.addFarmFlag({ worldId: world.id, aId: a.id, bId: b.id, reason: 'kills', data: { flows: 5 } });
+      const flags = (await store.farmFlags(before)).filter((f) => f.aId === a.id);
+      expect(flags).toHaveLength(1);
+      expect(flags[0]).toMatchObject({ bId: b.id, reason: 'kills', data: { flows: 5 } });
+    });
+
     it('keeps playtest feedback with its context, and reads it back since a date (v0.0.14)', async () => {
       const p = await store.createPlayer(player('Critic'), h('token-critic'), 'open');
       const before = new Date(Date.now() - 1000);

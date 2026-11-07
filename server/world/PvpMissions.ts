@@ -1,9 +1,9 @@
-import { BOUNTIES, COOP, MISSIONS, PVP, RAID_KINDS, RAIDS, type AiRole } from '../../src/config';
+import { BOUNTIES, COOP, MISSIONS, PVP, RAID_KINDS, RAIDS, SOCIAL, type AiRole, type MischiefKind } from '../../src/config';
 import type { Bounty } from './Bounties';
 import type { JointAttack } from './Coop';
 import type { MissionSpec } from '../../src/missions/Mission';
 import { planeId } from '../../src/net/protocol';
-import { territoryName } from '../../src/net/World';
+import { bannerPoint, territoryName } from '../../src/net/World';
 import type { Territory } from '../../src/world/Territory';
 
 /**
@@ -277,6 +277,39 @@ export function holdHomeMission(home: Territory, against: string): MissionSpec {
     objectives: [{ kind: 'patrol', territoryId: home.id, airspace: { x: home.x, z: home.z, half: home.half + PVP.airspace, ceiling }, duration: 60 }],
     codename: `Hold ${territoryName(home.id)}`,
   };
+}
+
+/**
+ * v0.0.19: harmless mischief on another player's desk (GDD §7.2): mark their banner with ink (fly
+ * through the hoop at it), fly through their airspace without a scratch, or fly a maneuver through a
+ * hoop over their desk. Nothing is destroyed and nothing is taken.
+ */
+export function mischiefMission(kind: MischiefKind, victimName: string, home: Territory): MissionSpec {
+  const place = territoryName(home.id);
+  const m = SOCIAL.mischief;
+  const base = { difficulty: 'easy' as const, tier: 'medium' as const, reward: m.reward, bombs: 0, timeLimit: m.time, ordered: false, codename: `Mischief on ${place}` };
+  switch (kind) {
+    case 'banner': {
+      const b = bannerPoint(home);
+      return {
+        ...base, type: 'rings', title: `Ink ${victimName}'s banner`,
+        description: `Fly through the hoop at ${victimName}'s banner on ${place} and leave an ink splat on it. It washes off. Their guns may object.`,
+        objectives: [{ kind: 'ring', gate: { x: b.x, y: b.y, z: b.z, yaw: Math.PI / 4, radius: 5 }, number: 1 }],
+      };
+    }
+    case 'stunt':
+      return {
+        ...base, type: 'rings', title: `Show off over ${victimName}'s desk`,
+        description: `Fly a maneuver through the hoop over ${victimName}'s desk on ${place}. Pure showing off: nothing gets broken.`,
+        objectives: [{ kind: 'ring', gate: { x: home.x, y: home.top + 14, z: home.z, yaw: 0, radius: 6, maneuver: true }, number: 1 }],
+      };
+    default:
+      return {
+        ...base, type: 'recon', title: `Buzz ${victimName}'s desk`,
+        description: `Fly right through ${victimName}'s airspace over ${place} without taking a single hit. One scratch and the fun's over.`,
+        objectives: [{ kind: 'reach', territoryId: home.id, airspace: { x: home.x, z: home.z, half: home.half, ceiling: 40 } }],
+      };
+  }
 }
 
 export function interceptMission(attackerId: string, attackerName: string, home: Territory): MissionSpec {

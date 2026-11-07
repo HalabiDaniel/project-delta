@@ -33,6 +33,9 @@ export const PlaneState = schema(
     fold: t.uint8().default(255),
     bombs: t.uint8().default(0),
     emergency: t.boolean().default(false),
+    /** v0.0.19: seconds of ink splat left on it, and who threw it ('' for none): muted players' splats aren't drawn. */
+    ink: t.uint8().default(0),
+    inkBy: t.string().default(''),
   },
   'PlaneState',
 );
@@ -133,6 +136,9 @@ export const TerritoryState = schema(
     label: t.string().default(''),
     /** Its place in the lifecycle (index into DESK_STATES, v0.0.13). */
     state: t.uint8().default(0),
+    /** v0.0.19: seconds of ink left on its owner's rival banner, and who marked it ('' for none). */
+    ink: t.uint8().default(0),
+    inkBy: t.string().default(''),
   },
   'TerritoryState',
 );

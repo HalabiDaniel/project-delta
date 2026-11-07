@@ -193,8 +193,9 @@ describe('connection, raid card, desk tags, emotes', () => {
     expect(bar.hidden).toBe(false);
     const buttons = bar.querySelectorAll<HTMLButtonElement>('button');
     expect(buttons).toHaveLength(EMOTES.length);
-    expect([...buttons].map((b) => b.getAttribute('aria-label'))).toEqual(['Waggle', 'Confetti', 'Heart']);
-    expect([...bar.querySelectorAll('button kbd')].map((k) => k.getAttribute('data-pad'))).toEqual(['up', 'left', 'right']);
+    // v0.0.19: four more emotes, keyboard-only (the controller keeps its three on the d-pad).
+    expect([...buttons].map((b) => b.getAttribute('aria-label'))).toEqual(['Waggle', 'Confetti', 'Heart', 'Salute', 'Laugh', 'Tease', 'Ink splat']);
+    expect([...bar.querySelectorAll('button kbd')].map((k) => k.getAttribute('data-pad')).filter(Boolean)).toEqual(['up', 'left', 'right']);
     buttons[2].click();
     expect(emote).toHaveBeenCalledWith('heart');
   });

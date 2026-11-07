@@ -1385,6 +1385,30 @@ export const COOP = {
   jointStrength: 1.6,
 } as const;
 
+/** v0.0.19: harmless mischief on another player's desk (plan §6B, GDD §7.2). */
+export type MischiefKind = 'banner' | 'flyby' | 'stunt';
+
+/**
+ * v0.0.19 (plan §6, GDD §7.2, §12.4): playful, non-destructive interactions with safety tools.
+ * Ink splats fade; mischief never destroys resources or buildings, is rate-limited per target and
+ * never aimed at offline or newly arrived players, or at anyone who muted you. Mutes are kept per
+ * player for good; reports (a reason, no free text) are kept for the developer. Provisional values.
+ * The rules that use them are in server/world/Social.ts.
+ */
+export const SOCIAL = {
+  /** A splat emote marks the nearest aircraft within `splatRange` ahead (inside `splatCone`); ink fades after `inkFade` seconds. */
+  splatRange: 35,
+  splatCone: 0.75,
+  inkFade: 20,
+  /** A banner marked with ink stays marked this long. */
+  bannerInk: 90,
+  /** Mischief cards: reward, time limit, the low pass's ceiling, and the limits (one per pair per `perPair` s, `perTarget` per target per `targetWindow` s). */
+  mischief: { reward: 15, time: 180, perPair: 600, perTarget: 3, targetWindow: 1800 },
+  /** Reports one player can send in a session, and per reported player. */
+  reportsPerSession: 5,
+  reportsPerTarget: 1,
+} as const;
+
 /** v0.0.19: what a player is known for (plan §5B). */
 export type ReputationKind = 'raider' | 'defender' | 'ace' | 'helper';
 

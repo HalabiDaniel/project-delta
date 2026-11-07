@@ -20,6 +20,9 @@ import type { WorldRoom } from './WorldRoom';
  *   POST /admin/end   {"session", "seconds"?, "reason"?}    end a session `seconds` from now (default 60), with notice
  *   POST /admin/desk  {"session", "desk"}                  free a desk stuck in the wrong state
  *   GET  /admin/merit?player=<public id or name>           a player's Merit, rank and latest awards (v0.0.17)
+ *   GET  /admin/reports[?days=7]                           player reports and anti-farming flags (v0.0.19)
+ *   GET  /admin/director[?session=<id>]                    each session's recent director decisions, open
+ *                                                          bounties, alliances and situations (v0.0.19)
  *   GET  /admin/stats[?reset=1]                            server step and tick timing per session,
  *                                                          database writes, memory (the load test reads it);
  *                                                          reset=1 starts the maxima over
@@ -113,6 +116,38 @@ export function adminRoutes(adminKey: string | null) {
       if (db && reset) db.maxMs = 0;
       const m = process.memoryUsage();
       return ctx.json({ at: Date.now(), uptime: Math.round(process.uptime()), memory: { rssMB: Math.round(m.rss / 1e6), heapMB: Math.round(m.heapUsed / 1e6) }, store: store.kind, writes: db0, sessions: rooms }, { headers: NO_STORE });
+    }),
+    adminReports: createEndpoint('/admin/reports', { method: 'GET' }, async (ctx) => {
+      const no = refuse(ctx as unknown as Ctx, 'reports');
+      if (no) return no as Response;
+      const days = Math.max(1, Math.min(90, num(input(ctx as unknown as Ctx).days) ?? 7));
+      const since = new Date(Date.now() - days * 86_400_000);
+      const store = services().store;
+      const [reports, flags] = await Promise.all([store.reports(since), store.farmFlags(since)]);
+      log('info', 'admin.reports', { reports: reports.length, flags: flags.length, days });
+      return ctx.json({
+        days,
+        reports: reports.map((r) => ({ at: r.createdAt, reporter: r.reporterName, reported: r.reportedName, reason: r.reason, session: r.session, context: r.context })),
+        farming: flags.map((f) => ({ at: f.createdAt, a: f.aName, b: f.bName, reason: f.reason, data: f.data })),
+      }, { headers: NO_STORE });
+    }),
+    adminDirector: createEndpoint('/admin/director', { method: 'GET' }, async (ctx) => {
+      const no = refuse(ctx as unknown as Ctx, 'director');
+      if (no) return no as Response;
+      const only = str(input(ctx as unknown as Ctx).session, 64);
+      const out = sessions().filter((s) => !only || s.id === only).map((s) => {
+        const r = room(s.id);
+        const w = r?.world;
+        return {
+          id: s.id, title: s.title,
+          decisions: w?.directorLog.entries ?? [],
+          bounties: w?.bounties.open.map((b) => ({ kind: b.kind, target: b.targetName, pot: b.pot, left: Math.round(b.expires - w.time), reason: b.reason })) ?? [],
+          alliances: w?.alliances.alliances.map((a) => a.members.map((m) => w.pilots.get(m)?.name ?? m)) ?? [],
+          situations: w ? [...w.situations.values()].map((x) => ({ name: x.name, tier: x.tier, strength: x.strength, relative: x.relative, threat: x.threat, raids: x.raids, weakKills: x.weakKills })) : [],
+        };
+      });
+      log('info', 'admin.director', { sessions: out.length });
+      return ctx.json({ sessions: out }, { headers: NO_STORE });
     }),
     adminMerit: createEndpoint('/admin/merit', { method: 'GET' }, async (ctx) => {
       const no = refuse(ctx as unknown as Ctx, 'merit');

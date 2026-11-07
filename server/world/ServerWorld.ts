@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses, raidTargetFor } from '../../src
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, RAID_KINDS, RIVALRY, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, RAID_KINDS, RIVALRY, SOCIAL, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord, PvpKind } from '../store/Store';
@@ -58,10 +58,12 @@ import { randomUUID } from 'node:crypto';
 import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
 import { MeritBook, type MeritEvent } from './Merit';
-import { bountyMission, challengedMission, challengeMission, coopEscortMission, holdHomeMission, huntMission, interceptMission, jointAttackMission, jointDefenseMission, raidMission, reconMission, stagedRaidMission, strikeMission, type RaidTarget } from './PvpMissions';
+import { bountyMission, challengedMission, challengeMission, mischiefMission, coopEscortMission, holdHomeMission, huntMission, interceptMission, jointAttackMission, jointDefenseMission, raidMission, reconMission, stagedRaidMission, strikeMission, type RaidTarget } from './PvpMissions';
 import { AllianceBook } from './Alliances';
 import { CoopBook, type JointAttack } from './Coop';
 import { reputationOf, RivalryBook } from './Rivalry';
+import { MISCHIEF_ORDER, SocialBook, type PendingReport } from './Social';
+import { MAX_MUTES } from './SocialData';
 import { BountyBoard, type Bounty } from './Bounties';
 import { addThreat, DirectorLog, median, strengthOf, threatNow, tierGap, tierOf, weakKill, weakKillsWithin, type DirectorDecision, type PlayerSituation } from './Situation';
 import type { SocialData } from './SocialData';
@@ -217,6 +219,8 @@ export class ServerWorld {
   readonly coop = new CoopBook();
   /** v0.0.19: who fought (and helped) whom, remembered across sessions. */
   readonly rivalry = new RivalryBook();
+  /** v0.0.19: ink marks, mischief limits and reports. */
+  readonly social = new SocialBook();
   /** v0.0.19: how the director sees each player, worked out again every PVP_REFRESH. */
   readonly situations = new Map<string, PlayerSituation>();
   readonly pilots = new Map<string, Pilot>();
@@ -802,8 +806,37 @@ export class ServerWorld {
     const status = p.flight.model.status;
     if (status === 'hidden' || status === 'crashed') return false;
     p.emoteAt = this.time;
-    this.emit({ t: 'emote', o: id, e: emote });
+    // v0.0.19: an ink splat marks the aircraft just ahead (it fades); harmless.
+    if (emote === 'splat' && p.flying) {
+      const hit = this.splatTarget(p);
+      if (hit) {
+        this.social.markPlane(hit.id, id, this.time);
+        if (!hit.social.mutes.includes(id)) this.note(hit, 'inkwell', `Ink splat from ${p.name}`, null, 'info');
+      }
+    }
+    // v0.0.19: players who muted this one don't get their emotes.
+    for (const o of this.pilots.values()) if (!o.social.mutes.includes(id)) this.emit({ t: 'emote', o: id, e: emote }, { to: o.id });
     return true;
+  }
+
+  /** v0.0.19: the player's plane nearest ahead of `p` within the splat's reach, if any. */
+  private splatTarget(p: Pilot): Pilot | null {
+    const m = p.flight.model;
+    const f = m.getForward(this.v1);
+    let best: Pilot | null = null;
+    let bestD: number = SOCIAL.splatRange;
+    for (const o of this.pilots.values()) {
+      if (o === p || !o.flying) continue;
+      const q = o.flight.model.position;
+      const dx = q.x - m.position.x;
+      const dy = q.y - m.position.y;
+      const dz = q.z - m.position.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > bestD || d < 0.01 || (dx * f.x + dy * f.y + dz * f.z) / d < SOCIAL.splatCone) continue;
+      best = o;
+      bestD = d;
+    }
+    return best;
   }
 
   // ---- Commands ---------------------------------------------------------------------------------
@@ -889,6 +922,32 @@ export class ServerWorld {
       case 'coop':
         this.coop.setWelcome(p.id, cmd.w);
         return true;
+      case 'mute': {
+        if (cmd.id === p.id) return false;
+        const mutes = new Set(p.social.mutes);
+        if (cmd.on) mutes.add(cmd.id);
+        else mutes.delete(cmd.id);
+        if (mutes.size > MAX_MUTES) return false;
+        p.social.mutes = [...mutes];
+        this.note(p, cmd.on ? 'mute' : 'sound', cmd.on ? 'Muted' : 'Unmuted', this.pilots.get(cmd.id)?.name ?? null, 'info');
+        return true;
+      }
+      case 'report': {
+        const them = this.pilots.get(cmd.id);
+        if (!them) return false;
+        const refusal = this.social.reportRefusal(p.id, them.id);
+        if (refusal) {
+          this.note(p, 'info', refusal === 'again' ? 'Already reported' : refusal === 'many' ? 'Too many reports' : 'No', null, 'info');
+          return false;
+        }
+        const record = this.rivalry.between(p.id, them.id);
+        this.social.report({
+          reporter: p.id, reported: them.id, reason: cmd.reason,
+          context: { reporterName: p.name, reportedName: them.name, at: Math.round(this.time), record: record ? { wins: record.wins, losses: record.losses, encounters: record.encounters } : null },
+        });
+        this.note(p, 'ok', 'Report sent', 'Thank you', 'info');
+        return true;
+      }
       case 'challenge-decline': {
         const ch = this.attacks.on(p.id);
         if (ch?.kind !== 'challenge' || ch.answered) return false;
@@ -952,6 +1011,7 @@ export class ServerWorld {
       this.updateBounties();
       this.updateCoop(PVP_REFRESH);
       if (this.tick % 3600 === 0) this.rivalry.prune(this.time);
+      this.social.fade(this.time);
       for (const p of this.pilots.values()) this.refreshPvp(p, false);
     }
     const ms = performance.now() - started;
@@ -1082,6 +1142,12 @@ export class ServerWorld {
       attacker?.aggression.set(p.id, this.time);
       p.combatAt = this.time;
       if (attacker) attacker.combatAt = this.time;
+    }
+    // v0.0.19: a mischief flyby is over the moment the teased player (or their base) lands a hit.
+    const mischief = p.pvpCard(st.mission);
+    if (mischief?.tag.kind === 'mischief' && mischief.tag.mischief === 'flyby' && by?.player === mischief.tag.target && st.mission?.isActive) {
+      st.failNow('abandoned');
+      this.note(p, 'close', 'Spotted!', 'No buzzing today', 'bad');
     }
     const { dealt, destroyed } = st.damageAircraft(amount, source, by?.name ?? null);
     if (dealt <= 0) return 0;
@@ -1869,6 +1935,22 @@ export class ServerWorld {
     return Math.max(0, Math.min(amount, health - 1));
   }
 
+  /** v0.0.19: a mischief card completed: nothing destroyed, nothing taken; a banner splat, a story. */
+  private mischiefDone(p: Pilot, tag: PvpTag): void {
+    const target = this.pilots.get(tag.target);
+    if (!target?.home) return;
+    if (tag.mischief === 'banner') this.social.markBanner(target.home.id, p.id, this.time);
+    this.recordPvp('mischief', p.id, target.id, true);
+    const what = tag.mischief === 'banner' ? `inked ${target.name}'s banner` : tag.mischief === 'stunt' ? `showed off over ${target.name}'s desk` : `buzzed ${target.name}'s desk`;
+    this.news(`${p.name} ${what}`, 'info');
+    if (!target.social.mutes.includes(p.id)) this.note(target, 'pencil', `${p.name} ${tag.mischief === 'banner' ? 'inked your banner' : 'teased you'}`, null, 'info');
+  }
+
+  /** v0.0.19: reports since the last call, for the store. */
+  takeReports(): PendingReport[] {
+    return this.social.takeReports();
+  }
+
   /** v0.0.19: `p`'s nemesis, their rivals, and their reputation, for their own screens. */
   private rivalsFor(p: Pilot): RivalsDTO {
     const name = (id: string) => this.pilots.get(id)?.name ?? this.nameOf(id);
@@ -2546,6 +2628,16 @@ export class ServerWorld {
       const role = prey.state?.plane ? aiRoleFor(prey.state.plane) : 'fighter';
       offered.push(() => add(`hunt:${prey.id}`, () => ({ spec: huntMission(prey.id, prey.name, prey.home, role), tag: { kind: 'hunt', target: prey.id, name: prey.name, territoryId: prey.home?.id ?? null, why: this.rivalWeight(p, prey).why } })));
     }
+    // v0.0.19: harmless mischief: never on an offline or new player, nor on anyone who muted you; rate-limited per target.
+    const teased = everyone.filter((o) => o.connected && !o.leaving && this.time >= o.protectUntil && this.time - o.arrivedAt >= this.arrivalGrace && !o.social.mutes.includes(p.id) && !this.social.mischiefRefusal(p.id, o.id, this.time));
+    const currentMischief = p.pvp.find((c) => c.tag.kind === 'mischief' && teased.some((o) => o.id === c.tag.target));
+    const mark = currentMischief ? this.pilots.get(currentMischief.tag.target)! : teased.length > 0 ? teased[Math.floor(this.rng() * teased.length)] : null;
+    if (mark) {
+      offered.push(() => add(`mischief:${mark.id}`, () => {
+        const kind = MISCHIEF_ORDER[Math.floor(this.rng() * MISCHIEF_ORDER.length)];
+        return { spec: mischiefMission(kind, mark.name, mark.home!), tag: { kind: 'mischief', target: mark.id, name: mark.name, territoryId: mark.home!.id, mischief: kind } };
+      }));
+    }
     // Recon: any other base.
     const currentRecon = p.pvp.find((c) => c.tag.kind === 'recon' && others.some((o) => o.id === c.tag.target));
     const scouted = currentRecon ? this.pilots.get(currentRecon.tag.target)! : others.length > 0 ? others[Math.floor(this.rng() * others.length)] : null;
@@ -2588,6 +2680,8 @@ export class ServerWorld {
       }
       case 'escort':
         return other.flying && !!other.state?.mission?.isActive;
+      case 'mischief':
+        return other.connected && !other.leaving && this.time >= other.protectUntil && !other.social.mutes.includes(p.id) && !this.social.mischiefRefusal(p.id, other.id, this.time);
       case 'defend':
         // Holding your own desk against a joint attack, or helping someone against their raider.
         return tag.target === p.id ? !!this.coop.jointOn(p.id) : !!this.attacks.by(other.id) && other.flying && !this.peaceful(p.id, other.id);
@@ -2633,6 +2727,8 @@ export class ServerWorld {
         p.missionTime = 0;
         const card = p.pvpCard(mission);
         if (card && (card.tag.kind === 'raid' || card.tag.kind === 'strike' || card.tag.kind === 'challenge')) this.startRaid(p, card.tag, mission);
+        // v0.0.19: mischief counts against its limits from the moment it is flown.
+        if (card?.tag.kind === 'mischief') this.social.mischief(p.id, card.tag.target, this.time);
         // v0.0.19: taking off while challenged answers the challenge.
         const ch = this.attacks.on(p.id);
         if (ch?.kind === 'challenge' && !ch.answered) {
@@ -2665,6 +2761,11 @@ export class ServerWorld {
         }
         p.stats.missions++;
         p.addScore(PVP.score.mission);
+        // v0.0.19: mischief done: the banner gets its splat, everyone hears about it.
+        {
+          const card = p.pvpCard(st.mission);
+          if (card?.tag.kind === 'mischief') this.mischiefDone(p, card.tag);
+        }
         // v0.0.19: a bomber's escorts complete with it.
         if (st.mission?.objectives.some((o) => o.kind === 'bomb')) this.bomberSucceeded(p);
         this.note(p, 'ok', 'Complete', `+${e.reward}`, 'good');
@@ -3227,6 +3328,8 @@ export class ServerWorld {
       bounties: this.bounties.open.map((b) => ({ id: b.id, kind: b.kind, target: b.target, targetName: b.targetName, pot: b.pot, left: Math.max(0, Math.ceil(b.expires - this.time)), reason: b.reason })),
       situation: { tier: this.situations.get(p.id)?.tier ?? 'intermediate', threat: Math.round(threatNow(p.social, this.clock()) * 10) / 10 },
       rivals: this.rivalsFor(p),
+      mutes: [...p.social.mutes],
+      reported: this.social.reported(p.id),
       alliance: {
         id: this.alliances.of(p.id)?.id ?? null, members: this.alliances.of(p.id)?.members ?? [], offers: this.alliances.pendingFor(p.id, this.time),
         sent: this.alliances.pendingFrom(p.id, this.time), welcome: this.coop.welcomes(p.id),

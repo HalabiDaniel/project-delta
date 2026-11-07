@@ -13,8 +13,12 @@ import {
   SAVE_FORMAT,
   type AircraftRecord,
   checkFeedback,
+  type FarmFlagRecord,
   type FeedbackRecord,
+  type NewFarmFlag,
   type NewFeedback,
+  type NewReport,
+  type ReportRecord,
   type BaseRecord,
   type MissionOutcome,
   type ProgressRecord,
@@ -436,6 +440,33 @@ export class MemoryStore implements Store {
     checkFeedback(entry);
     const player = entry.playerId ? this.players.get(entry.playerId) : undefined;
     this.feedbackRows.push({ ...entry, context: { ...entry.context }, id: this.feedbackRows.length + 1, playerName: player ? (player.username ?? player.name) : null, createdAt: new Date() });
+  }
+
+  private readonly reportRows: ReportRecord[] = [];
+  private readonly flagRows: FarmFlagRecord[] = [];
+
+  async addReport(entry: NewReport): Promise<void> {
+    const name = (id: string | null) => {
+      const p = id ? this.players.get(id) : undefined;
+      return p ? (p.username ?? p.name) : null;
+    };
+    this.reportRows.push({ ...entry, context: structuredClone(entry.context), id: this.reportRows.length + 1, reporterName: name(entry.reporterId), reportedName: name(entry.reportedId), createdAt: new Date() });
+  }
+
+  async reports(since?: Date): Promise<ReportRecord[]> {
+    return this.reportRows.filter((r) => !since || r.createdAt >= since).map((r) => ({ ...r, context: structuredClone(r.context) }));
+  }
+
+  async addFarmFlag(entry: NewFarmFlag): Promise<void> {
+    const name = (id: string | null) => {
+      const p = id ? this.players.get(id) : undefined;
+      return p ? (p.username ?? p.name) : null;
+    };
+    this.flagRows.push({ ...entry, data: structuredClone(entry.data), id: this.flagRows.length + 1, aName: name(entry.aId), bName: name(entry.bId), createdAt: new Date() });
+  }
+
+  async farmFlags(since?: Date): Promise<FarmFlagRecord[]> {
+    return this.flagRows.filter((r) => !since || r.createdAt >= since).map((r) => ({ ...r, data: structuredClone(r.data) }));
   }
 
   async feedback(since?: Date): Promise<FeedbackRecord[]> {

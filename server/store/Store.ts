@@ -285,6 +285,40 @@ export function cleanDesks(raw: unknown): Record<string, string> {
   return out;
 }
 
+/** v0.0.19: a report of one player by another: a reason category, no free text. */
+export interface NewReport {
+  reporterId: string | null;
+  reportedId: string | null;
+  reason: string;
+  /** The session it was sent from. */
+  session: string | null;
+  /** What the server knew: both players' public ids and names, their record together. */
+  context: Record<string, unknown>;
+}
+
+export interface ReportRecord extends NewReport {
+  id: number;
+  reporterName: string | null;
+  reportedName: string | null;
+  createdAt: Date;
+}
+
+/** v0.0.19: a pair the anti-farming rules flagged (rewards between them paused), for the developer. */
+export interface NewFarmFlag {
+  worldId: string;
+  aId: string | null;
+  bId: string | null;
+  reason: string;
+  data: Record<string, unknown>;
+}
+
+export interface FarmFlagRecord extends NewFarmFlag {
+  id: number;
+  aName: string | null;
+  bName: string | null;
+  createdAt: Date;
+}
+
 /** A playtest feedback entry (v0.0.14): what the player wrote, and what was attached. */
 export interface NewFeedback {
   worldId: string | null;
@@ -470,6 +504,12 @@ export interface Store {
   // ---- Playtest feedback (v0.0.14) ----------------------------------------------------------------
 
   addFeedback(entry: NewFeedback): Promise<void>;
+  /** v0.0.19: a player report, and the reports since a time (all of them without). */
+  addReport(entry: NewReport): Promise<void>;
+  reports(since?: Date): Promise<ReportRecord[]>;
+  /** v0.0.19: a pair flagged by the anti-farming rules, and the flags since a time. */
+  addFarmFlag(entry: NewFarmFlag): Promise<void>;
+  farmFlags(since?: Date): Promise<FarmFlagRecord[]>;
   /** Every entry since `since` (all of them without it), oldest first. */
   feedback(since?: Date): Promise<FeedbackRecord[]>;
 

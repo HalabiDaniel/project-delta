@@ -295,7 +295,11 @@ export type Command =
   /** v0.0.19: who may fly escort on your bombing missions. */
   | { a: 'coop'; w: 'allies' | 'anyone' | 'none' }
   /** v0.0.19: decline a challenge to a dogfight (it costs what not showing up costs). */
-  | { a: 'challenge-decline' };
+  | { a: 'challenge-decline' }
+  /** v0.0.19: mute (or unmute) another player's emotes and ink markings, for good. */
+  | { a: 'mute'; id: string; on: boolean }
+  /** v0.0.19: report another player, with a reason (kept for the developer). */
+  | { a: 'report'; id: string; reason: ReportReason };
 
 const BUILDINGS = Object.keys(BASE.buildings) as BuildingKind[];
 const SLOT_IDS = new Set<string>(BASE.slots.map((s) => s.id));
@@ -340,6 +344,10 @@ export function parseCommand(raw: unknown): Command | null {
     }
     case 'coop':
       return c.w === 'allies' || c.w === 'anyone' || c.w === 'none' ? { a: 'coop', w: c.w } : null;
+    case 'mute':
+      return typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id) && typeof c.on === 'boolean' ? { a: 'mute', id: c.id, on: c.on } : null;
+    case 'report':
+      return typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id) && REPORT_REASONS.includes(c.reason as ReportReason) ? { a: 'report', id: c.id, reason: c.reason as ReportReason } : null;
     default:
       return null;
   }
@@ -354,9 +362,16 @@ export function cleanName(raw: unknown, fallback = 'Pilot'): string {
 
 // ---- Emotes ---------------------------------------------------------------------------------------
 
-/** Playful gestures: a wing waggle, a burst of paper confetti, an ink heart. */
-export type Emote = 'waggle' | 'confetti' | 'heart';
-export const EMOTES: readonly Emote[] = ['waggle', 'confetti', 'heart'];
+/**
+ * Playful gestures: a wing waggle, a burst of paper confetti, an ink heart; v0.0.19 adds a salute,
+ * a laugh, a tease and an ink splat (it marks the aircraft ahead with ink that fades).
+ */
+export type Emote = 'waggle' | 'confetti' | 'heart' | 'salute' | 'laugh' | 'tease' | 'splat';
+export const EMOTES: readonly Emote[] = ['waggle', 'confetti', 'heart', 'salute', 'laugh', 'tease', 'splat'];
+
+/** v0.0.19: why a player is reported (no free text: the moderation queue is v0.0.26). */
+export const REPORT_REASONS = ['cheating', 'harassment', 'griefing', 'name', 'farming', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
 
 // ---- Player colours -------------------------------------------------------------------------------
 
@@ -461,13 +476,15 @@ export interface PlaneDTO {
  * the bounty's id).
  */
 export interface PvpTag {
-  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint' | 'strike' | 'challenge' | 'challenged';
+  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint' | 'strike' | 'challenge' | 'challenged' | 'mischief';
   target: string;
   name: string;
   territoryId: string | null;
   /** v0.0.19: the bounty, or the joint attack, this card is for. */
   bounty?: number;
   joint?: number;
+  /** v0.0.19: a mischief card's kind. */
+  mischief?: 'banner' | 'flyby' | 'stunt';
   /** v0.0.19: a raid card's kind (bombing or staged; strikes and challenges have their own card kinds). */
   raid?: 'bombing' | 'staged' | 'strike' | 'challenge';
   /** v0.0.19: why the director offered it, in words ("Rematch with Bo"), when there is a reason to tell. */
@@ -642,6 +659,9 @@ export interface MeDTO {
   alliance?: AllianceDTO;
   /** v0.0.19: your nemesis, your rivals and your reputation. */
   rivals?: RivalsDTO;
+  /** v0.0.19: the players you muted (public ids), and the players you already reported this session. */
+  mutes?: string[];
+  reported?: string[];
   /**
    * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
    * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.
