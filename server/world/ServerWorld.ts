@@ -19,6 +19,7 @@ import { overHome } from '../../src/defenses/Layout';
 import { Mission, type MissionSpec, type Point3 } from '../../src/missions/Mission';
 import { convoyMission, shipmentMission, type MissionContext } from '../../src/missions/MissionGenerator';
 import { scoutPlan } from '../../src/ai/FlightPlans';
+import { Progress, type ProgressData } from '../../src/progress/Progress';
 import { SessionEvents, type SessionEvent, type SessionEventKind } from './SessionEvents';
 import {
   NET,
@@ -110,6 +111,8 @@ export interface PlayerCarry {
   board?: Record<string, string>;
   /** Lifetime statistics so far. */
   stats?: Record<string, number>;
+  /** v0.0.18: medals, records, achievements, streaks and mastery so far (multiplayer's own). */
+  profile?: ProgressData;
   /**
    * New-player protection and the raid shield as clock times (ms; null: none). Absent: a brand-new
    * player, whose new-player protection starts now.
@@ -441,6 +444,8 @@ export class ServerWorld {
     // The garage and the hangar as the player left them (before the board, which looks at what they can fly).
     for (const plane of carry.planes ?? []) p.planeIds.set(plane.design, plane.id);
     p.lifetime = { ...(carry.stats ?? {}) };
+    p.progress = new Progress(this.clock);
+    if (carry.profile) p.progress.data = structuredClone(carry.profile);
     if (carry.director) {
       // The board as it was left: cards made again from their recipes keep their ids (and so
       // their rewards' keys); cards that make no sense on this desk are dealt afresh.
@@ -691,7 +696,7 @@ export class ServerWorld {
     const board: Record<string, string> = {};
     for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
     const clock = (t: number) => (t > this.time ? new Date(Math.round(this.wallOf(t))) : null);
-    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
+    return { stats, director: p.director.save(), profile: p.progress?.data ?? null, garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -1982,14 +1987,25 @@ export class ServerWorld {
       },
       { success, recovered, damageTaken, time: mission.elapsed, par: mission.spec.par ?? 0, reward: success ? mission.reward : 0 },
     );
-    (p.director?.takePayouts() ?? []).forEach((payout, i) => {
+    const payouts = p.director?.takePayouts() ?? [];
+    const operationDone = payouts.some((x) => x.label.endsWith('operation bonus'));
+    payouts.forEach((payout, i) => {
       p.cause = opKey ? `${opKey}:${i}` : null;
       st.payBonus(payout.amount, payout.label);
       p.cause = null;
     });
+    // v0.0.18: medals, records and achievements, decided here. Recognition only: no paper (no streak
+    // bonus in multiplayer), a little Merit for medals and achievements (each keyed: never twice).
+    const prog = p.progress?.sortieEnded({ mission, sortie, aircraft: plane.id, maxHealth: plane.maxHealth, recovered, operationCompleted: operationDone });
+    if (prog && !st.emergency) {
+      if (prog.medal && success) this.merit.medal(p.id, p.missionId(mission), prog.medal, mission.title);
+      for (const a of prog.achievements) this.merit.achievement(p.id, a.id, a.title);
+    }
+    for (const a of prog?.achievements ?? []) this.note(p, 'medal', a.title, null, 'good');
     p.result = {
       recovered, missionTitle: mission.title, status: mission.status, failure: mission.failure, reward: success ? mission.reward : 0,
       elapsed: mission.elapsed, sortie: { ...sortie }, pvp: card?.tag ?? null,
+      medal: prog?.medal ?? null, records: prog?.records ?? [], achievements: (prog?.achievements ?? []).map((a) => ({ title: a.title, detail: a.detail })),
     };
     if (card) p.pvp = p.pvp.filter((c) => c !== card);
   }
@@ -2032,6 +2048,8 @@ export class ServerWorld {
       territories: this.territories,
       homeId: home.id,
       launch,
+      // v0.0.18: discovery flights go to landmarks this player hasn't discovered yet.
+      visited: new Set(p.progress?.data.discovered ?? []),
       dummies: [],
       obstacles: [
         ...this.shared.decorGround,

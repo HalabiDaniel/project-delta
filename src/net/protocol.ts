@@ -500,6 +500,10 @@ export interface ResultDTO {
   elapsed: number;
   sortie: SortieLog;
   pvp: PvpTag | null;
+  /** v0.0.18: decided by the server: the medal, new records and achievements unlocked. */
+  medal?: 'bronze' | 'silver' | 'gold' | null;
+  records?: string[];
+  achievements?: Array<{ title: string; detail: string }>;
 }
 
 /** The defender's (or attacker's) report on a raid between players. */

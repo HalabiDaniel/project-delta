@@ -154,6 +154,11 @@ export interface ProgressRecord {
   director: unknown;
   /** The garage: the design chosen, the ids of the cards on the board. */
   garage: Record<string, unknown>;
+  /**
+   * v0.0.18: medals, records, achievements, streaks and mastery in multiplayer (ProgressData),
+   * checked when it is loaded. Absent or null: none yet.
+   */
+  profile?: unknown;
   /** New-player protection and the raid shield, as clock times (null: none). */
   protectUntil?: Date | null;
   shieldUntil?: Date | null;

@@ -566,6 +566,11 @@ function validateDirector(d: unknown, check: Checker): DirectorState | null {
   };
 }
 
+/** v0.0.18: a progress record from anywhere (the server's store too), checked field by field. */
+export function cleanProgress(p: unknown, problems: string[] = []): ProgressData {
+  return validateProgress(p, new Checker(problems));
+}
+
 function validateProgress(p: unknown, check: Checker): ProgressData {
   const out = emptyProgress();
   if (!isObject(p)) {

@@ -1815,6 +1815,12 @@ export const MERIT = {
   /** The first multiplayer session of the day (UTC), once. */
   firstOfDay: 10,
   /**
+   * v0.0.18: medals and achievements, now decided by the server, are Merit sources too: a medal per
+   * mission (by colour), and an achievement once ever.
+   */
+  medal: { bronze: 2, silver: 4, gold: 7 } as Record<'bronze' | 'silver' | 'gold', number>,
+  achievement: 12,
+  /**
    * Diminishing returns: the n-th shoot-down of the same player in a session pays `repeatKill[n]` of
    * the value (the last entry from then on); the n-th raid between the same two players likewise.
    */
