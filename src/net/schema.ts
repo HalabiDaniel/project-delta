@@ -64,6 +64,8 @@ export const PlayerState = schema(
     rank: t.string().default(''),
     /** v0.0.17: the title the player chose to show ('' for none). */
     title: t.string().default(''),
+    /** v0.0.19: their alliance for this session (0: none). */
+    ally: t.uint8().default(0),
   },
   'PlayerState',
 );

@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, DEFENSES, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
@@ -55,7 +55,9 @@ import { randomUUID } from 'node:crypto';
 import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
 import { MeritBook, type MeritEvent } from './Merit';
-import { bountyMission, huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
+import { bountyMission, coopEscortMission, holdHomeMission, huntMission, interceptMission, jointAttackMission, jointDefenseMission, raidMission, reconMission } from './PvpMissions';
+import { AllianceBook } from './Alliances';
+import { CoopBook, type JointAttack } from './Coop';
 import { BountyBoard, type Bounty } from './Bounties';
 import { addThreat, DirectorLog, median, strengthOf, threatNow, tierGap, tierOf, weakKill, weakKillsWithin, type DirectorDecision, type PlayerSituation } from './Situation';
 import type { SocialData } from './SocialData';
@@ -160,6 +162,11 @@ const PVP_REFRESH = 1;
 const LOOKOUT_RANGE = 45;
 /** v0.0.19: escorts' orders are worked out again this often (seconds). */
 const ESCORT_STEER = 0.5;
+/** v0.0.19: what an alliance refusal says. */
+const ALLY_REFUSALS: Record<string, string> = {
+  self: 'Not with yourself', allied: 'Already allies', full: 'Alliance full', cooldown: 'Too soon after leaving', busy: 'In another alliance',
+  pending: 'Offer already waiting', rate: 'Too many offers', none: 'No offer to accept',
+};
 
 /**
  * The authoritative classroom: every player's flight, every round, bomb and rocket, the AI in the
@@ -195,6 +202,9 @@ export class ServerWorld {
   /** v0.0.19: open bounties, and the director's decisions for the developer's panel. */
   readonly bounties = new BountyBoard();
   readonly directorLog = new DirectorLog();
+  /** v0.0.19: alliances for this session, and cooperation between players. */
+  readonly alliances = new AllianceBook();
+  readonly coop = new CoopBook();
   /** v0.0.19: how the director sees each player, worked out again every PVP_REFRESH. */
   readonly situations = new Map<string, PlayerSituation>();
   readonly pilots = new Map<string, Pilot>();
@@ -595,6 +605,8 @@ export class ServerWorld {
     for (const attack of [...this.attacks.active]) if (attack.attacker === id || attack.victim === id) this.endAttack(attack, 'abandoned');
     this.endMissionAi(p);
     for (const e of this.escorts.remove(id)) this.air.dismiss(e);
+    this.leaveAlliance(p);
+    this.coop.remove(id);
     this.guns.clear(id);
     this.bombs.clear(id);
     this.history.forget(p.plane);
@@ -853,6 +865,11 @@ export class ServerWorld {
         this.steerEscorts(p, true);
         return true;
       }
+      case 'ally':
+        return this.allyCommand(p, cmd.o, cmd.id);
+      case 'coop':
+        this.coop.setWelcome(p.id, cmd.w);
+        return true;
       case 'base-build':
       case 'base-upgrade':
       case 'base-repair':
@@ -908,6 +925,7 @@ export class ServerWorld {
       this.pvpTimer = PVP_REFRESH;
       this.updateSituations();
       this.updateBounties();
+      this.updateCoop(PVP_REFRESH);
       for (const p of this.pilots.values()) this.refreshPvp(p, false);
     }
     const ms = performance.now() - started;
@@ -1029,6 +1047,8 @@ export class ServerWorld {
     const st = p.state;
     if (!st || st.phase !== 'flying' || amount <= 0) return 0;
     if (by?.player && this.immune(p)) return 0;
+    // v0.0.19: allies can't hurt each other (nor former allies inside the leave cooldown).
+    if (by?.player && by.player !== p.id && this.peaceful(by.player, p.id)) return 0;
     p.lastWeapon = weapon;
     if (by?.player) {
       p.damageLog.push({ by: by.player, amount: Math.round(amount), at: this.time });
@@ -1236,6 +1256,8 @@ export class ServerWorld {
     if (!owner) return true;
     const intruder = ownerOfSide(t.side);
     if (!intruder) return true;
+    // v0.0.19: a base never fires on its owner's allies.
+    if (this.peaceful(owner, intruder)) return false;
     if (this.attacks.on(owner)?.attacker === intruder) return true;
     const hurt = this.pilots.get(intruder)?.aggression.get(owner);
     if (hurt !== undefined && this.time - hurt < PVP.aggression) return true;
@@ -1300,6 +1322,9 @@ export class ServerWorld {
     const escort = this.escorts.get(e.shot.source);
     const amount = escort ? this.escortDamage(escort.owner, e.target, e.shot.damage) : e.shot.damage;
     if (amount <= 0) return;
+    // v0.0.19: an escort never hurts its owner's allies, nor their escorts.
+    const hit = victim?.id ?? this.escorts.get(e.target)?.owner;
+    if (escort && hit && (hit === escort.owner || this.peaceful(escort.owner, hit))) return;
     if (victim) {
       const by = { player: sourceOwner?.id ?? null, name: this.describe(e.shot.source) };
       this.hurtPilot(victim, amount, rocket ? 'blast' : 'projectile', rocket ? 'rocket' : 'ink', by, at);
@@ -1376,6 +1401,8 @@ export class ServerWorld {
       return;
     }
     const ai = this.air.get(impact.id);
+    const allyEscort = ai ? this.escorts.get(ai.id) : undefined;
+    if (ai && allyEscort && (allyEscort.owner === shooter.id || this.peaceful(allyEscort.owner, shooter.id))) return;
     if (ai) {
       st.recordShotHit();
       const { dealt, destroyed } = this.air.damage(ai.id, r.damage, shooter.plane, true);
@@ -1408,6 +1435,9 @@ export class ServerWorld {
     const b = this.bounties.onInstallation(i.id);
     const card = p.pvpCard(p.state?.mission ?? null);
     if (b && card?.tag.kind === 'bounty' && card.tag.bounty === b.id) return true;
+    // v0.0.19: so does a joint attack's card, for its installation.
+    const j = this.coop.jointOnInstallation(i.id);
+    if (j && card?.tag.kind === 'joint' && card.tag.joint === j.id && !this.peaceful(p.id, owner)) return true;
     return this.attacks.by(p.id)?.victim === owner;
   }
 
@@ -1420,6 +1450,9 @@ export class ServerWorld {
     const bounty = this.bounties.onInstallation(i.id);
     if (bounty && by) this.bounties.contribute(bounty, by.id, dealt);
     if (bounty && destroyed) this.payBounty(bounty, bounty.damage);
+    const joint = this.coop.jointOnInstallation(i.id);
+    if (joint && by) this.coop.contribute(joint, by.id, dealt);
+    if (joint && destroyed) this.payJoint(joint, joint.damage);
     const centre = { x: i.spec.x, y: i.spec.ground + i.spec.pivot * 0.6, z: i.spec.z };
     this.emit({ t: 'dmg', tg: i.id, n: dealt, p: v3(centre), by: by?.id, fatal: destroyed, k: weapon });
     if (by?.state) by.state.recordDamage(dealt, destroyed ? i.id : null, true, i.spec.kind === 'turret');
@@ -1755,9 +1788,9 @@ export class ServerWorld {
     return { plane: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, fx: f.x / len, fz: f.z / len };
   }
 
-  /** Sides `p`'s escorts treat as friends (v0.0.19 alliances fill this in). */
-  friendsOf(_p: Pilot): Side[] {
-    return [];
+  /** Sides `p`'s escorts treat as friends: their allies'. */
+  friendsOf(p: Pilot): Side[] {
+    return this.alliesOf(p.id).map((id) => this.pilots.get(id)?.side).filter((s): s is Side & `p:${string}` => !!s);
   }
 
   /** Works out what `p`'s current order means for each of their escorts (`now`: a new order). */
@@ -1805,6 +1838,21 @@ export class ServerWorld {
   revealFor(p: Pilot): string[] {
     const out = new Set<string>();
     const friends = this.friendsOf(p);
+    // v0.0.19: allies share radar contacts: what any ally's working radar sees.
+    for (const id of this.alliesOf(p.id)) {
+      const ally = this.pilots.get(id);
+      const range = ally?.base?.radar?.alive ? ally.base.detectionRange : 0;
+      if (!ally?.home || range <= 0) continue;
+      for (const o of this.pilots.values()) {
+        if (o === p || o === ally || !o.flying || friends.includes(o.side)) continue;
+        const pos = o.flight.model.position;
+        if (Math.hypot(pos.x - ally.home.x, pos.z - ally.home.z) <= range) out.add(o.plane);
+      }
+      for (const a of this.air.aircraft) {
+        if (!a.alive || a.side === p.side || friends.includes(a.side)) continue;
+        if (Math.hypot(a.position.x - ally.home.x, a.position.z - ally.home.z) <= range) out.add(a.id);
+      }
+    }
     for (const e of this.escorts.of(p.id)) {
       if (e.kind !== 'spotter') continue;
       const s = this.air.get(e.id);
@@ -1899,9 +1947,19 @@ export class ServerWorld {
     return 1 + SITUATION.underdogBonus * Math.max(0, tierGap(a, v));
   }
 
-  /** The players `id` is allied with this session (v0.0.19 alliances; none until phase 4). */
-  alliesOf(_id: string): string[] {
-    return [];
+  /** The players `id` is allied with this session. */
+  alliesOf(id: string): string[] {
+    return this.alliances.allies(id);
+  }
+
+  /** Allies (or former allies inside the leave cooldown): they can't damage, raid or challenge each other. */
+  peaceful(a: string, b: string): boolean {
+    return this.alliances.peaceful(a, b, this.time);
+  }
+
+  /** Players online and placed: an alliance's size cap is matched against them. */
+  private online(): number {
+    return [...this.pilots.values()].filter((p) => p.connected && !p.leaving && p.home).length;
   }
 
   /** Decaying rewards between a pair (v0.0.19 anti-farming); 1 until phase 8. */
@@ -1994,6 +2052,190 @@ export class ServerWorld {
     this.decide(paid.length > 0 ? 'bounty-paid' : 'bounty-ended', paid.length > 0 ? `Bounty on ${b.targetName} paid: ${paid.join(', ')}` : `Bounty on ${b.targetName} brought down with no contributor`, [b.target, ...shares.map((s) => s.player)]);
   }
 
+  // ---- Alliances and cooperation (v0.0.19) --------------------------------------------------------
+
+  /** An alliance command: offer one, accept or decline an offer, or leave. Returns whether it was allowed. */
+  private allyCommand(p: Pilot, o: 'offer' | 'accept' | 'decline' | 'leave', other?: string): boolean {
+    const them = other ? this.pilots.get(other) : undefined;
+    if (o === 'leave') {
+      if (!this.alliances.of(p.id)) return false;
+      this.leaveAlliance(p);
+      return true;
+    }
+    if (!them?.home || !them.connected) return false;
+    if (o === 'offer') {
+      const refusal = this.alliances.offer(p.id, them.id, this.time, this.online());
+      if (refusal) {
+        this.note(p, 'ally', ALLY_REFUSALS[refusal], null, 'info');
+        return false;
+      }
+      this.note(them, 'ally', `${p.name} offers an alliance`, null, 'info');
+      this.note(p, 'ally', 'Offer sent', them.name, 'info');
+      return true;
+    }
+    if (o === 'decline') {
+      if (!this.alliances.decline(p.id, them.id)) return false;
+      this.note(them, 'ally', `${p.name} declined`, null, 'info');
+      return true;
+    }
+    const made = this.alliances.accept(p.id, them.id, this.time, this.online());
+    if (typeof made === 'string') {
+      this.note(p, 'ally', ALLY_REFUSALS[made], null, 'info');
+      return false;
+    }
+    const names = made.members.map((m) => this.pilots.get(m)?.name ?? '?');
+    this.news(`${names.join(' and ')} are allies for this session`, 'good');
+    this.decide('coop', `Alliance ${made.id}: ${names.join(', ')}`, made.members);
+    // Cards that no longer make sense between allies go.
+    for (const m of made.members) {
+      const pilot = this.pilots.get(m);
+      if (pilot) this.refreshPvp(pilot, false);
+    }
+    return true;
+  }
+
+  /** `p` leaves their alliance (or the session): the others are told; the peace holds a little longer. */
+  private leaveAlliance(p: Pilot): void {
+    const left = this.alliances.leave(p.id, this.time);
+    if (left.length === 0) return;
+    for (const id of left) {
+      const o = this.pilots.get(id);
+      if (o) this.note(o, 'ally', `${p.name} left the alliance`, null, 'info');
+    }
+    this.decide('coop', `${p.name} left their alliance`, [p.id, ...left]);
+  }
+
+  /** Who `p` is cooperating with right now: allies, the bomber they escort or who escorts them, partners in a joint attack. */
+  cooperators(p: Pilot): string[] {
+    const out = new Set(this.alliesOf(p.id));
+    const card = p.pvpCard(p.state?.mission ?? null);
+    if (card && card.tag.kind === 'escort') out.add(card.tag.target);
+    if (card && card.tag.kind === 'defend') {
+      const defended = this.attacks.active.find((a) => a.attacker === card.tag.target)?.victim;
+      if (defended) out.add(defended);
+    }
+    for (const o of this.pilots.values()) {
+      const c = o.pvpCard(o.state?.mission ?? null);
+      if (c?.tag.kind === 'escort' && c.tag.target === p.id) out.add(o.id);
+      if (c?.tag.kind === 'defend' && this.attacks.on(p.id)?.attacker === c.tag.target) out.add(o.id);
+    }
+    for (const j of this.coop.joints) if (j.members.includes(p.id)) for (const m of j.members) out.add(m);
+    out.delete(p.id);
+    return [...out];
+  }
+
+  /**
+   * Cooperation each PVP_REFRESH: escorts' time at their bomber's side, joint attacks offered,
+   * expired or cancelled.
+   */
+  private updateCoop(dt: number): void {
+    for (const p of this.pilots.values()) {
+      const card = p.pvpCard(p.state?.mission ?? null);
+      if (card?.tag.kind !== 'escort' || !p.flying) continue;
+      const bomber = this.pilots.get(card.tag.target);
+      if (!bomber?.flying) continue;
+      const a = p.flight.model.position;
+      const b = bomber.flight.model.position;
+      this.coop.fly(p.id, bomber.id, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) <= COOP.escortRange, dt);
+    }
+    for (const j of [...this.coop.joints]) {
+      const t = this.pilots.get(j.target);
+      if (this.time >= j.expires) this.endJoint(j, 'expired', 'time ran out');
+      else if (!t || !t.connected || t.leaving) this.endJoint(j, 'cancelled', 'target left');
+      else if (j.kind === 'bomber' && !t.flying) this.endJoint(j, 'expired', 'target landed');
+      else if (j.installation && !this.network.get(j.installation.id)?.alive) this.endJoint(j, 'cancelled', 'installation gone');
+    }
+    // A joint attack: a powerful player, and two intermediate players who may go after them.
+    const middle = median([...this.situations.values()].filter((s) => s.online).map((s) => s.strength));
+    for (const t of this.pilots.values()) {
+      const s = this.situations.get(t.id);
+      if (!s?.online || !t.home || middle <= 0 || s.strength < COOP.jointStrength * middle || this.coop.jointRefusal(t.id, this.time)) continue;
+      if (this.time < t.protectUntil) continue;
+      const bomber = t.flying && t.state?.plane?.role === 'bomber';
+      const pick = [...this.pilots.values()].filter((m) => {
+        const ms = this.situations.get(m.id);
+        if (m === t || !ms?.online || ms.tier !== 'intermediate' || this.peaceful(m.id, t.id) || m.flying) return false;
+        if (this.mismatch(m, t)) return false;
+        return bomber || this.attacks.refusal(m, t, this.time, this.arrivalGrace) === null;
+      });
+      if (pick.length < 2) continue;
+      const members = pick.sort((x, y) => x.id.localeCompare(y.id)).slice(0, 2).map((m) => m.id);
+      let j: JointAttack | null = null;
+      if (bomber) j = this.coop.offerJoint(t.id, t.name, 'bomber', members, this.time);
+      else {
+        const forward = this.network.on(t.home.id).filter((i) => i.isWeapon && i.alive)[0];
+        if (forward) j = this.coop.offerJoint(t.id, t.name, 'installation', members, this.time, { id: forward.id, name: forward.spec.name, territoryId: t.home.id });
+      }
+      if (!j) continue;
+      this.note(t, 'ally', 'Two pilots are coming', bomber ? 'for your bomber' : 'for your base', 'warn');
+      this.decide('coop', `Joint attack on ${t.name} (${j.kind}, strength ${s.strength}): ${members.map((m) => this.pilots.get(m)?.name).join(' and ')}`, [t.id, ...members]);
+    }
+  }
+
+  private endJoint(j: JointAttack, status: 'expired' | 'cancelled', why: string): void {
+    this.coop.closeJoint(j, status, this.time);
+    this.decide('coop', `Joint attack on ${j.targetName} ${status}: ${why}`, [j.target, ...j.members]);
+  }
+
+  /** Pays a joint attack's pot by contribution among its members (once), and closes it. */
+  private payJoint(j: JointAttack, damage: ReadonlyMap<string, number>): void {
+    if (j.status !== 'open') return;
+    const members = new Map([...damage].filter(([p]) => j.members.includes(p)));
+    const shares = BountyBoard.split({ pot: j.pot, target: j.target }, members, new Set(this.alliesOf(j.target)), (pl) => this.pairFactor(pl, j.target, 'coop'));
+    for (const s of shares) {
+      const p = this.pilots.get(s.player);
+      if (!p?.state) continue;
+      p.cause = `joint:${j.uid}:${p.id}`;
+      p.state.payBonus(s.amount, `Joint attack on ${j.targetName}`);
+      p.cause = null;
+      p.social.reputation.helps++;
+      this.note(p, 'ally', 'Joint attack', `+${s.amount}`, 'good');
+    }
+    this.coop.closeJoint(j, shares.length > 0 ? 'paid' : 'cancelled', this.time);
+    this.decide('coop', `Joint attack on ${j.targetName} paid: ${shares.map((s) => `${this.pilots.get(s.player)?.name} ${s.amount}`).join(', ') || 'nobody'}`, [j.target, ...j.members]);
+  }
+
+  /** The bomber's mission succeeded: every escort flying with it completes and is paid by presence (once). */
+  private bomberSucceeded(bomber: Pilot): void {
+    for (const p of this.pilots.values()) {
+      const card = p.pvpCard(p.state?.mission ?? null);
+      if (card?.tag.kind !== 'escort' || card.tag.target !== bomber.id || !p.state?.mission?.isActive) continue;
+      const presence = this.coop.presenceOf(p.id, bomber.id);
+      const pay = Math.round(CoopBook.escortPay(presence) * this.pairFactor(p.id, bomber.id, 'coop'));
+      p.state.escortStrike(bomber.plane, true);
+      if (pay > 0) {
+        p.cause = `coop-escort:${p.missionId(p.state.mission!)}`;
+        p.state.payBonus(pay, `Escorted ${bomber.name}`);
+        p.cause = null;
+        p.social.reputation.helps++;
+        this.note(p, 'escort', `Escorted ${bomber.name}`, `+${pay}`, 'good');
+      }
+      this.coop.clearPresence(p.id, bomber.id);
+      this.decide('coop', `${p.name} escorted ${bomber.name} (${Math.round(presence * 100)}% at their side): ${pay}`, [p.id, bomber.id]);
+    }
+  }
+
+  /** A raider went down: helpers in the joint defense share COOP.defensePot by their damage (once); the defender is paid as before. */
+  private payDefenders(raider: Pilot, attack: Attack): void {
+    const helpers = new Set<string>(this.alliesOf(attack.victim));
+    for (const o of this.pilots.values()) {
+      const c = o.pvpCard(o.state?.mission ?? null);
+      if (c?.tag.kind === 'defend' && c.tag.target === raider.id) helpers.add(o.id);
+    }
+    const damage = new Map<string, number>();
+    for (const e of raider.damageLog) if (helpers.has(e.by)) damage.set(e.by, (damage.get(e.by) ?? 0) + e.amount);
+    const excluded = new Set([attack.victim, raider.id, ...this.alliesOf(raider.id)]);
+    for (const s of BountyBoard.split({ pot: COOP.defensePot, target: raider.id }, damage, excluded, (pl) => this.pairFactor(pl, attack.victim, 'coop'))) {
+      const p = this.pilots.get(s.player);
+      if (!p?.state) continue;
+      p.cause = `coop-defend:${attack.uid}:${p.id}`;
+      p.state.payBonus(s.amount, `Helped defend ${this.pilots.get(attack.victim)?.name ?? 'a base'}`);
+      p.cause = null;
+      p.social.reputation.helps++;
+      this.note(p, 'ally', 'Joint defense', `+${s.amount}`, 'good');
+    }
+  }
+
   // ---- Raids between players ----------------------------------------------------------------------
 
   /** Raids under way: lookouts notice raiders without a radar; the territory shows the alert. */
@@ -2081,7 +2323,9 @@ export class ServerWorld {
     const raid = this.attacks.on(p.id);
     const raider = raid ? this.pilots.get(raid.attacker) : null;
     if (raid && raider?.flying) add(`intercept:${raider.id}:${raid.id}`, () => ({ spec: interceptMission(raider.id, raider.name, p.home!), tag: { kind: 'intercept', target: raider.id, name: raider.name, territoryId: p.home!.id } }));
-    const others = [...this.pilots.values()].filter((o) => o !== p && o.home && o.base && o.state);
+    const everyone = [...this.pilots.values()].filter((o) => o !== p && o.home && o.base && o.state);
+    // v0.0.19: no raids, hunts or scouting between allies (or right after leaving an alliance).
+    const others = everyone.filter((o) => !this.peaceful(p.id, o.id));
     const offered: Array<() => void> = [];
     // A raid: on a base that may be raided now, keeping the same target while it stays valid.
     const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0 && !this.mismatch(p, o));
@@ -2092,6 +2336,59 @@ export class ServerWorld {
     if (bounty && bountyTarget) {
       const role = bountyTarget.state?.plane ? aiRoleFor(bountyTarget.state.plane) : 'fighter';
       offered.push(() => add(`bounty:${bounty.id}`, () => ({ spec: bountyMission(bounty, bountyTarget.home, role), tag: { kind: 'bounty', target: bounty.target, name: bounty.targetName, territoryId: bounty.installation?.territoryId ?? bountyTarget.home?.id ?? null, bounty: bounty.id, why: bounty.reason } })));
+    }
+    // v0.0.19: joint defense: a raid on an ally's base, or on a desk near this one.
+    const defended = everyone.find((o) => {
+      const r = this.attacks.on(o.id);
+      const rr = r ? this.pilots.get(r.attacker) : undefined;
+      if (!r || !rr?.flying || rr === p || this.peaceful(p.id, rr.id)) return false;
+      return this.alliances.allied(p.id, o.id) || Math.hypot(o.home!.x - p.home!.x, o.home!.z - p.home!.z) <= COOP.defenseRange;
+    });
+    const defendRaid = defended ? this.attacks.on(defended.id) : undefined;
+    const defendRaider = defendRaid ? this.pilots.get(defendRaid.attacker) : undefined;
+    if (defended && defendRaid && defendRaider) {
+      offered.push(() => add(`defend:${defendRaid.id}`, () => ({
+        spec: jointDefenseMission(defendRaider.id, defendRaider.name, defended.name, defended.home!),
+        tag: { kind: 'defend', target: defendRaider.id, name: defendRaider.name, territoryId: defended.home!.id, why: `${defended.name}'s base is being raided` },
+      })));
+    }
+    // v0.0.19: a joint attack this player is part of.
+    const joint = this.coop.joints.find((j) => j.members.includes(p.id));
+    const jointTarget = joint ? this.pilots.get(joint.target) : undefined;
+    if (joint && jointTarget) {
+      const partner = this.pilots.get(joint.members.find((m) => m !== p.id) ?? '')?.name ?? 'another pilot';
+      const role = jointTarget.state?.plane ? aiRoleFor(jointTarget.state.plane) : 'bomber';
+      offered.push(() => add(`joint:${joint.id}`, () => ({
+        spec: jointAttackMission(joint, partner, jointTarget.home, role),
+        tag: { kind: 'joint', target: joint.target, name: joint.targetName, territoryId: joint.installation?.territoryId ?? jointTarget.home?.id ?? null, joint: joint.id, why: `${joint.targetName} is far stronger than either of you` },
+      })));
+    }
+    // v0.0.19: the target of a joint attack on their base gets a card to hold it.
+    const onMe = this.coop.jointOn(p.id);
+    if (onMe?.kind === 'installation') {
+      offered.push(() => add(`hold:${onMe.id}`, () => ({ spec: holdHomeMission(p.home!, 'Two pilots'), tag: { kind: 'defend', target: p.id, name: p.name, territoryId: p.home!.id, why: 'A joint attack is coming for your base' } })));
+    }
+    // v0.0.19: escort another player's bomber, where they welcome it (allies by default).
+    const bombers = everyone.filter((o) => {
+      if (!o.flying || o.state?.plane?.role !== 'bomber' || !o.state.mission?.isActive) return false;
+      if (!o.state.mission.objectives.some((ob, i) => ob.kind === 'bomb' && o.state!.mission!.isOpen(i))) return false;
+      const w = this.coop.welcomes(o.id);
+      if (w === 'none' || (w === 'allies' && !this.alliances.allied(p.id, o.id))) return false;
+      // Never on a raid against yourself or an ally.
+      const victim = this.attacks.by(o.id)?.victim;
+      return !victim || (victim !== p.id && !this.peaceful(p.id, victim));
+    });
+    const escorted = p.pvp.find((c) => c.tag.kind === 'escort' && bombers.some((o) => o.id === c.tag.target)) ? this.pilots.get(p.pvp.find((c) => c.tag.kind === 'escort')!.tag.target)! : bombers[0];
+    if (escorted) {
+      const m = escorted.state!.mission!;
+      const i = m.objectives.findIndex((ob, k) => ob.kind === 'bomb' && m.isOpen(k));
+      const ob = m.objectives[i];
+      if (ob?.kind === 'bomb') {
+        offered.push(() => add(`escort:${escorted.id}:${escorted.missionId(m)}`, () => ({
+          spec: coopEscortMission(escorted.id, escorted.name, ob.territoryId, ob.zone),
+          tag: { kind: 'escort', target: escorted.id, name: escorted.name, territoryId: ob.territoryId, why: this.alliances.allied(p.id, escorted.id) ? 'Your ally is on a bombing run' : `${escorted.name} welcomes escorts` },
+        })));
+      }
     }
     const current = p.pvp.find((c) => c.tag.kind === 'raid' && raidable.some((o) => o.id === c.tag.target));
     const victim = current ? this.pilots.get(current.tag.target)! : raidable.length > 0 ? raidable[Math.floor(this.rng() * raidable.length)] : null;
@@ -2134,9 +2431,9 @@ export class ServerWorld {
     if (!other?.home) return false;
     switch (tag.kind) {
       case 'raid':
-        return this.attacks.refusal(p, other, this.time, this.arrivalGrace) === null;
+        return this.attacks.refusal(p, other, this.time, this.arrivalGrace) === null && !this.peaceful(p.id, other.id);
       case 'hunt':
-        return other.flying;
+        return other.flying && !this.peaceful(p.id, other.id);
       case 'intercept':
         return this.attacks.on(p.id)?.attacker === other.id;
       case 'recon':
@@ -2145,6 +2442,16 @@ export class ServerWorld {
         const b = tag.bounty !== undefined ? this.bounties.get(tag.bounty) : undefined;
         if (!b) return false;
         return b.installation ? !!this.network.get(b.installation.id)?.alive : other.flying;
+      }
+      case 'escort':
+        return other.flying && !!other.state?.mission?.isActive;
+      case 'defend':
+        // Holding your own desk against a joint attack, or helping someone against their raider.
+        return tag.target === p.id ? !!this.coop.jointOn(p.id) : !!this.attacks.by(other.id) && other.flying && !this.peaceful(p.id, other.id);
+      case 'joint': {
+        const j = tag.joint !== undefined ? this.coop.joint(tag.joint) : undefined;
+        if (!j || !j.members.includes(p.id)) return false;
+        return j.installation ? !!this.network.get(j.installation.id)?.alive && this.attacks.refusal(p, other, this.time, this.arrivalGrace) === null : other.flying;
       }
     }
   }
@@ -2208,6 +2515,8 @@ export class ServerWorld {
         }
         p.stats.missions++;
         p.addScore(PVP.score.mission);
+        // v0.0.19: a bomber's escorts complete with it.
+        if (st.mission?.objectives.some((o) => o.kind === 'bomb')) this.bomberSucceeded(p);
         this.note(p, 'ok', 'Complete', `+${e.reward}`, 'good');
         {
           const attack = this.attacks.by(p.id);
@@ -2315,8 +2624,16 @@ export class ServerWorld {
       for (const e of p.damageLog) damage.set(e.by, (damage.get(e.by) ?? 0) + e.amount);
       this.payBounty(bountyOn, damage);
     }
+    // v0.0.19: a joint attack on this bomber is paid by contribution between its two members.
+    const jointOn = this.coop.jointOn(p.id);
+    if (jointOn?.kind === 'bomber' && !p.forfeit) {
+      const damage = new Map<string, number>();
+      for (const e of p.damageLog) damage.set(e.by, (damage.get(e.by) ?? 0) + e.amount);
+      this.payJoint(jointOn, damage);
+    }
     // A raider down: a defense if the player being raided brought it down (their plane or their guns).
     const attack = this.attacks.by(p.id);
+    if (attack && !p.forfeit) this.payDefenders(p, attack);
     if (attack) {
       const defender = this.pilots.get(attack.victim);
       const byDefender = !!defender && killer === defender.id;
@@ -2600,8 +2917,10 @@ export class ServerWorld {
     const paper = p.resources.paper;
     const plane = st.plane;
     const mission = st.mission;
+    // v0.0.19: allies see each other's raids.
+    const allies = this.alliesOf(p.id);
     const attacks: AttackDTO[] = this.attacks.active
-      .filter((a) => a.attacker === p.id || a.victim === p.id)
+      .filter((a) => a.attacker === p.id || a.victim === p.id || allies.includes(a.victim) || allies.includes(a.attacker))
       .map((a) => {
         const raider = this.pilots.get(a.attacker);
         const pos = raider?.flying ? raider.flight.model.position : null;
@@ -2659,6 +2978,10 @@ export class ServerWorld {
       reveal: this.revealFor(p),
       bounties: this.bounties.open.map((b) => ({ id: b.id, kind: b.kind, target: b.target, targetName: b.targetName, pot: b.pot, left: Math.max(0, Math.ceil(b.expires - this.time)), reason: b.reason })),
       situation: { tier: this.situations.get(p.id)?.tier ?? 'intermediate', threat: Math.round(threatNow(p.social, this.clock()) * 10) / 10 },
+      alliance: {
+        id: this.alliances.of(p.id)?.id ?? null, members: this.alliances.of(p.id)?.members ?? [], offers: this.alliances.pendingFor(p.id, this.time),
+        sent: this.alliances.pendingFrom(p.id, this.time), welcome: this.coop.welcomes(p.id),
+      },
     };
   }
 

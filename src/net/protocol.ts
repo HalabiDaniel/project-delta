@@ -16,7 +16,7 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
@@ -289,7 +289,11 @@ export type Command =
   /** v0.0.19: the escorts to buy at the next launch (empty: none; at most ESCORTS.perSortie). */
   | { a: 'escorts'; kinds: EscortKind[] }
   /** v0.0.19: an order to the escorts in the air (the order wheel). */
-  | { a: 'escort-order'; o: EscortOrder };
+  | { a: 'escort-order'; o: EscortOrder }
+  /** v0.0.19: alliances for the session: offer one to a player, accept or decline theirs, or leave yours. */
+  | { a: 'ally'; o: 'offer' | 'accept' | 'decline' | 'leave'; id?: string }
+  /** v0.0.19: who may fly escort on your bombing missions. */
+  | { a: 'coop'; w: 'allies' | 'anyone' | 'none' };
 
 const BUILDINGS = Object.keys(BASE.buildings) as BuildingKind[];
 const SLOT_IDS = new Set<string>(BASE.slots.map((s) => s.id));
@@ -325,6 +329,14 @@ export function parseCommand(raw: unknown): Command | null {
       return Array.isArray(c.kinds) && c.kinds.length <= 4 && c.kinds.every((k) => ESCORT_ORDER.includes(k as EscortKind)) ? { a: 'escorts', kinds: c.kinds as EscortKind[] } : null;
     case 'escort-order':
       return ESCORT_ORDERS.includes(c.o as EscortOrder) ? { a: 'escort-order', o: c.o as EscortOrder } : null;
+    case 'ally': {
+      const o = c.o as string;
+      if (o === 'leave') return { a: 'ally', o };
+      if ((o === 'offer' || o === 'accept' || o === 'decline') && typeof c.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(c.id)) return { a: 'ally', o, id: c.id };
+      return null;
+    }
+    case 'coop':
+      return c.w === 'allies' || c.w === 'anyone' || c.w === 'none' ? { a: 'coop', w: c.w } : null;
     default:
       return null;
   }
@@ -446,12 +458,13 @@ export interface PlaneDTO {
  * the bounty's id).
  */
 export interface PvpTag {
-  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty';
+  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty' | 'escort' | 'defend' | 'joint';
   target: string;
   name: string;
   territoryId: string | null;
-  /** v0.0.19: the bounty this card is for. */
+  /** v0.0.19: the bounty, or the joint attack, this card is for. */
   bounty?: number;
+  joint?: number;
   /** v0.0.19: why the director offered it, in words ("Rematch with Bo"), when there is a reason to tell. */
   why?: string;
 }
@@ -466,6 +479,18 @@ export interface BountyDTO {
   /** Seconds left. */
   left: number;
   reason: string;
+}
+
+/** v0.0.19: your alliance for the session. */
+export interface AllianceDTO {
+  /** Its number (null: not in one), and its members (public ids, you included). */
+  id: number | null;
+  members: string[];
+  /** Players who offered you an alliance, waiting for your answer; players you offered one to. */
+  offers: string[];
+  sent: string[];
+  /** Who may fly escort on your bombing missions. */
+  welcome: 'allies' | 'anyone' | 'none';
 }
 
 /** v0.0.19: how the director sees you. */
@@ -585,6 +610,8 @@ export interface MeDTO {
   /** v0.0.19: the bounties open in the session, and how the director sees you. */
   bounties?: BountyDTO[];
   situation?: SituationDTO;
+  /** v0.0.19: your alliance for this session, the offers waiting, and who may escort your bombers. */
+  alliance?: AllianceDTO;
   /**
    * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
    * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.

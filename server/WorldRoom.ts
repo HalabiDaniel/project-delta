@@ -975,6 +975,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ps.defends = p.stats.defends;
       ps.missions = p.stats.missions;
       ps.score = p.stats.score;
+      ps.ally = world.alliances.of(id)?.id ?? 0;
       ps.ping = Math.round(p.rtt * 1000);
       ps.phase = Math.max(0, PHASES.indexOf(p.state?.phase ?? 'desk'));
       const m = p.flight.model;

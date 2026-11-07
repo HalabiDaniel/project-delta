@@ -1341,6 +1341,50 @@ export const BOUNTIES = {
   defenderShare: 0.5,
 } as const;
 
+/**
+ * v0.0.19 (plan "Also B"): alliances that last only for the current session. An offer is sent from
+ * the scoreboard and accepted by the other player; it ends when the session ends or either side
+ * leaves. Allies can't damage each other, share radar contacts, see each other's raids, and can't
+ * raid, challenge or farm each other. Provisional values. The rules are in server/world/Alliances.ts.
+ */
+export const ALLIANCES = {
+  /** At most this many players in one alliance… */
+  maxSize: 3,
+  /** …and never more than this share of the players online (at least two), so no alliance dominates. */
+  sessionShare: 0.5,
+  /** After leaving, former allies can't attack each other for this long (seconds). */
+  leaveCooldown: 60,
+  /** An offer waits this long for an answer (seconds). */
+  offerTime: 60,
+  /** One player can send this many offers a minute. */
+  offersPerMinute: 4,
+} as const;
+
+/**
+ * v0.0.19 (plan §3, GDD §11.7): cooperation offers between players: escorting another player's
+ * bomber, joint defense of a raided base, and joint attacks on a powerful player. Opt-in for both
+ * sides, paid once by the server, shared by contribution, within every protection. Provisional
+ * values. The rules that use them are in server/world/Coop.ts.
+ */
+export const COOP = {
+  /** Flying a cooperation card itself pays this on success (the rest is paid by contribution). */
+  cardReward: 5,
+  /** Escorting a bomber: paid on success, scaled by the share of the flight spent within `escortRange` of it (none below `minPresence`). */
+  escortReward: 30,
+  escortRange: 45,
+  minPresence: 0.4,
+  /** Joint defense: offered to players whose desk is within `defenseRange` of the raided one (and allies anywhere); helpers share `defensePot` by damage on the raider. */
+  defenseRange: 140,
+  defensePot: 30,
+  /** Joint attack: a pot shared by the two attackers, by damage; at most `maxJoint` at once, the next on a target after `jointCooldown`. */
+  jointPot: 70,
+  jointTime: 300,
+  maxJoint: 1,
+  jointCooldown: 900,
+  /** The target of a joint attack must be this many times the session's median strength. */
+  jointStrength: 1.6,
+} as const;
+
 /** v0.0.19: the AI escort aircraft a player can buy for one sortie. */
 export type EscortKind = 'wingman' | 'guard' | 'spotter';
 export const ESCORT_ORDER: readonly EscortKind[] = ['wingman', 'guard', 'spotter'];

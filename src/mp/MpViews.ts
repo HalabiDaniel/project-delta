@@ -791,10 +791,16 @@ export class MpViews {
       if (!seen) continue;
       aircraft.push({ x: a.model.position.x, z: a.model.position.z, yaw: a.model.yaw, side: friendly ? 'player' : 'enemy', role: a.role as AiRole, raid: null, mission: target, escort: escorts.has(a.id), revealed: shown });
     }
+    // v0.0.19: allies always show, as friends.
+    const allies = new Set((g.priv.alliance?.members ?? []).filter((m) => m !== g.me).map((m) => `pl:${m}`));
     for (const r of g.remotes.values()) {
       if (!r.alive || r.status !== 'flying') continue;
       const target = wanted.has(r.id);
       const shown = revealed.has(r.id);
+      if (allies.has(r.id)) {
+        aircraft.push({ x: r.model.position.x, z: r.model.position.z, yaw: r.model.yaw, side: 'player', role: AIRCRAFT[r.spec.id].role === 'bomber' ? 'bomber' : 'fighter', raid: null, mission: target });
+        continue;
+      }
       const seen = target || shown || (home && Math.hypot(r.model.position.x - home.x, r.model.position.z - home.z) <= Math.max(detection, home.half + 45)) || (showPlane && r.model.position.distance(plane.position) < SIGHT_RANGE * 1.4);
       if (!seen) continue;
       aircraft.push({ x: r.model.position.x, z: r.model.position.z, yaw: r.model.yaw, side: 'enemy', role: AIRCRAFT[r.spec.id].role === 'bomber' ? 'bomber' : 'fighter', raid: null, mission: true, revealed: shown });

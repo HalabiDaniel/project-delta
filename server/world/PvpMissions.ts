@@ -1,5 +1,6 @@
-import { BOUNTIES, MISSIONS, PVP, RAIDS, type AiRole } from '../../src/config';
+import { BOUNTIES, COOP, MISSIONS, PVP, RAIDS, type AiRole } from '../../src/config';
 import type { Bounty } from './Bounties';
+import type { JointAttack } from './Coop';
 import type { MissionSpec } from '../../src/missions/Mission';
 import { planeId } from '../../src/net/protocol';
 import { territoryName } from '../../src/net/World';
@@ -121,6 +122,77 @@ export function bountyMission(b: Bounty, targetHome: Territory | null, role: AiR
     ordered: false,
     objectives: [{ kind: 'intercept', territoryId: targetHome?.id ?? PVP.centre, targets: [planeId(b.target)], count: 1, what: role }],
     codename: `Bounty on ${b.targetName}`,
+  };
+}
+
+/** v0.0.19: fly escort on another player's bomber until its bombs are on target. */
+export function coopEscortMission(bomberId: string, bomberName: string, territoryId: string, zone: { x: number; z: number; radius: number; top: number }): MissionSpec {
+  return {
+    type: 'escort',
+    difficulty: 'medium',
+    tier: 'medium',
+    title: `Escort ${bomberName}`,
+    description: `${bomberName} is on a bombing run over ${territoryName(territoryId)}. Stay close and keep their bomber in the air until its bombs are on target. Paid once, by how much of the flight you spent at their side.`,
+    reward: COOP.cardReward,
+    bombs: 0,
+    timeLimit: PVP.raidTime,
+    ordered: false,
+    objectives: [{ kind: 'escort', territoryId, escort: planeId(bomberId), zone }],
+    codename: `Wing for ${bomberName}`,
+  };
+}
+
+/** v0.0.19: help another player shoot down the raider over their base (joint defense). */
+export function jointDefenseMission(raiderId: string, raiderName: string, defenderName: string, home: Territory): MissionSpec {
+  return {
+    type: 'bomber-intercept',
+    difficulty: 'medium',
+    tier: 'medium',
+    title: `Help ${defenderName}`,
+    description: `${raiderName} is raiding ${defenderName}'s base on ${territoryName(home.id)}. Help bring them down: ${defenderName} keeps priority on the defense reward, helpers share the rest by damage.`,
+    reward: COOP.cardReward,
+    bombs: 0,
+    timeLimit: PVP.interceptTime,
+    ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: home.id, targets: [planeId(raiderId)], count: 1, what: 'bomber' }],
+    codename: `Defend ${territoryName(home.id)} together`,
+  };
+}
+
+/** v0.0.19: a joint attack card: the same target offered to two players, shared by contribution. */
+export function jointAttackMission(j: JointAttack, partnerName: string, targetHome: Territory | null, role: AiRole | 'aircraft'): MissionSpec {
+  const shared = `${j.pot} paper shared with ${partnerName} by damage`;
+  if (j.kind === 'installation' && j.installation) {
+    const i = j.installation;
+    return {
+      type: 'suppression', difficulty: 'hard', tier: 'hard',
+      title: `Joint attack: ${j.targetName}'s ${i.name.toLowerCase()}`,
+      description: `You and ${partnerName} both have this one. Wreck ${j.targetName}'s ${i.name.toLowerCase()} on ${territoryName(i.territoryId)}: ${shared}.`,
+      reward: COOP.cardReward, bombs: 2, timeLimit: COOP.jointTime, ordered: false,
+      objectives: [{ kind: 'destroy', territoryId: i.territoryId, targets: [i.id], count: 1 }],
+      codename: `Together on ${j.targetName}`,
+    };
+  }
+  return {
+    type: 'dogfight', difficulty: 'hard', tier: 'hard',
+    title: `Joint attack: ${j.targetName}`,
+    description: `You and ${partnerName} both have this one: bring down ${j.targetName}'s bomber. ${shared}.`,
+    reward: COOP.cardReward, bombs: 0, timeLimit: COOP.jointTime, ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: targetHome?.id ?? PVP.centre, targets: [planeId(j.target)], count: 1, what: role }],
+    codename: `Together on ${j.targetName}`,
+  };
+}
+
+/** v0.0.19: the target of a joint attack defends their base for a while. */
+export function holdHomeMission(home: Territory, against: string): MissionSpec {
+  const ceiling = 40;
+  return {
+    type: 'patrol', difficulty: 'medium', tier: 'medium',
+    title: 'Hold your desk',
+    description: `${against} are coming for your base on ${territoryName(home.id)}. Patrol over it for a minute and see them off.`,
+    reward: COOP.cardReward * 2, bombs: 0, timeLimit: COOP.jointTime, ordered: false,
+    objectives: [{ kind: 'patrol', territoryId: home.id, airspace: { x: home.x, z: home.z, half: home.half + PVP.airspace, ceiling }, duration: 60 }],
+    codename: `Hold ${territoryName(home.id)}`,
   };
 }
 
