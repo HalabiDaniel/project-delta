@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { DAMAGE, PALETTE, TRAILS } from '../config';
 import type { PlaneController } from './PlaneController';
+import { RankLook, type AuraKind, type TrailKind } from '../ranks/RankEffects';
 
 /** Most samples one ribbon keeps (about one per frame over its lifetime). */
 const MAX_SAMPLES = 72;
@@ -133,6 +134,10 @@ interface Streak {
  * while boosting. A damaged plane also trails a widening smudge of ink from its tail.
  */
 export class FlightTrails {
+  /** v0.0.17: the pilot's own rank effects (set from their rank and what they turned off). */
+  rankTrail: TrailKind | null = null;
+  rankAura: AuraKind | null = null;
+  private readonly rank: RankLook;
   private readonly left: Ribbon;
   private readonly right: Ribbon;
   private readonly smudge: Ribbon;
@@ -153,6 +158,7 @@ export class FlightTrails {
     this.left = new Ribbon(app, material);
     this.right = new Ribbon(app, material);
     this.smudge = new Ribbon(app, material, PALETTE.damageTrail, 1.6, 0.9);
+    this.rank = new RankLook(app, material);
 
     this.streakMaterial = new pc.StandardMaterial();
     this.streakMaterial.useLighting = false;
@@ -190,6 +196,9 @@ export class FlightTrails {
     const smudge = airborne ? clamp((DAMAGE.trailThreshold - health) / DAMAGE.trailThreshold, 0, 1) : 0;
     this.flat.set(-this.fwd.z, 0, this.fwd.x).normalize();
     this.smudge.update(dt, smudge > 0 ? plane.getTail(this.tail) : null, this.flat, 0.35 + 1.1 * smudge);
+    // v0.0.17: the rank trail behind boosts and maneuvers, and the aura while in the air.
+    const trailing = !!this.rankTrail && airborne && (boosting > 0 || plane.motion.activeManeuver !== null);
+    this.rank.update(dt, this.rankTrail, trailing ? plane.getTail(this.tail) : null, this.flat, airborne || moving ? this.rankAura : null, plane.root, 1.4);
 
     const target = airborne ? TRAILS.streakBase + (TRAILS.streakMax - TRAILS.streakBase) * Math.max(fast, boosting) : 0;
     this.streakOpacity += (target - this.streakOpacity) * (1 - Math.exp(-4 * dt));
@@ -197,6 +206,7 @@ export class FlightTrails {
   }
 
   clear(): void {
+    this.rank.clear();
     this.left.clear();
     this.right.clear();
     this.smudge.clear();

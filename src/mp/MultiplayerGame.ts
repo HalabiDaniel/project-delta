@@ -6,6 +6,11 @@ import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
 import { FlightModel, interpolateAttitude, type AircraftStatus } from '../aircraft/FlightModel';
 import { FlightTrails } from '../aircraft/FlightTrails';
+import { RankUi, type ProfileView } from './RankUi';
+import { activeEffects, decodeRank, stepAt, type EffectId, type RankStep } from '../ranks/Ranks';
+import { insigniaView } from '../ranks/insignia';
+import { lookFor, type AuraKind, type TrailKind } from '../ranks/RankEffects';
+import type { PromotionDTO, RankDTO } from '../net/protocol';
 import { PlaneController } from '../aircraft/PlaneController';
 import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
 import { Durability } from '../combat/Damage';
@@ -118,6 +123,12 @@ export class RemoteAircraft implements ShownAircraft {
   target: string | null = null;
   attacking = false;
   leaving = false;
+  /** v0.0.17: the pilot's rank effects (players' planes), and boosting now. */
+  rankTrail: TrailKind | null = null;
+  rankAura: AuraKind | null = null;
+  boosting = false;
+  /** Seen on the pad or folding (for the unfold effect at launch). */
+  wasParked = false;
 
   constructor(
     readonly id: string,
@@ -164,6 +175,8 @@ export class MultiplayerGame {
   paused = false;
   /** The F8 feedback form (set right after construction). */
   feedback!: FeedbackForm;
+  /** v0.0.17: our rank, the profile card and the promotion ceremony. */
+  rankUi!: RankUi;
   /** The HUD as last drawn (it is only drawn while we have a home): closed when the session ends. */
   private lastHud: ReturnType<MpViews['hud']> | null = null;
   /** The private state, merged from the server's sections. */
@@ -274,7 +287,7 @@ export class MultiplayerGame {
   private inputContext(): InputContext {
     // A confirm dialog (End sortie, Leave, Remove…) or the server-lost dialog owns the controller:
     // A and B answer it and no other button reaches the game (as in single-player).
-    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen || this.hud.settingsOpen) return 'menu';
+    if (!this.room || this.lobby.open || this.paused || !this.state || confirmOpen() || this.lostDialog.isOpen || this.hud.settingsOpen || this.rankUi?.open) return 'menu';
     return this.state.phase === 'flying' ? 'flight' : 'home';
   }
 
@@ -412,6 +425,15 @@ export class MultiplayerGame {
       e.preventDefault();
       game!.feedback.toggle();
     });
+    game.rankUi = new RankUi(hudRoot, (prefs) => game!.room?.send('rank', prefs));
+    game.rankUi.setSources(
+      () => game!.room?.state.players.get(game!.me ?? '')?.name ?? game!.lobby.name,
+      () => {
+        const p = game!.room?.state.players.get(game!.me ?? '');
+        const R = T.ranks;
+        return p ? [{ label: R.shotDown, value: p.kills }, { label: R.missions, value: p.missions }, { label: R.raids, value: p.raids }, { label: R.defended, value: p.defends }] : [];
+      },
+    );
     game.setGraphics(game.graphics);
     hud.setScale(game.settings.uiScale);
     // Important sounds get a caption (and an arrow toward their source) when captions are on.
@@ -548,6 +570,12 @@ export class MultiplayerGame {
     });
     room.onMessage('restarting', (m: { text?: string }) => this.hud.alert('warn', m?.text ?? T.mpGame.restarting, null, 'bad', 6));
     room.onMessage('me', (m: MeDTO) => this.onPrivate(m));
+    // v0.0.17: our rank, and promotions (the ceremony waits for the desk; in flight, a small note).
+    room.onMessage('rank', (m: RankDTO) => this.rankUi.setOwn(m));
+    room.onMessage('promoted', (m: PromotionDTO) => {
+      this.rankUi.promoted(m);
+      if (this.state?.phase !== 'desk') this.hud.alert('ok', T.ranks.promotedNote, null, 'good', 3);
+    });
     room.onMessage('own', (m: OwnFlight) => this.onOwn(m));
     room.onMessage('ev', (events: NetEvent[]) => {
       for (const e of events) this.onEvent(e);
@@ -861,6 +889,12 @@ export class MultiplayerGame {
     if (confirmOpen() || this.lostDialog.isOpen) return;
     if (!this.room || this.lobby.open) return;
     if (action === 'sound') return this.toggleSound();
+    // v0.0.17: the profile (P, D-pad up) opens and closes at the desk; Esc / B closes it.
+    if (this.rankUi?.open && (action === 'back' || action === 'profile')) return this.rankUi.close();
+    if (action === 'profile') {
+      if (!this.paused && this.state?.phase === 'desk') this.rankUi?.openPanel();
+      return;
+    }
     if (action === 'back' || action === 'pause') {
       // Esc backs out of one thing at a time: Settings over the match, a drawer, build mode, then Pause.
       if (this.hud.back()) return;
@@ -1188,6 +1222,15 @@ export class MultiplayerGame {
       r.durability.fraction = p.hp / 255;
       r.bombs = p.bombs;
       r.fold = p.fold / 255;
+      r.boosting = p.boost;
+      // v0.0.17: their rank effects, as this viewer chose to see them (only theirs to us: "everyone").
+      const look = this.rankUi?.shown === 'everyone' ? lookFor(this.rankOf(id)?.effects ?? []) : { trail: null, aura: null };
+      r.rankTrail = look.trail;
+      r.rankAura = look.aura;
+      // Unfold at launch: a paper crane opening into the plane, as the plane leaves the pad.
+      const parked = r.status === 'parked' || r.status === 'rolling';
+      if (r.wasParked && r.status === 'flying' && this.rankUi?.shown === 'everyone' && this.rankOf(id)?.effects.includes('unfold')) this.effects.burst(this.v1.set(p.x, p.y, p.z), 'fold');
+      r.wasParked = parked;
       r.buffer.push(s.time, { x: p.x, y: p.y, z: p.z, yaw: signedAngle(p.yaw), pitch: signedAngle(p.pitch), roll: signedAngle(p.roll) });
     });
     for (const [id, r] of this.remotes) {
@@ -1374,7 +1417,12 @@ export class MultiplayerGame {
         const s = this.room?.state;
         const colourOf = (id: string | null) => (id ? (s?.players.get(id)?.colour ?? null) : null);
         const assists = e.assists.map((id) => s?.players.get(id)?.name ?? '?');
-        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me ? 'killer' : e.victim === this.me ? 'victim' : null);
+        this.mpHud.kill(e.killer ? e.killerName : e.killerName || null, colourOf(e.killer), e.victimName, e.victim ? colourOf(e.victim) : null, e.weapon, assists, e.killer === this.me ? 'killer' : e.victim === this.me ? 'victim' : null, { killer: this.insigniaOf(e.killer), victim: this.insigniaOf(e.victim || null) });
+        // Shot down by a player: their card, briefly.
+        if (e.victim === this.me && e.killer && e.killer !== this.me) {
+          const card = this.profileOf(e.killer);
+          if (card) this.rankUi.showCard(card);
+        }
         if (e.killer === this.me && e.victim) this.sounds.play('kill');
         break;
       }
@@ -1478,6 +1526,8 @@ export class MultiplayerGame {
     this.lastTickMs = nowMs;
     this.stepPrediction(Math.min(realDt, 1));
     this.flush();
+    this.rankUi?.update(dt, this.state?.phase === 'desk');
+    if (this.rankUi) this.ownRankLook();
     this.updateRemotes(dt);
     this.updateScene(dt);
     this.hud.root.classList.toggle('mp-pregame', !this.home);
@@ -1739,6 +1789,45 @@ export class MultiplayerGame {
     };
   }
 
+  // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
+
+  /** A player's rank and active effects, from the schema ('' until the server knows it). */
+  private rankOf(id: string | null): { step: RankStep; effects: EffectId[] } | null {
+    if (!id) return null;
+    const raw = this.room?.state.players.get(id)?.rank;
+    return raw ? decodeRank(raw) : null;
+  }
+
+  private insigniaOf(id: string | null) {
+    const r = this.rankOf(id);
+    return r ? insigniaView(r.step) : null;
+  }
+
+  /** Another player's profile card, from what everyone may see of them. */
+  private profileOf(id: string): ProfileView | null {
+    const p = this.room?.state.players.get(id);
+    const r = this.rankOf(id);
+    if (!p || !r) return null;
+    const R = T.ranks;
+    return { name: p.name, step: r.step, title: p.title || null, card: null, stats: [{ label: R.shotDown, value: p.kills }, { label: R.missions, value: p.missions }] };
+  }
+
+  /** Our own plane's rank trail and aura, unless we turned them off (or chose to see none). */
+  private ownRankLook(): void {
+    const own = this.rankUi.prefs;
+    const shown = this.rankUi.shown !== 'none' && own;
+    const look = shown ? lookFor(activeEffects(stepAt(own.index), { off: own.off as EffectId[] })) : { trail: null, aura: null };
+    this.trails.rankTrail = look.trail;
+    this.trails.rankAura = look.aura;
+    // Unfold at launch: a burst of folds as our plane leaves the pad.
+    const phase = this.state?.phase ?? null;
+    if (shown && phase === 'flying' && this.lastRankPhase !== 'flying' && this.lastRankPhase !== null && activeEffects(stepAt(own.index), { off: own.off as EffectId[] }).includes('unfold')) {
+      this.effects.burst(this.v1.copy(this.plane.position), 'fold');
+    }
+    this.lastRankPhase = phase;
+  }
+  private lastRankPhase: string | null = null;
+
   private mpView(): MpHudView {
     const s = this.room?.state;
     const now = performance.now() / 1000;
@@ -1748,7 +1837,7 @@ export class MultiplayerGame {
           .map(([id, p]): ScoreRow => ({
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
-            status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield,
+            status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield, rank: this.insigniaOf(id),
             presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)
@@ -1765,7 +1854,7 @@ export class MultiplayerGame {
       if (d > 260) continue;
       tags.push({
         id, x: screen.x, y: screen.y, name: p.name, colour: p.colour, health: r.durability.fraction, far: Math.min(1, Math.max(0, (d - 30) / 200)),
-        hostile: true, plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null,
+        hostile: true, plane: AIRCRAFT[r.spec.id].name, emote: r.emote && now < r.emoteUntil ? r.emote : null, rank: this.insigniaOf(id),
       });
     }
     const territories: TerritoryTagView[] = [];
@@ -1780,6 +1869,7 @@ export class MultiplayerGame {
       territories.push({
         id: tid, x: screen.x, y: screen.y, label: ts?.label || deskLabel(p.name), owner: p.name, colour: p.colour, mine: owner === this.me, safe: !!ts?.safe, alert: !!ts?.alert,
         presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: DESK_STATES[ts?.state ?? 0] ?? null }),
+        rank: this.insigniaOf(owner), deskEffects: this.rankOf(owner)?.effects.filter((x) => x === 'pennant' || x === 'banner' || x === 'nameplate') ?? [],
       });
     }
     const attacks = this.priv.attacks ?? [];

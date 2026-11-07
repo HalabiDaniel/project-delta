@@ -56,6 +56,8 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   // v0.0.16: the maneuver in flight, changing it at home.
   Alt: '{south}',
   T: '{rs}',
+  // v0.0.17: the profile at the desk.
+  P: '{up}',
   LMB: '{rt}',
   RMB: '{lt}',
   // Key caps that are words come from the dictionary, so a translation keeps working.

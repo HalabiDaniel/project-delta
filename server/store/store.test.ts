@@ -46,6 +46,33 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.tutorial('not-a-uuid')).toBeNull();
     });
 
+    it('awards Merit once per key and derives the total from the ledger (v0.0.17)', async () => {
+      const p = await store.createPlayer(player('Merit'), h('token-merit'), 'open');
+      expect(await store.merit(p.id)).toBe(0);
+      expect(await store.awardMerit({ playerId: p.id, key: 'kill:1', source: 'kill', amount: 10, reason: 'Shot down Bo' })).toEqual({ status: 'applied', total: 10 });
+      // A retry, a reconnect or a restart: the same key is the same award.
+      expect(await store.awardMerit({ playerId: p.id, key: 'kill:1', source: 'kill', amount: 10, reason: 'Shot down Bo' })).toEqual({ status: 'duplicate', total: 10 });
+      await Promise.all([1, 2, 3].map(() => store.awardMerit({ playerId: p.id, key: 'mission:x', source: 'mission', amount: 6, reason: 'Mission' })));
+      expect(await store.merit(p.id)).toBe(16);
+      const history = await store.meritHistory(p.id);
+      expect(history.map((r) => r.key)).toEqual(['mission:x', 'kill:1']);
+      expect(history.reduce((s, r) => s + r.amount, 0)).toBe(await store.merit(p.id));
+      // Merit only counts up.
+      await expect(store.awardMerit({ playerId: p.id, key: 'k', source: 'x', amount: -5, reason: '' })).rejects.toThrow();
+      await expect(store.awardMerit({ playerId: p.id, key: 'k', source: 'x', amount: 0, reason: '' })).rejects.toThrow();
+      // Keys are per player.
+      const q = await store.createPlayer(player('Other'), h('token-merit-2'), 'open');
+      expect((await store.awardMerit({ playerId: q.id, key: 'kill:1', source: 'kill', amount: 10, reason: '' })).status).toBe('applied');
+      expect(await store.merit('not-a-uuid')).toBe(0);
+    });
+
+    it('keeps rank prefs on the player record (v0.0.17)', async () => {
+      const p = await store.createPlayer(player('Prefs'), h('token-prefs'), 'open');
+      expect(await store.rankPrefs(p.id)).toBeNull();
+      await store.setRankPrefs(p.id, { title: 'New Sheet', card: null, off: ['aura'], peak: 4 });
+      expect(await store.rankPrefs(p.id)).toEqual({ title: 'New Sheet', card: null, off: ['aura'], peak: 4 });
+    });
+
     it('refuses a second player with the same public id or token', async () => {
       const a = player();
       await store.createPlayer(a, h(`t-${a.id}`), 'open');

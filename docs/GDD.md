@@ -952,7 +952,7 @@ The whole multiplayer system on the internet (the game on Vercel, the server and
 
 ### Version 0.0.17: Player Ranks
 
-Cosmetic-only ranks from Loose Leaf to Head of the Class (12 tiers with divisions, then Honor Roll stars), earned as Merit on the server through an idempotent ledger with anti-farming rules; insignia, profile cards, titles, pennants, trails and auras that never affect play; promotions that never interrupt a fight. A rank is not a skill rating. See [v0.0.17](roadmap/v0.0.17.md).
+Cosmetic-only ranks from Blank Page to Head of the Class (15 ranks, 48 levels, then Honor Roll stars), earned as Merit on the server through an idempotent ledger with anti-farming rules; insignia, profile cards, titles, pennants, trails and auras that never affect play; promotions that never interrupt a fight. A rank is not a skill rating. See [v0.0.17](roadmap/v0.0.17.md).
 
 ### Version 0.0.18: Audio and Music Revamp
 

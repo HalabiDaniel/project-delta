@@ -181,6 +181,16 @@ describe('the admin endpoint', () => {
     expect(room.world.pilots.size).toBe(0);
   });
 
+  it("shows a player's Merit history and rank (v0.0.17)", async () => {
+    await enter('Meritia');
+    await wait(150);
+    const body = (await (await admin('merit?player=Meritia')).json()) as { merit: number; rank: string; history: Array<{ source: string }> };
+    expect(body.merit).toBeGreaterThan(0);
+    expect(body.rank).toMatch(/^Blank Page/);
+    expect(body.history.map((h) => h.source)).toContain('daily');
+    expect((await admin('merit?player=nobody-at-all')).status).toBe(404);
+  });
+
   it('reports step and tick timing, memory and writes for the load test', async () => {
     const { room } = await enter('Ann');
     await wait(200);

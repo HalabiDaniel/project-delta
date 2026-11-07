@@ -1645,6 +1645,45 @@ export const PROGRESS = {
   accuracyMinBombs: 2,
 } as const;
 
+/**
+ * v0.0.17: Merit, the points behind player ranks. Earned in multiplayer only, decided by the server,
+ * written to an idempotent ledger, never lost and never spent. Provisional values, for the developer
+ * to approve; the economy simulator (v0.0.20) checks them against real play.
+ */
+export const MERIT = {
+  /** A mission completed, by its tier (1–3+). */
+  mission: [6, 9, 13, 18] as readonly number[],
+  /** Shooting down another player, and an assist on one. */
+  playerKill: 10,
+  playerAssist: 4,
+  /** Shooting down an AI plane: small, and capped per session. */
+  aiKill: 1,
+  aiKillCap: 15,
+  /** A raid that got through (attacker), a raid repelled by the player being raided (defender). */
+  raid: 15,
+  defend: 12,
+  /** Active time in the air: `active.amount` for every `active.every` seconds flown, capped per session. */
+  active: { every: 300, amount: 3, cap: 36 },
+  /** End-of-session placement bonus, for 1st, 2nd and 3rd. */
+  placement: [15, 10, 5] as readonly number[],
+  /** The first multiplayer session of the day (UTC), once. */
+  firstOfDay: 10,
+  /**
+   * Diminishing returns: the n-th shoot-down of the same player in a session pays `repeatKill[n]` of
+   * the value (the last entry from then on); the n-th raid between the same two players likewise.
+   */
+  repeatKill: [1, 0.5, 0.25, 0] as readonly number[],
+  repeatRaid: [1, 0.5, 0] as readonly number[],
+  /** A shoot-down of a player under new-player protection pays this share. */
+  protectedShare: 0.3,
+  /** The Merit to go from one level to the next grows by `growth` each level, from `first`. */
+  curve: { first: 20, growth: 1.12 },
+  /** Past the top level, every Honor Roll star costs this. */
+  honorStar: 4000,
+  /** The one-off backfill for players from before v0.0.17: Merit per sortie, mission and kill already played. */
+  backfill: { sortie: 2, mission: 5, kill: 6, cap: 2500 },
+} as const;
+
 export const CAMERA = {
   distance: 10,
   /** Extra follow distance at full speed, and while boosting: the view pulls back as you speed up. */

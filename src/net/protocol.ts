@@ -48,6 +48,30 @@ export interface WelcomeDTO {
   title?: string;
 }
 
+/** v0.0.17: your own rank, sent when you join and whenever it or what you equipped changes. */
+export interface RankDTO {
+  /** Your total Merit. */
+  merit: number;
+  /** Your step on the ladder (src/ranks/Ranks.ts stepAt). */
+  index: number;
+  /** Merit into this step, and the Merit it takes to reach the next. */
+  into: number;
+  needed: number;
+  /** What you have equipped (null: the default). */
+  title: string | null;
+  card: string | null;
+  /** Effects you turned off for your own plane. */
+  off: string[];
+}
+
+/** v0.0.17: you were promoted (the ceremony waits until you're back at your desk). */
+export interface PromotionDTO {
+  from: number;
+  to: number;
+  /** A new rank name, not just a new level. */
+  tier: boolean;
+}
+
 /** The answer to a `username` request. */
 export interface UsernameDTO {
   ok: boolean;
@@ -121,6 +145,9 @@ export interface ResultLineDTO {
   paper: number;
   /** Still in the session at the end (or left before it). */
   present: boolean;
+  /** v0.0.17: their rank (step on the ladder) and chosen title, for the results' cards. */
+  rank?: number;
+  title?: string | null;
 }
 
 /** Sent to everyone when a session ends. */

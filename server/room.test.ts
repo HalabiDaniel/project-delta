@@ -1,7 +1,9 @@
 import { defineRoom, defineServer } from '@colyseus/core';
 import { boot, type ColyseusTestServer } from '@colyseus/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { NET, PROTOCOL_VERSION, ROOM, type MeDTO, type WelcomeDTO } from '../src/net/protocol';
+import { NET, PROTOCOL_VERSION, ROOM, type MeDTO, type PromotionDTO, type RankDTO, type WelcomeDTO } from '../src/net/protocol';
+import { MERIT } from '../src/config';
+import { rankFor } from '../src/ranks/Ranks';
 import type { WorldState } from '../src/net/schema';
 import { memoryServices, setServices } from './services';
 import { serverOptions } from './sessions/directory';
@@ -148,6 +150,55 @@ describe('the classroom room', () => {
 });
 
 describe('player identity in the room', () => {
+  it('ranks players from the Merit ledger, announces promotions and refuses unearned equipment (v0.0.17)', async () => {
+    const s = memoryServices('open');
+    setServices({ ...s, chooseDesk: true });
+    const r = await room();
+    const ann = await enter(r, { name: 'Ann' });
+    const bo = await enter(r, { name: 'Bo' });
+    const ranks: RankDTO[] = [];
+    ann.client.onMessage('rank', (m: RankDTO) => ranks.push(m));
+    const promotions: PromotionDTO[] = [];
+    ann.client.onMessage('promoted', (m: PromotionDTO) => promotions.push(m));
+    ann.client.send('claim', { t: 'T1' });
+    await ann.client.waitForMessage('claimed');
+    await wait(150);
+    // The first session of the day: a little Merit, from the ledger.
+    const [record] = await s.store.findPlayers(ann.id);
+    expect(await s.store.merit(record.id)).toBe(MERIT.firstOfDay);
+    expect(ranks.at(-1)).toMatchObject({ merit: MERIT.firstOfDay, index: 0, title: null });
+    // Everyone sees the rank.
+    await bo.client.waitForNextPatch();
+    expect((bo.client.state as WorldState).players.get(ann.id)?.rank).toBe('0');
+    // Enough Merit for Scribbler: a promotion, and a new rank name is news for the session.
+    r.world.merit.mission(ann.id, 'card-a', 4, 'Big mission');
+    for (let i = 0; i < 6; i++) r.world.merit.mission(ann.id, `card-${i}`, 4, 'Big mission');
+    await wait(200);
+    expect(promotions.some((p) => p.tier)).toBe(true);
+    expect(promotions.map((p) => p.to)).toEqual([...promotions.map((p) => p.to)].sort((a, b) => a - b));
+    expect(rankFor(await s.store.merit(record.id)).name).toBe('Scribbler');
+    // Only what the rank has unlocked can be equipped.
+    ann.client.send('rank', { title: 'Recess Legend' });
+    await wait(80);
+    expect(ranks.at(-1)?.title).not.toBe('Recess Legend');
+    ann.client.send('rank', { title: 'Margin Doodler', off: ['aura'] });
+    await wait(80);
+    expect(ranks.at(-1)).toMatchObject({ title: 'Margin Doodler', off: ['aura'] });
+    await bo.client.waitForNextPatch();
+    expect((bo.client.state as WorldState).players.get(ann.id)?.title).toBe('Margin Doodler');
+    // The same day again: no second daily award.
+    await ann.client.leave();
+    await wait(100);
+    const before = await s.store.merit(record.id);
+    const again = await enter(r, { name: 'Ann', token: ann.welcome.token });
+    again.client.send('claim', { t: 'T2' });
+    await again.client.waitForMessage('claimed');
+    await wait(150);
+    expect(await s.store.merit(record.id)).toBe(before);
+    // Saved with the player: the peak and the title come back.
+    expect(await s.store.rankPrefs(record.id)).toMatchObject({ title: 'Margin Doodler', peak: rankFor(before).index });
+  });
+
   it('issues a device token on the first join, and the token brings back the same player', async () => {
     const r = await room();
     const first = await enter(r, { name: 'Ann' });

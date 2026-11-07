@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
-  "description": "paperwars.io v0.0.16 - flight maneuvers",
+  "description": "paperwars.io v0.0.17 - player ranks",
   "type": "module",
   "scripts": {
     "dev": "vite",

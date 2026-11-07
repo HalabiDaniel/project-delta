@@ -10,7 +10,7 @@ import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
@@ -47,6 +47,7 @@ import { PaperJournal, type PaperChange } from './Paper';
 import { randomUUID } from 'node:crypto';
 import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
+import { MeritBook, type MeritEvent } from './Merit';
 import { huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
 
 export interface ServerWorldOptions {
@@ -162,6 +163,8 @@ export class ServerWorld {
   readonly history = new History();
   readonly attacks = new AttackBook();
   readonly kills = new KillBook();
+  /** v0.0.17: the Merit this session's play earns, for the ledger. */
+  readonly merit = new MeritBook();
   readonly pilots = new Map<string, Pilot>();
   /** Territory id → the player who claimed it. */
   readonly owners = new Map<string, string>();
@@ -330,6 +333,11 @@ export class ServerWorld {
   /** Raids and kills since the last call (for the store). */
   takePvp(): PvpEvent[] {
     return this.pvpOut.splice(0);
+  }
+
+  /** Merit awards since the last call (v0.0.17), for the ledger. */
+  takeMerit(): MeritEvent[] {
+    return this.merit.take();
   }
 
   /** Raids and kills from before (other sessions, before a restart), for the cooldowns and windows. */
@@ -838,6 +846,8 @@ export class ServerWorld {
     // v0.0.16: the maneuver chosen at home; GameState refuses changes in the air.
     m.maneuverSlot = st.maneuverSlot;
     if (st.phase === 'flying' && m.status === 'flying') {
+      // v0.0.17: time in the air earns Merit (capped); a plane waiting on the pad never does.
+      if (p.connected && !st.emergency) this.merit.fly(p.id, NET.step);
       const result = p.flight.step(f, home, this.territories, this.solids(), st.outOfRange);
       if (!result) return;
       for (const c of result.collisions) {
@@ -1063,6 +1073,7 @@ export class ServerWorld {
         if (shooter?.state) {
           shooter.state.aircraftDestroyed(owner?.pilot === shooter ? owner.id : a.id, a.role, true);
           if (a.side === 'enemy' && this.pilotOfPlane(e.by ?? '') === shooter) {
+            this.merit.aiKill(shooter.id, a.id, `an enemy ${a.spec.name}`);
             this.emit({ t: 'kill', killer: shooter.id, killerName: shooter.name, victim: '', victimName: `${a.side === 'enemy' ? 'enemy' : 'friendly'} ${a.spec.name}`, weapon: 'ink', assists: [], bomber: a.role === 'bomber' });
           }
         }
@@ -1443,6 +1454,7 @@ export class ServerWorld {
       if (attacker) {
         attacker.stats.raids++;
         attacker.addScore(PVP.score.raid);
+        this.merit.raid(attacker.id, victim.id, attack.uid, victim.name);
       }
       this.news(`${attacker?.name ?? 'Someone'} raided ${victim.name}`, 'bad');
     }
@@ -1684,6 +1696,7 @@ export class ServerWorld {
       const bounty = this.kills.record(k.id, p.id, cost, st.emergency, this.time);
       const kill = this.kills.last!;
       this.pvpOut.push({ id: kill.id, kind: 'kill', attacker: k.id, victim: p.id, success: true, at: Math.round(this.wallOf(kill.at)) });
+      this.merit.kill(k.id, p.id, kill.id, p.name, p.protectUntil > this.time);
       if (bounty > 0) k.state.payBonus(bounty, `Shot down ${p.name}`);
       k.state.aircraftDestroyed(p.plane, role, true);
       this.note(k, 'crumple', `Shot down ${p.name}`, bounty > 0 ? `+${bounty}` : null, 'good');
@@ -1695,6 +1708,7 @@ export class ServerWorld {
       const byDefender = !!defender && killer === defender.id;
       if (byDefender && defender.state) {
         defender.stats.defends++;
+        this.merit.defend(defender.id, p.id, attack.uid, p.name);
         defender.addScore(PVP.score.defend);
         // Paid for flying up to meet the raider, not for the base's guns alone (as single-player's raids).
         const flew = defender.state.phase === 'flying' || defender.state.phase === 'landed';
@@ -1709,6 +1723,7 @@ export class ServerWorld {
       if (!a?.state) continue;
       a.stats.assists++;
       a.addScore(PVP.score.assist);
+      if (k) this.merit.assist(a.id, p.id, this.kills.last!.id, p.name, p.protectUntil > this.time);
       const share = Math.round(PVP.killBase * PVP.assistShare);
       if (!st.emergency && share > 0) a.state.payBonus(share, `Assist on ${p.name}`);
       this.note(a, 'crumple', 'Assist', share > 0 && !st.emergency ? `+${share}` : null, 'good');
@@ -1732,6 +1747,7 @@ export class ServerWorld {
     this.endMissionAi(p);
     if (!mission || !sortie || !plane) return;
     const success = mission.status === 'succeeded';
+    if (success && !st.emergency) this.merit.mission(p.id, p.missionId(mission), (TIERS[mission.tier]?.index ?? 0) + 1, mission.title);
     p.outcomes.push({
       id: p.missionId(mission), template: mission.spec.type, state: success ? 'completed' : 'failed', outcome: mission.failure ?? null,
       reward: success ? mission.reward : 0, spec: { title: mission.title, tier: mission.tier, recovered, aircraft: plane.id },

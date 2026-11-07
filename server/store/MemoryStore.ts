@@ -5,6 +5,10 @@ import {
   cleanTips,
   checkLimits,
   checkTransaction,
+  checkMerit,
+  type MeritAward,
+  type MeritRecord,
+  type MeritResult,
   IncompatibleSaveError,
   SAVE_FORMAT,
   type AircraftRecord,
@@ -72,6 +76,9 @@ export class MemoryStore implements Store {
   private readonly progresses = new Map<string, ProgressRecord>();
   private readonly outcomes = new Map<string, MissionOutcome & { at: string }>();
   private readonly tipsOf = new Map<string, string[]>();
+  private readonly meritRows: MeritRecord[] = [];
+  private readonly meritKeys = new Set<string>();
+  private readonly prefs = new Map<string, Record<string, unknown>>();
   private readonly pvp: Array<PvpRecord & { worldId: string }> = [];
   private readonly sessionRows = new Map<string, SessionRecord>();
   /** Tests can make the store "newer" than the code to check refusals. */
@@ -318,6 +325,37 @@ export class MemoryStore implements Store {
 
   async setTips(playerId: string, tips: string[]): Promise<void> {
     if (this.players.has(playerId)) this.tipsOf.set(playerId, cleanTips(tips));
+  }
+
+  // ---- Merit and ranks (v0.0.17) -----------------------------------------------------------------
+
+  async awardMerit(a: MeritAward): Promise<MeritResult> {
+    checkMerit(a);
+    if (!this.players.has(a.playerId)) throw new Error(`no player ${a.playerId}`);
+    const k = `${a.playerId}|${a.key}`;
+    if (this.meritKeys.has(k)) return { status: 'duplicate', total: await this.merit(a.playerId) };
+    this.meritKeys.add(k);
+    this.meritRows.push({ ...a, createdAt: new Date() });
+    return { status: 'applied', total: await this.merit(a.playerId) };
+  }
+
+  async merit(playerId: string): Promise<number> {
+    let total = 0;
+    for (const r of this.meritRows) if (r.playerId === playerId) total += r.amount;
+    return total;
+  }
+
+  async meritHistory(playerId: string, limit = 100): Promise<MeritRecord[]> {
+    return this.meritRows.filter((r) => r.playerId === playerId).reverse().slice(0, limit).map((r) => ({ ...r }));
+  }
+
+  async rankPrefs(playerId: string): Promise<Record<string, unknown> | null> {
+    const p = this.prefs.get(playerId);
+    return p ? structuredClone(p) : null;
+  }
+
+  async setRankPrefs(playerId: string, prefs: Record<string, unknown>): Promise<void> {
+    if (this.players.has(playerId)) this.prefs.set(playerId, structuredClone(prefs));
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------

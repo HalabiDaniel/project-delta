@@ -60,6 +60,10 @@ export const PlayerState = schema(
     ping: t.uint16().default(0),
     /** Index into GamePhase, for the scoreboard. */
     phase: t.uint8().default(0),
+    /** v0.0.17: rank and active effects, encoded (src/ranks/Ranks.ts encodeRank); '' until known. */
+    rank: t.string().default(''),
+    /** v0.0.17: the title the player chose to show ('' for none). */
+    title: t.string().default(''),
   },
   'PlayerState',
 );

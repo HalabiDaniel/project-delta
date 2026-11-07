@@ -274,6 +274,37 @@ export interface FeedbackRecord extends NewFeedback {
   createdAt: Date;
 }
 
+// ---- Merit and ranks (v0.0.17) --------------------------------------------------------------------
+
+/** One Merit award for a player, and its cause. */
+export interface MeritAward {
+  playerId: string;
+  /** Built from the award's cause ("kill:<id>", "mission:<id>"): the same key twice is one award. */
+  key: string;
+  /** What earned it ("kill", "mission", "active", ...). */
+  source: string;
+  /** Always positive: Merit only counts up. */
+  amount: number;
+  reason: string;
+}
+
+export interface MeritRecord extends MeritAward {
+  createdAt: Date;
+}
+
+export type MeritResult =
+  /** Applied now: the player's total after it. */
+  | { status: 'applied'; total: number }
+  /** The key was awarded before: nothing changed. */
+  | { status: 'duplicate'; total: number };
+
+/** An award checked before it reaches the store (a bug, not a player, makes a bad one). */
+export function checkMerit(a: MeritAward): void {
+  if (!Number.isInteger(a.amount) || a.amount <= 0 || a.amount > 100_000) throw new Error(`bad Merit amount ${a.amount}`);
+  if (!a.key || a.key.length > 200) throw new Error('bad Merit key');
+  if (!a.source || a.source.length > 32) throw new Error('bad Merit source');
+}
+
 export interface Store {
   readonly kind: 'memory' | 'postgres';
 
@@ -363,6 +394,18 @@ export interface Store {
   /** First-time tips the player has seen (ids), across every world and computer. */
   tips(playerId: string): Promise<string[]>;
   setTips(playerId: string, tips: string[]): Promise<void>;
+
+  // ---- Merit and ranks (v0.0.17) -----------------------------------------------------------------
+
+  /** Awards Merit once per key (a repeat changes nothing). */
+  awardMerit(award: MeritAward): Promise<MeritResult>;
+  /** The player's total Merit: the sum of their ledger. */
+  merit(playerId: string): Promise<number>;
+  /** The player's latest awards, newest first (for the admin endpoint). */
+  meritHistory(playerId: string, limit?: number): Promise<MeritRecord[]>;
+  /** What the player has equipped, as saved (checked by the caller), or null. */
+  rankPrefs(playerId: string): Promise<Record<string, unknown> | null>;
+  setRankPrefs(playerId: string, prefs: Record<string, unknown>): Promise<void>;
 
   // ---- Portable bases (v0.0.12) -----------------------------------------------------------------
   //

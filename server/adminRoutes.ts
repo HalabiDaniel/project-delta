@@ -1,3 +1,4 @@
+import { cleanPrefs, rankFor } from '../src/ranks/Ranks';
 import { createEndpoint, createRouter, matchMaker } from '@colyseus/core';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { log } from './log';
@@ -18,6 +19,7 @@ import type { WorldRoom } from './WorldRoom';
  *                                                          they can't join again for `minutes` (default 10)
  *   POST /admin/end   {"session", "seconds"?, "reason"?}    end a session `seconds` from now (default 60), with notice
  *   POST /admin/desk  {"session", "desk"}                  free a desk stuck in the wrong state
+ *   GET  /admin/merit?player=<public id or name>           a player's Merit, rank and latest awards (v0.0.17)
  *   GET  /admin/stats[?reset=1]                            server step and tick timing per session,
  *                                                          database writes, memory (the load test reads it);
  *                                                          reset=1 starts the maxima over
@@ -111,6 +113,19 @@ export function adminRoutes(adminKey: string | null) {
       if (db && reset) db.maxMs = 0;
       const m = process.memoryUsage();
       return ctx.json({ at: Date.now(), uptime: Math.round(process.uptime()), memory: { rssMB: Math.round(m.rss / 1e6), heapMB: Math.round(m.heapUsed / 1e6) }, store: store.kind, writes: db0, sessions: rooms }, { headers: NO_STORE });
+    }),
+    adminMerit: createEndpoint('/admin/merit', { method: 'GET' }, async (ctx) => {
+      const no = refuse(ctx as unknown as Ctx, 'merit');
+      if (no) return no as Response;
+      const who = str(input(ctx as unknown as Ctx).player, 64);
+      if (!who) return ctx.json({ error: 'Which player? Ask /admin/merit?player=<public id or name>.' }, { status: 400, headers: NO_STORE });
+      const store = services().store;
+      const found = (await store.findPlayers(who))[0];
+      if (!found) return ctx.json({ error: `No player called "${who}".` }, { status: 404, headers: NO_STORE });
+      const [merit, history, prefs] = await Promise.all([store.merit(found.id), store.meritHistory(found.id, 50), store.rankPrefs(found.id)]);
+      const step = rankFor(merit, cleanPrefs(prefs, rankFor(0)).peak);
+      log('info', 'admin.merit', { player: found.publicId });
+      return ctx.json({ player: found.publicId, name: found.username ?? found.name, merit, rank: step.label, history: history.map((h) => ({ key: h.key, source: h.source, amount: h.amount, reason: h.reason, at: h.createdAt })) }, { headers: NO_STORE });
     }),
     adminKick: createEndpoint('/admin/kick', { method: 'POST' }, async (ctx) => {
       const no = refuse(ctx as unknown as Ctx, 'kick');

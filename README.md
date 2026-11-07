@@ -1,4 +1,14 @@
-# paperwars.io: v0.0.16 (flight maneuvers), on top of v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.17 (player ranks), on top of v0.0.16 (flight maneuvers), v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.17: player ranks (coded; next, the developer plays online and confirms the pace).** Every
+> multiplayer player earns **Merit** on the server (missions, shoot-downs and assists, raids and
+> defences, time in the air, top-three placings, the first session of the day) through an
+> idempotent ledger, and climbs **15 ranks, 48 levels** from *Blank Page* to *Head of the Class*,
+> then Honor Roll stars, with the developer's insignia art. Ranks are purely cosmetic: insignia next
+> to names everywhere, a profile card (P at the desk), titles, card paper, desk pennants and
+> banners, trails, an unfold burst and an aura, and a "Promoted" ceremony that waits for the desk.
+> See [v0.0.17: player ranks](#v0017-player-ranks), the [plan](docs/roadmap/v0.0.17.md) and the
+> [screenshots](docs/checkpoints/0.0.17-ranks/).
 
 > **v0.0.16: flight maneuvers (coded; next, the developer flies them).** Fighters, multiroles and
 > recon planes now have **automatic maneuvers**: eight scripted moves (Crane Flip, Fold Back, Dive
@@ -354,6 +364,69 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.17: player ranks
+
+Built from the [plan](docs/roadmap/v0.0.17.md) with the developer's ladder and insignia of
+2026-11-07 ([assets/ranks/](assets/ranks/README.md), the whole ladder:
+[0-ladder.png](docs/checkpoints/0.0.17-ranks/0-ladder.png)). Screenshots from the real game:
+[docs/checkpoints/0.0.17-ranks/](docs/checkpoints/0.0.17-ranks/).
+
+| Tier | Rank | Levels | Insignia |
+|---|---|---|---|
+| 1–3 | Blank Page, Scribbler, Dog-Ear | I–III | Bronze chevrons, rocker, senior chevrons |
+| 4–6 | Paper Dart, Glider, Inkslinger | I–III | The same in silver |
+| 7–9 | Hall Monitor, Paper Hawk, Origami Ace | I–III | The same in gold |
+| 10–12 | Sky Scholar, Hawk Eye, High Flyer | I–IV | Bronze, silver, gold stars |
+| 13–15 | Valedictorian, Dean's List, Head of the Class | I–III | Thin, thick and angled wings |
+| ∞ | Honor Roll | ★1, ★2, … | Gold swept wings |
+
+- **The ladder** (`src/ranks/Ranks.ts`, shared by client and server): Merit to rank and level, a
+  curve that starts at 20 Merit a step and grows 12% a level (`MERIT.curve`), 4,000 Merit per Honor
+  Roll star, and the highest step held saved with the player, so retuning never lowers a rank.
+- **Merit** (`server/world/Merit.ts`, values in `MERIT` in `src/config.ts`): decided by the server
+  from its own records and written to `merit_ledger` (migration `0008_merit.sql`) once per key
+  (`kill:<id>`, `mission:<card id>`, `raid:<id>`, `daily:<date>`, `backfill:v1`, …). The total is
+  the sum of the ledger. Anti-farming: less for shooting down the same player again in a session,
+  and for repeated raids between the same two players; a share for players under new-player
+  protection; AI kills and active time capped per session; only time in the air counts; no Merit
+  in single-player.
+- **Backfill:** a player from before v0.0.17 gets Merit for their saved sorties, missions and kills
+  on their first join (once, capped at 2,500).
+- **In the session** (`server/world/RankKeeper.ts`): the rank and active effects travel in the
+  player's state as a few characters (`PlayerState.rank`, `title`); the player gets `rank` with
+  their progress and `promoted` when they go up. Equipping (`rank` message) is checked against what
+  the rank has unlocked, so a modified client can't show what it hasn't earned. A new rank name is
+  news in the kill feed ("Ann is now a Paper Hawk").
+- **On screen** (`src/mp/RankUi.ts`, `src/ranks/insignia.ts`): insignia on the scoreboard, name
+  tags, desk nameplates (with the pennant, banner and nameplate stripe), the kill feed (a badge
+  from Paper Hawk, a gold name for Head of the Class) and the results (with the top players' cards);
+  the desk badge and **P** (D-pad up) open the profile: the card, Merit and progress, and the title,
+  card paper and effects to equip; the card of whoever shot you down, briefly; the ceremony (the
+  old insignia stamped "Promoted", the unlocks, under five seconds, skippable, at the desk only; in
+  flight only a small note).
+- **Plane effects** (`src/ranks/RankEffects.ts`): pencil, ink, feather and constellation trails
+  behind boosts and maneuvers, the unfold burst at launch, the aura and gold leaf. Drawn by each
+  client from the player's state; never a change to the silhouette or the team colours. A setting
+  in the profile shows other players' effects for everyone, only mine or no one.
+- **Admin:** `GET /admin/merit?player=<name>` shows a player's Merit, rank and latest awards.
+
+### Decisions for the developer
+
+- The name of tier 14 (**Dean's List** is a placeholder) and the titles (`RANKS[].titles`).
+- The Merit values and the curve, after playing (`MERIT` in `src/config.ts`; a retune never lowers
+  anyone).
+- The backfill: partial credit (2 per sortie, 5 per mission, 6 per kill, capped at 2,500), or more.
+- The single-star icons are 256 x 256 and the two-star ones 512 x 256 (the rest 512 x 512): larger
+  art would be sharper on the profile card and the ceremony.
+
+### Not done yet
+
+- Opening another player's full card from a scoreboard row (the scoreboard is hold-to-view).
+- The Inkslinger emote (emotes are a fixed set until v0.0.25's cosmetics), overshoot-kill Merit and
+  medals as a source (v0.0.20), the stealth rule's test (stealth is v0.0.20; effects are drawn only
+  with their plane).
+- The load test with every effect on, and the online playtest.
 
 ## v0.0.16: flight maneuvers
 

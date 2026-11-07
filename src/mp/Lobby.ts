@@ -1,3 +1,7 @@
+import { insigniaSlot } from './MpHud';
+import { insigniaView } from '../ranks/insignia';
+import { stepAt } from '../ranks/Ranks';
+import { profileCardHtml } from './RankUi';
 import { button, card, chip, stat } from '../ui/components';
 import { icon } from '../ui/icons';
 import { colourCss, type DeskState, type SessionResultsDTO } from '../net/protocol';
@@ -237,7 +241,7 @@ export class Lobby {
     const rows = results.lines
       .map(
         (l) => `<tr data-presence="${l.present ? 'online' : 'offline'}"${l.id === me ? ' data-me' : ''}><td class="num mp-place">${l.placing <= 3 ? icon('medal', `icon mp-medal-${l.placing}`) : ''}${count(l.placing)}</td>
-          <th scope="row" class="mp-pilot" style="--owner:${colourCss(l.colour)}">${icon('fighter', 'icon mp-swatch')}<b>${esc(l.name)}</b>${l.id === me ? chip({ label: L.you, tone: 'friend' }) : ''}${l.present ? '' : chip({ label: L.left, icon: 'offline' })}</th>
+          <th scope="row" class="mp-pilot" style="--owner:${colourCss(l.colour)}">${icon('fighter', 'icon mp-swatch')}${l.rank !== undefined ? insigniaSlot(insigniaView(l.rank)) : ''}<b>${esc(l.name)}</b>${l.id === me ? chip({ label: L.you, tone: 'friend' }) : ''}${l.present ? '' : chip({ label: L.left, icon: 'offline' })}</th>
           <td class="num mp-score">${count(l.score)}</td><td class="num">${count(l.kills)}</td><td class="num">${count(l.raids)}</td><td class="num">${count(l.missions)}</td><td class="num">+${paper(l.paper)}</td></tr>`,
       )
       .join('');
@@ -248,6 +252,7 @@ export class Lobby {
         <thead><tr><th scope="col" data-tip="${esc(L.placing)}">${esc(L.placingHead)}</th><th scope="col">${esc(L.player)}</th>${([['score', 'medal'], ['kills', 'kills'], ['raids', 'raid'], ['missions', 'ok'], ['paperEarned', 'paper']] as const).map(([k, i]) => `<th scope="col" data-tip="${esc(L[k])}" aria-label="${esc(L[k])}">${icon(i)}</th>`).join('')}</tr></thead>
         <tbody>${rows || `<tr><td colspan="7" class="mp-muted">${esc(L.nobody)}</td></tr>`}</tbody>
       </table>
+      ${topCards(results.lines)}
       <div class="mp-foot">${button({ label: L.joinNext, icon: 'plane', variant: 'primary', size: 'big', attrs: { 'data-u': 'next' } })}${button({ label: L.backToList, icon: 'close', size: 'small', attrs: { 'data-u': 'leave' } })}</div></div>`;
     this.results.querySelector('[data-u="next"]')!.addEventListener('click', () => this.actions.next(this.name));
     this.results.querySelector('[data-u="leave"]')!.addEventListener('click', () => this.actions.leave());
@@ -262,6 +267,15 @@ export class Lobby {
     this.root.hidden = true;
     this.lastClaimKey = '';
   }
+}
+
+/** v0.0.17: the top players' profile cards on the results. */
+function topCards(lines: SessionResultsDTO['lines']): string {
+  const top = lines.filter((l) => l.placing <= 3 && l.rank !== undefined).slice(0, 3);
+  if (top.length === 0) return '';
+  const R = T.ranks;
+  const cards = top.map((l) => profileCardHtml({ name: l.name, step: stepAt(l.rank!), title: l.title ?? null, card: null, stats: [{ label: R.shotDown, value: l.kills }, { label: R.missions, value: l.missions }, { label: R.raids, value: l.raids }] }, 'rank-card-small')).join('');
+  return `<div class="mp-result-cards">${cards}</div>`;
 }
 
 /** A problem the player must fix: an icon and the words, read out at once. */

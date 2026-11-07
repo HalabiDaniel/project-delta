@@ -60,6 +60,9 @@ export interface TerritoryTagView extends ScreenPoint {
   /** A player is raiding it. */
   alert: boolean;
   presence: Presence;
+  /** v0.0.17: the owner's insignia, and the desk effects their rank shows (pennant, banner, nameplate stripe). */
+  rank?: InsigniaView | null;
+  deskEffects?: string[];
 }
 
 export interface ScoreRow {
@@ -282,8 +285,8 @@ export class MpHud {
   }
 
   /** A line in the kill feed. `self`: whether we are the killer or the victim (the line stands out). */
-  kill(killer: string | null, killerColour: number | null, victim: string, victimColour: number | null, weapon: Weapon, assists: string[], self: FeedSelf): void {
-    this.push(killLine(killer, killerColour, victim, victimColour, weapon, assists), 'kill', self);
+  kill(killer: string | null, killerColour: number | null, victim: string, victimColour: number | null, weapon: Weapon, assists: string[], self: FeedSelf, ranks: { killer?: InsigniaView | null; victim?: InsigniaView | null } = {}): void {
+    this.push(killLine(killer, killerColour, victim, victimColour, weapon, assists, ranks), 'kill', self);
   }
 
   /** Session news (a raid got through, someone joined): an icon for its tone, then the words. */
@@ -451,7 +454,9 @@ export function territoryTagHtml(t: TerritoryTagView): string {
   const presence = p === 'online' ? '' : `<span class="mp-terr-presence" data-presence="${p}" data-tip="${esc(PRESENCE_TIPS[p])}">${icon(PRESENCE_ICONS[p])}<small>${esc(PRESENCE_LABELS[p])}</small></span>`;
   const safe = t.safe && p === 'online' ? `<span data-tip="${esc(H.cantBeRaided)}">${icon('shield', 'icon', esc(H.protected))}</span>` : '';
   const raid = t.alert ? `<span class="mp-terr-raid" data-tip="${esc(H.underAttack)}">${icon('raid', 'icon', esc(H.raid))}</span>` : '';
-  return `${icon('home', 'icon mp-swatch')}<b>${esc(t.label)}</b>${presence}${safe}${raid}`;
+  const effects = t.deskEffects ?? [];
+  const flags = effects.length > 0 ? ` data-desk-effects="${esc(effects.join(' '))}"` : '';
+  return `<span class="mp-terr-plate"${flags}>${icon('home', 'icon mp-swatch')}${insigniaSlot(t.rank)}<b>${esc(t.label)}</b></span>${presence}${safe}${raid}`;
 }
 
 /** The raid card: the attacker, ETA, direction, distance, our guns, the reward, and the one-press interception. */

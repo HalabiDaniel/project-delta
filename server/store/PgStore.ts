@@ -8,6 +8,10 @@ import {
   cleanTips,
   checkLimits,
   checkTransaction,
+  checkMerit,
+  type MeritAward,
+  type MeritRecord,
+  type MeritResult,
   IncompatibleBaseError,
   IncompatibleSaveError,
   SAVE_FORMAT,
@@ -377,6 +381,45 @@ export class PgStore implements Store {
   async setTips(playerId: string, tips: string[]): Promise<void> {
     if (!isUuid(playerId)) return;
     await this.db.query('update players set tips = $2::jsonb where id = $1', [playerId, JSON.stringify(cleanTips(tips))]);
+  }
+
+  // ---- Merit and ranks (v0.0.17) -----------------------------------------------------------------
+
+  async awardMerit(a: MeritAward): Promise<MeritResult> {
+    checkMerit(a);
+    if (!isUuid(a.playerId)) throw new Error(`no player ${a.playerId}`);
+    // The unique (player_id, idem_key) constraint decides: a racing twin inserts nothing.
+    const inserted = await this.db.query(
+      `insert into merit_ledger (player_id, idem_key, source, amount, reason) values ($1, $2, $3, $4, $5)
+       on conflict (player_id, idem_key) do nothing returning id`,
+      [a.playerId, a.key, a.source, a.amount, a.reason],
+    );
+    const total = await this.merit(a.playerId);
+    return { status: inserted.rows.length > 0 ? 'applied' : 'duplicate', total };
+  }
+
+  async merit(playerId: string): Promise<number> {
+    if (!isUuid(playerId)) return 0;
+    const { rows } = await this.db.query<{ total: string | null }>('select sum(amount) as total from merit_ledger where player_id = $1', [playerId]);
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  async meritHistory(playerId: string, limit = 100): Promise<MeritRecord[]> {
+    if (!isUuid(playerId)) return [];
+    const { rows } = await this.db.query('select idem_key, source, amount, reason, created_at from merit_ledger where player_id = $1 order by id desc limit $2', [playerId, limit]);
+    return rows.map((r) => ({ playerId, key: String(r.idem_key), source: String(r.source), amount: Number(r.amount), reason: String(r.reason), createdAt: r.created_at as Date }));
+  }
+
+  async rankPrefs(playerId: string): Promise<Record<string, unknown> | null> {
+    if (!isUuid(playerId)) return null;
+    const { rows } = await this.db.query('select rank_prefs from players where id = $1', [playerId]);
+    const p = rows[0]?.rank_prefs;
+    return p && typeof p === 'object' && !Array.isArray(p) && Object.keys(p).length > 0 ? (p as Record<string, unknown>) : null;
+  }
+
+  async setRankPrefs(playerId: string, prefs: Record<string, unknown>): Promise<void> {
+    if (!isUuid(playerId)) return;
+    await this.db.query('update players set rank_prefs = $2::jsonb where id = $1', [playerId, JSON.stringify(prefs)]);
   }
 
   // ---- Portable bases ---------------------------------------------------------------------------

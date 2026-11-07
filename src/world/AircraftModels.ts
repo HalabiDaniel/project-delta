@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { Ribbon, trailMaterial } from '../aircraft/FlightTrails';
+import { RankLook, type AuraKind, type TrailKind } from '../ranks/RankEffects';
 import { buildPaperBallMesh, createPaperMaterial, inkBlotMaterial } from '../aircraft/PlaneModel';
 import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
 import { createPlaneModel, type JetPaint, type PlaneModelView } from '../aircraft/JetModel';
@@ -28,6 +29,11 @@ export interface ShownAircraft {
    * Absent: always finished.
    */
   readonly fold?: number;
+  /** v0.0.17: rank effects (other players' planes): the trail behind boosts, and the aura. */
+  readonly rankTrail?: TrailKind | null;
+  readonly rankAura?: AuraKind | null;
+  /** Boosting now (the rank trail shows behind boosts). */
+  readonly boosting?: boolean;
 }
 
 /** Paper and trim colours for a side the defaults don't cover (multiplayer players). */
@@ -41,6 +47,8 @@ interface View {
   left: Ribbon;
   right: Ribbon;
   smudge: Ribbon;
+  /** v0.0.17: rank trail and aura, made the first time the plane has one. */
+  rank: RankLook | null;
   shownHealth: number;
   /** Paper balls on the rack, one per bomb slot (none for planes without a bomb bay). */
   rack: pc.Entity[];
@@ -144,6 +152,7 @@ export class AircraftModels {
       left: new Ribbon(this.app, this.trail),
       right: new Ribbon(this.app, this.trail),
       smudge: new Ribbon(this.app, this.trail, PALETTE.damageTrail, 1.4, 0.8),
+      rank: null,
       shownHealth: 1,
     };
   }
@@ -204,10 +213,17 @@ export class AircraftModels {
     this.flat.set(-this.fwd.z, 0, this.fwd.x).normalize();
     m.toWorld(0, shape.tail[1] * s, shape.tail[2] * s, this.tail);
     v.smudge.update(dt, smudge > 0 ? this.vt.set(this.tail.x, this.tail.y, this.tail.z) : null, this.flat, 0.35 + 1.1 * smudge);
+    const a = v.aircraft;
+    if (a.rankTrail || a.rankAura || v.rank) {
+      v.rank ??= new RankLook(this.app, this.trail);
+      const trailing = !!a.rankTrail && !!a.boosting;
+      v.rank.update(dt, a.rankTrail ?? null, trailing ? this.vt.set(this.tail.x, this.tail.y, this.tail.z) : null, this.flat, a.rankAura ?? null, v.model.entity, Math.abs(wx * s) * 2);
+    }
   }
 
   private dispose(v: View): void {
     v.model.entity.destroy();
     for (const r of [v.left, v.right, v.smudge]) r.entity.destroy();
+    v.rank?.dispose();
   }
 }

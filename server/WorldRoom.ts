@@ -44,6 +44,9 @@ import { BASE_SAVE_EVERY, BaseKeeper, SERVER_INSTANCE } from './world/BaseKeeper
 import { fromBaseState, toBaseState } from './world/bases';
 import { planesFrom, progressFrom } from './world/carry';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
+import { dailyAward, type MeritEvent } from './world/Merit';
+import { RankKeeper, isTierPromotion, type Promotion } from './world/RankKeeper';
+import type { PromotionDTO } from '../src/net/protocol';
 
 /** A session's settings, given by the server only (a client can't create a room). */
 export interface RoomOptions extends ServerWorldOptions {
@@ -161,6 +164,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
   private saveTimer = BASE_SAVE_EVERY;
   /** The economy world's id, once a base has been placed. */
   private worldId: string | null = null;
+  /** v0.0.17: every player's Merit and rank while they are here. */
+  private ranks!: RankKeeper;
 
   // ---- The session (v0.0.13) --------------------------------------------------------------------
   /** The session's time: started by the first player, warnings, joining closing, the end. */
@@ -215,6 +220,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     register(this.roomId, this);
     this.world = new ServerWorld(options);
     this.keeper = new BaseKeeper(() => services().store, `${SERVER_INSTANCE}/${this.roomId}`);
+    this.ranks = new RankKeeper((playerId, work) => this.keeper.queue(playerId, work));
     this.state = new WorldState();
     for (const t of this.world.territories) {
       const ts = new TerritoryState();
@@ -268,6 +274,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.onMessage('tip', (client, data: unknown) => void this.saveTip(client, data));
     this.onMessage('username', (client, data: unknown) => void this.setUsername(client, data));
     this.onMessage('feedback', (client, data: unknown) => void this.saveFeedback(client, data));
+    this.onMessage('rank', (client, data: unknown) => this.equip(client, data));
     this.onMessage('*', (client, type) => this.bad(client, typeof type === 'string' ? type.slice(0, 24) : '?'));
   }
 
@@ -385,6 +392,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     this.departed.delete(id);
     this.recordSession();
     ensureSpare();
+    if (!returning || !this.ranks.get(id)) void this.loadRank(id, player.id);
     this.log('info', 'join', { player: id, name: player.name, via: auth.via, returning: !!returning, ip: this.addresses.get(id) });
   }
 
@@ -591,6 +599,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
         return reply(desk, error);
       }
       this.worldId = worldId;
+      // v0.0.17: the first session of the day earns a little Merit (keyed by the date: once a day).
+      this.writeMerit([{ player: id, ...dailyAward() }]);
       // A new player's starting paper is the first entry in their log (once, whatever happens).
       if (!economy) {
         this.writePaper(id, account.id, stint, [{ key: `start:${account.id}`, kind: 'reward', amount: ECONOMY.startingPaper, reason: 'Starting paper' }]);
@@ -621,6 +631,70 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       this.writeOutcomes(id, account.id);
     }
     this.writePvp();
+    this.writeMerit(this.world.takeMerit());
+  }
+
+  // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
+
+  /** A joining player's Merit and rank, from the ledger (and the one-off backfill). */
+  private async loadRank(id: string, playerId: string): Promise<void> {
+    try {
+      const worldId = await economyWorld();
+      const progress = await this.keeper.queue(playerId, (store) => store.progress(worldId, playerId));
+      await this.ranks.load(id, playerId, progress?.stats ?? null);
+      // Gone while it loaded: nothing to show.
+      if (this.known.get(id) !== playerId) return;
+      this.showRank(id);
+    } catch (error) {
+      this.log('error', 'rank.error', { player: id, error });
+    }
+  }
+
+  /** Copies a player's rank to the schema (everyone) and sends it to them (their progress). */
+  private showRank(id: string): void {
+    const ps = this.state.players.get(id);
+    const entry = this.ranks.get(id);
+    if (ps && entry) {
+      ps.rank = this.ranks.publicRank(id);
+      ps.title = entry.prefs.title ?? '';
+    }
+    const dto = this.ranks.dto(id);
+    const client = this.clientOf(id);
+    if (client && dto) client.send('rank', dto);
+  }
+
+  /** Merit decided by the world into the ledger; promotions are announced when the store has them. */
+  private writeMerit(events: MeritEvent[]): void {
+    for (const e of events) {
+      const accountId = this.known.get(e.player);
+      if (!accountId) continue;
+      this.ranks.award(e, accountId).then(
+        (promotion) => {
+          if (promotion) this.promote(promotion);
+          else if (this.ranks.get(e.player)) this.showRank(e.player);
+        },
+        (error) => this.log('error', 'merit.error', { player: e.player, key: e.key, error }),
+      );
+    }
+  }
+
+  /** The player went up a step: they are told (the ceremony waits for their desk), and a new rank name is news. */
+  private promote(p: Promotion): void {
+    this.showRank(p.id);
+    const tier = isTierPromotion(p.from, p.to);
+    const dto: PromotionDTO = { from: p.from.index, to: p.to.index, tier };
+    this.clientOf(p.id)?.send('promoted', dto);
+    const name = this.world.pilots.get(p.id)?.name ?? this.accounts.get(p.id)?.name;
+    if (tier && name) this.world.emit({ t: 'news', text: p.to.stars > 0 ? `${name} made the Honor Roll` : `${name} is now ${article(p.to.name)} ${p.to.name}`, tone: 'good' });
+    this.log('info', 'rank.promoted', { player: p.id, from: p.from.label, to: p.to.label });
+  }
+
+  /** The player equips a title, a card or effects (only what their rank has unlocked is kept). */
+  private equip(client: Client, data: unknown): void {
+    const id = this.idOf(client);
+    if (!id) return;
+    if (!data || typeof data !== 'object' || JSON.stringify(data).length > 512) return this.bad(client, 'rank');
+    if (this.ranks.setPrefs(id, data)) this.showRank(id);
   }
 
   /** Raids and kills between players, kept for the rules that outlive a session. */
@@ -774,6 +848,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     // A raid or kill in their last moments goes to the store too.
     this.writePvp();
+    this.writeMerit(this.world.takeMerit());
+    this.ranks.forget(id);
     this.state.players.delete(id);
     this.state.planes.delete(id);
     this.pings.delete(id);
@@ -1199,7 +1275,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     const p = this.world.pilots.get(id);
     if (!p) return null;
     const s = p.stats;
-    return { id, name: p.name, colour: p.colour, placing: 0, score: s.score, kills: s.kills, deaths: s.deaths, raids: s.raids, missions: s.missions, paper: this.earned.get(id) ?? 0, present: true };
+    const rank = this.ranks.get(id);
+    return { id, name: p.name, colour: p.colour, placing: 0, score: s.score, kills: s.kills, deaths: s.deaths, raids: s.raids, missions: s.missions, paper: this.earned.get(id) ?? 0, present: true, rank: rank?.step.index, title: rank?.prefs.title ?? null };
   }
 
   /**
@@ -1223,6 +1300,9 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     for (const line of lines.values()) line.paper = this.earned.get(line.id) ?? 0;
     const ranked = [...lines.values()].sort((a, b) => b.score - a.score || b.kills - a.kills || b.paper - a.paper || a.name.localeCompare(b.name));
     ranked.forEach((l, i) => (l.placing = i > 0 && ranked[i - 1].score === l.score && ranked[i - 1].kills === l.kills ? ranked[i - 1].placing : i + 1));
+    // v0.0.17: Merit for the top places, in a session that had someone to beat.
+    if (ranked.length >= 2) for (const l of ranked) if (l.score > 0) this.world.merit.placement(l.id, this.roomId, l.placing);
+    this.writeMerit(this.world.takeMerit());
     const played = this.hour.startedAt === null ? 0 : Math.round((Date.now() - this.hour.startedAt) / 1000);
     this.results = { title: this.title, played, lines: ranked, reason };
     this.broadcast('results', this.results);
@@ -1380,4 +1460,9 @@ function joinOptionsValid(o: Partial<JoinOptions> | undefined): boolean {
   if (!o || typeof o !== 'object') return false;
   const short = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
   return short(o.name, 64) && short(o.username, 64) && short(o.token, 128) && short(o.code, 32);
+}
+
+/** "a Glider", "an Inkslinger". */
+function article(name: string): string {
+  return /^[aeiou]/i.test(name) ? 'an' : 'a';
 }

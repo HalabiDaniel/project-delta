@@ -590,3 +590,19 @@ v0.0.13 ([plan](roadmap/v0.0.13.md)) puts the portable bases into timed sessions
   in both stores, with the table's rules checked in memory too.
 - **Write statistics**: `Database.writes` counts every write statement and transaction and its
   time, for `/admin/stats` and the remote load test.
+
+## v0.0.17: Merit and ranks
+
+- **`merit_ledger`** (migration `0008`): one row per award (player, idempotency key, source,
+  amount, reason, time), unique on `(player_id, idem_key)`, amounts always positive. A player's
+  Merit is the sum of their rows; the rank is derived from it (`src/ranks/Ranks.ts`), never stored
+  as a number alone. Merit belongs to the player, not to a world.
+- **`players.rank_prefs`** (jsonb): the title, card and effects turned off, and the highest step
+  held (`peak`), so a retuned curve never lowers a rank. Checked against the rank on every read
+  and write (`cleanPrefs`).
+- `Store.awardMerit` (a repeated key is `duplicate`, nothing changes), `merit`, `meritHistory`,
+  `rankPrefs`, `setRankPrefs`, in both stores with the same contract tests.
+- **Backfill:** `backfill:v1`, awarded on a player's first join from their saved statistics; the
+  key makes it once-only however often it runs.
+- The restore drill's comparison does not count `merit_ledger` rows yet (it compares the tables
+  that existed in v0.0.14).

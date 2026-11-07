@@ -1,6 +1,6 @@
 import { TERRITORY_LIFECYCLE } from '../../src/config';
 import { describe, expect, it } from 'vitest';
-import { AIRCRAFT, ECONOMY, PLANE, PVP } from '../../src/config';
+import { AIRCRAFT, ECONOMY, MERIT, PLANE, PVP } from '../../src/config';
 import { NET, parseCommand, planeId, unpackFrames, packFrames, type NetEvent } from '../../src/net/protocol';
 import { launch, place, player, quietWorld, run } from './testkit';
 import { FLIGHT_SNAPSHOT_SIZE } from '../../src/aircraft/FlightModel';
@@ -148,6 +148,9 @@ describe('player versus player combat', () => {
     const kill = events(world, 'kill').find((e) => e.t === 'kill' && e.victim === 'b');
     expect(kill).toMatchObject({ killer: 'a', killerName: 'Ann', victimName: 'Bo' });
     expect(a.resources.paper).toBeGreaterThan(paper);
+    // v0.0.17: Merit for the shoot-down, keyed by the kill (Bo is a new player: a share of it).
+    const merit = world.takeMerit().filter((m) => m.source === 'kill');
+    expect(merit).toEqual([{ player: 'a', key: `kill:${world.kills.last!.id}`, source: 'kill', amount: Math.round(MERIT.playerKill * MERIT.protectedShare), reason: 'Shot down Bo' }]);
     // Respawning is folding a new plane at home.
     run(world, 1.5);
     expect(world.command('b', { a: 'continue' })).toBe(true);
@@ -224,6 +227,10 @@ describe('raids between players', () => {
     expect(b.shieldUntil).toBeGreaterThan(world.time);
     expect(b.report?.outcome).toBe('bombed');
     expect(a.stats.raids).toBe(1);
+    // v0.0.17: Merit for the raid (the mission's own comes when the sortie ends).
+    const merit = world.takeMerit();
+    expect(merit.find((m) => m.source === 'raid')).toMatchObject({ player: 'a', amount: MERIT.raid, reason: 'Raided Bo' });
+    expect(merit.some((m) => m.player === 'b')).toBe(false);
     // The shield keeps everyone off for a while.
     expect(world.attacks.refusal(a, b, world.time, world.arrivalGrace)).toBe('shield');
   });
