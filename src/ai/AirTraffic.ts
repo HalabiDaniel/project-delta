@@ -342,14 +342,25 @@ export class AirTraffic {
     return Math.max(0, AI.maxActive - this.reserved());
   }
 
-  /** Aircraft that must fly: mission, raid and event ones (ambient ones make way for them). */
+  /**
+   * Aircraft that must fly: mission, raid and event ones (ambient ones make way for them). Players'
+   * escorts (v0.0.19) are bounded by their own caps (ESCORTS) and don't count.
+   */
   private reserved(): number {
-    return this.aircraft.filter((a) => a.purpose !== 'ambient').length + this.pending.length;
+    return this.aircraft.filter((a) => a.purpose !== 'ambient' && a.purpose !== 'escort').length + this.pending.length;
+  }
+
+  /** v0.0.19: takes an aircraft out of the world at once (an escort whose sortie is over). */
+  dismiss(id: string): boolean {
+    const a = this.get(id);
+    if (!a) return false;
+    this.remove(a);
+    return true;
   }
 
   /** Over the limit: ambient patrols head home, the longest-flying first. */
   private makeRoom(): void {
-    let over = this.aircraft.filter((a) => !a.leaving).length - AI.maxActive;
+    let over = this.aircraft.filter((a) => !a.leaving && a.purpose !== 'escort').length - AI.maxActive;
     for (const a of [...this.aircraft].sort((p, q) => q.age - p.age)) {
       if (over <= 0) break;
       if (a.purpose !== 'ambient' || a.leaving) continue;

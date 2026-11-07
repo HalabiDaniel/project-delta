@@ -1,6 +1,6 @@
 import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, ESCORT_ORDERS, ESCORT_PLANS, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type BombKind, type Side } from '../config';
 import { cycleManeuver as cycleManeuverIn } from '../aircraft/maneuvers';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
@@ -325,6 +325,7 @@ export class MultiplayerGame {
       selectAircraft: (id) => game?.send({ a: 'aircraft', id }),
       rearm: () => game?.send({ a: 'rearm' }),
       cycleManeuver: (dir) => game?.cycleManeuver(dir),
+      cycleEscort: () => game?.cycleEscort(),
       takeOff: () => game?.takeOff(),
       endSortie: () => game?.send({ a: 'end' }),
       continueToDesk: () => game?.send({ a: 'continue' }),
@@ -746,6 +747,28 @@ export class MultiplayerGame {
     }
   }
 
+  /**
+   * v0.0.19: at home, the next choice of escorts for the next sortie (ESCORT_PLANS, round and
+   * round); in the air, the next order to the escorts flying (the order wheel).
+   */
+  cycleEscort(): void {
+    const phase = this.state?.phase;
+    const e = this.priv.escorts;
+    if (!phase || !e) return;
+    if (phase === 'flying') {
+      if (e.active.length === 0) return;
+      const next = ESCORT_ORDERS[(ESCORT_ORDERS.indexOf(e.order) + 1) % ESCORT_ORDERS.length];
+      this.send({ a: 'escort-order', o: next });
+      this.sounds.play('pop', { caption: false });
+      return;
+    }
+    if (phase !== 'desk' && phase !== 'building' && phase !== 'ready' && !(phase === 'landed' && this.priv.plane?.stopped)) return;
+    const now = JSON.stringify(e.plan);
+    const i = ESCORT_PLANS.findIndex((p) => JSON.stringify(p) === now);
+    this.send({ a: 'escorts', kinds: [...ESCORT_PLANS[(i + 1) % ESCORT_PLANS.length]] });
+    this.sounds.play('pop', { caption: false });
+  }
+
   launchPlane(): void {
     if (this.state?.phase !== 'ready') return;
     this.send({ a: 'launch' });
@@ -969,6 +992,8 @@ export class MultiplayerGame {
         return;
       case 'maneuverNext':
         return this.cycleManeuver(1);
+      case 'escortNext':
+        return this.cycleEscort();
       case 'service':
         if (phase === 'landed') this.send({ a: 'rearm' });
         else if (phase === 'flying') this.hud.alert('home', T.mpGame.rearmAtHome, null, 'info', 1.6);

@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, EVENTS, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
@@ -56,6 +56,7 @@ import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
 import { MeritBook, type MeritEvent } from './Merit';
 import { huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
+import { EscortBook, type Candidate, type Leader } from './Escorts';
 
 export interface ServerWorldOptions {
   /** Seeds every random choice (missions, AI), for repeatable tests. */
@@ -152,6 +153,8 @@ const SIGHT = 140;
 const PVP_REFRESH = 1;
 /** Without a radar, a base notices a raider this close (beyond its platform). */
 const LOOKOUT_RANGE = 45;
+/** v0.0.19: escorts' orders are worked out again this often (seconds). */
+const ESCORT_STEER = 0.5;
 
 /**
  * The authoritative classroom: every player's flight, every round, bomb and rocket, the AI in the
@@ -182,6 +185,8 @@ export class ServerWorld {
   readonly sessionEvents: SessionEvents;
   /** v0.0.17: the Merit this session's play earns, for the ledger. */
   readonly merit = new MeritBook();
+  /** v0.0.19: the AI escorts players bought, and their orders. */
+  readonly escorts = new EscortBook();
   readonly pilots = new Map<string, Pilot>();
   /** Territory id → the player who claimed it. */
   readonly owners = new Map<string, string>();
@@ -204,6 +209,7 @@ export class ServerWorld {
   private keySerial = 0;
   private solidsCache: Collider[] | null = null;
   private pvpTimer = 0;
+  private escortTimer = 0;
   private readonly v1 = new Vec3();
   private readonly v2 = new Vec3();
 
@@ -513,6 +519,8 @@ export class ServerWorld {
     if (!p || p.connected === connected) return;
     p.connected = connected;
     p.droppedAt = this.time;
+    // v0.0.19: a pilot who drops loses their escorts at once (they leave with their owner).
+    if (!connected) this.dismissEscorts(p);
     // Back before a raid on their base was settled: their desk is theirs again.
     if (connected) p.leaving = false;
     this.news(connected ? `${p.name} is back` : `${p.name} lost connection`, connected ? 'good' : 'bad');
@@ -575,6 +583,7 @@ export class ServerWorld {
     this.settleFlight(p);
     for (const attack of [...this.attacks.active]) if (attack.attacker === id || attack.victim === id) this.endAttack(attack, 'abandoned');
     this.endMissionAi(p);
+    for (const e of this.escorts.remove(id)) this.air.dismiss(e);
     this.guns.clear(id);
     this.bombs.clear(id);
     this.history.forget(p.plane);
@@ -618,6 +627,7 @@ export class ServerWorld {
     const st = p.state;
     if (!st || (st.phase !== 'flying' && st.phase !== 'landed')) return false;
     if (!st.recall()) return false;
+    this.dismissEscorts(p);
     this.guns.clear(p.id);
     this.bombs.clear(p.id);
     this.history.forget(p.plane);
@@ -819,6 +829,19 @@ export class ServerWorld {
         this.note(p, 'swap', 'Swapped', `${director.swaps}`, 'info');
         return true;
       }
+      case 'escorts': {
+        // Chosen at home; bought (and charged) when the plane launches.
+        if (!p.atHome) return false;
+        const refusal = this.escorts.choose(p.id, cmd.kinds);
+        if (refusal) this.note(p, 'escort', refusal === 'cap' ? `Max ${ESCORTS.perSortie} escorts` : 'No escort', null, 'info');
+        return refusal === null;
+      }
+      case 'escort-order': {
+        if (this.escorts.of(p.id).length === 0) return false;
+        this.escorts.setOrder(p.id, cmd.o);
+        this.steerEscorts(p, true);
+        return true;
+      }
       case 'base-build':
       case 'base-upgrade':
       case 'base-repair':
@@ -853,6 +876,11 @@ export class ServerWorld {
       p.commandTokens = Math.min(NET.commandsPerSecond, p.commandTokens + NET.commandsPerSecond * dt);
       for (const frame of p.inputs.advance(dt)) this.stepPilot(p, frame);
       this.scheduleSpawns(p, dt);
+    }
+    this.escortTimer -= dt;
+    if (this.escortTimer <= 0) {
+      this.escortTimer = ESCORT_STEER;
+      for (const p of this.pilots.values()) this.steerEscorts(p, false);
     }
     this.updateAir(dt);
     this.updateDefenses(dt);
@@ -1123,6 +1151,12 @@ export class ServerWorld {
         this.emit({ t: 'down', id: a.id, p: v3(a.position), v: v3(v), kind: a.spec.id, side: a.side });
         this.history.forget(a.id);
         const shooter = e.by ? (this.pilotOfPlane(e.by) ?? this.ownerOfInstallation(e.by)) : null;
+        // v0.0.19: an escort down: a small fixed reward for whoever shot it, nothing else.
+        const escort = this.escorts.get(a.id);
+        if (escort) {
+          this.escortDown(escort.owner, a.id, shooter);
+          break;
+        }
         const ev = this.sessionEvents.about(a.id);
         if (ev) this.settleEvent(ev, 'resolved');
         const owner = this.missionOwner(a.id);
@@ -1142,6 +1176,9 @@ export class ServerWorld {
         owner?.pilot.state?.bombReleased(owner.id);
         break;
       }
+      case 'gone':
+        this.escorts.forget(e.aircraft.id);
+        break;
       case 'escaped': {
         const owner = this.missionOwner(e.aircraft.id);
         owner?.pilot.state?.aircraftEscaped(owner.id);
@@ -1246,12 +1283,16 @@ export class ServerWorld {
     const source = this.network.get(e.shot.source);
     // Kill credit for a base's guns goes to the base's owner; a player's friendly AI credits nobody.
     const sourceOwner = source ? this.ownerOfInstallation(source.id) : null;
+    // v0.0.19: an escort's round never finishes a target its owner's mission needs.
+    const escort = this.escorts.get(e.shot.source);
+    const amount = escort ? this.escortDamage(escort.owner, e.target, e.shot.damage) : e.shot.damage;
+    if (amount <= 0) return;
     if (victim) {
       const by = { player: sourceOwner?.id ?? null, name: this.describe(e.shot.source) };
-      this.hurtPilot(victim, e.shot.damage, rocket ? 'blast' : 'projectile', rocket ? 'rocket' : 'ink', by, at);
+      this.hurtPilot(victim, amount, rocket ? 'blast' : 'projectile', rocket ? 'rocket' : 'ink', by, at);
       return;
     }
-    const { dealt, destroyed } = this.air.damage(e.target, e.shot.damage, e.shot.source, false);
+    const { dealt, destroyed } = this.air.damage(e.target, amount, e.shot.source, false);
     if (dealt > 0) {
       this.emit({ t: 'dmg', tg: e.target, n: dealt, p: v3(at), by: sourceOwner?.id, fatal: destroyed, k: rocket ? 'rocket' : 'ink' });
       if (source && sourceOwner?.base) sourceOwner.base.recordDamage(source.id, dealt);
@@ -1270,6 +1311,8 @@ export class ServerWorld {
       return owner ? `${owner.name}'s ${i.spec.name.toLowerCase()}` : `${i.spec.name} on ${i.spec.territoryId}`;
     }
     const a = this.air.get(source);
+    const escort = this.escorts.get(source);
+    if (a && escort) return `${this.pilots.get(escort.owner)?.name ?? 'Someone'}'s ${ESCORTS.roster[escort.kind].short.toLowerCase()}`;
     if (a) return `${a.side === 'enemy' ? 'enemy' : 'friendly'} ${a.skill.label.toLowerCase()} ${a.spec.name}`;
     const p = this.pilotOfPlane(source);
     return p ? p.name : 'enemy fire';
@@ -1638,6 +1681,126 @@ export class ServerWorld {
     this.settleEvent(e, 'resolved');
   }
 
+  // ---- Escorts (v0.0.19) ---------------------------------------------------------------------------
+
+  /** The escorts chosen at the desk go up with the plane, paid for now (single-use, never refunded). */
+  private launchEscorts(p: Pilot): void {
+    const st = p.state!;
+    const plan = this.escorts.plan(p.id).slice(0, this.escorts.room(p.id));
+    if (plan.length === 0 || st.emergency) return;
+    const missionId = p.missionId(st.mission!);
+    const leader = this.leaderOf(p);
+    const keepOut = [...this.pilots.values()].filter((o) => o.home && (!o.connected || o.leaving)).map((o) => ({ x: o.home!.x, z: o.home!.z, half: o.home!.half + PVP.airspace }));
+    const bought: string[] = [];
+    plan.forEach((kind, i) => {
+      const spec = ESCORTS.roster[kind];
+      if (!p.resources.canAffordAll(spec.cost)) return;
+      p.cause = `escort:${missionId}:${i}`;
+      const paid = p.resources.spendAll(spec.cost, `Escort: ${spec.label}`);
+      p.cause = null;
+      if (!paid) return;
+      const orders = this.escorts.launch(p.id, kind, leader, keepOut);
+      orders.friends = this.friendsOf(p);
+      this.air.spawn(orders);
+      bought.push(spec.short);
+    });
+    if (bought.length < plan.length) this.note(p, 'escort', 'Escort not bought', bought.length === 0 ? 'Need resources' : `${bought.length} of ${plan.length}`, 'bad');
+    else if (bought.length > 0) this.note(p, 'escort', bought.length > 1 ? 'Escorts up' : 'Escort up', bought.join(' + '), 'good');
+  }
+
+  /** The sortie is over (or the pilot gone): their escorts peel off and are removed at once. */
+  private dismissEscorts(p: Pilot): void {
+    for (const id of this.escorts.release(p.id)) this.air.dismiss(id);
+  }
+
+  /** An escort went down: its owner is told, whoever shot it gets the small fixed reward (once). */
+  private escortDown(owner: string, id: string, shooter: Pilot | null): void {
+    const escort = this.escorts.get(id);
+    this.escorts.forget(id);
+    const o = this.pilots.get(owner);
+    if (o && escort) this.note(o, 'escort', `${ESCORTS.roster[escort.kind].short} down`, null, 'bad');
+    if (!shooter?.state || shooter.id === owner || ESCORTS.killReward <= 0) return;
+    shooter.cause = `escort-kill:${id}`;
+    shooter.state.payBonus(ESCORTS.killReward, `Shot down ${o?.name ?? 'an'}'s escort`);
+    shooter.cause = null;
+    this.note(shooter, 'crumple', 'Escort down', `+${ESCORTS.killReward}`, 'good');
+  }
+
+  /** The owner's plane, for their escorts' orders. */
+  private leaderOf(p: Pilot): Leader {
+    const m = p.flight.model;
+    const f = m.getForward(this.v1);
+    const len = Math.hypot(f.x, f.z) || 1;
+    return { plane: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, fx: f.x / len, fz: f.z / len };
+  }
+
+  /** Sides `p`'s escorts treat as friends (v0.0.19 alliances fill this in). */
+  friendsOf(_p: Pilot): Side[] {
+    return [];
+  }
+
+  /** Works out what `p`'s current order means for each of their escorts (`now`: a new order). */
+  private steerEscorts(p: Pilot, now: boolean): void {
+    const mine = this.escorts.of(p.id);
+    if (mine.length === 0 || !p.flying) return;
+    const leader = this.leaderOf(p);
+    const friends = this.friendsOf(p);
+    const hostiles: Candidate[] = [];
+    for (const o of this.pilots.values()) {
+      if (o === p || !o.flying || friends.includes(o.side)) continue;
+      const pos = o.flight.model.position;
+      hostiles.push({ id: o.plane, side: o.side, x: pos.x, y: pos.y, z: pos.z, shielded: this.shielded(o) });
+    }
+    for (const a of this.air.aircraft) {
+      if (!a.alive || a.side === p.side || friends.includes(a.side) || a.leaving) continue;
+      hostiles.push({ id: a.id, side: a.side, x: a.position.x, y: a.position.y, z: a.position.z, shielded: false });
+    }
+    const plane = p.state?.plane;
+    const bomber = plane?.role === 'bomber' ? p.plane : null;
+    for (const e of mine) {
+      const a = this.air.get(e.id);
+      if (!a) continue;
+      a.orders.friends = friends;
+      EscortBook.apply(a.orders, this.escorts.order(p.id), leader, hostiles, bomber, now ? null : (a.orders.prey ?? null));
+    }
+  }
+
+  /**
+   * Damage an escort of `owner`'s may deal to `target`: never the last of a target that `owner`'s
+   * mission needs (escorts can't complete objectives, plan §1C); in full otherwise.
+   */
+  private escortDamage(owner: string, target: string, amount: number): number {
+    const mission = this.pilots.get(owner)?.state?.mission;
+    if (!mission?.isActive) return amount;
+    const local = target.startsWith(`${owner}/`) ? target.slice(owner.length + 1) : target;
+    const needed = mission.objectives.some((o) => (o.kind === 'intercept' || o.kind === 'destroy') && o.targets.includes(local));
+    if (!needed) return amount;
+    const victim = this.pilotOfPlane(target);
+    const health = victim ? (victim.state?.durability?.health ?? 0) : (this.air.get(target)?.durability.health ?? 0);
+    return Math.max(0, Math.min(amount, health - 1));
+  }
+
+  /** v0.0.19: the aircraft `p`'s mini-map shows wherever they are (a spotter's marks). */
+  revealFor(p: Pilot): string[] {
+    const out = new Set<string>();
+    const friends = this.friendsOf(p);
+    for (const e of this.escorts.of(p.id)) {
+      if (e.kind !== 'spotter') continue;
+      const s = this.air.get(e.id);
+      if (!s?.alive) continue;
+      for (const o of this.pilots.values()) {
+        if (o === p || !o.flying || friends.includes(o.side)) continue;
+        const pos = o.flight.model.position;
+        if (Math.hypot(pos.x - s.position.x, pos.z - s.position.z) <= ESCORTS.spotterReveal) out.add(o.plane);
+      }
+      for (const a of this.air.aircraft) {
+        if (!a.alive || a.side === p.side || friends.includes(a.side) || this.escorts.get(a.id)?.owner === p.id) continue;
+        if (Math.hypot(a.position.x - s.position.x, a.position.z - s.position.z) <= ESCORTS.spotterReveal) out.add(a.id);
+      }
+    }
+    return [...out].sort();
+  }
+
   // ---- Raids between players ----------------------------------------------------------------------
 
   /** Raids under way: lookouts notice raiders without a radar; the territory shows the alert. */
@@ -1813,6 +1976,7 @@ export class ServerWorld {
         p.missionTime = 0;
         const card = p.pvpCard(mission);
         if (card?.tag.kind === 'raid') this.startRaid(p, card.tag.target, mission);
+        this.launchEscorts(p);
         break;
       }
       case 'took-off':
@@ -1821,6 +1985,7 @@ export class ServerWorld {
         p.stopped = false;
         break;
       case 'landed':
+        this.dismissEscorts(p);
         this.note(p, 'land', st.mission?.status === 'succeeded' ? 'Complete' : 'Touchdown', st.mission?.status === 'succeeded' ? `+${st.mission.reward}` : null, 'good');
         break;
       case 'objective-complete':
@@ -1861,6 +2026,7 @@ export class ServerWorld {
         this.sortieOver(p, true);
         break;
       case 'returned':
+        this.dismissEscorts(p);
         m.hide();
         p.result = null;
         break;
@@ -1906,6 +2072,7 @@ export class ServerWorld {
     const v = m.getVelocity(this.v1);
     this.emit({ t: 'down', id: p.plane, p: v3(m.position), v: v3(v), kind: m.spec.id, side: p.side });
     m.crash();
+    this.dismissEscorts(p);
     p.crashedAt = this.time;
     p.stopped = false;
     p.stats.deaths++;
@@ -1971,6 +2138,7 @@ export class ServerWorld {
     const sortie = st.sortie;
     const plane = st.plane;
     this.endMissionAi(p);
+    this.dismissEscorts(p);
     if (!mission || !sortie || !plane) return;
     const success = mission.status === 'succeeded';
     if (success && !st.emergency) this.merit.mission(p.id, p.missionId(mission), (TIERS[mission.tier]?.index ?? 0) + 1, mission.title);
@@ -2261,6 +2429,11 @@ export class ServerWorld {
       result: p.result,
       report: p.report,
       raid: p.raidReport,
+      escorts: {
+        plan: this.escorts.plan(p.id), cost: EscortBook.cost(this.escorts.plan(p.id)), order: this.escorts.order(p.id),
+        active: this.escorts.of(p.id).map((e) => ({ id: e.id, kind: e.kind })),
+      },
+      reveal: this.revealFor(p),
     };
   }
 

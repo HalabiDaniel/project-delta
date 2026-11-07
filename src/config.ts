@@ -1273,6 +1273,60 @@ export const PVP = {
   combatWindow: 10,
 } as const;
 
+/** v0.0.19: the AI escort aircraft a player can buy for one sortie. */
+export type EscortKind = 'wingman' | 'guard' | 'spotter';
+export const ESCORT_ORDER: readonly EscortKind[] = ['wingman', 'guard', 'spotter'];
+/** v0.0.19: the choices the escort button steps through at home, round and round. */
+export const ESCORT_PLANS: ReadonlyArray<readonly EscortKind[]> = [
+  [], ['wingman'], ['guard'], ['spotter'], ['wingman', 'wingman'], ['guard', 'wingman'], ['guard', 'guard'], ['guard', 'spotter'], ['wingman', 'spotter'],
+];
+/** v0.0.19: the orders a player gives their escorts (the order wheel). */
+export type EscortOrder = 'follow' | 'attack' | 'protect' | 'cover';
+export const ESCORT_ORDERS: readonly EscortOrder[] = ['follow', 'attack', 'protect', 'cover'];
+
+/**
+ * v0.0.19 (plan §1, GDD §10): purchasable, single-use AI escorts. Bought at launch, removed when the
+ * sortie ends whether they survived or not, never refunded, capped at two per sortie, flown by
+ * rookie or regular AI pilots with less health and weaker guns than a human-flown plane of the same
+ * type. Built only from conventional aircraft: no stealth (their radar signature is never below
+ * `minSignature`) and no drones. Provisional: the developer approves the roster, costs and cap.
+ * The rules that use them are in server/world/Escorts.ts.
+ */
+export const ESCORTS = {
+  roster: {
+    wingman: {
+      label: 'Paper Wingman', short: 'Wingman', aircraft: 'swift' as AircraftId, role: 'fighter' as AiRole, skill: 'easy' as Difficulty,
+      cost: { paper: 16, ink: 5 }, detail: 'Follows you, draws fire from defenses, light guns.',
+    },
+    guard: {
+      label: 'Guard Falcon', short: 'Guard', aircraft: 'falcon' as AircraftId, role: 'fighter' as AiRole, skill: 'medium' as Difficulty,
+      cost: { paper: 30, ink: 12 }, detail: 'Goes after hostile aircraft near you; protects bombers.',
+    },
+    spotter: {
+      label: 'Spotter', short: 'Spotter', aircraft: 'dart' as AircraftId, role: 'scout' as AiRole, skill: 'easy' as Difficulty,
+      cost: { paper: 12 }, detail: 'Marks hostile aircraft near you on the mini-map. Unarmed in a fight.',
+    },
+  } as Record<EscortKind, { label: string; short: string; aircraft: AircraftId; role: AiRole; skill: Difficulty; cost: { paper: number; ink?: number; rubber?: number }; detail: string }>,
+  /** At most this many escorts on one sortie (GDD §10.3). */
+  perSortie: 2,
+  /** At most this many escorts in the air in one session, so bandwidth stays predictable (GDD §16.4). */
+  perSession: 12,
+  /** Weaker than a human: this share of the design's health, and of its guns' damage. */
+  health: 0.6,
+  gunFactor: 0.55,
+  /** Escorts are never quieter to radar than this (escorts add no stealth). */
+  minSignature: 1,
+  /** Shooting down someone's escort pays this, fixed, and nothing else (escorts can't be farmed). */
+  killReward: 3,
+  /** A spotter marks hostile aircraft within this distance of itself on its owner's mini-map. */
+  spotterReveal: 90,
+  /** Orders: "attack my target" picks the hostile nearest the owner's nose within this range and cone. */
+  attackRange: 110,
+  attackCone: 0.5,
+  /** "Cover my retreat": escorts go after anything hostile this close behind their owner. */
+  coverRange: 70,
+} as const;
+
 /**
  * The territory lifecycle in sessions (v0.0.13): when a player's base is packed, the desk stays
  * empty for `gap`, is then open to joining players, and the AI moves back in after `aiDelay` more if

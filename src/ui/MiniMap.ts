@@ -45,7 +45,7 @@ export interface MiniMapView {
   targets: Array<{ x: number; z: number }>;
   plane: { x: number; z: number; yaw: number; autopilot: boolean } | null;
   /** AI aircraft: enemies red, friends blue. Raiders pulse, with a line to what they are bombing. */
-  aircraft: Array<{ x: number; z: number; yaw: number; side: Side; role: AiRole; raid: { x: number; z: number } | null; mission: boolean }>;
+  aircraft: Array<{ x: number; z: number; yaw: number; side: Side; role: AiRole; raid: { x: number; z: number } | null; mission: boolean; escort?: boolean; revealed?: boolean }>;
   /** The point the target marker is showing, for a guide line from the plane. */
   objective: { x: number; z: number } | null;
   /**
@@ -437,6 +437,21 @@ export class MiniMap {
         ctx.stroke();
       }
       ctx.restore();
+      // v0.0.19: your escorts wear a small square around them; what a spotter or Specter reveals, a dashed ring.
+      if (a.escort) {
+        ctx.strokeStyle = this.c.friend;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - 5, y - 5, 10, 10);
+      }
+      if (a.revealed && !a.mission) {
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = this.c.enemy;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     if (v.plane && v.objective) {

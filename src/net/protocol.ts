@@ -1,4 +1,4 @@
-import { AIRCRAFT_ORDER, BASE, MANEUVER_ORDER, SESSION, type AircraftId, type BuildingKind, type ManeuverId } from '../config';
+import { AIRCRAFT_ORDER, BASE, ESCORT_ORDER, ESCORT_ORDERS, MANEUVER_ORDER, SESSION, type AircraftId, type BuildingKind, type EscortKind, type EscortOrder, type ManeuverId } from '../config';
 import type { BaseSave } from '../base/Base';
 import type { RaidReport } from '../base/Raids';
 import type { MissionFailure, MissionSpec, MissionStatus } from '../missions/Mission';
@@ -285,7 +285,11 @@ export type Command =
   | { a: 'base-upgrade'; slot: string }
   | { a: 'base-repair'; key: string }
   | { a: 'base-repair-all' }
-  | { a: 'base-remove'; slot: string };
+  | { a: 'base-remove'; slot: string }
+  /** v0.0.19: the escorts to buy at the next launch (empty: none; at most ESCORTS.perSortie). */
+  | { a: 'escorts'; kinds: EscortKind[] }
+  /** v0.0.19: an order to the escorts in the air (the order wheel). */
+  | { a: 'escort-order'; o: EscortOrder };
 
 const BUILDINGS = Object.keys(BASE.buildings) as BuildingKind[];
 const SLOT_IDS = new Set<string>(BASE.slots.map((s) => s.id));
@@ -317,6 +321,10 @@ export function parseCommand(raw: unknown): Command | null {
       return SLOT_IDS.has(c.slot as string) ? { a: c.a, slot: c.slot as string } : null;
     case 'base-repair':
       return c.key === 'store' || SLOT_IDS.has(c.key as string) ? { a: 'base-repair', key: c.key as string } : null;
+    case 'escorts':
+      return Array.isArray(c.kinds) && c.kinds.length <= 4 && c.kinds.every((k) => ESCORT_ORDER.includes(k as EscortKind)) ? { a: 'escorts', kinds: c.kinds as EscortKind[] } : null;
+    case 'escort-order':
+      return ESCORT_ORDERS.includes(c.o as EscortOrder) ? { a: 'escort-order', o: c.o as EscortOrder } : null;
     default:
       return null;
   }
@@ -546,6 +554,24 @@ export interface MeDTO {
   result?: ResultDTO | null;
   report?: AttackReportDTO | null;
   raid?: RaidReport | null;
+  /** v0.0.19: your escorts: chosen for the next sortie, and in the air. */
+  escorts?: EscortsDTO;
+  /**
+   * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
+   * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.
+   */
+  reveal?: string[];
+}
+
+/** v0.0.19: your escorts. */
+export interface EscortsDTO {
+  /** Chosen for the next sortie, and what they cost together. */
+  plan: EscortKind[];
+  cost: { paper?: number; ink?: number; rubber?: number };
+  /** The order they are flying under. */
+  order: EscortOrder;
+  /** In the air now: their AI aircraft ids and kinds. */
+  active: Array<{ id: string; kind: EscortKind }>;
 }
 
 /** The pilot's own flight, sent with every patch while it flies: for reconciliation. */

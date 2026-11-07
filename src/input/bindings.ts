@@ -17,6 +17,8 @@ export type Action =
   | 'throttleUp' | 'throttleDown' | 'bankLeft' | 'bankRight' | 'boost' | 'firePrimary' | 'fireSecondary' | 'modifier'
   // v0.0.16: fly the maneuver in the slot; at the pad, change which one is in the slot
   | 'maneuver' | 'maneuverNext'
+  // v0.0.19: at home, choose the escorts for the next sortie; in the air, give them the next order
+  | 'escortNext'
   // Sortie flow
   | 'confirm' | 'launch' | 'back' | 'pause' | 'fold' | 'service' | 'swap' | 'remove' | 'upgrade'
   // Selection
@@ -35,7 +37,7 @@ export const KEYMAP: Readonly<Record<string, Action>> = {
   KeyW: 'throttleUp', KeyS: 'throttleDown', KeyA: 'bankLeft', KeyD: 'bankRight',
   ShiftLeft: 'boost', ShiftRight: 'boost',
   // Left Alt flies the maneuver (not Ctrl: Ctrl+W closes the tab, and W is the throttle). T changes it at the pad.
-  AltLeft: 'maneuver', KeyT: 'maneuverNext',
+  AltLeft: 'maneuver', KeyT: 'maneuverNext', KeyG: 'escortNext',
   Enter: 'confirm', NumpadEnter: 'confirm', Space: 'launch', Escape: 'back',
   KeyF: 'fold', KeyR: 'service', KeyX: 'swap', Delete: 'remove', KeyU: 'upgrade',
   KeyQ: 'prevAircraft', KeyE: 'nextAircraft',
@@ -47,10 +49,10 @@ export const KEYMAP: Readonly<Record<string, Action>> = {
 
 /** Controller: per context, button → action on press. */
 export const PAD_PRESS: Readonly<Record<InputContext, Partial<Record<PadButton, Action>>>> = {
-  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3', south: 'maneuver' },
+  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3', south: 'maneuver', down: 'escortNext' },
   home: {
     south: 'confirm', east: 'back', west: 'service', north: 'base', lb: 'prevAircraft', rb: 'nextAircraft',
-    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause', rs: 'maneuverNext', up: 'profile',
+    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause', rs: 'maneuverNext', up: 'profile', down: 'escortNext',
   },
   menu: { south: 'confirm', east: 'back', menu: 'pause', view: 'logbook', up: 'profile' },
 };

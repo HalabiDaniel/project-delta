@@ -24,6 +24,7 @@ import type { GamePhase } from '../systems/GameState';
 import type { GarageView } from '../ui/Garage';
 import type {
   AircraftStatusView,
+  EscortView,
   GroundView,
   HudView,
   ManeuverPickerView,
@@ -245,6 +246,7 @@ export class MpViews {
       aircraft: this.aircraftStatus(),
       ground: this.groundView(),
       maneuverPicker: this.maneuverPicker(phase, baseOpen),
+      escorts: this.escortView(phase, baseOpen),
       landing,
       boundary: { state: flying ? g.predictor.flight.boundary.state : 'inside', countdown: g.predictor.flight.boundary.countdown },
       result: this.result(),
@@ -401,6 +403,24 @@ export class MpViews {
     const home = phase === 'desk' || phase === 'building' || phase === 'ready' || (phase === 'landed' && !!g.priv.plane?.stopped);
     if (!home) return null;
     return maneuverPickerView(g.maneuverDesign, g.priv.garage?.maneuver ?? null, true);
+  }
+
+  /** v0.0.19: the escort button: the escorts chosen (home) or their order (in the air). */
+  private escortView(phase: GamePhase | undefined, baseOpen: boolean): EscortView | null {
+    const g = this.g;
+    const e = g.priv.escorts;
+    if (!phase || !e || baseOpen || g.paused) return null;
+    if (phase === 'flying') {
+      if (e.active.length === 0) return null;
+      return { where: 'air', label: T.escort.orders[e.order], tip: T.escort.orderTip(e.active.length), cost: null, canChange: true };
+    }
+    const home = phase === 'desk' || phase === 'building' || phase === 'ready';
+    if (!home) return null;
+    if (e.plan.length === 0) return { where: 'home', label: T.escort.none, tip: T.escort.noneTip, cost: null, canChange: true };
+    const names = e.plan.map((k) => T.escort.short[k]);
+    const label = T.escort.button(names.length > 1 ? T.escort.plus(names[0], names[1]) : names[0]);
+    const tip = T.escort.tip(e.plan.map((k) => T.escort.details[k]).join(' '));
+    return { where: 'home', label, tip, cost: describeBundle(e.cost), canChange: true };
   }
 
   private groundView(): GroundView | null {
@@ -758,21 +778,26 @@ export class MpViews {
     const home = g.home;
     // The mission's own aircraft (what it wants shot down, or escorted) always show, highlighted.
     const wanted = this.missionAircraft(mission);
+    // v0.0.19: your escorts, and what a spotter or Specter reveals (shown wherever they are).
+    const escorts = new Set((g.priv.escorts?.active ?? []).map((e) => e.id));
+    const revealed = new Set(g.priv.reveal ?? []);
     const aircraft: MiniMapView['aircraft'] = [];
     for (const a of g.ais.values()) {
       if (!a.alive) continue;
       const friendly = a.side === mine;
       const target = wanted.has(a.id);
-      const seen = friendly || target || (home && Math.hypot(a.model.position.x - home.x, a.model.position.z - home.z) <= detection) || (showPlane && a.model.position.distance(plane.position) < SIGHT_RANGE);
+      const shown = revealed.has(a.id);
+      const seen = friendly || target || shown || (home && Math.hypot(a.model.position.x - home.x, a.model.position.z - home.z) <= detection) || (showPlane && a.model.position.distance(plane.position) < SIGHT_RANGE);
       if (!seen) continue;
-      aircraft.push({ x: a.model.position.x, z: a.model.position.z, yaw: a.model.yaw, side: friendly ? 'player' : 'enemy', role: a.role as AiRole, raid: null, mission: target });
+      aircraft.push({ x: a.model.position.x, z: a.model.position.z, yaw: a.model.yaw, side: friendly ? 'player' : 'enemy', role: a.role as AiRole, raid: null, mission: target, escort: escorts.has(a.id), revealed: shown });
     }
     for (const r of g.remotes.values()) {
       if (!r.alive || r.status !== 'flying') continue;
       const target = wanted.has(r.id);
-      const seen = target || (home && Math.hypot(r.model.position.x - home.x, r.model.position.z - home.z) <= Math.max(detection, home.half + 45)) || (showPlane && r.model.position.distance(plane.position) < SIGHT_RANGE * 1.4);
+      const shown = revealed.has(r.id);
+      const seen = target || shown || (home && Math.hypot(r.model.position.x - home.x, r.model.position.z - home.z) <= Math.max(detection, home.half + 45)) || (showPlane && r.model.position.distance(plane.position) < SIGHT_RANGE * 1.4);
       if (!seen) continue;
-      aircraft.push({ x: r.model.position.x, z: r.model.position.z, yaw: r.model.yaw, side: 'enemy', role: AIRCRAFT[r.spec.id].role === 'bomber' ? 'bomber' : 'fighter', raid: null, mission: true });
+      aircraft.push({ x: r.model.position.x, z: r.model.position.z, yaw: r.model.yaw, side: 'enemy', role: AIRCRAFT[r.spec.id].role === 'bomber' ? 'bomber' : 'fighter', raid: null, mission: true, revealed: shown });
     }
     return {
       territories: g.territories.map((t) => {

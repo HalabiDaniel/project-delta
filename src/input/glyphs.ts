@@ -56,6 +56,8 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   // v0.0.16: the maneuver in flight, changing it at home.
   Alt: '{south}',
   T: '{rs}',
+  // v0.0.19: escorts (home) and their orders (in the air).
+  G: '{down}',
   // v0.0.17: the profile at the desk.
   P: '{up}',
   LMB: '{rt}',

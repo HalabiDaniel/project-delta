@@ -336,6 +336,7 @@ export const en = {
       boost: 'Boost',
       maneuver: 'Maneuver',
       maneuverPick: 'Change maneuver (home)',
+      escorts: 'Escorts (home) · escort orders',
       throttleBank: 'Throttle / bank',
       confirmLaunch: 'Confirm, launch',
       back: 'Back',
@@ -675,6 +676,25 @@ export const en = {
   },
 
   /** v0.0.16: the maneuver slot (src/ui/PlaneHud.ts) and its picker at the pad. */
+  /** v0.0.19: AI escorts, bought for one sortie (plan v0.0.19 §1). */
+  escort: {
+    none: 'No escorts',
+    button: (names: string) => `Escorts: ${names}`,
+    plus: (a: string, b: string) => `${a} + ${b}`,
+    tip: (detail: string) => `${detail} Bought when you launch, for one sortie: they leave when it ends and are never refunded.`,
+    noneTip: 'Buy up to two AI escorts for your next sortie. They are weaker than a real pilot and can\'t complete objectives.',
+    order: (name: string) => `Escorts: ${name}`,
+    orderTip: (count: number) => `${count === 1 ? 'Your escort follows' : 'Your escorts follow'} this order. Press again for the next one.`,
+    orders: { follow: 'Follow me', attack: 'Attack my target', protect: 'Protect the bomber', cover: 'Cover my retreat' } as Record<string, string>,
+    names: { wingman: 'Paper Wingman', guard: 'Guard Falcon', spotter: 'Spotter' } as Record<string, string>,
+    short: { wingman: 'Wingman', guard: 'Guard', spotter: 'Spotter' } as Record<string, string>,
+    details: {
+      wingman: 'Follows you, draws fire from defenses, light guns.',
+      guard: 'Goes after hostile aircraft near you; protects bombers.',
+      spotter: 'Marks hostile aircraft near you on the mini-map.',
+    } as Record<string, string>,
+  },
+
   maneuver: {
     slot: 'Maneuver',
     none: 'No maneuvers',
