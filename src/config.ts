@@ -309,7 +309,7 @@ export interface AircraftSpec {
 export interface AircraftTraits {
   /**
    * Stealth: defined in the data since v0.0.11, but it has no effect until the stealth system
-   * arrives in v0.0.20 (until then only `signature` makes a plane hard to spot).
+   * arrives in v0.0.18 (until then only `signature` makes a plane hard to spot).
    */
   stealth?: boolean;
   /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
@@ -1215,7 +1215,7 @@ export const TERRITORY_LIFECYCLE = {
 export const SESSION = {
   /** How long a session lasts (seconds). */
   length: 3600,
-  /** Players per session: one per desk (16 now; 32 once the larger classrooms arrive in v0.0.24). */
+  /** Players per session: one per desk (16 now; 32 once the larger classrooms arrive in v0.0.22). */
   capacity: 16,
   /** Everyone is warned this long before the end (seconds). */
   warnings: [600, 120, 30] as readonly number[],
@@ -1648,7 +1648,7 @@ export const PROGRESS = {
 /**
  * v0.0.17: Merit, the points behind player ranks. Earned in multiplayer only, decided by the server,
  * written to an idempotent ledger, never lost and never spent. Provisional values, for the developer
- * to approve; the economy simulator (v0.0.20) checks them against real play.
+ * to approve; the economy simulator (v0.0.18) checks them against real play.
  */
 export const MERIT = {
   /** A mission completed, by its tier (1–3+). */

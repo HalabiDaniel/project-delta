@@ -13,7 +13,7 @@
  * highlight through the HUD's buttons (the focus manager, FocusNav.ts). The keyboard keeps its
  * v0.0.10 keys; outside flight the arrow keys also move the highlight (no game key uses them),
  * and once they have, Enter presses it, Q / E switch tabs and PageUp / PageDown scroll lists.
- * The default controller mapping is in docs/roadmap/v0.0.11.md section 7C; rebinding is v0.0.19.
+ * The default controller mapping is in docs/roadmap/v0.0.11.md section 7C; rebinding is v0.0.24.
  */
 
 import {

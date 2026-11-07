@@ -6,7 +6,7 @@ import { trailFor, type EffectId } from './Ranks';
  * v0.0.17: the plane effects ranks unlock, drawn by each client from the few bytes in the player's
  * state (no bandwidth in flight). Purely cosmetic and kept out of the way: a trail behind boosts
  * from the tail only, and an aura that is a faint shimmer around the plane, never a change of its
- * silhouette or its friend-or-foe colours. Whatever hides a plane (stealth, from v0.0.20) hides
+ * silhouette or its friend-or-foe colours. Whatever hides a plane (stealth, from v0.0.18) hides
  * these too: they are drawn only while the plane itself is.
  */
 

@@ -49,7 +49,7 @@ As players accumulate resources, their available strategic options increase. A d
 
 The game takes place in a miniature world inspired by school supplies, paper airplanes, and classroom objects.
 
-The initial playable environments may use abstract floating square territories, but later environments can feature classrooms, bedrooms, desks, bookshelves, pencil cases, and other oversized everyday objects. From 0.0.22 the game has nine maps, each one room or area, indoor (classroom, science lab, library, cafeteria, gym, bedroom) or outdoor (playground, backyard, rooftop); from 0.0.23 they have world conditions: fans whose blades destroy planes, moving air, rain and sprinklers that soak paper, day and night, and lights out.
+The initial playable environments may use abstract floating square territories, but later environments can feature classrooms, bedrooms, desks, bookshelves, pencil cases, and other oversized everyday objects. From 0.0.20 the game has nine maps, each one room or area, indoor (classroom, science lab, library, cafeteria, gym, bedroom) or outdoor (playground, backyard, rooftop); from 0.0.21 they have world conditions: fans whose blades destroy planes, moving air, rain and sprinklers that soak paper, day and night, and lights out.
 
 Aircraft resemble folded paper creations rather than conventional metal airplanes.
 
@@ -234,20 +234,20 @@ Every aircraft is a stylised folded-paper interpretation inspired by a real airc
 | Aircraft | Inspiration | Role | Arrives in |
 |---|---|---|---|
 | Swift | F-16 | Basic fighter; the starter and free emergency plane | 0.0.3 (remodelled in 0.0.11) |
-| Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.20) |
+| Falcon | Su-57 | Agile stealth fighter | 0.0.3 (remodelled in 0.0.11; stealth in 0.0.18) |
 | Dart | SR-71 Blackbird | High-speed reconnaissance | 0.0.3 (remodelled and re-roled in 0.0.11) |
 | Widewing | B-52 Stratofortress | Heavy bomber | 0.0.3 (remodelled in 0.0.11) |
 | Raptor | F-22 | Air superiority: the strongest pure dogfighter (fastest fighter, best climber, heaviest guns, turns slightly wider than the Falcon); no bombs | 0.0.15 (provisional since 0.0.11) |
-| Lancer | B-1B Lancer | Supersonic bomber | 0.0.18 |
-| Lightning | F-35 | Stealth multirole | 0.0.20 |
-| Thug | A-10 Thunderbolt II | Ground attack | 0.0.20 |
-| Ghost | B-2 Spirit | Stealth bomber | 0.0.21 |
-| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.21 |
-| Jumper | AV-8B Harrier | VTOL fighter | 0.0.24 |
-| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.24 |
-| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.25 |
+| Lancer | B-1B Lancer | Supersonic bomber | 0.0.25 |
+| Lightning | F-35 | Stealth multirole | 0.0.18 |
+| Thug | A-10 Thunderbolt II | Ground attack | 0.0.18 |
+| Ghost | B-2 Spirit | Stealth bomber | 0.0.19 |
+| Specter | RQ-4 Global Hawk | Surveillance drone | 0.0.19 |
+| Jumper | AV-8B Harrier | VTOL fighter | 0.0.22 |
+| Wasp | AH-6 Little Bird | Light attack helicopter | 0.0.22 |
+| Hawk | AH-64 Apache | Heavy attack helicopter | 0.0.22 |
 
-New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.20), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.24), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
+New mechanics arrive with the aircraft that need them: radar signature and stealth with the Lightning (0.0.18), which the Falcon and Ghost also use, and a hover flight mode with the Jumper (0.0.22), which the helicopters build on. Stealth reduces detection and lock-on range; it never makes an aircraft invisible.
 
 Statistics, costs and exact roles are provisional and balanced through playtesting. Names and silhouettes get a trademark and likeness review before the public release (0.0.26).
 
@@ -920,7 +920,7 @@ Up to eight players share a classroom on an authoritative Node + Colyseus server
 
 ### Versions 0.0.10 to 0.0.28: towards the first public release
 
-Each version has a detailed plan in [docs/roadmap/](roadmap/README.md), reorganised on 2026-11-02 around portable bases and timed sessions. Multiplayer goes online in 0.0.14, so two real players test every version that follows. Flight maneuvers (0.0.16) and player ranks (0.0.17) were added on 2026-11-06, after the HUD revamp (0.0.15), and maps (0.0.22) and world conditions (0.0.23) the same day, moving the later versions up.
+Each version has a detailed plan in [docs/roadmap/](roadmap/README.md); the order after player ranks (0.0.17) was set on 2026-11-07. Multiplayer goes online in 0.0.14, so two real players test every version that follows. The gameplay and world versions (0.0.18 to 0.0.23) come first, then one pass that finalises the HUD, UI and pages (0.0.24), then audio (0.0.25), then the public launch versions (0.0.26 to 0.1.0).
 
 ### Version 0.0.10: Player Identity and the Database (closed after phase 3)
 
@@ -936,7 +936,7 @@ A base belongs to the player and travels with them: buildings, levels, damage, h
 
 ### Version 0.0.13: Sessions
 
-Timed sessions of up to 16 players (32 from 0.0.24), several at once; a random free desk on every join; the territory lifecycle (draining, empty, open, AI-held, with players replacing AI desks at once); raids that finish normally if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and structured logs. See [v0.0.13](roadmap/v0.0.13.md).
+Timed sessions of up to 16 players (32 from 0.0.22), several at once; a random free desk on every join; the territory lifecycle (draining, empty, open, AI-held, with players replacing AI desks at once); raids that finish normally if the defender leaves; flight across disconnects; no practice targets; saving, shutdown, restore and crash recovery; hardening and structured logs. See [v0.0.13](roadmap/v0.0.13.md).
 
 ### Version 0.0.14: Going Live
 
@@ -954,37 +954,37 @@ The whole multiplayer system on the internet (the game on Vercel, the server and
 
 Cosmetic-only ranks from Blank Page to Head of the Class (15 ranks, 48 levels, then Honor Roll stars), earned as Merit on the server through an idempotent ledger with anti-farming rules; insignia, profile cards, titles, pennants, trails and auras that never affect play; promotions that never interrupt a fight. A rank is not a skill rating. See [v0.0.17](roadmap/v0.0.17.md).
 
-### Version 0.0.18: Audio and Music Revamp
+### Version 0.0.18: Economy and Content Depth
 
-Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. Lancer finalised. See [v0.0.18](roadmap/v0.0.18.md).
+Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, world events in sessions, server-side medals, records, achievements and the logbook, the radar signature and stealth system, and an economy simulator. Lightning and Thug finalised. See [v0.0.18](roadmap/v0.0.18.md).
 
-### Version 0.0.19: Menus, Settings and Branding
+### Version 0.0.19: Advanced Multiplayer
 
-Logo and branding, main menu, the session lobby, full settings with rebinding, loading screens, transitions, a first-launch flow and clear error screens. See [v0.0.19](roadmap/v0.0.19.md).
+AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.19](roadmap/v0.0.19.md).
 
-### Version 0.0.20: Economy and Content Depth
+### Version 0.0.20: Maps
 
-Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, world events in sessions, server-side medals, records, achievements and the logbook, the radar signature and stealth system, and an economy simulator. Lightning and Thug finalised. See [v0.0.20](roadmap/v0.0.20.md).
+The classroom becomes one map of nine, each one room or area with 16 territories: six indoor (classroom, science lab, library, cafeteria, gym, bedroom) and three outdoor (playground, backyard, rooftop). A data-driven map framework, furniture to fly through (gaps sized against each plane), cover from defenses, sessions on any map with portable bases placed on its territories, and missions, AI and defenses on every map. See [v0.0.20](roadmap/v0.0.20.md).
 
-### Version 0.0.21: Advanced Multiplayer
+### Version 0.0.21: World Conditions
 
-AI escort aircraft (§10), mission director bounties and rivalries (§11), cooperation offers and escorting real players, three kinds of raid (bombing, strike, challenge), alliances that last for a session, reputation, social features with mute and report (§12), and anti-farming rules. Ghost and Specter finalised. See [v0.0.21](roadmap/v0.0.21.md).
+The maps come alive with conditions unrelated to combat: one airflow system (updrafts, crosswinds, outdoor gusts), ceiling and small fans whose blades destroy planes instantly, rain showers that come and go and soak planes (heavier handling, a limited life), rare indoor sprinklers and garden sprinklers, day and night outdoors, lights out indoors with lit bases and night vision on a few planes, bursting lab beakers, Bunsen burners, birds and fog, all scheduled and announced by a conditions director. See [v0.0.21](roadmap/v0.0.21.md).
 
-### Version 0.0.22: Maps
+### Version 0.0.22: World Scale
 
-The classroom becomes one map of nine, each one room or area with 16 territories: six indoor (classroom, science lab, library, cafeteria, gym, bedroom) and three outdoor (playground, backyard, rooftop). A data-driven map framework, furniture to fly through (gaps sized against each plane), cover from defenses, sessions on any map with portable bases placed on its territories, and missions, AI and defenses on every map. See [v0.0.22](roadmap/v0.0.22.md).
+Sessions of up to 32 players on larger layouts of every map, interest-based network updates (§16.4), regional servers, level of detail and a hover flight mode, with the Jumper's hover and the Wasp and Hawk helicopters completing the thirteen aircraft. See [v0.0.22](roadmap/v0.0.22.md).
 
-### Version 0.0.23: World Conditions
+### Version 0.0.23: Customization and Social
 
-The maps come alive with conditions unrelated to combat: one airflow system (updrafts, crosswinds, outdoor gusts), ceiling and small fans whose blades destroy planes instantly, rain showers that come and go and soak planes (heavier handling, a limited life), rare indoor sprinklers and garden sprinklers, day and night outdoors, lights out indoors with lit bases and night vision on a few planes, bursting lab beakers, Bunsen burners, birds and fog, all scheduled and announced by a conditions director. See [v0.0.23](roadmap/v0.0.23.md).
+Cosmetic-only aircraft and desk customization (§5.6), earned cosmetics, an inventory, friends and optional persistent squads. See [v0.0.23](roadmap/v0.0.23.md).
 
-### Version 0.0.24: World Scale
+### Version 0.0.24: HUD, UI and Pages Finalization
 
-Sessions of up to 32 players on larger layouts of every map, interest-based network updates (§16.4), regional servers, level of detail and a hover flight mode, with the Jumper's hover and the Wasp and Hawk helicopters completing the thirteen aircraft. See [v0.0.24](roadmap/v0.0.24.md).
+One pass over everything a player sees, once every feature exists: the final HUD and screens for the features of 0.0.18 to 0.0.23, logo and branding, the main menu, the session lobby, full settings with rebinding, loading screens, transitions, a first-launch flow, credits and clear error screens. See [v0.0.24](roadmap/v0.0.24.md).
 
-### Version 0.0.25: Customization and Social
+### Version 0.0.25: Audio and Music Revamp
 
-Cosmetic-only aircraft and desk customization (§5.6), earned cosmetics, an inventory, friends and optional persistent squads. See [v0.0.25](roadmap/v0.0.25.md).
+Audio buses and mixing, positional audio, adaptive music, a paper-themed sound library, territory ambience and multiplayer cues. Lancer finalised. See [v0.0.25](roadmap/v0.0.25.md).
 
 ### Version 0.0.26: Public Readiness
 

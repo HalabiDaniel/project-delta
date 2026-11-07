@@ -42,7 +42,7 @@ approximate where noted ("~").
 | Threat HUD | `ThreatHud.ts` | Threat panel (territory, level pips, defense icons, status), threat ring round the centre, rocket lock warning, threat notes, hit arcs | §3B; phase 3 | In flight only (`threat` null otherwise) |
 | Air HUD | `AirHud.ts` | Brackets and tag on AI aircraft, health bar, edge chevrons, lead sight | §3B; phase 3 | When not paused |
 | World labels | `WorldLabels.ts` | Reticles, objective diamond / edge arrow, territory tags, target tags with health, hit X, pop words, damage numbers | §3B; phase 3 | Per frame from view |
-| Mini-map | `MiniMap.ts` | Canvas: territories by role, defenses and reach arcs, zones, rings, practice targets, AI aircraft, raid lines, T1 radar sweep, boundary, plane | §3A; phase 3 (desk states: "Also in this version"; larger maps v0.0.24) | Always (zone-tr); 128 px at home, bigger in flight |
+| Mini-map | `MiniMap.ts` | Canvas: territories by role, defenses and reach arcs, zones, rings, practice targets, AI aircraft, raid lines, T1 radar sweep, boundary, plane | §3A; phase 3 (desk states: "Also in this version"; larger maps v0.0.22) | Always (zone-tr); 128 px at home, bigger in flight |
 | Alerts | `Alerts.ts` (`Alerts`) | Pill: icon, title, one value, ×count; max 3 | §3B; phase 3 | `hud.alert(...)`, times out (default 2.6 s) |
 | Tips | `Alerts.ts` (`Tips`) | Dark first-time tip with keys | §6B; phase 6 | `hud.tip(...)`; click to dismiss, times out |
 | Tutorial panel | `TutorialPanel.ts` | "3 / 10", title, text, key chips, progress, Skip | §6B; phase 6 | While a step is active; hidden paused / result / welcome |
@@ -50,12 +50,12 @@ approximate where noted ("~").
 | Raid alert | `BaseHud.ts` (`RaidHud`) | Inbound raid: from, ETA, target, guns ready, what to do | §3A top centre; phase 3 | While a raid is inbound |
 | Defense report | `BaseHud.ts` (`RaidHud`) | Raid outcome card | §4A results ("defense report"); phase 4 | `hud.raidReport()`, click or timeout |
 | Sortie report | `ReportCard.ts`, `reportText.ts` | Result and medal, 4 big tiles, chips, why it failed, advice, paper breakdown, Details list, Continue | §4A results; phase 4 | `v.result` non-null; Continue (Enter / A) |
-| Pause menu | `Menus.ts` | Resume, Logbook, Sound, mode link; settings (Hints, Size, Graphics, Outlines, Lines, pad Invert Y / Stick / Camera); session stats; controls grid (keyboard or pad); transfer code; Feedback, Another computer (MP), Tutorial, Reset / Leave | §4A pause; phase 4. Settings screens: v0.0.19 | `Esc` / pad Menu / Menu button; Resume, backdrop click |
+| Pause menu | `Menus.ts` | Resume, Logbook, Sound, mode link; settings (Hints, Size, Graphics, Outlines, Lines, pad Invert Y / Stick / Camera); session stats; controls grid (keyboard or pad); transfer code; Feedback, Another computer (MP), Tutorial, Reset / Leave | §4A pause; phase 4. Settings screens: v0.0.24 | `Esc` / pad Menu / Menu button; Resume, backdrop click |
 | Welcome card | `Menus.ts` | "Welcome (back)", paper, last session, Continue, Multiplayer link | §4A (pause family); phase 4 | On arrival (SP); any key or click |
 | Logbook | `Logbook.ts` | Tabs: Records, Base, Aircraft, Paper, Session; tables, ledger, achievements | §4A; phase 4 | `L` / pad View / button; `Esc`, Close, backdrop. SP only (MP shows "Not in multiplayer") |
 | Mouse-capture hint | `HUD.ts` | "`Esc` → click" pill | §3; phase 3 | In flight without pointer lock |
 | Damage flash | `HUD.ts` | Red inset vignette | §3; phase 3 (§8C) | On hit |
-| Loading screen | `LoadingScreen.ts` | Sheet with progress bar, "Folding the paper…" | Out of scope: v0.0.19 (loading screens) | Startup; fades after load |
+| Loading screen | `LoadingScreen.ts` | Sheet with progress bar, "Folding the paper…" | Out of scope: v0.0.24 (loading screens) | Startup; fades after load |
 | Developer panel | `DevPanel.ts` | Director, performance, events, history, sim tools | Not player UI; no plan section. Keep as is | `` ` `` key or `?dev` |
 | Perf overlay | `PerfOverlay.ts` | fps, frame ms, draws, tris, strokes, memory | Not player UI; used for §11D | `?perf`; console `paperwars.perf()` |
 
@@ -63,8 +63,8 @@ approximate where noted ("~").
 
 | Screen / panel | Source | What it shows | Plan section / phase | Opened / closed |
 |---|---|---|---|---|
-| Lobby: sessions | `Lobby.ts` | Username, code inputs, Quick join, session list (Join), Refresh, Single-player | Lobby redesign: v0.0.19. Must move to shared tokens when `mp.css` retires (phase 5) | Before a desk; `showRooms()` |
-| Lobby: claim / username | `Lobby.ts` | Classroom map (3-column grid of desk cells, display-only, buttons disabled), players, "Choose a username" | v0.0.19 (lobby); tokens phase 5 | After joining; hidden once placed |
+| Lobby: sessions | `Lobby.ts` | Username, code inputs, Quick join, session list (Join), Refresh, Single-player | Lobby redesign: v0.0.24. Must move to shared tokens when `mp.css` retires (phase 5) | Before a desk; `showRooms()` |
+| Lobby: claim / username | `Lobby.ts` | Classroom map (3-column grid of desk cells, display-only, buttons disabled), players, "Choose a username" | v0.0.24 (lobby); tokens phase 5 | After joining; hidden once placed |
 | Session results card | `Lobby.ts` (`showResults`) | Placings table, Join next session, Back to the list | "Also in this version" (results card); phase 5 | At session end |
 | Connection line | `MpHud.ts` (`mp-net`) | Status dot, ping, players, room, session timer, protection, emote keys | §5A; phase 5 ("Also": session timer) | Always in game |
 | Kill feed / news | `MpHud.ts` (`mp-feed`) | Up to 6 lines, killer + assists + weapon icon + victim, owner colours | §5A; phase 5 | Lines fade at 6 s |
@@ -437,5 +437,5 @@ No tests for: any DOM module, `FocusNav` beyond `pickInDirection`, `applyGlyphs`
     outlines touches `GraphicsSettings` shape and its storage normalisation (keep old saves loading).
 12. **No DOM test environment.** Component and focus tests (§11A) need `happy-dom` or `jsdom` added
     to `devDependencies`. `ui:shots` and `measure` use the Playwright installed on the machine.
-13. **Out of scope screens.** LoadingScreen, Lobby redesign and settings screens are v0.0.19; still,
+13. **Out of scope screens.** LoadingScreen, Lobby redesign and settings screens are v0.0.24; still,
     they must not break when the token source moves. DevPanel and PerfOverlay can stay as they are.
