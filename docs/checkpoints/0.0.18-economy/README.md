@@ -67,3 +67,13 @@ npm run sim -- --players steady,aggressive,aggressive,newcomer --days 14 --json 
 ```
 
 `--strict` exits with code 1 if a flag is raised (for CI).
+
+## In the real game
+
+![The desk HUD: paper, ink and rubber balls in the economy strip, and the Lightning's materials under the fold button](desk-hud.png)
+
+A headless Chromium run of single-player (software rendering, 1280 × 720): the economy strip
+shows ink (60 / 150, +1.5/min) and rubber balls (12 / 30, +0.6/min) beside paper, and the fold
+button notes "Also takes 8 ink · 3 rubber balls" for the Lightning. Launching a Falcon took 45
+paper and 19 ink (10 materials and 9 for its 85 paid rounds) and flew with a full gun. No page
+errors.
