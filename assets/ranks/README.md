@@ -11,6 +11,7 @@ named `<rank-id>-<level>.png`. They are wired into the game once every batch has
 | 4 | Paper Dart | Corporal | I–III (three only) | `paper-dart-1.png` (bronze: three chevrons, a rocker and three bars, plain centre), `paper-dart-2.png` (a diamond in the centre), `paper-dart-3.png` (a star in the centre) |
 | 5 | Glider | Sergeant | I–III (three only) | `glider-1.png` (one silver upward chevron, dark outline), `glider-2.png` (two), `glider-3.png` (three) |
 | 6 | Inkslinger | Staff Sergeant | I–III (three only) | `inkslinger-1.png` (silver: one chevron over a rocker), `inkslinger-2.png` (three chevrons over a rocker), `inkslinger-3.png` (three chevrons, a rocker and two bars) |
+| 9 | High Flyer (replaces Origami Ace) | Captain | I–IV | `high-flyer-1.png` (one silver star), `high-flyer-2.png` (two), `high-flyer-3.png` (three in a triangle), `high-flyer-4.png` (four in a diamond) |
 | 10 | Sky Scholar | Major | I–IV | `sky-scholar-1.png` (one gold star). Not received as files yet: II (two stars), III (three stars in a close equilateral triangle), IV (four stars in a diamond) |
 | 11 | Valedictorian | Colonel | I–III: bronze, silver, gold thin wings | `valedictorian-1.png` (bronze), `valedictorian-2.png` (silver), `valedictorian-3.png` (gold) |
 | 12 | Head of the Class | General | I–III: bronze, silver, gold thick wings | `head-of-the-class-1.png` (bronze), `head-of-the-class-2.png` (silver), `head-of-the-class-3.png` (gold) |
