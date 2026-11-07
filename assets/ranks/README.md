@@ -8,6 +8,6 @@ named `<rank-id>-<level>.png`. They are wired into the game once every batch has
 | 1 | Blank Page | Recruit | I–III (three only) | `blank-page-1.png` (one bronze chevron), `blank-page-2.png` (two), `blank-page-3.png` (three) |
 | 2 | Scribbler | Private | I–III (three only) | Not saved yet: silver chevrons, to be re-attached as files |
 | 3 | Dog-Ear | Private First Class | I–III (three only) | `dog-ear-1.png` (one gold chevron), `dog-ear-2.png` (two), `dog-ear-3.png` (three) |
-| 11 | Valedictorian | Colonel | I–III: bronze, silver, gold thin wings | `valedictorian-2.png` (silver). Bronze (`-1`) and gold (`-3`) not received yet |
+| 11 | Valedictorian | Colonel | I–III: bronze, silver, gold thin wings | `valedictorian-1.png` (bronze), `valedictorian-2.png` (silver), `valedictorian-3.png` (gold) |
 | 12 | Head of the Class | General | I–III: bronze, silver, gold thick wings | `head-of-the-class-1.png` (bronze), `head-of-the-class-2.png` (silver), `head-of-the-class-3.png` (gold) |
 | ∞ | Honor Roll | Marshal | One insignia, plus stars | `honor-roll.png` (gold swept wings) |
