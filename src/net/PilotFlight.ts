@@ -26,9 +26,9 @@ export class PilotFlight {
   /**
    * One step with `frame`'s controls. Flying: steer, move, collide (the result says what was hit
    * and whether it touched down or fell into the void). Rolling: brake along `home`. Otherwise
-   * nothing moves. `gliding`: out of range, the plane can only glide.
+   * nothing moves.
    */
-  step(frame: Omit<InputFrame, 'seq'>, home: Territory | null, territories: readonly Territory[], solids: readonly Collider[], gliding: boolean): FlightResult | null {
+  step(frame: Omit<InputFrame, 'seq'>, home: Territory | null, territories: readonly Territory[], solids: readonly Collider[]): FlightResult | null {
     const m = this.model;
     if (m.status === 'rolling' && home) {
       m.rollout(NET.step, home);
@@ -51,7 +51,6 @@ export class PilotFlight {
         boost: frame.boost,
         autoLevel: frame.autoLevel,
         autopilot,
-        gliding,
         maneuver: frame.maneuver === true,
       },
       territories,

@@ -1274,7 +1274,6 @@ export class Game {
         boost: controls.held('boost'),
         autoLevel: !this.onApproach(),
         autopilot,
-        gliding: state.outOfRange,
         maneuver: this.maneuverQueued && !this.paused,
       },
       world.territories,
@@ -2254,9 +2253,6 @@ export class Game {
         case 'out-of-ammo':
           this.alert('ink', 'Out of ink', null, 'bad', 2.2);
           break;
-        case 'range-exhausted':
-          this.alert('range', SAY.gliding, null, 'bad', 3);
-          break;
         case 'damaged':
           hud.damageFlash(event.amount);
           break;
@@ -2886,7 +2882,6 @@ export class Game {
           { icon: 'ink', value: String(chosen.gun.ammo), label: `${chosen.gunLabel} · ink` },
           { icon: 'bombload', value: String(chosen.bombs.capacity), label: bombKind.label + (chosen.bombs.capacity === 1 ? '' : 's') },
           { icon: 'health', value: String(chosen.maxHealth), label: 'Health' },
-          { icon: 'range', value: `${(chosen.range / 1000).toFixed(1)} km`, label: 'Range' },
         ],
         record: (() => {
           const m = this.progress.data.mastery[chosen.id];
@@ -2919,8 +2914,6 @@ export class Game {
       accent: css(spec.accent),
       health: state.durability.health,
       maxHealth: spec.maxHealth,
-      rangeLeft: state.rangeLeft,
-      range: spec.range,
       gun: { label: spec.gunLabel, ammo: state.gun.ammo, capacity: state.gun.capacity, ready: state.canFire() },
       bombs: {
         label: bomb.label + 's',
@@ -3259,7 +3252,7 @@ export class Game {
       case 'intercept':
         switch (next.what) {
           case 'bomber': return "Fly out to meet the bomber: it holds a steady course. Get behind it and keep firing. T1's guns help near home.";
-          case 'scout': return 'Come up behind it: once it spots you it runs for the edge of the map. Shift boosts to catch it.';
+          case 'scout': return 'Follow the red marker to find it and come up behind it. It dodges once it spots you, but stays over its patch until it is done: keep after it.';
           case 'fighter': return "It will turn on you. Keep turning so it can't line up, and aim at the small circle to lead your shots.";
           case 'convoy': return 'The supply Widewing is slow and steady: get behind it and keep firing. Mind its escort, if it has one.';
           default: return 'Shoot down every intruder: scouts run for the edge, fighters fight back.';

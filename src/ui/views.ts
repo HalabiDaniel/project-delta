@@ -191,8 +191,6 @@ export interface AircraftStatusView {
   accent: string;
   health: number;
   maxHealth: number;
-  rangeLeft: number;
-  range: number;
   gun: { label: string; ammo: number; capacity: number; ready: boolean };
   bombs: { label: string; loaded: number; capacity: number; falling: number; cooldown: number; ready: boolean };
   airborne: boolean;

@@ -304,22 +304,18 @@ describe('GameState: damage and range', () => {
     expect(state.mission?.failure).toBe('aircraft-lost');
   });
 
-  it('flying uses up range; once it is gone the plane can only glide', () => {
-    const { state, events } = setup('delivery');
+  it('flying has no range limit: any distance is fine and only counts towards the sortie log', () => {
+    const { state } = setup('delivery');
     state.selectAircraft('widewing');
     sortie(state);
-    expect(state.rangeLeft).toBe(AIRCRAFT.widewing.range);
-    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -300 }, 0.1);
-    expect(state.rangeLeft).toBe(AIRCRAFT.widewing.range - 300);
-    expect(state.outOfRange).toBe(false);
-    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -5000 }, 0.1);
-    expect(state.outOfRange).toBe(true);
-    expect(events.filter((e) => e === 'range-exhausted')).toHaveLength(1);
+    state.updateFlight({ x: 0, y: 10, z: 0 }, { x: 0, y: 10, z: -50000 }, 0.1);
+    expect(state.phase).toBe('flying');
+    expect(state.sortie?.distanceFlown).toBe(50000);
   });
 });
 
 describe('GameState: landing, rearming and the end of a sortie', () => {
-  it('landing keeps the sortie going: rearm (free) restores ink and range, then take off again', () => {
+  it('landing keeps the sortie going: rearm (free) restores ink, then take off again', () => {
     const { state, resources, events } = setup('practice');
     sortie(state);
     for (let i = 0; i < 10; i++) {
@@ -337,7 +333,6 @@ describe('GameState: landing, rearming and the end of a sortie', () => {
     state.tick(PLANE.rearmTime);
     expect(events).toContain('rearmed');
     expect(state.gun?.ammo).toBe(AIRCRAFT[PLANE_ID].gun.ammo);
-    expect(state.rangeLeft).toBe(AIRCRAFT[PLANE_ID].range);
     expect(resources.paper).toBe(paper);
     expect(state.canRearm()).toBe(false); // nothing left to top up
     expect(state.takeOff()).toBe(true);

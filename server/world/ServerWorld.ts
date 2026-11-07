@@ -848,7 +848,7 @@ export class ServerWorld {
     if (st.phase === 'flying' && m.status === 'flying') {
       // v0.0.17: time in the air earns Merit (capped); a plane waiting on the pad never does.
       if (p.connected && !st.emergency) this.merit.fly(p.id, NET.step);
-      const result = p.flight.step(f, home, this.territories, this.solids(), st.outOfRange);
+      const result = p.flight.step(f, home, this.territories, this.solids());
       if (!result) return;
       for (const c of result.collisions) {
         this.pilotCollision(p, c);
@@ -870,7 +870,7 @@ export class ServerWorld {
           break;
       }
     } else if (m.status === 'rolling') {
-      p.flight.step(f, home, this.territories, this.solids(), false);
+      p.flight.step(f, home, this.territories, this.solids());
       if ((m.status as string) === 'stopped') p.stopped = true;
     }
   }
@@ -1638,9 +1638,6 @@ export class ServerWorld {
       case 'out-of-ammo':
         this.note(p, 'ink', 'Out of ink', null, 'bad');
         break;
-      case 'range-exhausted':
-        this.note(p, 'range', 'Gliding', null, 'bad');
-        break;
       case 'rearmed':
         this.note(p, 'rearm', 'Rearmed', null, 'good');
         break;
@@ -1900,7 +1897,7 @@ export class ServerWorld {
     if (!p?.state || !m || (m.status !== 'flying' && m.status !== 'rolling')) return null;
     const i = p.inputs;
     return {
-      seq: i.lastSeq, flight: m.saveState(), range: p.state.rangeLeft, boundary: p.flight.boundary.state, countdown: p.flight.boundary.countdown,
+      seq: i.lastSeq, flight: m.saveState(), boundary: p.flight.boundary.state, countdown: p.flight.boundary.countdown,
       inputs: [i.applied, i.autoSteps, i.dropped, i.queue.length],
     };
   }
@@ -1983,7 +1980,7 @@ export class ServerWorld {
             id: plane.id, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
             ammo: st.gun?.ammo ?? plane.gun.ammo, ammoMax: plane.gun.ammo, gunReady: st.gun?.canFire() ?? false,
             bombs: st.bombsLoaded, bombsMax: plane.bombs.capacity, falling: st.bombsFalling, cooldown: Math.round(st.bombCooldown * 10) / 10,
-            range: Math.round(st.rangeLeft), rangeMax: plane.range, rearm: st.rearmProgress === null ? null : Math.round(st.rearmProgress * 100) / 100,
+            rearm: st.rearmProgress === null ? null : Math.round(st.rearmProgress * 100) / 100,
             build: Math.round(st.buildProgress * 100) / 100, buildKind: st.buildKind, stopped: p.stopped,
           }
         : null,

@@ -16,7 +16,7 @@ import type { IncomeState } from '../systems/HomeIncome';
 /** The Colyseus room type every classroom session uses. */
 export const ROOM = 'classroom';
 /** Bumped when the wire format changes; a client with another version is refused. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * What a browser sends when it joins (v0.0.10): its device token if it has one, or a code (an
@@ -410,8 +410,6 @@ export interface PlaneDTO {
   bombsMax: number;
   falling: number;
   cooldown: number;
-  range: number;
-  rangeMax: number;
   rearm: number | null;
   build: number;
   buildKind: BuildKind;
@@ -517,7 +515,6 @@ export interface OwnFlight {
   /** Last input frame the server applied. */
   seq: number;
   flight: number[];
-  range: number;
   boundary: BoundaryState;
   countdown: number;
   /** The server's input counters for this player: frames applied, steps it flew alone, frames dropped, frames queued. */

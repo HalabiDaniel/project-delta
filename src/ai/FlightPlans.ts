@@ -81,12 +81,18 @@ export function patrolPlan(territories: readonly Territory[], zone: readonly str
 /**
  * A reconnaissance flight: in from beyond the first territory, over each of `path` (circling each
  * one if it `lingers` to take a good look), then out of the world beyond the last one, its
- * checkpoint. Once it has spotted trouble it runs for that exit.
+ * checkpoint. Once it has spotted trouble it runs (a mission's scout keeps to the territories it is scouting).
  */
 export function scoutPlan(territories: readonly Territory[], path: readonly string[], skill: Difficulty, id: string, rng: Rng, purpose: AiPurpose, linger = false): AiOrders {
   const over = path.map((p) => territories.find((t) => t.id === p)!);
   const altitude = randRange(rng, AI.patrolAltitude[0], AI.patrolAltitude[1]);
-  const route = linger ? over.flatMap((t) => orbit(t, altitude, rng, t.half * 0.6)) : routeOver(territories, path, rng, altitude);
+  // A mission's scout circles each territory a few times (AI.scoutLaps): time to find and catch it.
+  const route = linger
+    ? over.flatMap((t) => {
+        const lap = orbit(t, altitude, rng, t.half * 0.6);
+        return Array.from({ length: AI.scoutLaps }, () => lap.map((q) => ({ ...q }))).flat();
+      })
+    : routeOver(territories, path, rng, altitude);
   const first = over[0];
   const last = over[over.length - 1];
   // In from the side away from where it is going, out on the far side of where it has been.

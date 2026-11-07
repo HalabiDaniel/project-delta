@@ -1048,7 +1048,6 @@ export class MultiplayerGame {
         st.bombsLoaded = d.bombs;
         st.bombsFalling = d.falling;
         st.bombCooldown = d.cooldown;
-        st.rangeLeft = d.range;
         st.rearmProgress = d.rearm;
         st.buildProgress = d.build;
         st.buildKind = d.buildKind;

@@ -4,13 +4,12 @@ import type { MissionSpec, MissionType } from '../missions/Mission';
 export type RatingKey = keyof typeof RATINGS;
 export type Ratings = Record<RatingKey, number>;
 
-export const RATING_KEYS: readonly RatingKey[] = ['speed', 'maneuverability', 'durability', 'range', 'payload', 'firepower', 'stealth'];
+export const RATING_KEYS: readonly RatingKey[] = ['speed', 'maneuverability', 'durability', 'payload', 'firepower', 'stealth'];
 
 export const RATING_LABELS: Record<RatingKey, string> = {
   speed: 'Speed',
   maneuverability: 'Agility',
   durability: 'Durability',
-  range: 'Range',
   payload: 'Payload',
   firepower: 'Firepower',
   stealth: 'Stealth',
@@ -23,7 +22,6 @@ export function ratingValue(spec: AircraftSpec, key: RatingKey): number {
     case 'speed': return f.maxSpeed + f.boostSpeed / 2;
     case 'maneuverability': return (f.maxTurnRate / 1.8 + f.rollResponse / 8 + f.maxPitchRate / 1.5) / 3;
     case 'durability': return spec.maxHealth;
-    case 'range': return spec.range;
     case 'payload': return spec.bombs.capacity * BOMB.kinds[spec.bombs.kind].weight;
     case 'firepower': return spec.gun.damage / spec.gun.interval;
     case 'stealth': return spec.signature;
@@ -115,7 +113,6 @@ const PHRASES: Record<RatingKey, [high: string, low: string]> = {
   speed: ['Very fast', 'Slow'],
   maneuverability: ['Nimble', 'Turns slowly'],
   durability: ['Tough', 'Fragile'],
-  range: ['Long range', 'Short range'],
   payload: ['Big bomb rack', 'Small bomb rack'],
   firepower: ['Heavy guns', 'Light guns'],
   stealth: ['Hard to spot', 'Easy to spot'],

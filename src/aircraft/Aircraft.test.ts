@@ -62,10 +62,9 @@ describe('aircraft catalog', () => {
     expect(falcon.bombs.capacity).toBe(0);
     expect(falcon.traits?.stealth).toBe(true);
     expect(aircraftRatings(falcon).firepower).toBe(5);
-    // Dart: the fastest plane, longest range of the four, weak guns, no bombs, a recon bonus.
+    // Dart: the fastest plane, weak guns, no bombs, a recon bonus.
     const top = (id: AircraftId) => AIRCRAFT[id].flight.maxSpeed + AIRCRAFT[id].flight.boostSpeed;
     for (const id of AIRCRAFT_ORDER) if (id !== 'dart') expect(top(id)).toBeLessThan(top('dart'));
-    expect(dart.range).toBeGreaterThan(Math.max(swift.range, falcon.range, widewing.range));
     expect(dart.bombs.capacity).toBe(0);
     expect(aircraftRatings(dart).firepower).toBe(1);
     expect(dart.traits?.reconRate).toBeGreaterThan(1);
@@ -87,7 +86,6 @@ describe('aircraftRatings', () => {
     const falcon = aircraftRatings(AIRCRAFT.falcon);
     const swift = aircraftRatings(AIRCRAFT.swift);
     const widewing = aircraftRatings(AIRCRAFT.widewing);
-    expect(dart.range).toBe(5);
     expect(dart.speed).toBe(5);
     expect(dart.durability).toBe(1);
     expect(falcon.maneuverability).toBe(5);

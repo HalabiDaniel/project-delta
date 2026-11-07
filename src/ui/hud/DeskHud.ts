@@ -333,7 +333,7 @@ export class DeskHud {
           ${kmeter({ label: d.ink, value: (r.firepower ?? 0) / 5, valueText: count(r.firepower ?? 0), segments: 10 })}
           ${kmeter({ label: d.bombs, value: (r.payload ?? 0) / 5, valueText: count(r.payload ?? 0), segments: 10 })}
         </div>
-        <div class="h-details" aria-label="${esc(T.say.details)}">${kchip({ label: d.agility, value: count(r.maneuverability ?? 0) })}${kchip({ label: d.vision, value: count(r.stealth ?? 0) })}${kchip({ label: d.range, value: count(r.range ?? 0) })}</div>
+        <div class="h-details" aria-label="${esc(T.say.details)}">${kchip({ label: d.agility, value: count(r.maneuverability ?? 0) })}${kchip({ label: d.vision, value: count(r.stealth ?? 0) })}</div>
         <h4 class="pw-section">${esc(d.yourPlanes)}</h4>
         <div class="h-grid">${g.cards.map((c) => this.planeCard(c, g.locked)).join('')}</div>`,
       footHtml: `${kbutton({ label: d.foldNew, icon: 'plus', size: 'm', disabled: v.phase !== 'desk' || !v.desk.canBuild || sel.buildKind !== 'fold', attrs: { 'data-act': 'build' } })}${kbutton({ label: d.fly(sel.name), icon: 'send', variant: 'primary', size: 'm', disabled: v.phase === 'desk' && !v.desk.canBuild, attrs: { 'data-act': 'fly', 'data-nav-default': '' } })}`,

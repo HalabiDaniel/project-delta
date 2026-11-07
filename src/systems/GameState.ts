@@ -97,8 +97,7 @@ export function emergencyPlane(): AircraftSpec {
     roleLabel: 'Emergency',
     cost: 0,
     refitCost: 0,
-    tagline: 'Scrap paper, free, for one sortie: half the ink, no bomb, shorter range.',
-    range: ECONOMY.emergency.range,
+    tagline: 'Scrap paper, free, for one sortie: half the ink, no bomb.',
     gun: { ...base.gun, ammo: ECONOMY.emergency.ammo },
     gunLabel: `${base.gunLabel} (half full)`,
     bombs: { capacity: 0, kind: base.bombs.kind },
@@ -127,7 +126,6 @@ export type GameEvent =
   | { type: 'mission-failed'; reason: MissionFailure }
   | { type: 'damaged'; amount: number; source: DamageSource; health: number }
   | { type: 'target-destroyed'; id: string; defense: boolean }
-  | { type: 'range-exhausted' }
   | { type: 'crashed'; cause: CrashCause }
   | { type: 'landed' }
   | { type: 'rearm-started' }
@@ -199,8 +197,6 @@ export class GameState {
   bombsFalling = 0;
   /** Seconds until the next bomb can be dropped. */
   bombCooldown = 0;
-  /** Metres left before the plane can only glide. */
-  rangeLeft = 0;
   /** 0 → 1 while the ground crew rearms after a landing; null otherwise. */
   rearmProgress: number | null = null;
   /** The current (or just finished) sortie, from the moment its plane was paid for. */
@@ -446,7 +442,6 @@ export class GameState {
     this.bombsFalling = 0;
     this.bombCooldown = 0;
     this.gun = new Gun(this.plane.gun);
-    this.rangeLeft = this.plane.range;
     this.emit({ type: 'launched' });
     return true;
   }
@@ -623,20 +618,11 @@ export class GameState {
     return { dealt, destroyed: this.durability.destroyed };
   }
 
-  /** Out of range, the plane can only glide. */
-  get outOfRange(): boolean {
-    return this.rangeLeft <= 0;
-  }
-
-  /** One step of flight from `prev` to `pos`: range used, recon time, deliveries and rings. */
+  /** One step of flight from `prev` to `pos`: distance flown, recon time, deliveries and rings. */
   updateFlight(prev: Point3, pos: Point3, dt: number): void {
     if (this.phase !== 'flying') return;
     const step = Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
     if (this.sortie) this.sortie.distanceFlown += step;
-    if (this.rangeLeft > 0) {
-      this.rangeLeft = Math.max(0, this.rangeLeft - step);
-      if (this.rangeLeft === 0) this.emit({ type: 'range-exhausted' });
-    }
     const mission = this.mission;
     if (!mission) return;
     const approaches = mission.objectives.map((_, i) => mission.approachState(i));
@@ -660,13 +646,13 @@ export class GameState {
     return true;
   }
 
-  /** On the ground at home, with ink or range to top up. */
+  /** On the ground at home, with ink to top up. */
   canRearm(): boolean {
     if (this.phase !== 'landed' || this.rearmProgress !== null || !this.plane) return false;
-    return (this.gun?.ammo ?? 0) < this.plane.gun.ammo || this.rangeLeft < this.plane.range;
+    return (this.gun?.ammo ?? 0) < this.plane.gun.ammo;
   }
 
-  /** Starts the free rearm: ink and range are restored after a short wait. Bombs come with the mission. */
+  /** Starts the free rearm: ink is restored after a short wait. Bombs come with the mission. */
   rearm(): boolean {
     if (!this.canRearm()) return false;
     this.rearmProgress = 0;
@@ -745,7 +731,6 @@ export class GameState {
   private finishRearm(): void {
     this.rearmProgress = null;
     this.gun?.refill();
-    if (this.plane) this.rangeLeft = this.plane.range;
     if (this.sortie) this.sortie.rearms++;
     this.emit({ type: 'rearmed' });
   }
@@ -758,7 +743,6 @@ export class GameState {
     this.sortie = null;
     this.bombsLoaded = 0;
     this.rearmProgress = null;
-    this.rangeLeft = 0;
   }
 
   private objectiveComplete(index: number): void {

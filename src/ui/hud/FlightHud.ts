@@ -2,7 +2,7 @@ import { bind } from '../../input/bindings';
 import { glyph } from '../components';
 import { LANDING, MANEUVERS } from '../../config';
 import { esc, toggle } from '../dom';
-import { clock, count, fixed, fmt, metres, num, pct, level as levelOf } from '../format';
+import { clock, count, fixed, fmt, num, pct, level as levelOf } from '../format';
 import { icon } from '../icons';
 import { dock, kbadge, kbutton, kchip, kiconButton, kmeter, setMeter, statusBar } from '../kit';
 import { MISSION_ICONS, STYLE_TEXT, T } from '../strings';
@@ -61,8 +61,7 @@ export class FlightHud {
       <div class="pc-numbers">
         <div class="pc-num"><span class="pc-big"><b class="num" data-f="speed"></b><small>${esc(f.speedUnit)}</small></span><span class="pc-throttle" role="img" aria-label="${esc(f.throttle)}"><i data-f="throttle"></i></span></div>
         <div class="pc-num"><span class="pc-big"><b class="num" data-f="alt"></b><small>${esc(f.altUnit)}</small></span><span class="pc-label">${esc(f.altitude)}</span></div>
-      </div>
-      <div class="pc-warn" data-f="range-warn" hidden>${kchip({ icon: 'range', label: '', tone: 'hostile' })}</div>`);
+      </div>`);
     const tile = (id: string, i: Parameters<typeof icon>[0], label: string, key: ReturnType<typeof bind>, pip: boolean) =>
       `<div class="action-tile" data-f="t-${id}" role="group" aria-label="${esc(label)}">${pip ? `<span class="pw-pip num" data-f="${id}-n"></span>` : ''}${icon(i, 'icon pw-icon')}<span class="action-label">${esc(label)}</span>${glyph(key, { className: 'pw-key' })}</div>`;
     this.el.actions = add(zones.bc, 'action-bar', [
@@ -121,12 +120,6 @@ export class FlightHud {
       const lvl = levelOf(hp);
       setMeter(this.el.hull, hp, pct(hp), lvl === 'ok' ? 'good' : lvl === 'worn' ? 'warn' : 'hostile');
       this.el.plane.toggleAttribute('data-critical', a.airborne && lvl === 'critical');
-      const range = a.range > 0 ? a.rangeLeft / a.range : 0;
-      const warn = this.el['range-warn'];
-      toggle(warn, a.airborne && range <= 0.25);
-      const label = warn.querySelector<HTMLElement>('.pw-chip-label');
-      const rangeText = range > 0 ? T.common.labelSpaceValue(STYLE_TEXT.range, metres(a.rangeLeft)) : T.say.gliding;
-      if (label && label.textContent !== rangeText) label.textContent = rangeText;
     }
     const f = v.flight;
     if (f && flying) {

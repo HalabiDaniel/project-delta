@@ -22,8 +22,6 @@ export class Predictor {
   readonly flight: PilotFlight;
   /** Frames flown locally, not yet confirmed by the server. */
   readonly pending: InputFrame[] = [];
-  /** Range left, as predicted (the server's figure replaces it on every reconciliation). */
-  range = Infinity;
   private seq = 0;
   /** Reconciliations, and how many of them moved the plane noticeably (for the network panel). */
   corrections = 0;
@@ -62,7 +60,6 @@ export class Predictor {
     const bz = m.position.z;
     if (!m.loadState(own.flight)) return 0;
     this.flight.setBoundary(own.boundary, own.countdown);
-    this.range = own.range;
     while (this.pending.length > 0 && this.pending[0].seq <= own.seq) this.pending.shift();
     for (const frame of this.pending) this.fly(frame, world);
     const error = Math.hypot(m.position.x - bx, m.position.y - by, m.position.z - bz);
@@ -75,13 +72,9 @@ export class Predictor {
   /** Forget everything unconfirmed (a new sortie, a new plane). */
   reset(): void {
     this.pending.length = 0;
-    this.range = Infinity;
   }
 
   private fly(frame: InputFrame, world: PredictionWorld): ReturnType<PilotFlight['step']> {
-    const before = this.model.position.clone();
-    const result = this.flight.step(frame, world.home, world.territories, world.solids, this.range <= 0);
-    if (result?.outcome === 'flying') this.range = Math.max(0, this.range - before.distance(this.model.position));
-    return result;
+    return this.flight.step(frame, world.home, world.territories, world.solids);
   }
 }

@@ -193,31 +193,62 @@ describe('fighters', () => {
 });
 
 describe('scouts and bombers', () => {
-  it('scouts run from the player rather than fight, and get away through their exit', () => {
+  /** A scout on `purpose` duty, flown a little, then chased from behind at 21 m/s for `seconds`. */
+  const chaseScout = (purpose: 'mission' | 'ambient', linger: boolean, seconds: number) => {
     const air = traffic(4);
-    const orders = scoutPlan(territories, ['T8', 'T5', 'T6'], 'medium', 'scout', seededRng(4), 'mission');
-    air.startMission([{ orders }]);
+    const orders = scoutPlan(territories, ['T8', 'T5', 'T6'], 'medium', 'scout', seededRng(4), purpose, linger);
+    if (purpose === 'mission') air.startMission([{ orders }]);
+    else air.startMission([{ orders: { ...orders, purpose } }]);
     const s = new Session(air);
-    s.run(1);
+    s.run(9);
     const scout = air.get('scout')!;
-    // Chase it from behind once it is over the map.
-    s.run(8);
     const from = { x: scout.position.x - 30, y: scout.position.y, z: scout.position.z };
-    const chase = new Session(air, (t) => {
+    // How far from the middle of the world it gets, and how often the chaser is within gun range.
+    let farthest = 0;
+    let steps = 0;
+    let close = 0;
+    const chase = new Session(air, () => {
       const p = air.get('scout')?.position ?? { x: from.x, y: from.y, z: from.z };
+      farthest = Math.max(farthest, Math.hypot(p.x, p.z));
+      steps++;
+      if (Math.hypot(p.x - from.x, p.z - from.z) < 60) close++;
       const dx = p.x - from.x;
       const dz = p.z - from.z;
       const len = Math.hypot(dx, dz) || 1;
       from.x += (dx / len) * 21 * DT;
       from.z += (dz / len) * 21 * DT;
-      void t;
       return { x: from.x, y: from.y, z: from.z, vx: (dx / len) * 21, vy: 0, vz: (dz / len) * 21 };
     });
     chase.run(3);
-    expect(['alert', 'evade', 'leave']).toContain(scout.state);
-    chase.run(45);
+    const stateAfter3 = scout.state;
+    chase.run(seconds);
+    return { air, scout, chase, stateAfter3, farthest, closeShare: close / Math.max(1, steps) };
+  };
+
+  it('scouts run from the player rather than fight; an ordinary one gets away through its exit', () => {
+    const { chase, stateAfter3 } = chaseScout('ambient', false, 45);
+    expect(['alert', 'evade', 'leave']).toContain(stateAfter3);
     expect(chase.result.shots).toBe(0);
-    expect(chase.result.events.some((e) => e.type === 'escaped' && e.aircraft.id === 'scout')).toBe(true);
+    expect(chase.result.events.some((e) => (e.type === 'gone' || e.type === 'escaped') && e.aircraft.id === 'scout')).toBe(true);
+  });
+
+  it("a mission's scout dodges but stays over its patch while chased, slow enough to be caught", () => {
+    const { chase, scout, stateAfter3, farthest, closeShare } = chaseScout('mission', true, 45);
+    expect(['alert', 'evade']).toContain(stateAfter3);
+    expect(chase.result.shots).toBe(0);
+    expect(chase.result.events.some((e) => e.type === 'escaped' && e.aircraft.id === 'scout')).toBe(false);
+    expect(scout.alive).toBe(true);
+    expect(scout.leaving).toBe(false);
+    // It keeps over the map rather than running for the edge of the world…
+    expect(farthest).toBeLessThan(WORLD.boundaryRadius);
+    // …and runs only a little over cruise, so even a slow chaser (21 m/s) keeps it within gun range.
+    expect(closeShare).toBeGreaterThan(0.9);
+  });
+
+  it("a mission's scout circles each territory a few times before it heads out", () => {
+    const linger = scoutPlan(territories, ['T8', 'T5', 'T6'], 'medium', 's', seededRng(4), 'mission', true);
+    // Entry point + four points per lap, AI.scoutLaps laps over each of the three territories.
+    expect(linger.route.length).toBe(1 + 3 * 4 * AI.scoutLaps);
   });
 
   it('bombers fly to T1 and make a steady run at the store, released half a minute after setting out', () => {

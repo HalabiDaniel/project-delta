@@ -26,10 +26,10 @@ export const ECONOMY = {
   protectedPaper: 50,
   /**
    * The free emergency Swift (STARTER_AIRCRAFT's pattern), offered only when the player can afford no
-   * plane at all: folded from scrap, with half the ink, no bomb and a shorter range, for one sortie
+   * plane at all: folded from scrap, with half the ink and no bomb, for one sortie
    * (it is not kept afterwards). Before v0.0.11 it was an emergency Dart.
    */
-  emergency: { ammo: 35, range: 1800 },
+  emergency: { ammo: 35 },
   /** Transactions kept in the paper log. */
   ledgerSize: 60,
 } as const;
@@ -89,10 +89,8 @@ export const PLANE = {
   buildTime: 2,
   refitTime: 0.9,
   rolloutTime: 0.5,
-  /** Seconds the ground crew takes to top up ink and range after a landing (R). */
+  /** Seconds the ground crew takes to top up ink after a landing (R). */
   rearmTime: 1.5,
-  /** Out of range, the nose is held at least this far down: the plane can only glide. */
-  glideAngle: 5 * DEG,
 } as const;
 
 /**
@@ -123,26 +121,24 @@ export interface ManeuverSpec {
    * boost counts). 0 = any speed.
    */
   minEntry: number;
-  /** Can be flown while gliding out of range. */
-  whileGliding: boolean;
 }
 
 export const MANEUVERS: Record<ManeuverId, ManeuverSpec> = {
-  craneFlip: { id: 'craneFlip', name: 'Crane Flip', inspiredBy: 'Kulbit', duration: 1.4, cooldown: 7, minEntry: 0.45, whileGliding: false,
+  craneFlip: { id: 'craneFlip', name: 'Crane Flip', inspiredBy: 'Kulbit', duration: 1.4, cooldown: 7, minEntry: 0.45,
     summary: 'Air-brakes and flips the nose a full turn while sliding on: a chaser overshoots and you come out behind it.' },
-  foldBack: { id: 'foldBack', name: 'Fold Back', inspiredBy: 'Immelmann turn', duration: 1.9, cooldown: 6, minEntry: 0.3, whileGliding: false,
+  foldBack: { id: 'foldBack', name: 'Fold Back', inspiredBy: 'Immelmann turn', duration: 1.9, cooldown: 6, minEntry: 0.3,
     summary: 'Half loop up and roll upright: flying the other way, higher and a little slower.' },
-  diveFold: { id: 'diveFold', name: 'Dive Fold', inspiredBy: 'Split-S', duration: 1.9, cooldown: 6, minEntry: 0.1, whileGliding: false,
+  diveFold: { id: 'diveFold', name: 'Dive Fold', inspiredBy: 'Split-S', duration: 1.9, cooldown: 6, minEntry: 0.1,
     summary: 'Half roll onto the back and pull through a half loop down: the other way, lower and faster.' },
-  slipRoll: { id: 'slipRoll', name: 'Slip Roll', inspiredBy: 'Barrel roll', duration: 1.0, cooldown: 4.5, minEntry: 0, whileGliding: true,
+  slipRoll: { id: 'slipRoll', name: 'Slip Roll', inspiredBy: 'Barrel roll', duration: 1.0, cooldown: 4.5, minEntry: 0,
     summary: 'A fast roll with a sideways shove of about two wingspans (towards A or D): spoils aim and homing rockets.' },
-  updraftRoll: { id: 'updraftRoll', name: 'Updraft Roll', inspiredBy: 'Pop-up attack', duration: 2.2, cooldown: 6, minEntry: 0.2, whileGliding: false,
+  updraftRoll: { id: 'updraftRoll', name: 'Updraft Roll', inspiredBy: 'Pop-up attack', duration: 2.2, cooldown: 6, minEntry: 0.2,
     summary: 'A boosted climb with a full roll on the way up, levelling off higher on the same heading.' },
-  paperHang: { id: 'paperHang', name: 'Paper Hang', inspiredBy: 'Hammerhead (stall turn)', duration: 3.2, cooldown: 8, minEntry: 0.45, whileGliding: false,
+  paperHang: { id: 'paperHang', name: 'Paper Hang', inspiredBy: 'Hammerhead (stall turn)', duration: 3.2, cooldown: 8, minEntry: 0.45,
     summary: 'Straight up, hangs at the top, pivots on a wingtip and drops back down the way it came.' },
-  spiralDrill: { id: 'spiralDrill', name: 'Spiral Drill', inspiredBy: 'Rolling dive', duration: 2.2, cooldown: 6, minEntry: 0, whileGliding: false,
+  spiralDrill: { id: 'spiralDrill', name: 'Spiral Drill', inspiredBy: 'Rolling dive', duration: 2.2, cooldown: 6, minEntry: 0,
     summary: 'A corkscrew dive that comes out lower and faster on the same heading: shakes off a tail.' },
-  paperPivot: { id: 'paperPivot', name: 'Paper Pivot', inspiredBy: 'Flat 180° (drift)', duration: 1.6, cooldown: 7, minEntry: 0.2, whileGliding: false,
+  paperPivot: { id: 'paperPivot', name: 'Paper Pivot', inspiredBy: 'Flat 180° (drift)', duration: 1.6, cooldown: 7, minEntry: 0.2,
     summary: 'Swings the tail round flat and drifts, then boosts out the other way at the same height.' },
 };
 
@@ -277,8 +273,6 @@ export interface AircraftSpec {
   tagline: string;
   flight: FlightProfile;
   maxHealth: number;
-  /** Metres it can fly before it can only glide. Rearming at home restores it. */
-  range: number;
   gun: GunSpec;
   gunLabel: string;
   bombs: { capacity: number; kind: BombKind };
@@ -334,7 +328,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Fast recon',
     cost: 40,
     refitCost: 10,
-    tagline: 'The fastest plane in the classroom, with the longest legs. A light gun, no bombs: it looks, it runs.',
+    tagline: 'The fastest plane in the classroom. A light gun, no bombs: it looks, it runs.',
     flight: {
       minSpeed: 11, cruiseSpeed: 24, maxSpeed: 38,
       throttleAccel: 22, speedResponse: 3.4, pitchSpeedEffect: 6,
@@ -343,7 +337,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.6,
     },
     maxHealth: 50,
-    range: 2800,
     gun: { barrels: 1, ammo: 40, interval: 0.18, damage: 4, speed: 62, range: 60 },
     gunLabel: 'Light ink gun',
     bombs: { capacity: 0, kind: 'small' },
@@ -371,7 +364,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.8,
     },
     maxHealth: 100,
-    range: 1600,
     gun: { barrels: 2, ammo: 130, interval: 0.08, damage: 7, speed: 78, range: 85 },
     gunLabel: 'Twin ink guns',
     bombs: { capacity: 0, kind: 'standard' },
@@ -399,7 +391,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.8,
     },
     maxHealth: 90,
-    range: 2000,
     gun: { barrels: 2, ammo: 70, interval: 0.12, damage: 5, speed: 70, range: 75 },
     gunLabel: 'Twin ink guns',
     bombs: { capacity: 1, kind: 'small' },
@@ -426,7 +417,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 1,
     },
     maxHealth: 150,
-    range: 1300,
     gun: { barrels: 1, ammo: 50, interval: 0.2, damage: 6, speed: 60, range: 65 },
     gunLabel: 'Nose ink gun',
     bombs: { capacity: 4, kind: 'standard' },
@@ -459,7 +449,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.85,
     },
     maxHealth: 120,
-    range: 1800,
     gun: { barrels: 2, ammo: 140, interval: 0.075, damage: 8, speed: 82, range: 90 },
     gunLabel: 'Twin heavy ink guns',
     bombs: { capacity: 0, kind: 'standard' },
@@ -487,7 +476,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.8,
     },
     maxHealth: 110,
-    range: 2000,
     gun: { barrels: 1, ammo: 100, interval: 0.1, damage: 7, speed: 74, range: 80 },
     gunLabel: 'Internal ink gun',
     bombs: { capacity: 2, kind: 'standard' },
@@ -514,7 +502,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.95,
     },
     maxHealth: 150,
-    range: 1500,
     gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70 },
     gunLabel: 'Rotary ink cannon',
     bombs: { capacity: 3, kind: 'small' },
@@ -541,7 +528,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.8,
     },
     maxHealth: 100,
-    range: 1500,
     gun: { barrels: 1, ammo: 90, interval: 0.11, damage: 6, speed: 70, range: 75 },
     gunLabel: 'Gun pod',
     bombs: { capacity: 2, kind: 'small' },
@@ -559,7 +545,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Surveillance drone',
     cost: 50,
     refitCost: 10,
-    tagline: 'A long, quiet glider that flies further than anything. Barely armed, no bombs.',
+    tagline: 'A long, quiet glider that is hard to spot. Barely armed, no bombs.',
     flight: {
       minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
       throttleAccel: 12, speedResponse: 2, pitchSpeedEffect: 7,
@@ -568,7 +554,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 0.8,
     },
     maxHealth: 60,
-    range: 3200,
     gun: { barrels: 1, ammo: 30, interval: 0.2, damage: 4, speed: 60, range: 60 },
     gunLabel: 'Light ink gun',
     bombs: { capacity: 0, kind: 'small' },
@@ -595,7 +580,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 1,
     },
     maxHealth: 135,
-    range: 1700,
     gun: { barrels: 1, ammo: 50, interval: 0.18, damage: 6, speed: 64, range: 65 },
     gunLabel: 'Tail ink gun',
     bombs: { capacity: 3, kind: 'standard' },
@@ -613,7 +597,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Stealth bomber',
     cost: 120,
     refitCost: 26,
-    tagline: 'A flying wing defenses barely notice. Four bombs, long legs, no dogfighting.',
+    tagline: 'A flying wing defenses barely notice. Four bombs, no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
       throttleAccel: 9, speedResponse: 1.2, pitchSpeedEffect: 10,
@@ -622,7 +606,6 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       collisionRadius: 1,
     },
     maxHealth: 140,
-    range: 2300,
     gun: { barrels: 1, ammo: 30, interval: 0.22, damage: 5, speed: 60, range: 60 },
     gunLabel: 'Defensive ink gun',
     bombs: { capacity: 4, kind: 'standard' },
@@ -648,7 +631,6 @@ export const RATINGS = {
   /** Average of turn rate, roll response and pitch rate, each relative to a nimble plane. */
   maneuverability: [0.5, 1],
   durability: [40, 160],
-  range: [1200, 2700],
   /** Bombs carried; a mini bomb counts for less. */
   payload: [0.6, 4],
   /** Ink damage per second. */
@@ -988,6 +970,8 @@ export const AI: {
   overshoot: number;
   flee: number;
   safe: number;
+  scoutLaps: number;
+  missionScoutThrottle: number;
   bombingAltitude: number;
   runIn: number;
   abortHealth: number;
@@ -1066,6 +1050,14 @@ export const AI: {
   /** Scouts run from anything this close, and calm down beyond `safe`. */
   flee: 75,
   safe: 140,
+  /** A mission's scout circles each territory it scouts this many times before it heads out. */
+  scoutLaps: 3,
+  /**
+   * A mission's scout runs (from a pursuer, and out at the end) at this share of the way from cruise
+   * to top speed, without boosting, and stays over the territories it is scouting while chased: any
+   * plane can catch it, and it only gets away once it has finished its route.
+   */
+  missionScoutThrottle: 0.2,
   /** Bombers: bombing height, and how far out they line up for the run. */
   bombingAltitude: 16,
   runIn: 75,
@@ -1498,10 +1490,10 @@ export const SUITABILITY = {
   weights: {
     bombing: { payload: 2, durability: 1 },
     precision: { payload: 2, maneuverability: 1 },
-    recon: { range: 2, maneuverability: 1 },
-    delivery: { speed: 3, range: 1 },
-    return: { durability: 2, payload: 1, range: 1 },
-    'multi-bomb': { payload: 3, range: 1 },
+    recon: { stealth: 2, speed: 2, durability: 1 },
+    delivery: { speed: 3, maneuverability: 1 },
+    return: { durability: 2, payload: 2, stealth: 1 },
+    'multi-bomb': { payload: 3, maneuverability: 1 },
     rings: { maneuverability: 3, speed: 1 },
     practice: { firepower: 3, maneuverability: 2 },
     suppression: { firepower: 3, maneuverability: 2, durability: 1 },
@@ -1513,12 +1505,12 @@ export const SUITABILITY = {
     dogfight: { firepower: 3, maneuverability: 3, speed: 1 },
     'scout-intercept': { speed: 3, firepower: 2, stealth: 1 },
     'bomber-intercept': { firepower: 3, speed: 2, durability: 1 },
-    escort: { firepower: 3, maneuverability: 2, durability: 1, range: 1 },
-    patrol: { firepower: 2, maneuverability: 2, range: 1, speed: 1 },
+    escort: { firepower: 3, maneuverability: 2, durability: 1 },
+    patrol: { firepower: 2, maneuverability: 3, durability: 1, speed: 1 },
     combined: { payload: 1, firepower: 1, durability: 1, maneuverability: 1 },
     shipment: { firepower: 2, payload: 2, maneuverability: 1 },
-    convoy: { speed: 2, firepower: 3, range: 1 },
-    'supply-run': { firepower: 3, maneuverability: 2, durability: 1, range: 1 },
+    convoy: { speed: 3, firepower: 2, durability: 1 },
+    'supply-run': { firepower: 3, maneuverability: 2, durability: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus

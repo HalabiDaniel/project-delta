@@ -114,7 +114,7 @@ describe('stick steering', () => {
       m.speed = m.throttleSpeed = AIRCRAFT.falcon.flight.cruiseSpeed;
       for (let i = 0; i < 45; i++) {
         const d = controls(m);
-        m.fly(1 / 60, { mouseDX: d.dx, mouseDY: d.dy, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null, gliding: false }, [], []);
+        m.fly(1 / 60, { mouseDX: d.dx, mouseDY: d.dy, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null }, [], []);
       }
       return m.yaw;
     };

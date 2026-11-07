@@ -6,7 +6,7 @@ import { FlightModel, wrapAngle, type FlightControls } from './FlightModel';
 
 const territories = generateTerritories();
 const DT = 1 / 60;
-const idle: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null, gliding: false };
+const idle: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null };
 
 describe('FlightModel', () => {
   it('spawns already flying, with no climb-out and no home to land on', () => {

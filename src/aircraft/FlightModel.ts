@@ -39,10 +39,9 @@ export const FLIGHT_SNAPSHOT_SIZE = 39;
  * slow     – not fast enough for this move.
  * low      – the move would go too low (towards the classroom floor).
  * room     – something is in the way of the move's path.
- * gliding  – out of range, only the Slip Roll still works.
  * busy     – already in a move, a loop, or the climb-out or autopilot has the controls.
  */
-export type ManeuverRefusal = 'none' | 'cooldown' | 'slow' | 'low' | 'room' | 'gliding' | 'busy';
+export type ManeuverRefusal = 'none' | 'cooldown' | 'slow' | 'low' | 'room' | 'busy';
 
 /**
  * normal – mouse-aim flight with the pitch limit.
@@ -80,8 +79,6 @@ export interface FlightControls {
   autoLevel: boolean;
   /** When set, the autopilot flies this heading and pitch and the player's steering is ignored. */
   autopilot: { yaw: number; pitch: number } | null;
-  /** Out of range: the plane can only glide, with no boost and no climbing. */
-  gliding: boolean;
   /**
    * Steering given as a direction to fly instead of mouse movement: how AI pilots fly. Unlike the
    * autopilot it leaves the boost alone.
@@ -291,7 +288,7 @@ export class FlightModel {
       const over = this.aimPitch > PLANE.maxPitch ? this.aimPitch - PLANE.maxPitch : this.aimPitch < -PLANE.maxPitch ? this.aimPitch + PLANE.maxPitch : 0;
       const atLimit = Math.abs(this.pitch) > PLANE.maxPitch - 3 * DEG && Math.sign(this.pitch) === Math.sign(over);
       this.loopPull = this.loopPull * Math.exp(-2 * dt) + (atLimit ? over : 0);
-      if (!climbingOut && !controls.gliding && this.aerobatic && Math.abs(this.loopPull) > ACRO.loopEntry) {
+      if (!climbingOut && this.aerobatic && Math.abs(this.loopPull) > ACRO.loopEntry) {
         this.startLoop(Math.sign(this.loopPull));
         this.flyFree(dt, controls);
         return this.afterMove(collisions, territories, obstacles, climbingOut);
@@ -301,8 +298,6 @@ export class FlightModel {
     this.aimPitch = clamp(this.aimPitch, -PLANE.maxPitch, PLANE.maxPitch);
 
     let targetPitch = climbingOut ? PLANE.launchPitch : this.aimPitch;
-    // Out of range the plane can only glide.
-    if (controls.gliding && !climbingOut) targetPitch = Math.min(targetPitch, -PLANE.glideAngle);
     // Level off smoothly near the ceiling.
     const headroom = (WORLD.ceilingY - this.position.y) / 5;
     targetPitch = Math.min(targetPitch, PLANE.maxPitch * clamp(headroom, -1, 1));
@@ -336,10 +331,9 @@ export class FlightModel {
    */
   private updateSpeed(dt: number, controls: FlightControls, autopilot: boolean): void {
     const f = this.flight;
-    this.boost.update(dt, controls.boost && !autopilot && !controls.gliding);
-    const topThrottle = controls.gliding ? f.cruiseSpeed : f.maxSpeed;
+    this.boost.update(dt, controls.boost && !autopilot);
     const braking = controls.throttle < 0 && this.throttleSpeed <= f.minSpeed && !autopilot && !this.boost.active;
-    this.throttleSpeed = clamp(this.throttleSpeed + controls.throttle * f.throttleAccel * dt, f.minSpeed, topThrottle);
+    this.throttleSpeed = clamp(this.throttleSpeed + controls.throttle * f.throttleAccel * dt, f.minSpeed, f.maxSpeed);
     const targetSpeed = braking ? f.minSpeed * ACRO.airbrakeFloor : this.throttleSpeed + (this.boost.active ? f.boostSpeed : 0);
     const response = this.boost.active ? f.boostResponse : braking ? ACRO.airbrakeResponse : f.speedResponse;
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-response * dt)) - Math.sin(this.pitch) * f.pitchSpeedEffect * dt;
@@ -390,12 +384,11 @@ export class FlightModel {
   }
 
   /** Why the slot's move can't be started right now, or null if it can (apart from the path check). */
-  maneuverBlocker(controls: Pick<FlightControls, 'gliding' | 'autopilot'> = { gliding: false, autopilot: null }): ManeuverRefusal | null {
+  maneuverBlocker(controls: Pick<FlightControls, 'autopilot'> = { autopilot: null }): ManeuverRefusal | null {
     const id = this.slottedManeuver;
     if (!id) return 'none';
     if (this.status !== 'flying' || this.activeManeuver || this.loopMode !== 0 || controls.autopilot || this.airborneTime < PLANE.launchGrace) return 'busy';
     const spec = MANEUVERS[id];
-    if (controls.gliding && !spec.whileGliding) return 'gliding';
     if (this.maneuverCooldown > 0) return 'cooldown';
     const f = this.flight;
     if ((this.speed - f.minSpeed) / (f.maxSpeed - f.minSpeed) < spec.minEntry - 1e-9) return 'slow';
@@ -443,7 +436,7 @@ export class FlightModel {
     this.startTrack(id, side);
     const step = MANEUVER.clearanceStep;
     const r = this.flight.collisionRadius + MANEUVER.clearanceMargin;
-    const none: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: false, autopilot: null, gliding: false };
+    const none: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: false, autopilot: null };
     let reason: ManeuverRefusal | null = null;
     while (this.activeManeuver && !reason) {
       this.flyFree(step, none);

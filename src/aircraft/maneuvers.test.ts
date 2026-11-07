@@ -8,7 +8,7 @@ import { eulerToMatrix, FLIGHT_SNAPSHOT_SIZE, FlightModel, interpolateAttitude, 
 import { cycleManeuver, defaultManeuver, designsWith, maneuverDuration, TRACKS } from './maneuvers';
 
 const DT = 1 / 60;
-const idle: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null, gliding: false };
+const idle: FlightControls = { mouseDX: 0, mouseDY: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, autopilot: null };
 /** Reverses the heading: the move comes out flying the other way. */
 const REVERSES: ReadonlySet<ManeuverId> = new Set(['foldBack', 'diveFold', 'paperHang', 'paperPivot']);
 
@@ -136,7 +136,7 @@ describe('automatic maneuvers in the flight model', () => {
     expect(down.speed).toBeGreaterThan(down.flight.cruiseSpeed);
   });
 
-  it('refuses with a reason: no slot, not ready, too slow, gliding, too low, no room', () => {
+  it('refuses with a reason: no slot, not ready, too slow, too low, no room', () => {
     const bomber = flying('widewing', null);
     bomber.fly(DT, { ...idle, maneuver: true }, [], []);
     expect(bomber.lastRefusal).toBe('none');
@@ -152,13 +152,6 @@ describe('automatic maneuvers in the flight model', () => {
     const slow = flying('falcon', 'craneFlip', 0, 40, AIRCRAFT.falcon.flight.minSpeed);
     slow.fly(DT, { ...idle, maneuver: true }, [], []);
     expect(slow.lastRefusal).toBe('slow');
-
-    const glide = flying('falcon', 'foldBack');
-    glide.fly(DT, { ...idle, gliding: true, maneuver: true }, [], []);
-    expect(glide.lastRefusal).toBe('gliding');
-    const glideSlip = flying('falcon', 'slipRoll');
-    glideSlip.fly(DT, { ...idle, gliding: true, maneuver: true }, [], []);
-    expect(glideSlip.activeManeuver).toBe('slipRoll');
 
     const low = flying('falcon', 'diveFold', 0, -12);
     low.fly(DT, { ...idle, maneuver: true }, [], []);

@@ -383,7 +383,7 @@ function draftMission(type: MissionType, difficulty: Difficulty, ctx: MissionCon
       const last = path[path.length - 1];
       return make(distanceTo(path[Math.floor(path.length / 2)]), {
         title: 'Intercept the scout',
-        description: `A ${pilot(difficulty)} enemy Dart is scouting ${listing(path.map((t) => t.id))}. Shoot it down before it slips away beyond ${last.id}: once it spots you, it runs.`,
+        description: `A ${pilot(difficulty)} enemy Dart is scouting ${listing(path.map((t) => t.id))}. It circles each one a few times before it heads out beyond ${last.id}: shoot it down first. Follow the red marker to find it; when it spots you it dodges, but it can be caught.`,
         objectives: [{ kind: 'intercept', territoryId: path[0].id, targets: [id], count: 1, what: 'scout', before: 'escape' }],
         aircraft: [{ orders: scoutPlan(ctx.territories, path.map((t) => t.id), difficulty, id, rng, 'mission', true), delay: 2 }],
       });

@@ -167,6 +167,8 @@ export class AiAircraft {
   private jinkDir = 1;
   private jinkPitch = 0;
   private resume: AiState = 'patrol';
+  /** Cached middle of its route (AiAircraft.area). */
+  private areaCentre: { x: number; z: number } | null = null;
   private positioning = false;
   private readonly chaseFrom = { x: 0, y: 0, z: 0 };
   /** Where a bomber thinks the release point puts its bomb, off by its skill's error. */
@@ -277,7 +279,7 @@ export class AiAircraft {
 
     const decision = this.think(dt, world);
     const controls: FlightControls = {
-      mouseDX: 0, mouseDY: 0, bank: 0, autoLevel: false, autopilot: null, gliding: false,
+      mouseDX: 0, mouseDY: 0, bank: 0, autoLevel: false, autopilot: null,
       throttle: this.throttleFor(decision.speed),
       boost: decision.boost,
       aim: this.avoid(decision.yaw, decision.pitch, world),
@@ -475,8 +477,10 @@ export class AiAircraft {
       }
       return this.jink(dt, { yaw: this.model.yaw, pitch: 0, speed: this.top(), boost: this.skill.boost, fire: false, drop: false, done: false });
     }
-    // Spotted on a mission, a scout runs for its exit; one that can't shake a pursuer leaves too.
-    if (this.purpose === 'mission' || this.stateTime > 8) {
+    // A mission's scout keeps running round the territories it is scouting until its job is done;
+    // any other scout that can't shake a pursuer leaves.
+    const mission = this.purpose === 'mission';
+    if (!mission && this.stateTime > 8) {
       this.leave();
       return this.flyOut(dt, world);
     }
@@ -485,18 +489,19 @@ export class AiAircraft {
       this.enter('patrol');
       return this.followRoute(world);
     }
-    // Away from the threat, bent a little towards the way out.
+    // Away from the threat, bent towards the way out (a mission's scout: back over its area, harder the further it strays).
     const away = { x: p.x - threat.x, z: p.z - threat.z };
     const awayLen = Math.hypot(away.x, away.z) || 1;
-    const out = { x: this.orders.exit.x - p.x, z: this.orders.exit.z - p.z };
+    const goal = mission ? this.area() : this.orders.exit;
+    const out = { x: goal.x - p.x, z: goal.z - p.z };
     const outLen = Math.hypot(out.x, out.z) || 1;
-    const k = 0.35;
+    const k = mission ? Math.min(0.9, 0.35 + outLen / 150) : 0.35;
     const dir = { x: (away.x / awayLen) * (1 - k) + (out.x / outLen) * k, z: (away.z / awayLen) * (1 - k) + (out.z / outLen) * k };
     let decision: Decision = {
       yaw: Math.atan2(-dir.x, -dir.z),
       pitch: Math.max(-0.25, Math.min(0.25, (this.orders.route[0].y - p.y) * 0.05)),
-      speed: this.top(),
-      boost: this.skill.boost && this.boostable,
+      speed: mission ? this.missionRun() : this.top(),
+      boost: !mission && this.skill.boost && this.boostable,
       fire: false,
       drop: false,
       done: false,
@@ -564,8 +569,9 @@ export class AiAircraft {
     let decision: Decision = { ...headingTo(p, this.orders.exit, 0.35), speed: this.cruise(), boost: false, fire: false, drop: false, done: false };
     if (this.role === 'bomber') decision.fire = this.opportunisticFire(world, this.contact());
     if (this.role === 'scout' && this.nearestHostile(world, this.contact(), AI.safe)) {
-      decision.speed = this.top();
-      decision.boost = this.skill.boost && this.boostable;
+      const mission = this.purpose === 'mission';
+      decision.speed = mission ? this.missionRun() : this.top();
+      decision.boost = !mission && this.skill.boost && this.boostable;
       if (this.jinkLeft <= 0 && world.rng() < this.skill.evasive * dt) this.startJink(world.rng, 'leave');
       if (this.jinkLeft > 0) decision = this.jink(dt, decision);
     }
@@ -775,6 +781,21 @@ export class AiAircraft {
 
   private cruise(): number {
     return this.orders.speed ?? this.spec.flight.cruiseSpeed;
+  }
+
+  /** How fast a mission's scout runs: a little over cruise, so a determined pursuer catches it. */
+  private missionRun(): number {
+    const f = this.spec.flight;
+    return f.cruiseSpeed + (f.maxSpeed - f.cruiseSpeed) * Math.min(this.skill.throttle, AI.missionScoutThrottle);
+  }
+
+  /** The middle of the route it was sent to fly (leaving out where it came in). */
+  private area(): { x: number; z: number } {
+    if (!this.areaCentre) {
+      const pts = this.orders.route.length > 1 ? this.orders.route.slice(1) : this.orders.route;
+      this.areaCentre = { x: pts.reduce((s, q) => s + q.x, 0) / pts.length, z: pts.reduce((s, q) => s + q.z, 0) / pts.length };
+    }
+    return this.areaCentre;
   }
 
   /** As fast as this pilot pushes it. */

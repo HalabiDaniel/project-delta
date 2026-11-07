@@ -16,7 +16,7 @@ import { presenceOf } from './presence';
 import { ownerOfSide, sideOf, territoryName } from '../net/World';
 import type { AircraftMarkerView, AirView } from '../ui/AirHud';
 import { BUILDING_ICONS } from '../ui/BaseHud';
-import { compass, count, fixed, km, num, paper, seconds } from '../ui/format';
+import { compass, count, fixed, num, paper, seconds } from '../ui/format';
 import { T } from '../ui/strings';
 import { maneuverPickerView, maneuverSlotView } from '../ui/maneuverView';
 import type { GamePhase } from '../systems/GameState';
@@ -345,7 +345,6 @@ export class MpViews {
           { icon: 'ink', value: count(chosen.gun.ammo), label: V.gunInk(chosen.gunLabel) },
           { icon: 'bombload', value: count(chosen.bombs.capacity), label: V.bombs(bombKind.label, chosen.bombs.capacity) },
           { icon: 'health', value: count(chosen.maxHealth), label: V.health },
-          { icon: 'range', value: km(chosen.range, 1), label: V.range },
         ],
         record: null,
         suitability: { level: fit.level, reason: fit.reason, missionTitle: mission.title },
@@ -365,8 +364,6 @@ export class MpViews {
       accent: css(spec.accent),
       health: st.durability.health,
       maxHealth: spec.maxHealth,
-      rangeLeft: this.g.predictor.range === Infinity ? st.rangeLeft : Math.min(st.rangeLeft, this.g.predictor.range + 50),
-      range: spec.range,
       gun: { label: spec.gunLabel, ammo: st.gun.ammo, capacity: st.gun.capacity, ready: st.gun.ammo > 0 },
       bombs: {
         label: bomb.label + 's',
@@ -742,17 +739,21 @@ export class MpViews {
     const radar = g.base?.radar;
     const detection = g.base?.detectionRange ?? 0;
     const home = g.home;
+    // The mission's own aircraft (what it wants shot down, or escorted) always show, highlighted.
+    const wanted = this.missionAircraft(mission);
     const aircraft: MiniMapView['aircraft'] = [];
     for (const a of g.ais.values()) {
       if (!a.alive) continue;
       const friendly = a.side === mine;
-      const seen = friendly || (home && Math.hypot(a.model.position.x - home.x, a.model.position.z - home.z) <= detection) || (showPlane && a.model.position.distance(plane.position) < SIGHT_RANGE);
+      const target = wanted.has(a.id);
+      const seen = friendly || target || (home && Math.hypot(a.model.position.x - home.x, a.model.position.z - home.z) <= detection) || (showPlane && a.model.position.distance(plane.position) < SIGHT_RANGE);
       if (!seen) continue;
-      aircraft.push({ x: a.model.position.x, z: a.model.position.z, yaw: a.model.yaw, side: friendly ? 'player' : 'enemy', role: a.role as AiRole, raid: null, mission: false });
+      aircraft.push({ x: a.model.position.x, z: a.model.position.z, yaw: a.model.yaw, side: friendly ? 'player' : 'enemy', role: a.role as AiRole, raid: null, mission: target });
     }
     for (const r of g.remotes.values()) {
       if (!r.alive || r.status !== 'flying') continue;
-      const seen = (home && Math.hypot(r.model.position.x - home.x, r.model.position.z - home.z) <= Math.max(detection, home.half + 45)) || (showPlane && r.model.position.distance(plane.position) < SIGHT_RANGE * 1.4);
+      const target = wanted.has(r.id);
+      const seen = target || (home && Math.hypot(r.model.position.x - home.x, r.model.position.z - home.z) <= Math.max(detection, home.half + 45)) || (showPlane && r.model.position.distance(plane.position) < SIGHT_RANGE * 1.4);
       if (!seen) continue;
       aircraft.push({ x: r.model.position.x, z: r.model.position.z, yaw: r.model.yaw, side: 'enemy', role: AIRCRAFT[r.spec.id].role === 'bomber' ? 'bomber' : 'fighter', raid: null, mission: true });
     }
@@ -881,11 +882,7 @@ export class MpViews {
     if (flying) {
       const p = g.plane.position;
       const st = g.state!;
-      const wanted = new Set<string>();
-      st.mission?.objectives.forEach((o) => {
-        if (o.kind === 'intercept') for (const id of o.targets) wanted.add(this.serverId(id));
-        if (o.kind === 'escort') wanted.add(this.serverId(o.escort));
-      });
+      const wanted = this.missionAircraft(st.mission);
       const now = performance.now();
       const gun = st.plane?.gun ?? g.plane.spec.gun;
       const fwd = g.plane.getForward(new pc.Vec3());
@@ -977,6 +974,17 @@ export class MpViews {
   }
 
   /** An AI aircraft id in a mission (as the generator named it) → its id on the server. */
+  /** Server ids of the aircraft the mission is about: those to shoot down and the one to escort. */
+  private missionAircraft(mission: Mission | null | undefined): Set<string> {
+    const wanted = new Set<string>();
+    if (!mission?.isActive) return wanted;
+    mission.objectives.forEach((o) => {
+      if (o.kind === 'intercept') for (const id of o.targets) wanted.add(this.serverId(id));
+      if (o.kind === 'escort') wanted.add(this.serverId(o.escort));
+    });
+    return wanted;
+  }
+
   private serverId(id: string): string {
     if (id.startsWith('pl:')) return id;
     return `${this.g.me}/${id}`;
