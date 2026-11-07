@@ -3,20 +3,28 @@
 The developer's insignia art, one PNG per rank level, with transparent backgrounds. Files are
 named `<rank-id>-<level>.png`. They are wired into the game once every batch has arrived.
 
+Each metal runs through the same three chevron designs (plain chevrons, chevrons over a rocker,
+senior chevrons with bars), then the same star designs (one to four stars).
+
 | Tier | Rank | Soldier equivalent | Levels | Files |
 |---|---|---|---|---|
-| 1 | Blank Page | Recruit | I–III (three only) | `blank-page-1.png` (one bronze chevron), `blank-page-2.png` (two), `blank-page-3.png` (three) |
-| 2 | Scribbler | Private | I–III (three only) | `scribbler-1.png` (one bronze upward chevron, dark outline), `scribbler-2.png` (two), `scribbler-3.png` (three) |
-| 3 | Dog-Ear | Private First Class | I–III (three only) | `dog-ear-1.png` (bronze: one chevron over a rocker), `dog-ear-2.png` (three chevrons over a rocker), `dog-ear-3.png` (three chevrons, a rocker and two bars) |
-| 4 | Paper Dart | Corporal | I–III (three only) | `paper-dart-1.png` (bronze: three chevrons, a rocker and three bars, plain centre), `paper-dart-2.png` (a diamond in the centre), `paper-dart-3.png` (a star in the centre) |
-| 5 | Glider | Sergeant | I–III (three only) | `glider-1.png` (one silver upward chevron, dark outline), `glider-2.png` (two), `glider-3.png` (three) |
-| 6 | Inkslinger | Staff Sergeant | I–III (three only) | `inkslinger-1.png` (silver: one chevron over a rocker), `inkslinger-2.png` (three chevrons over a rocker), `inkslinger-3.png` (three chevrons, a rocker and two bars) |
-| 9 | Origami Ace | Captain | I–IV | Not received as files yet: bronze stars, one to four (one, two, three in a triangle, four in a diamond) |
-| 9b | High Flyer (new, between Origami Ace and Sky Scholar) | Captain | I–IV | `high-flyer-1.png` (one silver star), `high-flyer-2.png` (two), `high-flyer-3.png` (three in a triangle), `high-flyer-4.png` (four in a diamond) |
-| 10 | Sky Scholar | Major | I–IV | `sky-scholar-1.png` (one gold star). Not received as files yet: II (two stars), III (three stars in a close equilateral triangle), IV (four stars in a diamond) |
-| 11 | Valedictorian | Colonel | I–III: bronze, silver, gold thin wings | `valedictorian-1.png` (bronze), `valedictorian-2.png` (silver), `valedictorian-3.png` (gold) |
-| 12 | Head of the Class | General | I–III: bronze, silver, gold thick wings | `head-of-the-class-1.png` (bronze), `head-of-the-class-2.png` (silver), `head-of-the-class-3.png` (gold) |
+| 1 | Blank Page | Recruit | I–III | Bronze upward chevrons: `blank-page-1.png` (one), `-2` (two), `-3` (three) |
+| 2 | Scribbler | Private | I–III | Bronze rocker chevrons: `scribbler-1.png` (one chevron over a rocker), `-2` (three over a rocker), `-3` (three, a rocker and two bars) |
+| 3 | Dog-Ear | Private First Class | I–III | Bronze senior chevrons with three bars: `dog-ear-1.png` (plain centre), `-2` (diamond), `-3` (star) |
+| 4 | Paper Dart | Corporal | I–III | Silver upward chevrons: `paper-dart-1.png` (one), `-2` (two), `-3` (three) |
+| 5 | Glider | Sergeant | I–III | Silver rocker chevrons: `glider-1.png` (one chevron over a rocker), `-2` (three over a rocker), `-3` (three, a rocker and two bars) |
+| 6 | Inkslinger | Staff Sergeant | I–III | Silver senior chevrons with three bars: `inkslinger-1.png` (plain centre), `-2` (diamond), `-3` (star) |
+| 7 | Hall Monitor | Sergeant Major | I–III | Not received yet |
+| 8 | Paper Hawk | Warrant Officer | I–III | Not received yet |
+| 9 | Origami Ace | Lieutenant | I–IV | Not received as files yet: bronze stars, one to four |
+| 10 | High Flyer | Captain | I–IV | Silver stars: `high-flyer-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
+| 11 | Sky Scholar | Major | I–IV | Gold stars: `sky-scholar-1.png` (one). II–IV not received as files yet |
+| 12 | Valedictorian | Colonel | I–III | Thin wings: `valedictorian-1.png` (bronze), `-2` (silver), `-3` (gold) |
+| 13 | Head of the Class | General | I–III | Thick wings: `head-of-the-class-1.png` (bronze), `-2` (silver), `-3` (gold) |
 | ∞ | Honor Roll | Marshal | One insignia, plus stars | `honor-roll.png` (gold swept wings) |
 
-Not yet assigned to a rank: `unassigned-gold-chevrons-1.png` to `-3.png` (one, two and three gold upward chevrons
-with a dark outline, sent first as Paper Dart and then replaced).
+Not yet assigned to a rank:
+
+- `unassigned-gold-chevrons-1.png` to `-3.png`: one, two and three gold upward chevrons.
+- `unassigned-bronze-down-chevrons-1.png` to `-3.png`: the first Blank Page art, one, two and
+  three bronze downward chevrons, replaced by the upward style.
