@@ -10,14 +10,16 @@ import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, EVENTS, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
 import { overHome } from '../../src/defenses/Layout';
 import { Mission, type MissionSpec, type Point3 } from '../../src/missions/Mission';
-import type { MissionContext } from '../../src/missions/MissionGenerator';
+import { convoyMission, shipmentMission, type MissionContext } from '../../src/missions/MissionGenerator';
+import { scoutPlan } from '../../src/ai/FlightPlans';
+import { SessionEvents, type SessionEvent, type SessionEventKind } from './SessionEvents';
 import {
   NET,
   NEUTRAL_FRAME,
@@ -173,6 +175,8 @@ export class ServerWorld {
   readonly history = new History();
   readonly attacks = new AttackBook();
   readonly kills = new KillBook();
+  /** v0.0.18: the session's world events. */
+  readonly sessionEvents: SessionEvents;
   /** v0.0.17: the Merit this session's play earns, for the ledger. */
   readonly merit = new MeritBook();
   readonly pilots = new Map<string, Pilot>();
@@ -220,6 +224,8 @@ export class ServerWorld {
     this.clock = options.clock ?? Date.now;
     this.seed = options.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = seededRng(this.seed);
+    // Events roll from their own sequence, so they never change what the rest of the world rolls.
+    this.sessionEvents = new SessionEvents(seededRng(this.seed + 4441));
     // Desk names draw from their own sequence, so they never change what the world's rules roll.
     this.nameRng = seededRng(this.seed + 7177);
     this.shared = sharedWorld();
@@ -847,6 +853,7 @@ export class ServerWorld {
     this.updateAttacks();
     this.rebuildAi();
     this.updateDesks();
+    this.updateSessionEvents(dt);
     this.pvpTimer -= dt;
     if (this.pvpTimer <= 0) {
       this.pvpTimer = PVP_REFRESH;
@@ -1106,6 +1113,8 @@ export class ServerWorld {
         this.emit({ t: 'down', id: a.id, p: v3(a.position), v: v3(v), kind: a.spec.id, side: a.side });
         this.history.forget(a.id);
         const shooter = e.by ? (this.pilotOfPlane(e.by) ?? this.ownerOfInstallation(e.by)) : null;
+        const ev = this.sessionEvents.about(a.id);
+        if (ev) this.settleEvent(ev, 'resolved');
         const owner = this.missionOwner(a.id);
         // The mission it belongs to counts it whoever finished it; the shooter gets the credit.
         if (owner && owner.pilot !== shooter) owner.pilot.state?.aircraftDestroyed(owner.id, a.role, false);
@@ -1126,6 +1135,8 @@ export class ServerWorld {
       case 'escaped': {
         const owner = this.missionOwner(e.aircraft.id);
         owner?.pilot.state?.aircraftEscaped(owner.id);
+        const ev = this.sessionEvents.about(e.aircraft.id);
+        if (ev) this.settleEvent(ev, 'failed');
         break;
       }
       default:
@@ -1302,6 +1313,7 @@ export class ServerWorld {
     if (ai) {
       st.recordShotHit();
       const { dealt, destroyed } = this.air.damage(ai.id, r.damage, shooter.plane, true);
+      this.sessionEvents.contribute(ai.id, shooter.id, dealt);
       if (dealt > 0) {
         st.recordDamage(dealt, null);
         this.emit({ t: 'dmg', tg: ai.id, n: dealt, p: v3(at), by: shooter.id, fatal: destroyed, k: 'ink' });
@@ -1332,6 +1344,7 @@ export class ServerWorld {
   private damageInstallation(i: Installation, amount: number, by: Pilot | null, weapon: Weapon): number {
     const { dealt, destroyed } = i.damage(Math.round(amount));
     if (dealt <= 0) return 0;
+    if (by) this.sessionEvents.contribute(i.id, by.id, dealt);
     const centre = { x: i.spec.x, y: i.spec.ground + i.spec.pivot * 0.6, z: i.spec.z };
     this.emit({ t: 'dmg', tg: i.id, n: dealt, p: v3(centre), by: by?.id, fatal: destroyed, k: weapon });
     if (by?.state) by.state.recordDamage(dealt, destroyed ? i.id : null, true, i.spec.kind === 'turret');
@@ -1355,6 +1368,8 @@ export class ServerWorld {
     if (destroyed) {
       this.solidsCache = null;
       this.emit({ t: 'inst', id: i.id, wrecked: true });
+      const ev = this.sessionEvents.about(i.id);
+      if (ev) this.settleEvent(ev, 'resolved');
     }
     return dealt;
   }
@@ -1456,6 +1471,160 @@ export class ServerWorld {
         owner?.pilot.state?.escortStrike(owner.id, hit);
       }
     }
+  }
+
+  // ---- World events (v0.0.18) ----------------------------------------------------------------------
+
+  /** Starts, runs and ends the session's events. */
+  private updateSessionEvents(dt: number): void {
+    const players = [...this.pilots.values()].filter((p) => p.connected && !p.leaving && p.home).length;
+    const started = this.sessionEvents.tick(dt, players, (kind, uid) => this.startEvent(kind, uid));
+    if (started) {
+      this.news(started.title, 'info');
+      this.offerEventCards();
+    }
+    for (const e of this.sessionEvents.expire(this.time)) this.settleEvent(e, 'expired');
+    // A supply drop goes to the first plane that flies low over it.
+    for (const e of this.sessionEvents.active) {
+      if (e.kind !== 'supply-drop' || !e.drop) continue;
+      const d = e.drop;
+      for (const p of this.pilots.values()) {
+        if (!p.flying || !p.state) continue;
+        const pos = p.flight.model.position;
+        if (Math.abs(pos.x - d.x) <= EVENTS.session.dropHalf && Math.abs(pos.z - d.z) <= EVENTS.session.dropHalf && pos.y - d.top <= EVENTS.session.dropCeiling) {
+          this.collectDrop(e, p);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Starts an event of `kind` now, if one can happen (the developer's tools and tests). */
+  forceEvent(kind: SessionEventKind): SessionEvent | null {
+    const e = this.startEvent(kind, randomUUID());
+    if (!e) return null;
+    this.sessionEvents.events.push(e);
+    this.news(e.title, 'info');
+    this.offerEventCards();
+    return e;
+  }
+
+  /** Makes an event of `kind`, or null if it can't happen right now. */
+  private startEvent(kind: SessionEventKind, uid: string): SessionEvent | null {
+    const aiDesks = this.territories.filter((t) => this.deskState(t.id) === 'ai' && !this.owners.has(t.id));
+    const pick = <T,>(xs: T[]): T | undefined => xs[Math.floor(this.rng() * xs.length)];
+    switch (kind) {
+      case 'high-value': {
+        const depots = this.network.installations.filter((i) => i.alive && i.side === 'enemy' && i.spec.kind === 'supply' && aiDesks.some((t) => t.id === i.spec.territoryId) && !this.sessionEvents.about(i.id));
+        const depot = pick(depots);
+        if (!depot) return null;
+        return { uid, kind, territoryId: depot.spec.territoryId, title: `Shipment at ${this.deskName(depot.spec.territoryId)}: destroy the supply depot`, until: this.time + EVENTS.shipmentTime, target: depot.id, status: 'active' };
+      }
+      case 'convoy': {
+        if (this.air.room < 1) return null;
+        const zone = aiDesks.filter((t) => t.threat >= 1);
+        const start = pick(zone);
+        if (!start) return null;
+        const path = [start];
+        for (let n = 0; n < 2; n++) {
+          const last = path[path.length - 1];
+          const next = aiDesks.filter((t) => !path.includes(t)).sort((a, b) => Math.hypot(a.x - last.x, a.z - last.z) - Math.hypot(b.x - last.x, b.z - last.z))[0];
+          if (next) path.push(next);
+        }
+        const id = `ev-${uid.slice(0, 8)}`;
+        this.air.spawn({ ...scoutPlan(this.territories, path.map((t) => t.id), 'medium', id, this.rng, 'event'), role: 'bomber', speed: 13 });
+        return { uid, kind, territoryId: path[Math.floor(path.length / 2)].id, title: `Enemy convoy crossing ${path.map((t) => this.deskName(t.id)).join(' → ')}`, until: null, target: id, status: 'active' };
+      }
+      case 'supply-drop': {
+        const free = this.territories.filter((t) => !this.owners.has(t.id) && !this.sessionEvents.active.some((e) => e.territoryId === t.id));
+        const t = pick(free);
+        if (!t) return null;
+        const resource = this.rng() < 0.5 ? ('ink' as const) : ('rubber' as const);
+        return {
+          uid, kind, territoryId: t.id, title: `Supply drop on ${this.deskName(t.id)}: ${resource === 'ink' ? 'ink' : 'rubber balls'}, first come first served`,
+          until: this.time + EVENTS.session.dropTime, target: null, status: 'active',
+          drop: { x: t.x, z: t.z, top: t.top, resource, amount: EVENTS.session.drop[resource] },
+        };
+      }
+      case 'ink-storm':
+        return { uid, kind, territoryId: null, title: `Ink storm: missions pay double ink for ${Math.round(EVENTS.session.stormTime / 60)} minutes`, until: this.time + EVENTS.session.stormTime, target: null, status: 'active' };
+    }
+  }
+
+  /** Puts the newest active shipment or convoy on the board of every player not in the air. */
+  private offerEventCards(): void {
+    const live = [...this.sessionEvents.active].reverse().find((e) => e.kind === 'high-value' || e.kind === 'convoy');
+    for (const p of this.pilots.values()) {
+      const director = p.director;
+      if (!director || !p.home || p.flying) continue;
+      const current = director.event;
+      if ((current?.eventId ?? null) === (live?.uid ?? null)) continue;
+      if (!live) {
+        director.setEvent(null);
+        p.state?.updateOffers(p.cards());
+        continue;
+      }
+      const ctx = this.missionContext(p);
+      const t = this.territories.find((x) => x.id === live.territoryId);
+      if (!t) continue;
+      const spec = live.kind === 'high-value'
+        ? shipmentMission(t, live.target!, 'medium', ctx, this.rng, Math.round(EVENTS.shipmentTime / 60))
+        : convoyMission(live.target!, [t], 'medium', false, ctx, this.rng);
+      director.setEvent({ slot: 'event', source: 'event', mission: new Mission(spec), recipe: null, eventId: live.uid, reasons: [`World event: ${live.title}`] });
+      p.state?.updateOffers(p.cards());
+    }
+  }
+
+  /** The event's card is being flown by these players (they are paid by it, not by the bounty). */
+  private eventFlyers(e: SessionEvent): Set<string> {
+    const out = new Set<string>();
+    for (const p of this.pilots.values()) {
+      const m = p.state?.mission;
+      if (m && p.director?.offerFor(m)?.eventId === e.uid) out.add(p.id);
+    }
+    return out;
+  }
+
+  /** An event is over: bounties split by damage, cards taken off the board. */
+  private settleEvent(e: SessionEvent, status: SessionEvent['status']): void {
+    if (e.status !== 'active') return;
+    e.status = status;
+    if (status === 'resolved' && e.target && (e.kind === 'high-value' || e.kind === 'convoy')) {
+      const bounty = e.kind === 'high-value' ? EVENTS.bounty['high-value'] : EVENTS.bounty.convoy;
+      for (const share of this.sessionEvents.split(e.target, bounty, this.eventFlyers(e))) {
+        const p = this.pilots.get(share.player);
+        if (!p?.state) continue;
+        p.cause = `event:${e.uid}:${p.id}`;
+        p.state.payBonus(share.amount, e.kind === 'high-value' ? 'Shipment bounty' : 'Convoy bounty');
+        p.cause = null;
+        this.note(p, 'trophy', e.kind === 'high-value' ? 'Shipment destroyed' : 'Convoy down', `+${share.amount}`, 'good');
+      }
+      this.news(e.kind === 'high-value' ? 'The shipment was destroyed' : 'The convoy was shot down', 'good');
+    } else if (status === 'expired' && e.kind === 'ink-storm') {
+      this.news('The ink storm is over', 'info');
+    } else if (status !== 'resolved' && e.kind !== 'ink-storm') {
+      this.news(e.kind === 'convoy' ? 'The convoy got away' : e.kind === 'supply-drop' ? 'The supply drop was taken away' : 'The shipment was moved on', 'info');
+    }
+    // Shipments and convoys leave the boards (a card being flown stays with its pilot).
+    for (const p of this.pilots.values()) {
+      if (p.director?.event?.eventId === e.uid && !p.flying) {
+        p.director.setEvent(null);
+        p.state?.updateOffers(p.cards());
+      }
+    }
+    this.offerEventCards();
+  }
+
+  /** A player flew low over a supply drop first: it is theirs (once: keyed by the event). */
+  private collectDrop(e: SessionEvent, p: Pilot): void {
+    const d = e.drop!;
+    p.cause = `event:${e.uid}:${p.id}`;
+    p.resources.earnOf(d.resource, d.amount, 'bonus', 'Supply drop');
+    p.state!.payBonus(EVENTS.session.drop.paper, 'Supply drop');
+    p.cause = null;
+    this.note(p, d.resource === 'ink' ? 'inkwell' : 'rubber', 'Supply drop', `+${d.amount} ${d.resource === 'ink' ? 'ink' : 'rubber'}`, 'good');
+    this.news(`${p.name} took the supply drop`, 'info');
+    this.settleEvent(e, 'resolved');
   }
 
   // ---- Raids between players ----------------------------------------------------------------------
@@ -1648,6 +1817,12 @@ export class ServerWorld {
         break;
       case 'mission-succeeded':
         this.endMissionAi(p);
+        // v0.0.18: an ink storm pays the mission's ink again (once: keyed by the mission).
+        if (this.sessionEvents.storm && (st.mission?.supplies.ink ?? 0) > 0) {
+          p.cause = `storm:${p.missionId(st.mission!)}`;
+          p.resources.earnOf('ink', Math.round(st.mission!.supplies.ink! * (EVENTS.session.stormFactor - 1)), 'bonus', 'Ink storm');
+          p.cause = null;
+        }
         p.stats.missions++;
         p.addScore(PVP.score.mission);
         this.note(p, 'ok', 'Complete', `+${e.reward}`, 'good');

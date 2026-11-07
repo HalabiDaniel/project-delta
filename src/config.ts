@@ -1733,6 +1733,29 @@ export const EVENTS = {
   bounty: { 'high-value': 45, convoy: 50 },
   /** Supplies delivered to T1 by a supply run that the player escorted. */
   supplies: 50,
+  /**
+   * v0.0.18: world events in multiplayer sessions (server/world/SessionEvents.ts). One scheduler per
+   * session, paced by how many players are connected: the cooldown is scaled by
+   * sqrt(`pacePlayers` / players) (never shorter than with 16), so a two-player session is never
+   * flooded; one event at a time up to `crowd` players, two above. Rewards for shipments and convoys
+   * are the bounties above, split by each player's share of the damage (`shareMin` to count).
+   */
+  session: {
+    first: [120, 200] as readonly [number, number],
+    cooldown: [160, 260] as readonly [number, number],
+    pacePlayers: 2,
+    crowd: 8,
+    weights: { 'high-value': 1, convoy: 1, 'supply-drop': 1, 'ink-storm': 0.3 } as Record<string, number>,
+    shareMin: 0.1,
+    /** A supply drop: a crate of ink or rubber balls on a free desk, to the first to fly low over it. */
+    dropTime: 180,
+    drop: { ink: 45, rubber: 10, paper: 15 },
+    dropHalf: 7,
+    dropCeiling: 9,
+    /** An ink storm: missions pay `stormFactor` times their ink for `stormTime` seconds. */
+    stormTime: 600,
+    stormFactor: 2,
+  },
   /** A territory stays on alert this long after the player destroys something there, and its wrecks stay down. */
   alertTime: 180,
   /** With every weapon destroyed, a territory's defenses stay disabled this long. */
