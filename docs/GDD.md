@@ -168,6 +168,14 @@ Initially, the planned resource types are:
 
 Additional resource types may be introduced only if they improve strategic decisions without creating excessive complexity.
 
+**Since v0.0.18** all three are real: each has production, storage, a protected reserve and its own
+ledger, decided by the server in multiplayer. Ink comes from the crew and ink wells and is spent
+arming guns, reloading a player's turrets and launchers, and on some planes and upgrades; rubber
+balls are scavenged slowly, paid by missions and events, and spent on bombs and payload fittings.
+Paper stays the dominant resource: the starter Swift needs paper only, and a free basic load (a
+share of the rounds and one bomb) means an empty ink or rubber store never grounds anyone. The
+values are in `src/config.ts` (`ECONOMY`, `BASE`) and the README's v0.0.18 section.
+
 ### 4.3 Resource Production
 
 Territories generate a limited amount of resources automatically.
@@ -956,7 +964,7 @@ Cosmetic-only ranks from Blank Page to Head of the Class (15 ranks, 48 levels, t
 
 ### Version 0.0.18: Economy and Content Depth
 
-Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, world events in sessions, server-side medals, records, achievements and the logbook, the radar signature and stealth system, and an economy simulator. Lightning and Thug finalised. See [v0.0.18](roadmap/v0.0.18.md).
+Ink and rubber balls as real resources (§4.2), upkeep and caps against snowballing (§13.5), stunt, exploration and timed missions, world events in sessions, server-side medals, records, achievements and the logbook, the radar signature and stealth system, and an economy simulator. Lightning and Thug finalised. See [v0.0.18](roadmap/v0.0.18.md). **Coded:** everything above except multiplayer supply runs and consented deliveries to another player's desk (with v0.0.19's cooperation settings) and the new art; the numbers await the developer's approval and the two-player playtest.
 
 ### Version 0.0.19: Advanced Multiplayer
 

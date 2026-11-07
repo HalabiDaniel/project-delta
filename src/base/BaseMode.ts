@@ -11,6 +11,16 @@ export type Projector = (x: number, z: number) => { x: number; y: number } | nul
 
 /** What one building of `kind` at `level` gives, as icon stats (with what changed from `from`). */
 export function levelStats(kind: BuildingKind, level: number, from?: number): Stat[] {
+  const stats = coreStats(kind, level, from);
+  // v0.0.18: ink or rubber balls the level takes, and its upkeep.
+  const lv = levelOf(kind, level);
+  if (lv.materials?.ink) stats.push({ icon: 'inkwell', value: String(lv.materials.ink), label: 'Also takes ink' });
+  if (lv.materials?.rubber) stats.push({ icon: 'rubber', value: String(lv.materials.rubber), label: 'Also takes rubber balls' });
+  if (lv.upkeep) stats.push({ icon: 'repair', value: `−${lv.upkeep.paper ?? lv.upkeep.ink}/m${lv.upkeep.ink ? ' ink' : ''}`, label: 'Upkeep, for a second one at this level' });
+  return stats;
+}
+
+function coreStats(kind: BuildingKind, level: number, from?: number): Stat[] {
   const lv = levelOf(kind, level);
   const prev = from !== undefined ? levelOf(kind, from) : null;
   const delta = (now: number | undefined, before: number | undefined, unit = '') => (prev && now !== undefined && before !== undefined && now !== before ? `${now > before ? '+' : ''}${Math.round((now - before) * 10) / 10}${unit}` : undefined);
@@ -37,7 +47,11 @@ export function levelStats(kind: BuildingKind, level: number, from?: number): St
       return [
         { icon: 'capacity', value: `+${lv.capacity}`, label: 'Extra capacity', delta: delta(lv.capacity, prev?.capacity) },
         { icon: 'lock', value: `+${lv.protection}`, label: 'Extra paper protected from raids', delta: delta(lv.protection, prev?.protection) },
+        { icon: 'ink', value: `+${lv.holds?.ink ?? 0}`, label: 'Extra ink capacity', delta: delta(lv.holds?.ink, prev?.holds?.ink) },
+        { icon: 'bombload', value: `+${lv.holds?.rubber ?? 0}`, label: 'Extra rubber-ball capacity', delta: delta(lv.holds?.rubber, prev?.holds?.rubber) },
       ];
+    case 'inkwell':
+      return [{ icon: 'ink', value: `+${lv.production}/m`, label: 'Ink per minute', delta: delta(lv.production, prev?.production, '/m') }];
   }
 }
 
@@ -212,7 +226,16 @@ export class BaseMode {
         stats: [
           { icon: 'capacity', value: String(base.capacity), label: 'Capacity' },
           { icon: 'lock', value: String(base.protectedPaper), label: `Protected from raids (always at least ${ECONOMY.protectedPaper})` },
-          { icon: 'rate', value: `${Math.round(base.production * 10) / 10}/m`, label: 'Paper per minute' },
+          { icon: 'rate', value: `${Math.round(base.production * 10) / 10}/m`, label: 'Paper per minute, before upkeep' },
+          // v0.0.18: upkeep (GDD §13.5) and what is left of production after it.
+          ...(base.upkeepOf('paper') > 0 || base.upkeepOf('ink') > 0
+            ? [
+                { icon: 'repair' as const, value: `−${base.upkeepOf('paper')}/m${base.upkeepOf('ink') > 0 ? ` · −${base.upkeepOf('ink')} ink` : ''}`, label: 'Upkeep of top-level buildings (paid out of production)' },
+                { icon: 'chart' as const, value: `${base.netProductionOf('paper')}/m`, label: 'Paper per minute, after upkeep' },
+              ]
+            : []),
+          { icon: 'inkwell', value: `${base.resources.ink}/${base.capacityOf('ink')} · ${base.netProductionOf('ink')}/m`, label: `Ink: held / capacity · per minute (${base.protectedOf('ink')} protected)` },
+          { icon: 'rubber', value: `${base.resources.rubber}/${base.capacityOf('rubber')} · ${base.netProductionOf('rubber')}/m`, label: `Rubber balls: held / capacity · per minute (${base.protectedOf('rubber')} protected)` },
         ],
         upgrade: null, repair, refund: null, confirmingRemove: false,
       };

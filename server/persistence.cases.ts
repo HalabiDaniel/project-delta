@@ -112,12 +112,12 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
       const recordOf = async (store: Store, publicId: string) => (await store.findPlayers(publicId))[0];
 
       /** The player's log, oldest first, and the balance it explains. */
-      async function ledger(store: Store, playerId: string) {
+      async function ledger(store: Store, playerId: string, resource: 'paper' | 'ink' | 'rubber' = 'paper') {
         const worldId = await economyWorld();
-        const log = (await store.transactions(worldId, playerId, 1000)).reverse();
+        const log = (await store.transactions(worldId, playerId, 1000)).reverse().filter((t) => t.resource === resource);
         return {
           log,
-          balance: await store.balance(worldId, playerId),
+          balance: await store.balance(worldId, playerId, resource),
           sum: log.reduce((a, t) => a + t.amount, 0),
         };
       }
@@ -142,6 +142,13 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         expect(after.log.find((t) => t.kind === 'spend')!.amount).toBe(-AIRCRAFT.swift.cost);
         expect(after.balance).toBe(after.sum);
         expect(after.balance + pilot.journal!.unflushed).toBe(pilot.resources.paper);
+        // v0.0.18: ink and rubber balls have their own log: a first stock, once, and the balance equals the log.
+        for (const r of ['ink', 'rubber'] as const) {
+          await eventually(async () => (await ledger(s.store, rec.id, r)).log.length >= 1);
+          const own = await ledger(s.store, rec.id, r);
+          expect(own.log[0]).toMatchObject({ key: `stock:${rec.id}:${r}`, amount: r === 'ink' ? ECONOMY.startingInk : ECONOMY.startingRubber });
+          expect(own.balance).toBe(own.sum);
+        }
       });
 
       it('brings the paper back exactly on the next join, and never pays the starting paper twice', async () => {
@@ -167,6 +174,10 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         const now = await ledger(s.store, rec.id);
         expect(now.log.filter((t) => t.key.startsWith('start:'))).toHaveLength(1);
         expect(now.balance).toBe(now.sum);
+        // The first stock of ink is never given twice either, and the ink comes back as it was.
+        const ink = await ledger(s.store, rec.id, 'ink');
+        expect(ink.log.filter((t) => t.key.startsWith('stock:'))).toHaveLength(1);
+        expect(r.world.pilots.get(ann.id)!.resources.ink).toBe(ink.balance);
         // The limits are saved with the balance.
         const economy = await s.store.economy(await economyWorld(), rec.id);
         expect(economy!.capacity).toBeGreaterThan(0);
@@ -219,6 +230,9 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         const pilot = r.world.pilots.get(ann.id)!;
         // A plane on the pad (paid for), and a board to come back to.
         ann.client.send('cmd', { a: 'aircraft', id: 'dart' });
+        await eventually(() => pilot.state!.aircraft === 'dart');
+        // A card the Dart can fly (it carries no bombs).
+        for (let i = 0; i < pilot.state!.offers.length && !r.world.suits(pilot, 'dart'); i++) pilot.state!.select(i);
         ann.client.send('cmd', { a: 'build' });
         await eventually(() => pilot.state!.phase === 'ready', 4000);
         pilot.stats.kills = 2;

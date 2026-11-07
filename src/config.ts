@@ -30,6 +30,28 @@ export const ECONOMY = {
    * (it is not kept afterwards). Before v0.0.11 it was an emergency Dart.
    */
   emergency: { ammo: 35 },
+  /**
+   * v0.0.18: ink and rubber balls (GDD §4.2). A new player starts with these, and raids never take
+   * either below its protected reserve (storage boxes protect more on top). Provisional values, for
+   * the developer to approve against the simulator's reports.
+   */
+  startingInk: 60,
+  startingRubber: 12,
+  protectedInk: 20,
+  protectedRubber: 4,
+  /**
+   * Arming a plane at launch, and topping it up on the runway, draws on the territory's stores: ink
+   * for gun rounds, rubber balls for bombs (per bomb, by kind). Nobody is grounded by an empty store: a plane always
+   * takes off with `basicLoad` of its rounds and up to `freeBombs` bombs (when the mission needs
+   * them) for free, and simply carries less of anything the stores can't pay for.
+   */
+  arming: {
+    /** Gun rounds one ink buys. */
+    roundsPerInk: 10,
+    rubberPerBomb: { standard: 2, small: 1 } as Record<'standard' | 'small', number>,
+    basicLoad: 0.35,
+    freeBombs: 1,
+  },
   /** Transactions kept in the paper log. */
   ledgerSize: 60,
 } as const;
@@ -237,6 +259,11 @@ export interface GunSpec {
   speed: number;
   /** Distance a round travels before it dries up. */
   range: number;
+  /**
+   * v0.0.18: damage against structures and defenses is multiplied by this (the Thug's cannon);
+   * absent: 1. Depots still shrug off most ink on top (DEFENSES.supply.inkFactor).
+   */
+  structureFactor?: number;
 }
 
 export type BombKind = 'standard' | 'small';
@@ -266,6 +293,12 @@ export interface AircraftSpec {
   /** Re-creasing (and repairing) one that landed safely. */
   refitCost: number;
   /**
+   * v0.0.18: ink and rubber balls folded into a new one on top of its paper `cost` (special
+   * weapons, markings, payload fittings). Not charged for a refit. The Swift needs none: the
+   * starter is always reachable with paper alone.
+   */
+  materials?: { ink?: number; rubber?: number };
+  /**
    * Seconds to fold a new one; `PLANE.buildTime` if not set. A refit takes `PLANE.refitTime`
    * scaled the same way (aircraft/Aircraft.ts `buildDuration`). Since v0.0.15.
    */
@@ -294,6 +327,11 @@ export interface AircraftSpec {
   /** Special abilities beyond the numbers above. */
   traits?: AircraftTraits;
   /**
+   * v0.0.18: armour: this share of every enemy round, rocket and blast is absorbed (the Thug). Absent:
+   * none. Collisions and rough landings are not armoured against. Counted in the durability rating.
+   */
+  armour?: number;
+  /**
    * v0.0.16: the automatic maneuvers this design can carry in its maneuver slot, the first being
    * the default. Empty for bombers.
    */
@@ -302,8 +340,9 @@ export interface AircraftSpec {
 
 export interface AircraftTraits {
   /**
-   * Stealth: defined in the data since v0.0.11, but it has no effect until the stealth system
-   * arrives in v0.0.18 (until then only `signature` makes a plane hard to spot).
+   * Stealth (v0.0.18, the radar signature system): the plane's signature drops further while it is
+   * quiet (STEALTH.quiet) and rocket locks on it take longer. Firing, opening the bomb bay or
+   * boosting reveals it for a moment. It is never invisible: within visual range it is always seen.
    */
   stealth?: boolean;
   /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
@@ -328,6 +367,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Fast recon',
     cost: 40,
     refitCost: 10,
+    materials: { ink: 4 },
     tagline: 'The fastest plane in the classroom. A light gun, no bombs: it looks, it runs.',
     flight: {
       minSpeed: 11, cruiseSpeed: 24, maxSpeed: 38,
@@ -355,6 +395,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Agile fighter',
     cost: 45,
     refitCost: 11,
+    materials: { ink: 10 },
     tagline: 'Turns tighter than anything else, with twin ink guns. No bombs: built to dogfight.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 33,
@@ -408,6 +449,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Bomber',
     cost: 75,
     refitCost: 19,
+    materials: { rubber: 6 },
     tagline: 'Slow, heavy and tough. Carries four bombs and turns like a barge.',
     flight: {
       minSpeed: 9, cruiseSpeed: 17, maxSpeed: 26,
@@ -439,6 +481,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Air superiority',
     cost: 72,
     refitCost: 16,
+    materials: { ink: 14 },
     buildTime: 3,
     tagline: 'The fastest fighter, the best climber and the heaviest guns. No bombs: it rules the air.',
     flight: {
@@ -467,7 +510,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Stealth multirole',
     cost: 80,
     refitCost: 18,
-    tagline: 'Hard to spot, good at everything: guns for a fight, two bombs for the target.',
+    materials: { ink: 8, rubber: 3 },
+    tagline: 'The lowest-signature fighter: a gun for a fight, two mini bombs in an internal bay. Good at everything, best at nothing.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 31,
       throttleAccel: 14, speedResponse: 2.1, pitchSpeedEffect: 8,
@@ -478,14 +522,17 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     maxHealth: 110,
     gun: { barrels: 1, ammo: 100, interval: 0.1, damage: 7, speed: 74, range: 80 },
     gunLabel: 'Internal ink gun',
-    bombs: { capacity: 2, kind: 'standard' },
+    // v0.0.18: a light payload carried inside; opening the bay reveals it (STEALTH.reveal.bomb).
+    bombs: { capacity: 2, kind: 'small' },
     signature: 0.65,
     hitRadius: 1.0,
     accent: [0.55, 0.45, 0.3],
     inspiration: 'F-35',
     shape: 'swift',
     maneuvers: ['foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'spiralDrill'],
+    traits: { stealth: true },
   },
+
   thug: {
     id: 'thug',
     name: 'Thug',
@@ -493,18 +540,22 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Ground attack',
     cost: 70,
     refitCost: 16,
-    tagline: 'Slow, armoured and loud. A spinning ink cannon and three mini bombs for low passes.',
+    materials: { ink: 12, rubber: 2 },
+    buildTime: 2.6,
+    tagline: 'Slow, armoured and loud. A rotary ink cannon that chews through defenses, three mini bombs, and no business in a dogfight.',
     flight: {
-      minSpeed: 8, cruiseSpeed: 17, maxSpeed: 26,
-      throttleAccel: 11, speedResponse: 1.6, pitchSpeedEffect: 9,
-      maxTurnRate: 1.35, maxPitchRate: 1.1, aimGain: 2.8, rollResponse: 5, pitchResponse: 5, maxBank: 52 * DEG,
-      boostSpeed: 10, boostResponse: 4, boostDuration: 1.1, boostCooldown: 4,
+      minSpeed: 8, cruiseSpeed: 17, maxSpeed: 25,
+      throttleAccel: 10, speedResponse: 1.5, pitchSpeedEffect: 10,
+      maxTurnRate: 1.3, maxPitchRate: 1.0, aimGain: 2.8, rollResponse: 4.8, pitchResponse: 4.8, maxBank: 52 * DEG,
+      boostSpeed: 9, boostResponse: 3.5, boostDuration: 1.1, boostCooldown: 4.2,
       collisionRadius: 0.95,
     },
     maxHealth: 150,
-    gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70 },
+    // v0.0.18: the cannon hits structures and defenses twice as hard as ordinary ink.
+    gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70, structureFactor: 2 },
     gunLabel: 'Rotary ink cannon',
     bombs: { capacity: 3, kind: 'small' },
+    armour: 0.25,
     signature: 1.15,
     hitRadius: 1.3,
     accent: [0.45, 0.55, 0.3],
@@ -512,6 +563,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'swift',
     maneuvers: ['updraftRoll', 'diveFold', 'foldBack', 'slipRoll', 'spiralDrill'],
   },
+
   jumper: {
     id: 'jumper',
     name: 'Jumper',
@@ -519,6 +571,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'VTOL fighter',
     cost: 70,
     refitCost: 16,
+    materials: { ink: 6, rubber: 2 },
     tagline: 'Flies slower than anything else with jets, and turns tight. Hover mode comes later.',
     flight: {
       minSpeed: 7, cruiseSpeed: 19, maxSpeed: 29,
@@ -545,6 +598,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Surveillance drone',
     cost: 50,
     refitCost: 10,
+    materials: { ink: 4 },
     tagline: 'A long, quiet glider that is hard to spot. Barely armed, no bombs.',
     flight: {
       minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
@@ -571,6 +625,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Supersonic bomber',
     cost: 105,
     refitCost: 23,
+    materials: { ink: 4, rubber: 6 },
     tagline: 'A bomber that can outrun fighters: swing wings, three bombs, a quick dash home.',
     flight: {
       minSpeed: 11, cruiseSpeed: 22, maxSpeed: 34,
@@ -597,6 +652,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     roleLabel: 'Stealth bomber',
     cost: 120,
     refitCost: 26,
+    materials: { ink: 6, rubber: 8 },
     tagline: 'A flying wing defenses barely notice. Four bombs, no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
@@ -617,6 +673,22 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     maneuvers: [],
   },
 };
+
+/**
+ * v0.0.18: the radar signature system (GDD §5.2, plan v0.0.18 §8). Every plane's `signature`
+ * scales how far defenses, AI pilots and threat panels notice it. A plane with the stealth trait
+ * is quieter still while it does nothing loud (`quiet`); firing, opening the bomb bay or boosting
+ * reveals it (`reveal` added to its signature, fading over `revealTime`). Rocket locks on a plane
+ * below signature 1 take longer, by 1 / signature, never more than `maxLock` times: locks stay
+ * possible. Visual range is untouched: inside `visual` metres anything is seen, whatever it is.
+ */
+export const STEALTH = {
+  quiet: 0.8,
+  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2 },
+  revealTime: 3,
+  maxLock: 1.8,
+  visual: 28,
+} as const;
 
 /** Garage order, roughly cheapest first: the starter Swift, then the rest up to the bombers. */
 export const AIRCRAFT_ORDER: readonly AircraftId[] = ['swift', 'dart', 'falcon', 'specter', 'thug', 'jumper', 'raptor', 'lightning', 'widewing', 'lancer', 'ghost'];
@@ -853,6 +925,12 @@ export const DEFENSES = {
     storeRole: 'Your paper · raid target',
     storeHealth: 120,
   },
+  /**
+   * v0.0.18: a player's weapons reload from the territory's ink store (GDD §9.3): a turret's
+   * magazine, a launcher's next rocket. With the store empty they still reload, `dryFactor` times
+   * slower: an empty store degrades defenses, it never switches them off.
+   */
+  ammo: { magazine: 2, rocket: 3, dryFactor: 2.5 },
   /** Once a territory's radar is gone, its weapons only notice planes this much closer. */
   radarLostDetection: 0.7,
   /** Hysteresis: a weapon keeps a plane it is tracking out to this times its detection range. */
@@ -866,7 +944,7 @@ export const DEFENSES = {
   /** Weapons are placed so their reach stays clear of home and the first stretch after take-off. */
   departureClearance: 8,
   /** Share of the normal impact damage a plane takes flying into each kind. */
-  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, workshop: 0.75, storage: 0.7, barrier: 0.85 },
+  hardness: { turret: 1, launcher: 1, radar: 0.8, supply: 0.7, workshop: 0.75, storage: 0.7, inkwell: 0.7, barrier: 0.85 },
   /** Name and health labels show for installations this close. */
   labelRange: 110,
   /** The threat panel shows a defended territory once the plane is this close to its weapons' reach. */
@@ -1095,6 +1173,14 @@ export const RAIDS = {
    * reserve), up to `max`: more when it hits the paper store itself than another building.
    */
   loss: { store: { share: 0.2, max: 80 }, building: { share: 0.1, max: 40 } },
+  /**
+   * v0.0.18: the same rule for ink and rubber balls, each with its own cap, so one raid touches
+   * every stock but never takes much of any. Protected reserves (ECONOMY, storage boxes) are safe.
+   */
+  lossOther: {
+    ink: { store: { share: 0.2, max: 40 }, building: { share: 0.1, max: 20 } },
+    rubber: { store: { share: 0.2, max: 8 }, building: { share: 0.1, max: 4 } },
+  },
   /** The first two raids come alone; after that, a raid has this chance of a fighter escort. */
   escortAfter: 2,
   escortChance: 0.3,
@@ -1225,7 +1311,7 @@ export const SESSION = {
 } as const;
 
 /** What the player can build on T1, and how the base works. Numbers are first balancing guesses. */
-export type BuildingKind = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage';
+export type BuildingKind = 'turret' | 'launcher' | 'radar' | 'workshop' | 'storage' | 'inkwell';
 /** defense – weapons. radar – the radar station. economy – workshops and storage. utility – anything but a radar. */
 export type SlotKind = 'defense' | 'radar' | 'economy' | 'utility';
 
@@ -1243,11 +1329,20 @@ export interface BuildingLevel {
   reloadTime?: number;
   /** Launchers: seconds between rockets. */
   reload?: number;
-  /** Workshops: extra paper per minute. */
+  /** Workshops: extra paper per minute. Ink wells (v0.0.18): ink per minute. */
   production?: number;
   /** Storage boxes: extra capacity, and extra paper protected from raids. */
   capacity?: number;
   protection?: number;
+  /** Storage boxes (v0.0.18): extra ink and rubber-ball capacity, and how much of each they protect. */
+  holds?: { ink: number; rubber: number };
+  guards?: { ink: number; rubber: number };
+  /**
+   * v0.0.18: ink or rubber balls on top of the paper `cost` (higher levels of some buildings), and
+   * the upkeep this level costs per minute, paid out of production (BASE.upkeep).
+   */
+  materials?: { ink?: number; rubber?: number };
+  upkeep?: { paper?: number; ink?: number };
 }
 
 export interface BuildingSpec {
@@ -1271,6 +1366,15 @@ export const BASE = {
   lowBoost: 3,
   /** …and times this while the paper store lies wrecked. */
   wreckedStore: 0.5,
+  /**
+   * v0.0.18: ink and rubber balls held with no storage boxes, and what comes in without any building:
+   * the crew scrapes ink from old pens and scavenges rubber balls. An ink well adds far more ink;
+   * rubber balls stay scarce (missions, deliveries and events pay them). Same low-balance boost.
+   */
+  inkCapacity: 150,
+  rubberCapacity: 30,
+  inkProduction: 1.5,
+  rubberProduction: 0.6,
   /** Without a radar, raiders are only noticed this close to T1 (m from its middle). */
   detection: 70,
   /** Share of the paper put into a building given back when it is removed (scaled by its health). */
@@ -1330,20 +1434,28 @@ export const BASE = {
       levels: [
         { cost: 80, health: 90, production: 1.5 },
         { cost: 60, health: 105, production: 3.5 },
-        { cost: 90, health: 120, production: 6 },
+        { cost: 90, health: 120, production: 6, materials: { ink: 20 }, upkeep: { ink: 0.6 } },
       ],
     },
     storage: {
       kind: 'storage', name: 'Storage box', short: 'Storage', slots: ['economy', 'utility'], purpose: 'Holds and protects more paper',
       levels: [
-        { cost: 50, health: 100, capacity: 200, protection: 25 },
-        { cost: 50, health: 115, capacity: 500, protection: 50 },
-        { cost: 80, health: 130, capacity: 900, protection: 80 },
+        { cost: 50, health: 100, capacity: 200, protection: 25, holds: { ink: 100, rubber: 10 }, guards: { ink: 10, rubber: 2 } },
+        { cost: 50, health: 115, capacity: 500, protection: 50, holds: { ink: 220, rubber: 24 }, guards: { ink: 20, rubber: 4 } },
+        { cost: 80, health: 130, capacity: 900, protection: 80, holds: { ink: 400, rubber: 40 }, guards: { ink: 35, rubber: 6 }, materials: { rubber: 4 }, upkeep: { paper: 0.4 } },
+      ],
+    },
+    inkwell: {
+      kind: 'inkwell', name: 'Ink well', short: 'Ink well', slots: ['economy', 'utility'], purpose: 'Ink for guns and turrets',
+      levels: [
+        { cost: 65, health: 85, production: 2.5 },
+        { cost: 50, health: 100, production: 5 },
+        { cost: 80, health: 115, production: 8, materials: { rubber: 4 }, upkeep: { paper: 0.5 } },
       ],
     },
   } as Record<BuildingKind, BuildingSpec>,
   /** The order buildings are listed in. */
-  order: ['turret', 'launcher', 'radar', 'workshop', 'storage'] as readonly BuildingKind[],
+  order: ['turret', 'launcher', 'radar', 'workshop', 'inkwell', 'storage'] as readonly BuildingKind[],
   /** Sorties during which key hints show on the HUD (after that, hold H). */
   hintSorties: 3,
 } as const;
@@ -1382,6 +1494,10 @@ export const MISSIONS = {
     shipment: 25,
     convoy: 28,
     'supply-run': 28,
+    stunt: 20,
+    'time-trial': 18,
+    discovery: 18,
+    strafe: 30,
   },
   /**
    * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
@@ -1411,9 +1527,16 @@ export const MISSIONS = {
     shipment: 1.1,
     convoy: 0.6,
     'supply-run': 0.8,
+    stunt: 0.6,
+    'time-trial': 0.6,
+    discovery: 0.7,
+    strafe: 1.3,
   },
   /** Mission types built around defenses need targets with at least this threat level. */
-  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1 },
+  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1, strafe: 1 },
+  /** v0.0.18 strafing run: structures to wreck (by difficulty), and seconds on top of the flight there. */
+  strafeCount: { easy: 2, medium: 3, hard: 4 },
+  strafeTime: { easy: 50, medium: 40, hard: 32 },
   /** Extra reward for each enemy aircraft a mission sends up, by its pilot's skill. */
   airBonus: { easy: 6, medium: 8, hard: 10 },
   /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
@@ -1433,6 +1556,18 @@ export const MISSIONS = {
   /** Extra paper per metre between the launch pad and the objective. */
   distanceReward: 0.05,
   /**
+   * v0.0.18: ink and rubber balls a mission pays with its paper, by type, before the tier's
+   * multiplier (TIERS). Combat pays ink back, bombing pays rubber balls back, deliveries pay well in
+   * one or the other (they are the natural way to top up). Rewards stay modest: paper rules.
+   */
+  supplies: {
+    bombing: { rubber: 2 }, precision: { rubber: 2 }, 'multi-bomb': { rubber: 3 }, return: { rubber: 2 }, fortified: { rubber: 3, ink: 4 },
+    'low-attack': { rubber: 2, ink: 4 }, suppression: { ink: 10 }, practice: { ink: 8 }, dogfight: { ink: 10 }, patrol: { ink: 8 },
+    'scout-intercept': { ink: 6 }, 'bomber-intercept': { ink: 8 }, escort: { ink: 8 }, combined: { ink: 6, rubber: 2 }, 'multi-stage': { ink: 6, rubber: 2 },
+    delivery: { ink: 18 }, survival: { ink: 6 }, shipment: { rubber: 3 }, convoy: { ink: 8 }, 'supply-run': { ink: 10, rubber: 3 },
+    stunt: { ink: 4 }, 'time-trial': { ink: 4 }, discovery: { rubber: 3 }, strafe: { ink: 10, rubber: 2 },
+  } as Partial<Record<string, { ink?: number; rubber?: number }>>,
+  /**
    * Seconds a good run spends on the job itself, on top of the flight there at the reference
    * speed: the par time for a gold rating.
    */
@@ -1440,7 +1575,7 @@ export const MISSIONS = {
     bombing: 15, precision: 22, recon: 14, delivery: 0, return: 25, 'multi-bomb': 30, rings: 6, practice: 28,
     suppression: 30, 'danger-recon': 22, fortified: 25, 'multi-stage': 50, survival: 18, 'low-attack': 28,
     dogfight: 30, 'scout-intercept': 30, 'bomber-intercept': 25, escort: 45, patrol: 35, combined: 35,
-    shipment: 25, convoy: 30, 'supply-run': 45,
+    shipment: 25, convoy: 30, 'supply-run': 45, stunt: 14, 'time-trial': 4, discovery: 6, strafe: 35,
   },
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
   referenceSpeed: 20,
@@ -1477,6 +1612,28 @@ export const MISSIONS = {
   /** Survival challenge: total time to spend in a defended territory's airspace. */
   survivalTime: { easy: 12, medium: 16, hard: 20 },
   survivalCeiling: 32,
+  /**
+   * v0.0.18 stunts: rings, of which `maneuverGates` must be flown through during a maneuver, and one
+   * low gate at `lowGate` metres. Time trials: a desk's fixed circuit (the same rings every time, so
+   * a record means something), its time limit = the reference flight × `trialSlack`.
+   */
+  stuntRings: { easy: 4, medium: 5, hard: 6 },
+  maneuverGates: { easy: 1, medium: 2, hard: 2 },
+  lowGate: 4.5,
+  trialRings: 6,
+  trialSlack: { easy: 1.9, medium: 1.6, hard: 1.35 },
+  /** Discovery: the airspace over a landmark to reach, and its ceiling. */
+  discoveryHalf: 10,
+  discoveryCeiling: 32,
+  /**
+   * v0.0.18 deliveries: from medium up, a delivery may carry fragile cargo (any knock over
+   * `fragileImpact` damage fails it) or heavy cargo (top speed and boost times `heavyCargo`).
+   */
+  cargoChance: { easy: 0, medium: 0.4, hard: 0.6 },
+  fragileImpact: 4,
+  heavyCargo: 0.85,
+  /** Fragile and heavy cargo pay this much more. */
+  cargoBonus: 1.25,
   /** Low-level strike: stay below this height within `lowApproachRadius` of the bullseye. */
   lowCeiling: { easy: 16, medium: 13, hard: 10 },
   lowApproachRadius: 60,
@@ -1511,6 +1668,10 @@ export const SUITABILITY = {
     shipment: { firepower: 2, payload: 2, maneuverability: 1 },
     convoy: { speed: 3, firepower: 2, durability: 1 },
     'supply-run': { firepower: 3, maneuverability: 2, durability: 1 },
+    stunt: { maneuverability: 3, speed: 1 },
+    'time-trial': { speed: 3, maneuverability: 2 },
+    discovery: { speed: 2, stealth: 1, maneuverability: 1 },
+    strafe: { firepower: 3, durability: 3, payload: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus
@@ -1552,10 +1713,19 @@ export const DIRECTOR = {
     'high-value': { label: 'High value', detail: 'A temporary high-value target', reward: 1.5 },
     alert: { label: 'On alert', detail: 'The target territory is on alert', reward: 1.2 },
     recovery: { label: 'Recovery', detail: 'Low risk, pays enough for a new plane', reward: 1 },
+    'short-ink': { label: 'Ink run', detail: 'Pays extra ink: your store is low', reward: 1 },
+    'short-rubber': { label: 'Rubber run', detail: 'Pays extra rubber balls: your store is low', reward: 1 },
     emergency: { label: 'Emergency', detail: 'Defend home', reward: 1 },
   },
   /** A recovery mission always pays at least this: enough to fold a Falcon. */
   recoveryReward: 30,
+  /**
+   * v0.0.18: below these the safe card becomes a recovery card that pays the short resource (the
+   * extra on top of the type's own supplies), so a player low on ink or rubber balls tops up by flying.
+   */
+  shortInk: 25,
+  shortRubber: 4,
+  recoverySupplies: { ink: 30, rubber: 8 },
   /** Tight clock: the time limit is the par time times this, plus `tightExtra` seconds (existing limits shrink by `tightShrink`). */
   tightSlack: 1.7,
   tightExtra: 10,
@@ -1602,6 +1772,29 @@ export const EVENTS = {
   bounty: { 'high-value': 45, convoy: 50 },
   /** Supplies delivered to T1 by a supply run that the player escorted. */
   supplies: 50,
+  /**
+   * v0.0.18: world events in multiplayer sessions (server/world/SessionEvents.ts). One scheduler per
+   * session, paced by how many players are connected: the cooldown is scaled by
+   * sqrt(`pacePlayers` / players) (never shorter than with 16), so a two-player session is never
+   * flooded; one event at a time up to `crowd` players, two above. Rewards for shipments and convoys
+   * are the bounties above, split by each player's share of the damage (`shareMin` to count).
+   */
+  session: {
+    first: [120, 200] as readonly [number, number],
+    cooldown: [160, 260] as readonly [number, number],
+    pacePlayers: 2,
+    crowd: 8,
+    weights: { 'high-value': 1, convoy: 1, 'supply-drop': 1, 'ink-storm': 0.3 } as Record<string, number>,
+    shareMin: 0.1,
+    /** A supply drop: a crate of ink or rubber balls on a free desk, to the first to fly low over it. */
+    dropTime: 180,
+    drop: { ink: 45, rubber: 10, paper: 15 },
+    dropHalf: 7,
+    dropCeiling: 9,
+    /** An ink storm: missions pay `stormFactor` times their ink for `stormTime` seconds. */
+    stormTime: 600,
+    stormFactor: 2,
+  },
   /** A territory stays on alert this long after the player destroys something there, and its wrecks stay down. */
   alertTime: 180,
   /** With every weapon destroyed, a territory's defenses stay disabled this long. */
@@ -1660,6 +1853,12 @@ export const MERIT = {
   placement: [15, 10, 5] as readonly number[],
   /** The first multiplayer session of the day (UTC), once. */
   firstOfDay: 10,
+  /**
+   * v0.0.18: medals and achievements, now decided by the server, are Merit sources too: a medal per
+   * mission (by colour), and an achievement once ever.
+   */
+  medal: { bronze: 2, silver: 4, gold: 7 } as Record<'bronze' | 'silver' | 'gold', number>,
+  achievement: 12,
   /**
    * Diminishing returns: the n-th shoot-down of the same player in a session pays `repeatKill[n]` of
    * the value (the last entry from then on); the n-th raid between the same two players likewise.

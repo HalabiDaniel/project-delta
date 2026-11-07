@@ -5,6 +5,7 @@ import { AIRCRAFT, type AircraftId, type PlayerSide } from '../../src/config';
 import type { MissionOutcome } from '../store/Store';
 import type { MissionDirector } from '../../src/director/MissionDirector';
 import type { Mission } from '../../src/missions/Mission';
+import type { Progress } from '../../src/progress/Progress';
 import { PilotFlight } from '../../src/net/PilotFlight';
 import { NET, planeId, type AttackReportDTO, type MeDTO, type PvpTag, type ResultDTO, type Weapon } from '../../src/net/protocol';
 import { sideOf } from '../../src/net/World';
@@ -72,6 +73,8 @@ export class Pilot {
   readonly planeIds = new Map<AircraftId, string>();
   /** Lifetime statistics from before this session (added to this session's when saved). */
   lifetime: Record<string, number> = {};
+  /** v0.0.18: medals, records, achievements, streaks and mastery, decided here (set on placing). */
+  progress: Progress | null = null;
   /** Missions flown to the end on this placement, for the store (written once each). */
   readonly outcomes: MissionOutcome[] = [];
   /** Each card's id (a UUID): mission rewards are keyed by it, so a mission never pays twice. */

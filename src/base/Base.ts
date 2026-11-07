@@ -1,7 +1,7 @@
 import { BASE, ECONOMY, type BuildingKind, type BuildingLevel, type Side, type SlotKind } from '../config';
 import type { DefenseNetwork, Installation } from '../defenses/Installation';
 import { buildingSpec, homeDefenses } from '../defenses/Layout';
-import type { ResourceManager } from '../systems/ResourceManager';
+import { cleanBundle, type Bundle, type Resource, type ResourceManager } from '../systems/ResourceManager';
 import type { Territory } from '../world/Territory';
 
 /** ok – full health. damaged – standing, but hurt. destroyed – a wreck: it does nothing until repaired. */
@@ -58,7 +58,7 @@ export interface BaseSave {
  * in that kind of slot, or the slot is taken/empty. unique – only one of these per territory.
  * max-level – fully upgraded. destroyed – repair it first. intact – nothing to repair.
  */
-export type Refusal = 'paper' | 'slot' | 'unique' | 'max-level' | 'destroyed' | 'intact';
+export type Refusal = 'paper' | 'materials' | 'slot' | 'unique' | 'max-level' | 'destroyed' | 'intact';
 
 export interface Check {
   ok: boolean;
@@ -66,6 +66,10 @@ export interface Check {
   cost: number;
   /** Paper still needed when the reason is `paper`. */
   missing: number;
+  /** v0.0.18: ink and rubber balls the action takes on top of its paper `cost`. */
+  materials?: Bundle;
+  /** What is missing of them when the reason is `materials`. */
+  short?: Bundle;
 }
 
 export type BaseEvent =
@@ -168,6 +172,64 @@ export class Base {
 
   // ---- Effects ----------------------------------------------------------------------------------
 
+  /**
+   * v0.0.18: what comes in of `resource` per minute before any low-balance boost or upkeep: paper
+   * from the base and workshops, ink from the crew and ink wells, rubber balls from scavenging.
+   */
+  productionOf(resource: Resource): number {
+    if (resource === 'paper') return this.production;
+    const wrecked = this.store.alive ? 1 : BASE.wreckedStore;
+    if (resource === 'rubber') return BASE.rubberProduction * wrecked;
+    let wells = 0;
+    for (const b of this.buildings.values()) if (b.kind === 'inkwell') wells += (levelOf('inkwell', b.level).production ?? 0) * this.strength(b.slot);
+    return Math.round((BASE.inkProduction * wrecked + wells) * 10) / 10;
+  }
+
+  /** The most of `resource` T1 holds: its base capacity plus every standing storage box. */
+  capacityOf(resource: Resource): number {
+    if (resource === 'paper') return this.capacity;
+    let capacity: number = resource === 'ink' ? BASE.inkCapacity : BASE.rubberCapacity;
+    for (const b of this.buildings.values()) if (b.kind === 'storage' && this.status(b.slot) !== 'destroyed') capacity += levelOf('storage', b.level).holds?.[resource] ?? 0;
+    return capacity;
+  }
+
+  /** What raids can never take of `resource`: its reserve plus what the storage boxes guard, by their condition. */
+  protectedOf(resource: Resource): number {
+    if (resource === 'paper') return this.protectedPaper;
+    let safe: number = resource === 'ink' ? ECONOMY.protectedInk : ECONOMY.protectedRubber;
+    for (const b of this.buildings.values()) if (b.kind === 'storage') safe += Math.floor((levelOf('storage', b.level).guards?.[resource] ?? 0) * this.strength(b.slot));
+    return safe;
+  }
+
+  /** What a raid can destroy of `resource`: what is above its protected reserve. */
+  vulnerableOf(resource: Resource, amount = this.resources.amount(resource)): number {
+    return Math.max(0, amount - this.protectedOf(resource));
+  }
+
+  /**
+   * v0.0.18: upkeep per minute (GDD §13.5), paid out of production: high-level buildings cost a
+   * little to run while they stand. Never charged for the first building of each kind, nor for
+   * anything below its top level, so a recovering base pays nothing.
+   */
+  upkeepOf(resource: Resource): number {
+    let total = 0;
+    const firsts = new Set<string>();
+    for (const b of [...this.buildings.values()].sort((x, y) => x.slot.localeCompare(y.slot))) {
+      if (!firsts.has(b.kind)) {
+        firsts.add(b.kind);
+        continue;
+      }
+      if (this.status(b.slot) === 'destroyed') continue;
+      total += (levelOf(b.kind, b.level).upkeep as Bundle | undefined)?.[resource] ?? 0;
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  /** Production after upkeep (never below zero: upkeep slows growth, it never takes from the store). */
+  netProductionOf(resource: Resource): number {
+    return Math.max(0, Math.round((this.productionOf(resource) - this.upkeepOf(resource)) * 100) / 100);
+  }
+
   /** Paper per minute before any low-balance boost: base production plus the workshops' share. */
   get production(): number {
     const base = BASE.production * (this.store.alive ? 1 : BASE.wreckedStore);
@@ -257,7 +319,7 @@ export class Base {
     const cost = levelOf(kind, 1).cost;
     if (!slotKind || this.buildings.has(slot) || !fits(kind, slotKind)) return refuse('slot', cost);
     if (BASE.unique.includes(kind) && this.count(kind) > 0) return refuse('unique', cost);
-    return this.afford(cost);
+    return this.afford(cost, levelOf(kind, 1).materials);
   }
 
   canUpgrade(slot: string): Check {
@@ -266,7 +328,7 @@ export class Base {
     if (b.level >= BASE.buildings[b.kind].levels.length) return refuse('max-level', 0);
     const cost = levelOf(b.kind, b.level + 1).cost;
     if (this.status(slot) === 'destroyed') return refuse('destroyed', cost);
-    return this.afford(cost);
+    return this.afford(cost, levelOf(b.kind, b.level + 1).materials);
   }
 
   /**
@@ -305,7 +367,7 @@ export class Base {
   build(slot: string, kind: BuildingKind): boolean {
     const check = this.canBuild(slot, kind);
     if (!check.ok) return this.refused(check);
-    this.resources.spend(check.cost, `Built ${BASE.buildings[kind].name}`);
+    this.resources.spendAll({ ...check.materials, paper: check.cost }, `Built ${BASE.buildings[kind].name}`);
     this.stats.construction += check.cost;
     this.put({ slot, kind, level: 1, invested: check.cost, kills: 0, bombers: 0, damage: 0 });
     this.emit({ type: 'built', slot, kind, cost: check.cost });
@@ -317,7 +379,7 @@ export class Base {
     const check = this.canUpgrade(slot);
     if (!check.ok) return this.refused(check);
     const b = this.buildings.get(slot)!;
-    this.resources.spend(check.cost, `Upgraded ${BASE.buildings[b.kind].name}`);
+    this.resources.spendAll({ ...check.materials, paper: check.cost }, `Upgraded ${BASE.buildings[b.kind].name}`);
     this.stats.construction += check.cost;
     b.level++;
     b.invested += check.cost;
@@ -454,9 +516,13 @@ export class Base {
     if (!i.alive) i.state = 'destroyed';
   }
 
-  private afford(cost: number): Check {
+  private afford(cost: number, extra?: Bundle): Check {
+    const materials = cleanBundle(extra ?? {});
     const missing = Math.max(0, cost - this.resources.paper);
-    return missing > 0 ? { ok: false, reason: 'paper', cost, missing } : { ok: true, reason: null, cost, missing: 0 };
+    if (missing > 0) return { ok: false, reason: 'paper', cost, missing, materials };
+    const short = this.resources.shortfall(materials);
+    if (Object.keys(short).length > 0) return { ok: false, reason: 'materials', cost, missing: 0, materials, short };
+    return { ok: true, reason: null, cost, missing: 0, materials };
   }
 
   private refused(check: Check): false {

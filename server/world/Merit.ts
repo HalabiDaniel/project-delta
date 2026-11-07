@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { MERIT } from '../../src/config';
 
 /** What earned an award (the ledger's `source`). */
-export type MeritSource = 'mission' | 'kill' | 'assist' | 'ai-kill' | 'raid' | 'defend' | 'active' | 'placement' | 'daily' | 'backfill';
+export type MeritSource = 'mission' | 'kill' | 'assist' | 'ai-kill' | 'raid' | 'defend' | 'active' | 'placement' | 'daily' | 'backfill' | 'medal' | 'achievement';
 
 /** One award as the world decides it: the player by public id, keyed by its cause. */
 export interface MeritEvent {
@@ -71,6 +71,16 @@ export class MeritBook {
   mission(player: string, missionId: string, tier: number, title: string): void {
     const value = MERIT.mission[Math.max(0, Math.min(MERIT.mission.length - 1, Math.round(tier) - 1))];
     this.add(player, `mission:${missionId}`, 'mission', value, title);
+  }
+
+  /** v0.0.18: a medal for mission `missionId` (its card's id): once per mission. */
+  medal(player: string, missionId: string, medal: 'bronze' | 'silver' | 'gold', title: string): void {
+    this.add(player, `medal:${missionId}`, 'medal', MERIT.medal[medal], `${medal[0].toUpperCase()}${medal.slice(1)} medal: ${title}`);
+  }
+
+  /** v0.0.18: an achievement unlocked: once ever (the key is the achievement's). */
+  achievement(player: string, id: string, title: string): void {
+    this.add(player, `achievement:${id}`, 'achievement', MERIT.achievement, `Achievement: ${title}`);
   }
 
   /** `attacker`'s raid `raidId` on `victim` got through. */

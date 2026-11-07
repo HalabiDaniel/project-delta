@@ -59,6 +59,8 @@ describe('wrapping up a session', () => {
     const world = quietWorld(5);
     const a = player(world, 'a', 'T1', 'Ann');
     world.command('a', { a: 'aircraft', id: 'falcon' });
+    // A card the Falcon can fly (it carries no bombs).
+    for (let i = 0; i < a.state!.offers.length && !world.suits(a, 'falcon'); i++) a.state!.select(i);
     world.command('a', { a: 'build' });
     run(world, 0.5);
     expect(a.state!.phase).toBe('building');

@@ -32,6 +32,8 @@ function sample(): SaveData {
     version: SAVE_VERSION,
     savedAt: 1000,
     paper: 137,
+    ink: 41,
+    rubber: 9,
     aircraft: 'swift',
     hangar: [{ id: 'falcon', condition: 'recovered', health: 64, invested: 0 }],
     maneuvers: [['falcon', 'paperHang'], ['dart', 'spiralDrill']],

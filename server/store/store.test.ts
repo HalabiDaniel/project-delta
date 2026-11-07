@@ -223,15 +223,25 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       const p = await store.createPlayer(player('Lim'), h('tok-lim'), 'open');
       expect(await store.economy(world.id, p.id)).toBeNull();
       await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'start', kind: 'reward', amount: 100, reason: '' });
-      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 0, protected: 0 });
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 0, protected: 0, ink: null, rubber: null });
       await store.setEconomyLimits(world.id, p.id, 450, 40);
       await store.setEconomyLimits(world.id, p.id, 500, 45);
-      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45 });
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45, ink: null, rubber: null });
+      // v0.0.18: ink and rubber balls are balances of their own, in the same log.
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'stock:ink', kind: 'reward', amount: 60, reason: '', resource: 'ink' })).toEqual({ status: 'applied', balance: 60 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:1:ink', kind: 'arm', amount: -7, reason: '', resource: 'ink' })).toEqual({ status: 'applied', balance: 53 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:1:ink', kind: 'arm', amount: -7, reason: '', resource: 'ink' })).toEqual({ status: 'duplicate', balance: 53 });
+      expect(await store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'arm:2:rubber', kind: 'arm', amount: -1, reason: '', resource: 'rubber' })).toMatchObject({ status: 'insufficient' });
+      await expect(store.applyTransaction({ worldId: world.id, playerId: p.id, key: 'x', kind: 'arm', amount: 1, reason: '', resource: 'gold' as never })).rejects.toThrow();
+      expect(await store.balance(world.id, p.id, 'ink')).toBe(53);
+      expect(await store.balance(world.id, p.id)).toBe(100);
+      expect(await store.economy(world.id, p.id)).toEqual({ paper: 100, capacity: 500, protected: 45, ink: 53, rubber: null });
+      expect((await store.transactions(world.id, p.id)).map((t) => t.resource)).toEqual(['ink', 'ink', 'paper']);
       await expect(store.setEconomyLimits(world.id, p.id, -1, 0)).rejects.toThrow();
       // Limits alone (a player whose first change hasn't been written yet) still count as a record.
       const q = await store.createPlayer(player('Lim2'), h('tok-lim2'), 'open');
       await store.setEconomyLimits(world.id, q.id, 300, 30);
-      expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30 });
+      expect(await store.economy(world.id, q.id)).toEqual({ paper: 0, capacity: 300, protected: 30, ink: null, rubber: null });
     });
 
     it('keeps the planes a player owns, and destroys for good the ones no longer listed', async () => {
@@ -259,9 +269,15 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.progress(world.id, p.id)).toBeNull();
       const record = { stats: { kills: 3, sorties: 9 }, director: { swaps: 2, offers: [] }, garage: { aircraft: 'falcon', board: { safe: randomUUID() } } };
       await store.saveProgress(world.id, p.id, record);
-      expect(await store.progress(world.id, p.id)).toEqual({ ...record, protectUntil: null, shieldUntil: null });
+      expect(await store.progress(world.id, p.id)).toEqual({ ...record, profile: null, protectUntil: null, shieldUntil: null });
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 4, sorties: 10 } });
       expect((await store.progress(world.id, p.id))?.stats).toEqual({ kills: 4, sorties: 10 });
+      // v0.0.18: the multiplayer profile (medals, records, achievements), kept when a save has none.
+      const profile = { medals: { bronze: 1, silver: 0, gold: 2 }, times: { 'time-trial:T7': 51.2 }, discovered: ['T3'] };
+      await store.saveProgress(world.id, p.id, { ...record, profile });
+      expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
+      await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 5, sorties: 11 } });
+      expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
       const outcome = { id: randomUUID(), template: 'strike', state: 'completed' as const, outcome: null, reward: 60, spec: { title: 'Strike' } };
       expect(await store.recordMission(world.id, p.id, outcome)).toBe(true);
       expect(await store.recordMission(world.id, p.id, { ...outcome, reward: 999 })).toBe(false);

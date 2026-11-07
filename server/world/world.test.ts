@@ -298,7 +298,8 @@ describe('the Raptor on the server (v0.0.15)', () => {
   });
 
   it('folds one for its price in its longer fold time, and refuses it for a card that needs a bomb', () => {
-    const world = quietWorld(4);
+    // A seed whose first deal has both a bombing card and one without bombs.
+    const world = quietWorld(3);
     const a = player(world, 'a', 'T1', 'Ann');
     const st = a.state!;
     expect(world.command('a', { a: 'aircraft', id: 'raptor' })).toBe(true);

@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
-  "description": "paperwars.io v0.0.17 - player ranks",
+  "description": "paperwars.io v0.0.18 - economy and content depth",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,7 +27,8 @@
     "db:backup": "tsx server/db/backup.ts backup",
     "db:restore": "tsx server/db/backup.ts restore",
     "db:up": "docker compose up -d postgres",
-    "export-models": "node tools/export-models.mjs"
+    "export-models": "node tools/export-models.mjs",
+    "sim": "tsx tools/sim.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.23",

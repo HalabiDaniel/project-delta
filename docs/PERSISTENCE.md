@@ -606,3 +606,47 @@ v0.0.13 ([plan](roadmap/v0.0.13.md)) puts the portable bases into timed sessions
   key makes it once-only however often it runs.
 - The restore drill's comparison does not count `merit_ledger` rows yet (it compares the tables
   that existed in v0.0.14).
+
+## v0.0.18: ink and rubber balls
+
+- **`balances.ink`, `balances.rubber`** (migration `0009`): two more balances on the same row,
+  behind the same row lock as paper. Both start **null** for every existing player: null means
+  "never had any", so the server can tell an old player from one who spent everything.
+- **`transactions.resource`** (`paper`, `ink` or `rubber`, default `paper`): every existing row is
+  paper and stays as it was. Idempotency keys stay unique per world; a change to ink or rubber balls
+  carries the resource at the end of its key (`mission:<id>:ink`, `raid:<uid>:loss:rubber`,
+  `prod:<stint>:<n>:ink`), so one cause can touch several balances and still apply once.
+- **The first stock.** The first time a player's base is placed after the upgrade, the server gives
+  them ink and rubber balls (`ServerWorld.claim`): a new player gets `ECONOMY.startingInk` and
+  `startingRubber`; a player from before v0.0.18 gets half of what their base holds, never less than
+  a new player's start (`startingStock`). The grant is written to the ledger as `stock:<player>:ink`
+  and `stock:<player>:rubber`: once per player, however often they join.
+- **`base_buildings.kind`** accepts `inkwell`.
+- `Store.applyTransaction` takes `resource`; `Store.balance` takes it too (paper by default);
+  `Store.economy` returns `ink` and `rubber` (null until the first stock). Same contract tests for
+  both stores, plus a migration test that runs `0009` over v0.0.17 rows.
+
+### Running the migration on the private server
+
+1. Take a backup first: `npm run db:backup` (v0.0.14), and check it lists every table.
+2. Rehearse on a copy: restore the backup into a scratch database (`npm run db:restore` with
+   `DATABASE_URL` pointing at it), start a server against it, join with a test account, and check
+   the player's paper is unchanged and they get their first ink and rubber balls once.
+3. Deploy. The server applies `0009` on start, in one transaction.
+
+### Rolling back
+
+`0009` only adds. To go back to a v0.0.17 server, restore the backup taken in step 1 (the simplest
+and safest), or, keeping the data, run by hand:
+
+```sql
+delete from base_buildings where kind = 'inkwell';
+delete from transactions where resource <> 'paper';
+alter table transactions drop column resource;
+alter table balances drop column ink, drop column rubber;
+alter table base_buildings drop constraint base_buildings_kind_check;
+alter table base_buildings add constraint base_buildings_kind_check check (kind in ('turret', 'launcher', 'radar', 'workshop', 'storage'));
+delete from schema_migrations where version = 9;
+```
+
+The paper ledger is untouched either way.

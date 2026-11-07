@@ -1,3 +1,4 @@
+import { describeBundle } from '../systems/ResourceManager';
 import { emergencyPlane } from '../systems/GameState';
 import { dashboardView } from '../ui/dashboardView';
 import { failureText, nextStepText, paperBreakdown } from '../ui/reportText';
@@ -44,6 +45,8 @@ import { matchesPreset } from '../render/GraphicsSettings';
 import type { MultiplayerGame, RemoteAircraft } from './MultiplayerGame';
 
 const V = T.mpViews;
+/** Resource names for describing a bundle, from the dictionary. */
+const units = (): Record<string, string> => ({ paper: T.economy.unitPaper, ink: T.economy.unitInk, rubber: T.economy.unitRubber });
 const O = V.objective;
 const I = V.hint;
 /** A height or distance in metres, as the objectives write it ("120 m"). */
@@ -57,7 +60,7 @@ const AIRCRAFT_EDGE_RANGE = 140;
 const SIGHT_RANGE = 120;
 const CRASH_REPORT_DELAY = 1200;
 
-const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell' };
 
 interface Goal {
   point: pc.Vec3;
@@ -154,6 +157,17 @@ export class MpViews {
         noteTone = 'bad';
         tag = `−${paper(buildCost - g.resources.paper)}`;
         note = V.needPaper(paper(buildCost), paper(g.resources.paper), wait !== null ? seconds(Math.ceil(wait)) : null);
+      } else if (phase === 'desk') {
+        // v0.0.18: a new plane may also take ink or rubber balls.
+        const materials = g.priv.garage?.costs[st.aircraft]?.materials ?? {};
+        const short = g.resources.shortfall(materials);
+        if (Object.keys(short).length > 0) {
+          noteTone = 'bad';
+          tag = T.economy.tagMaterials;
+          note = T.economy.needMaterials(name, describeBundle(materials, units(), T.economy.nothing), describeBundle(short, units(), T.economy.nothing));
+        } else if (Object.keys(materials).length > 0) {
+          note = T.economy.alsoTakes(describeBundle(materials, units(), T.economy.nothing));
+        }
       }
     }
     const card = mission ? g.cards.get(mission) : undefined;
@@ -185,6 +199,7 @@ export class MpViews {
         protectedPaper: eco?.protectedPaper ?? 0,
         streak: 0,
         repairs: g.base?.needsRepair.length ?? 0,
+        resources: (eco?.stores ?? []).map((s) => ({ id: s.id, icon: s.id === 'ink' ? ('inkwell' as const) : ('rubber' as const), label: s.id === 'ink' ? T.economy.ink : T.economy.rubber, amount: s.amount, capacity: s.capacity, rate: s.rate })),
       },
       desk: {
         cost: buildCost,
@@ -195,7 +210,7 @@ export class MpViews {
         noteTone,
         progress: st?.buildProgress ?? 0,
         emergency: emergencyNow,
-        canBuild: !!st && !!mission && phase === 'desk' && (g.resources.canAfford(buildCost) || emergencyNow) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
+        canBuild: !!st && !!mission && phase === 'desk' && (g.resources.canAffordAll(st.buildPriceFor(st.aircraft)) || emergencyNow) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
       },
       swaps: g.priv.swaps ?? 0,
       welcome: null,
@@ -259,7 +274,7 @@ export class MpViews {
                 fit: mission ? st.suitability(st.aircraft, mission).level : 'possible',
                 cost: buildCost,
                 kind: phase === 'desk' ? st.buildKindFor(st.aircraft) : st.buildKind,
-                canBuild: !!mission && phase === 'desk' && g.resources.canAfford(buildCost) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
+                canBuild: !!mission && phase === 'desk' && g.resources.canAffordAll(st.buildPriceFor(st.aircraft)) && st.suitability(st.aircraft, mission).level !== 'unsuitable',
               },
               lostPlane: g.lostPlane,
               onPad: phase !== 'desk',
@@ -291,11 +306,12 @@ export class MpViews {
       stars: tier.stars,
       multiplier: tier.multiplier,
       reward: m.reward,
+      supplies: m.supplies,
       rewardNote: parts ? V.rewardNote(count(parts.base), num(parts.difficulty, 2), fixed(parts.modifier, 2), parts.floor ? paper(parts.floor) : null) : card?.pvp ? V.pvpReward : '',
       modifiers: (m.spec.modifiers ?? []).map((id) => ({ id, label: DIRECTOR.modifiers[id].label, detail: DIRECTOR.modifiers[id].detail })),
       recommended: false,
       expires: null,
-      operation: null,
+      operation: card?.operation ? { ...card.operation, confirming: false } : null,
       bombs: m.spec.bombs,
       timeLimit: m.spec.timeLimit,
       threat: card?.pvp ? this.pvpThreat(card.pvp.territoryId) : threatSummary(m),
@@ -361,6 +377,7 @@ export class MpViews {
     return {
       name: spec.name,
       roleLabel: spec.roleLabel,
+      detection: spec.traits?.stealth ? (this.g.priv.plane?.detection ?? 'hidden') : undefined,
       accent: css(spec.accent),
       health: st.durability.health,
       maxHealth: spec.maxHealth,
@@ -441,11 +458,11 @@ export class MpViews {
       health: r.recovered ? (st.durability?.fraction ?? 1) : 0,
       paperSpent: s.paperSpent,
       paperEarned: s.paperEarned,
-      medal: null,
+      medal: r.medal ?? null,
       criteria: null,
       bonuses: [],
-      records: [],
-      achievements: [],
+      records: r.records ?? [],
+      achievements: r.achievements ?? [],
       streak: 0,
       failure: succeeded ? null : failureText(r.failure ?? null),
       paper: paperBreakdown({ reward: succeeded ? r.reward : 0, missionTitle: r.missionTitle, bonuses: [], earned: s.paperEarned, spent: s.paperSpent, lost: s.paperLost, overflow: s.paperOverflow }),
@@ -564,7 +581,7 @@ export class MpViews {
         return o.precision ? O.inkSpot(where(o.territoryId)) : O.bomb(where(o.territoryId));
       case 'recon': return O.scout(where(o.territoryId), m(o.airspace.ceiling));
       case 'reach': return O.reach(where(o.territoryId));
-      case 'ring': return V.ring(o.number, mission.objectives.length);
+      case 'ring': return o.gate.maneuver ? V.trickRing(o.number, mission.objectives.length) : V.ring(o.number, mission.objectives.length);
       case 'land': return O.land(o.territoryId);
       case 'survive': return O.hold(o.territoryId, Math.floor(mission.progress[index] * o.duration), T.units.seconds(num(o.duration)));
       case 'escape': return O.escape(o.territoryId, m(o.distance));

@@ -1,11 +1,13 @@
 import { assessSuitability, bombLoad, buildDuration, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, MISSIONS, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
 import { canCarry, cycleManeuver, defaultManeuver } from '../aircraft/maneuvers';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
+import { RadarSignature } from '../aircraft/Signature';
+import { armingFor, materialsOf, newIncomes, type Arming, type Incomes } from './Economy';
 import { HomeIncome } from './HomeIncome';
-import type { ResourceManager } from './ResourceManager';
+import { describeBundle, type Bundle, type ResourceManager } from './ResourceManager';
 
 /**
  * desk     – at home on T1, choosing a mission and an aircraft. Recovered or stowed planes wait in the hangar.
@@ -74,6 +76,11 @@ export interface SortieLog {
   paperLost: number;
   /** Paper earned that didn't fit in the store (it was full). */
   paperOverflow: number;
+  /** v0.0.18: ink and rubber balls spent on the plane: materials, arming and topping up. */
+  inkSpent: number;
+  rubberSpent: number;
+  /** v0.0.18: maneuvers flown during the sortie (for stunt medals and achievements). */
+  maneuvers: number;
   rearms: number;
   /** Metres flown, over every take-off of the sortie. */
   distanceFlown: number;
@@ -109,7 +116,9 @@ export type GameEvent =
   | { type: 'maneuver-chosen'; aircraft: AircraftId; maneuver: ManeuverId }
   | { type: 'stowed'; aircraft: AircraftId }
   | { type: 'built'; cost: number; kind: BuildKind; aircraft: AircraftId }
-  | { type: 'build-refused'; cost: number; reason: 'paper' | 'incompatible'; detail: string }
+  | { type: 'build-refused'; cost: number; reason: 'paper' | 'materials' | 'incompatible'; detail: string }
+  /** v0.0.18: the plane was armed from the stores (at launch, or topped up on the runway). */
+  | { type: 'armed'; arming: Arming; topUp: boolean }
   | { type: 'ready' }
   | { type: 'mission-selected'; index: number }
   | { type: 'launch-refused'; detail: string }
@@ -204,6 +213,10 @@ export class GameState {
   /** The plane on the pad or in the air is the free emergency plane. */
   emergency = false;
 
+  /** v0.0.18: the plane's radar signature: firing, bombing and boosting give it away for a moment. */
+  readonly radar = new RadarSignature();
+  /** v0.0.18: every income, paper's included (`income` is `incomes.paper`). */
+  readonly incomes: Incomes;
   private buildDuration: number = PLANE.buildTime;
   private readonly listeners: Array<(event: GameEvent) => void> = [];
 
@@ -214,6 +227,7 @@ export class GameState {
     readonly catalog: Record<AircraftId, AircraftSpec> = AIRCRAFT,
   ) {
     this.offers = makeOffers();
+    this.incomes = newIncomes(income);
   }
 
   onEvent(listener: (event: GameEvent) => void): void {
@@ -244,13 +258,23 @@ export class GameState {
     return this.buildCostFor(this.aircraft);
   }
 
+  /** v0.0.18: ink and rubber balls the next build of `id` takes on top of its paper (a fold only). */
+  buildMaterialsFor(id: AircraftId): Bundle {
+    return this.buildKindFor(id) === 'fold' ? materialsOf(this.catalog[id]) : {};
+  }
+
+  /** The whole price of the next build of `id`: paper, ink and rubber balls. */
+  buildPriceFor(id: AircraftId): Bundle {
+    return { ...this.buildMaterialsFor(id), paper: this.buildCostFor(id) };
+  }
+
   /** How well design `id` suits mission `mission` (the selected card by default). */
   suitability(id: AircraftId = this.aircraft, mission: Mission = this.selectedMission): Suitability {
     return assessSuitability(this.catalog[id], mission.spec);
   }
 
   canBuild(): boolean {
-    return this.phase === 'desk' && this.resources.canAfford(this.buildCost) && this.suitability().level !== 'unsuitable';
+    return this.phase === 'desk' && this.resources.canAffordAll(this.buildPriceFor(this.aircraft)) && this.suitability().level !== 'unsuitable';
   }
 
   /**
@@ -259,7 +283,7 @@ export class GameState {
    */
   emergencyAvailable(): boolean {
     if (this.phase !== 'desk') return false;
-    return AIRCRAFT_ORDER.every((id) => !this.resources.canAfford(this.buildCostFor(id)));
+    return AIRCRAFT_ORDER.every((id) => !this.resources.canAffordAll(this.buildPriceFor(id)));
   }
 
   /** desk → building, with the free emergency plane. Refused if the mission needs a bomb (it carries none). */
@@ -388,8 +412,13 @@ export class GameState {
     const spec = this.chosen;
     const kind = this.buildKindFor(spec.id);
     const label = kind === 'refit' ? `Refitted ${spec.name}` : `Folded ${spec.name}`;
-    if (!this.resources.spend(cost, label)) {
+    if (!this.resources.canAfford(cost)) {
       this.emit({ type: 'build-refused', cost, reason: 'paper', detail: '' });
+      return false;
+    }
+    const materials = this.buildMaterialsFor(spec.id);
+    if (!this.resources.spendAll({ ...materials, paper: cost }, label)) {
+      this.emit({ type: 'build-refused', cost, reason: 'materials', detail: `Needs ${describeBundle(this.resources.shortfall(materials))} more` });
       return false;
     }
     const waiting = this.hangar.get(spec.id);
@@ -399,6 +428,8 @@ export class GameState {
     this.buildKind = kind;
     this.durability = new Durability(spec.maxHealth);
     this.sortie = newSortie(spec.id, kind, cost + (kind === 'rollout' ? (waiting?.invested ?? 0) : 0));
+    this.sortie.inkSpent += materials.ink ?? 0;
+    this.sortie.rubberSpent += materials.rubber ?? 0;
     this.phase = 'building';
     this.buildProgress = 0;
     this.buildDuration = buildDuration(spec, kind);
@@ -410,6 +441,9 @@ export class GameState {
   /** Advances everything that runs on a clock: income, folding, guns, bombs, rearming and the mission timer. */
   tick(dt: number): void {
     this.income.update(dt, this.resources);
+    this.radar.update(dt);
+    this.incomes.ink.update(dt, this.resources);
+    this.incomes.rubber.update(dt, this.resources);
     if (this.phase === 'building') {
       this.buildProgress = Math.min(1, this.buildProgress + dt / this.buildDuration);
       if (this.buildProgress >= 1) {
@@ -438,10 +472,19 @@ export class GameState {
     this.phase = 'flying';
     this.mission = this.selectedMission;
     this.mission.start();
-    this.bombsLoaded = bombLoad(this.plane, this.mission.spec);
     this.bombsFalling = 0;
     this.bombCooldown = 0;
     this.gun = new Gun(this.plane.gun);
+    const wanted = bombLoad(this.plane, this.mission.spec);
+    if (this.emergency) {
+      // Scrap paper: the emergency plane's half-full gun costs nothing.
+      this.bombsLoaded = wanted;
+    } else {
+      const arming = this.armFromStores(this.plane.gun.ammo, 0, wanted, 'Armed');
+      this.gun.ammo = arming.rounds;
+      this.bombsLoaded = arming.bombs;
+      this.emit({ type: 'armed', arming, topUp: false });
+    }
     this.emit({ type: 'launched' });
     return true;
   }
@@ -455,6 +498,7 @@ export class GameState {
     if (!this.canFire()) return null;
     const barrel = this.gun!.fire()!;
     this.sortie!.shotsFired++;
+    this.radar.reveal('fire');
     this.emit({ type: 'fired', barrel, ammo: this.gun!.ammo });
     if (this.gun!.empty) this.emit({ type: 'out-of-ammo' });
     return barrel;
@@ -468,6 +512,7 @@ export class GameState {
     if (!this.canDropBomb()) return false;
     this.bombsLoaded--;
     this.bombsFalling++;
+    this.radar.reveal('bomb');
     this.bombCooldown = BOMB.dropCooldown;
     this.sortie!.bombsDropped++;
     this.emit({ type: 'bomb-dropped', remaining: this.bombsLoaded });
@@ -587,6 +632,20 @@ export class GameState {
    * A raider's bomb hit T1: `amount` paper is destroyed, never below `floor` (the protected
    * reserve). Returns what was actually lost.
    */
+  /**
+   * v0.0.18: a raid's bomb hit: each resource loses up to its amount, never below its floor (the
+   * protected reserve). Returns what was actually lost of each.
+   */
+  raidHitAll(losses: Bundle, floors: Bundle, label = 'Raid on T1'): Bundle {
+    const paper = this.raidHit(losses.paper ?? 0, floors.paper ?? 0, label);
+    const out: Bundle = { paper };
+    for (const r of ['ink', 'rubber'] as const) {
+      const lost = this.resources.loseOf(r, Math.max(0, Math.round(losses[r] ?? 0)), floors[r] ?? 0, label);
+      if (lost > 0) out[r] = lost;
+    }
+    return out;
+  }
+
   raidHit(amount: number, floor: number, label = 'Raid on T1'): number {
     const lost = this.resources.lose(Math.max(0, Math.round(amount)), floor, label);
     if (this.sortie && (this.phase === 'flying' || this.phase === 'landed')) this.sortie.paperLost += lost;
@@ -607,9 +666,13 @@ export class GameState {
     if (this.phase !== 'flying' || !this.durability) return { dealt: 0, destroyed: false };
     const enemy = source === 'projectile' || source === 'blast';
     if (enemy && by) this.sortie!.enemyHits++;
-    const dealt = this.durability.damage(Math.round(amount));
+    // v0.0.18: armour absorbs a share of enemy rounds, rockets and blasts (never of collisions).
+    const armour = enemy ? (this.plane?.armour ?? 0) : 0;
+    const dealt = this.durability.damage(Math.round(amount * (1 - armour)));
     if (dealt <= 0) return { dealt: 0, destroyed: false };
     this.sortie!.damageTaken += dealt;
+    // v0.0.18: fragile cargo breaks on a hard knock (a collision or a rough landing), not on ink.
+    if (!enemy && dealt >= MISSIONS.fragileImpact && this.mission?.spec.cargo === 'fragile' && this.mission.isActive) this.failMission('cargo-broken');
     this.emit({ type: 'damaged', amount: dealt, source, health: this.durability.health });
     if (this.durability.destroyed) {
       if (enemy) this.sortie!.killedBy = by;
@@ -619,14 +682,37 @@ export class GameState {
   }
 
   /** One step of flight from `prev` to `pos`: distance flown, recon time, deliveries and rings. */
-  updateFlight(prev: Point3, pos: Point3, dt: number): void {
+  /**
+   * v0.0.18: the plane's top speed while carrying heavy cargo (MISSIONS.heavyCargo) until the
+   * delivery is made; 1 otherwise. The flight model reads it (client and server alike).
+   */
+  get cargoFactor(): number {
+    const m = this.mission;
+    return this.phase === 'flying' && m?.isActive && m.spec.cargo === 'heavy' ? MISSIONS.heavyCargo : 1;
+  }
+
+  /**
+   * v0.0.18: the plane's signature right now, for defenses, AI pilots and threat panels. `boosting`:
+   * the flight model's boost is on (it reveals the plane too).
+   */
+  signatureNow(boosting = false): number {
+    if (boosting) this.radar.reveal('boost');
+    return this.plane ? this.radar.valueFor(this.plane) : 1;
+  }
+
+  /** v0.0.18: the plane started a maneuver (counted for stunts and achievements). */
+  recordManeuver(): void {
+    if (this.phase === 'flying' && this.sortie) this.sortie.maneuvers++;
+  }
+
+  updateFlight(prev: Point3, pos: Point3, dt: number, maneuvering = false): void {
     if (this.phase !== 'flying') return;
     const step = Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
     if (this.sortie) this.sortie.distanceFlown += step;
     const mission = this.mission;
     if (!mission) return;
     const approaches = mission.objectives.map((_, i) => mission.approachState(i));
-    for (const index of mission.updateFlight(prev, pos, dt, this.plane?.traits?.reconRate ?? 1)) this.objectiveComplete(index);
+    for (const index of mission.updateFlight(prev, pos, dt, this.plane?.traits?.reconRate ?? 1, maneuvering)) this.objectiveComplete(index);
     approaches.forEach((before, index) => {
       if (before !== 'blown' && mission.approachState(index) === 'blown' && mission.isActive) this.emit({ type: 'approach-blown', index });
     });
@@ -728,9 +814,36 @@ export class GameState {
     this.emit({ type: 'paper-reset' });
   }
 
+  /** What topping up the gun on the runway would cost and give right now (v0.0.18). */
+  rearmPreview(): Arming | null {
+    if (!this.plane || !this.gun) return null;
+    if (this.emergency) return { rounds: this.plane.gun.ammo, bombs: 0, ink: 0, rubber: 0, short: false };
+    return armingFor(this.plane, this.plane.gun.ammo, this.gun.ammo, 0, this.resources.ink, this.resources.rubber);
+  }
+
+  /** Draws what arming takes from the stores and returns what was loaded. */
+  private armFromStores(roundsWanted: number, roundsHave: number, bombsWanted: number, label: string): Arming {
+    const arming = armingFor(this.plane!, roundsWanted, roundsHave, bombsWanted, this.resources.ink, this.resources.rubber);
+    const name = this.plane!.name;
+    if (arming.ink > 0) this.resources.draw('ink', arming.ink, `${label} ${name}: gun rounds`);
+    if (arming.rubber > 0) this.resources.draw('rubber', arming.rubber, `${label} ${name}: bombs`);
+    if (this.sortie) {
+      this.sortie.inkSpent += arming.ink;
+      this.sortie.rubberSpent += arming.rubber;
+    }
+    return arming;
+  }
+
   private finishRearm(): void {
     this.rearmProgress = null;
-    this.gun?.refill();
+    if (this.gun && this.plane) {
+      if (this.emergency) this.gun.refill();
+      else {
+        const arming = this.armFromStores(this.plane.gun.ammo, this.gun.ammo, 0, 'Topped up');
+        this.gun.ammo = arming.rounds;
+        this.emit({ type: 'armed', arming, topUp: true });
+      }
+    }
     if (this.sortie) this.sortie.rearms++;
     this.emit({ type: 'rearmed' });
   }
@@ -756,6 +869,8 @@ export class GameState {
         this.sortie.paperEarned += added;
         this.sortie.paperOverflow += mission.reward - added;
       }
+      // v0.0.18: ink and rubber balls paid with it (same label: the same ledger key, per resource).
+      this.resources.earnAll(mission.supplies, 'reward', `Mission completed: ${mission.title}`);
       this.stats.successes++;
       this.emit({ type: 'mission-succeeded', reward: mission.reward });
     }
@@ -777,7 +892,7 @@ function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): S
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
     bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0,
-    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0,
+    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, inkSpent: 0, rubberSpent: 0, maneuvers: 0,
     rearms: 0, distanceFlown: 0, landings: 0, emergency: false, outcome: 'flying',
   };
 }

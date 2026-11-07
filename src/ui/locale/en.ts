@@ -180,6 +180,10 @@ export const en = {
     shipment: 'High-value target',
     convoy: 'Convoy interception',
     'supply-run': 'Supply run escort',
+    stunt: 'Stunt course',
+    'time-trial': 'Time trial',
+    discovery: 'Discovery flight',
+    strafe: 'Strafing run',
   } satisfies Record<MissionType, string>,
 
   slotKind: { defense: 'Defense slot', radar: 'Radar slot', economy: 'Economy slot', utility: 'Utility slot' } satisfies Record<SlotKind, string>,
@@ -192,7 +196,7 @@ export const en = {
     survive: 'Survive', escape: 'Escape', land: 'Land', ring: 'Ring', practice: 'Practice plane', reach: 'Reach', rocket: 'Rocket',
     fighter: 'Fighter', scout: 'Scout', bomber: 'Bomber', escort: 'Escort', patrol: 'Patrol',
     paper: 'Paper', rate: 'Paper per minute', capacity: 'Storage capacity', lock: 'Protected paper', refund: 'Refund', store: 'Paper store',
-    workshop: 'Paper workshop', storage: 'Storage box',
+    workshop: 'Paper workshop', storage: 'Storage box', inkwell: 'Ink well', rubber: 'Rubber balls',
     speed: 'Speed', altitude: 'Altitude', boost: 'Boost', health: 'Health', range: 'Range', ink: 'Ink', bombload: 'Bombs', rearm: 'Rearm',
     plane: 'Aircraft', heading: 'Direction',
     base: 'Base', repair: 'Repair', upgrade: 'Upgrade', build: 'Build', remove: 'Remove', slot: 'Empty slot', level: 'Level', shield: 'Defenses',
@@ -244,6 +248,11 @@ export const en = {
       title: 'Your bomber was lost',
       why: 'The bomber you were escorting was shot down.',
       advice: 'Stay close to it and go after the fighters that turn towards it first.',
+    },
+    'cargo-broken': {
+      title: 'The cargo broke',
+      why: 'The fragile cargo took a hard knock.',
+      advice: 'Fly smooth: keep clear of props and walls, and land gently if you have to land.',
     },
   } satisfies Record<MissionFailure, { title: string; why: string; advice: string }>,
 
@@ -519,6 +528,8 @@ export const en = {
     raidersShotDown: (byDefenses: number, byPlayer: number) => `Raiders shot down (defenses ${byDefenses}, you ${byPlayer})`,
     paperLost: 'Paper lost',
     paperSaved: 'Paper saved',
+    inkLost: 'Ink lost',
+    rubberLost: 'Rubber balls lost',
     hit: (names: readonly string[]) => `Hit: ${names.join(', ')}`,
     repairCost: 'Repair cost',
     defenseShare: (yours: string) => `Defenses' share of the damage (you: ${yours})`,
@@ -561,6 +572,14 @@ export const en = {
   },
 
   /** The top bar: resources, streak and the icon buttons (src/ui/EconomyStrip.ts). */
+  /** v0.0.18: a stealth plane's detection state, on the flight HUD's plane card. */
+  stealth: {
+    hidden: 'Hidden',
+    detected: 'Detected',
+    locked: 'Locked on',
+    tip: 'Stealth: defenses notice you later. Firing, bombing or boosting gives you away for a moment.',
+  },
+
   economy: {
     paper: 'Paper',
     storage: (resource: string) => `${resource}: storage`,
@@ -570,6 +589,16 @@ export const en = {
     full: 'Storage full: production stopped',
     boosted: 'Paper per minute (low reserves: faster)',
     perMinute: (resource: string) => `${resource} per minute`,
+    /** v0.0.18: ink and rubber balls. */
+    ink: 'Ink',
+    rubber: 'Rubber balls',
+    unitPaper: 'paper',
+    unitInk: 'ink',
+    unitRubber: 'rubber balls',
+    nothing: 'nothing',
+    needMaterials: (name: string, need: string, short: string) => `The ${name} also needs ${need}: ${short} short. Build an ink well, or fly a mission that pays them.`,
+    alsoTakes: (what: string) => `Also takes ${what}.`,
+    tagMaterials: 'Ink',
   },
 
   /** The plane cards (src/ui/Garage.ts). */
@@ -955,6 +984,7 @@ export const en = {
     holdOut: (where: string) => `Hold out over ${where}`,
     escape: 'Escape',
     ring: (n: number, of: number) => `Ring ${n}/${of}`,
+    trickRing: (n: number, of: number) => `Ring ${n}/${of} · maneuver`,
     bombersTarget: (where: string) => `${where} · bomber's target`,
     patrolOver: (where: string) => `Patrol over ${where}`,
     /** The objective strip's step labels. */

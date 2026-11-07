@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, CAMERA, DAMAGE, DEFENSES, DIRECTOR, EVENTS, LANDING, PALETTE, PLANE, PLAYER_ID, RAIDS, TARGETS, THREAT, TIERS, WEAPONS, WORLD, type AircraftId, type Side } from './config';
 import { Base, STORE, type BaseEvent } from './base/Base';
 import { BaseMode } from './base/BaseMode';
-import { chooseRaidTarget, raidLoss, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
+import { chooseRaidTarget, lossText, raidLoss, raidLosses, raidPace, RaidTracker, raidTargetFor, type RaidReport } from './base/Raids';
 import type { AiAircraft, BombOrder, Contact, Strike } from './ai/AiAircraft';
 import { AirTraffic, type AirEvent, type Raid } from './ai/AirTraffic';
 import { leadPoint } from './ai/Gunnery';
@@ -30,12 +30,13 @@ import type { Mission, Objective } from './missions/Mission';
 import { defenseList, type MissionContext } from './missions/MissionGenerator';
 import { medalCriteria, Progress, type SortieProgress } from './progress/Progress';
 import { Boundary } from './systems/Boundary';
+import { applyBaseEconomy, applyCapacities, resourceViews, startingStock } from './systems/Economy';
 import { foldPose, GameState, type BuildKind, type CrashCause } from './systems/GameState';
 import { Input, MOUSE_LEFT } from './systems/Input';
 import { Controls, type Action, type Device, type InputContext } from './input/Controls';
 import { Ledger } from './systems/Ledger';
 import { LocalStats } from './systems/LocalStats';
-import { ResourceManager } from './systems/ResourceManager';
+import { describeBundle, ResourceManager } from './systems/ResourceManager';
 import { openStore, SaveManager, SAVE_VERSION, UI_SCALES, type SaveData } from './systems/SaveGame';
 import { DevPanel } from './ui/DevPanel';
 import { STEER_SECONDS, Tutorial, tutorialEventFor } from './progress/Tutorial';
@@ -322,13 +323,15 @@ export class Game {
     const { data: saved, problems } = await saves.load();
     if (problems.length > 0) console.warn('paperwars: problems with the saved game', problems);
     const resources = new ResourceManager();
+    // v0.0.18: T1's weapons reload from the ink store.
+    defenses.supply = (side, ink, what) => side !== 'player' || resources.spendOf('ink', ink, `${what} reloaded`, 'supply');
     const ledger = new Ledger();
     ledger.watch(resources);
     // T1 as a base: the paper store, and whatever the player has built (a new game starts with one turret).
     const base = new Base(world.home, defenses, resources);
     if (saved?.base) base.load(saved.base);
     else base.startFresh();
-    resources.capacity = base.capacity;
+    applyCapacities(base, resources);
     const staticContext = {
       territories: world.territories,
       homeId: world.home.id,
@@ -349,10 +352,16 @@ export class Game {
       ...staticContext,
       installations: layout.installations.filter((i) => defenses.get(i.id)?.alive ?? true),
       states: events?.territoryStates,
+      // v0.0.18: discovery flights go to landmarks not yet discovered first.
+      visited: discovered,
     });
+    // Kept up to date from the progress (loaded below, and after every sortie).
+    const discovered = new Set<string>();
     let state: GameState | null = null;
     const situation = (): Situation => ({
       paper: resources.paper,
+      ink: resources.ink,
+      rubber: resources.rubber,
       costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, state?.buildCostFor(id) ?? AIRCRAFT[id].cost])) as Record<AircraftId, number>,
       airRoom: airTraffic.room,
       raidActive: airTraffic.activeRaid !== null,
@@ -371,8 +380,12 @@ export class Game {
 
     if (saved) {
       resources.restore(saved.paper);
+      // v0.0.18: a save from before ink and rubber balls starts with a share of what the base holds.
+      resources.restoreOf('ink', saved.ink ?? startingStock('ink', base.capacityOf('ink')));
+      resources.restoreOf('rubber', saved.rubber ?? startingStock('rubber', base.capacityOf('rubber')));
       ledger.load(saved.ledger.entries, saved.ledger.totals, new Map(saved.ledger.byAircraft), new Map(saved.ledger.byType));
       progress.data = saved.progress;
+      for (const t of progress.data.discovered) discovered.add(t);
       if (saved.director) director.load(saved.director);
       else director.deal();
     } else {
@@ -1007,13 +1020,13 @@ export class Game {
         this.alert('remove', `${BASE.buildings[e.kind].short} removed`, e.refund > 0 ? `+${e.refund}` : null, 'info', 1.8);
         break;
       case 'refused': {
-        const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
+        const what = { paper: 'Need paper', materials: 'Need ink or rubber', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
         hud.alert(e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad', 1.8);
         break;
       }
     }
     // Capacity and production change with the buildings.
-    this.resources.capacity = base.capacity;
+    applyCapacities(base, this.resources);
     this.requestSave();
   }
 
@@ -1053,6 +1066,8 @@ export class Game {
       version: SAVE_VERSION,
       savedAt: Date.now(),
       paper: this.resources.paper,
+      ink: this.resources.ink,
+      rubber: this.resources.rubber,
       aircraft: state.aircraft,
       hangar,
       maneuvers: [...state.maneuverChoice],
@@ -1085,6 +1100,9 @@ export class Game {
     const opBefore = director.operation;
     const offer = director.offerFor(mission);
     const p = progress.sortieEnded({ mission, sortie, aircraft: plane.id, maxHealth: plane.maxHealth, recovered, operationCompleted: false });
+    // v0.0.18: a discovered landmark stops being a discovery target (the context's set is live).
+    const visited = this.missionContext().visited as Set<string> | undefined;
+    for (const t of progress.data.discovered) visited?.add(t);
     const success = mission.status === 'succeeded';
     const damageTaken = Math.min(1, sortie.damageTaken / plane.maxHealth);
     director.afterSortie(
@@ -1160,10 +1178,8 @@ export class Game {
 
   private simulate(dt: number, mouse: { dx: number; dy: number }): void {
     const { world, plane, camera, state, base, resources } = this;
-    // T1's buildings set how fast paper comes in and how much the store holds.
-    state.income.perMinute = base.production;
-    state.income.capacity = base.capacity;
-    resources.capacity = base.capacity;
+    // T1's buildings set how fast paper, ink and rubber balls come in and how much the stores hold.
+    applyBaseEconomy(base, resources, state.incomes);
     state.tick(dt);
     base.recordIncome(state.income.lastPaid);
     this.progress.session.seconds += dt;
@@ -1263,6 +1279,7 @@ export class Game {
     this.camera.setLook(controls.look());
     // The slot was chosen at home; it is locked in the air (GameState refuses changes while flying).
     plane.motion.maneuverSlot = state.maneuverSlot;
+    plane.motion.cargoFactor = state.cargoFactor;
     const wasManeuvering = plane.motion.activeManeuver;
     const result = plane.fly(
       dt,
@@ -1281,6 +1298,7 @@ export class Game {
     );
     this.maneuverQueued = false;
     if (plane.motion.activeManeuver && !wasManeuvering) {
+      state.recordManeuver();
       this.sounds.play('whoosh', { caption: false });
     }
     for (const collision of result.collisions) {
@@ -1293,7 +1311,7 @@ export class Game {
           this.steerTime += dt;
           if (this.steerTime >= STEER_SECONDS) this.tutorial.note('steered');
         }
-        state.updateFlight(plane.prevPosition, plane.position, dt);
+        state.updateFlight(plane.prevPosition, plane.position, dt, plane.motion.activeManeuver !== null);
         if (controls.held('firePrimary') && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
@@ -1356,7 +1374,7 @@ export class Game {
       const v = plane.getVelocity(this.v2);
       player = {
         id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z,
-        signature: plane.spec.signature, radius: plane.spec.hitRadius, shielded: this.playerShielded(), role: 'player',
+        signature: this.state.signatureNow(plane.motion.boost.active), radius: plane.spec.hitRadius, shielded: this.playerShielded(), role: 'player',
       };
     }
     const out = this.airTraffic.update(dt, {
@@ -1676,9 +1694,12 @@ export class Game {
     if (hostile && hit) {
       // A bomb on target destroys a share of the vulnerable paper; the protected reserve is safe.
       const key = tracker?.target.key ?? STORE;
-      const lost = this.state.raidHit(raidLoss(this.base.vulnerable(), key === STORE), this.base.protectedPaper, `Raid hit the ${(tracker?.target.name ?? 'paper store').toLowerCase()}`);
-      tracker?.hit(lost);
-      this.alert('raid', SAY.baseHit, lost > 0 ? `−${lost}` : null, 'bad', 3);
+      // v0.0.18: ink and rubber balls too, each above its own protected reserve and under its own cap.
+      const { losses, floors } = raidLosses(this.base, key === STORE);
+      const hit = this.state.raidHitAll(losses, floors, `Raid hit the ${(tracker?.target.name ?? 'paper store').toLowerCase()}`);
+      const lost = hit.paper ?? 0;
+      tracker?.hit(lost, hit);
+      this.alert('raid', SAY.baseHit, lossText(hit), 'bad', 3);
     }
     this.airTraffic.bombLanded(impact.tag, hit);
     if (!hostile) {
@@ -1709,7 +1730,7 @@ export class Game {
     const targets: Target[] = [];
     if (flying && !safe) {
       const v = plane.getVelocity(this.v2);
-      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature });
+      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: this.state.signatureNow(plane.motion.boost.active) });
     }
     for (const a of this.airTraffic.aircraft) {
       if (!a.alive) continue;
@@ -1826,7 +1847,7 @@ export class Game {
       this.effects.explosion(centre, 1.1, 'wreck');
       this.sounds.play('collapse');
       const p = this.projectOnScreen(centre);
-      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!', workshop: 'WORKSHOP DOWN!', storage: 'BOX DOWN!' }[i.spec.kind];
+      const word = { turret: 'TURRET DOWN!', launcher: 'LAUNCHER DOWN!', radar: 'RADAR DOWN!', supply: 'DEPOT BURNS!', workshop: 'WORKSHOP DOWN!', storage: 'BOX DOWN!', inkwell: 'INK WELL DOWN!' }[i.spec.kind];
       if (p) this.hud.pop(word, 'good', p);
       const t = i.spec.territoryId;
       const left = this.defenses.on(t).filter((x) => x.isWeapon && x.alive).length;
@@ -1964,7 +1985,8 @@ export class Game {
     if (installation) {
       this.state.recordShotHit();
       // Cardboard depots shrug off most of the ink.
-      const factor = installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1;
+      // v0.0.18: the Thug's cannon hits structures harder.
+      const factor = (installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1) * (this.state.plane?.gun.structureFactor ?? 1);
       const dealt = this.damageInstallation(installation, impact.damage * factor, point);
       if (dealt > 0) this.hud.hitMarker(!installation.alive);
       return;
@@ -2431,6 +2453,17 @@ export class Game {
       noteTone = 'bad';
       tag = `−${buildCost - resources.paper}`;
       note = `Need ${buildCost} paper, you have ${resources.paper}.${wait !== null ? ` Ready in about ${Math.ceil(wait)} s.` : ' Fly a mission to earn more.'}`;
+    } else if (state.phase === 'desk') {
+      // v0.0.18: a new plane may also take ink or rubber balls.
+      const materials = state.buildMaterialsFor(state.aircraft);
+      const short = resources.shortfall(materials);
+      if (Object.keys(short).length > 0) {
+        noteTone = 'bad';
+        tag = 'Ink';
+        note = `The ${name} also needs ${describeBundle(materials)}: ${describeBundle(short)} short. Build an ink well, or fly a mission that pays them.`;
+      } else if (Object.keys(materials).length > 0) {
+        note = `Also takes ${describeBundle(materials)}.`;
+      }
     }
 
     const landing = this.onApproach()
@@ -2469,6 +2502,7 @@ export class Game {
         protectedPaper: base.protectedPaper,
         streak: this.progress.data.streak.current,
         repairs: base.needsRepair.length,
+        resources: resourceViews(resources, state.incomes),
       },
       desk: {
         cost: buildCost, kind, name, note, tag, noteTone, progress: state.buildProgress,
@@ -2586,6 +2620,7 @@ export class Game {
       stars: tier.stars,
       multiplier: tier.multiplier,
       reward: m.reward,
+      supplies: m.supplies,
       rewardNote: parts
         ? `Reward = B ${Math.round(parts.base)} × D ${parts.difficulty} × M ${parts.modifier.toFixed(2)}${parts.floor ? ` (at least ${parts.floor})` : ''}`
         : '',
@@ -2911,6 +2946,7 @@ export class Game {
     return {
       name: spec.name,
       roleLabel: spec.roleLabel,
+      detection: spec.traits?.stealth ? this.defenses.detectionOf(PLAYER_ID) : undefined,
       accent: css(spec.accent),
       health: state.durability.health,
       maxHealth: spec.maxHealth,
@@ -3113,7 +3149,7 @@ export class Game {
         return o.precision ? `Ink spot ${o.territoryId}` : `Bomb ${o.territoryId}`;
       case 'recon': return `Scout ${o.territoryId} <${o.airspace.ceiling} m`;
       case 'reach': return `Reach ${o.territoryId}`;
-      case 'ring': return `Ring ${o.number}/${mission.objectives.length}`;
+      case 'ring': return `Ring ${o.number}/${mission.objectives.length}${o.gate.maneuver ? ' · maneuver' : ''}`;
       case 'land': return `Land ${o.territoryId}`;
       case 'survive': return `Hold ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
       case 'escape': return `Escape ${o.territoryId} ${o.distance} m`;
@@ -3221,6 +3257,7 @@ export class Game {
         'target-escaped': 'It got away.',
         'target-bombed': 'The bomber released its bomb.',
         'escort-lost': 'Your bomber was shot down.',
+        'cargo-broken': 'The fragile cargo broke.',
       };
       return `${why[mission.failure ?? ''] ?? 'The mission is lost.'} Land on T1 to recover the plane anyway.`;
     }
@@ -3237,7 +3274,7 @@ export class Game {
         return 'Line up on the target and right-click to drop. The ball keeps your speed, so release before you are over it.';
       case 'recon': return `Stay low over ${next.territoryId}: time only counts inside the blue zone, below ${next.airspace.ceiling} m. Mind the pencil stands.`;
       case 'reach': return `Get into ${next.territoryId}'s airspace before the clock runs out. Shift boosts.`;
-      case 'ring': return 'Fly through the orange ring. The next one lights up when you pass.';
+      case 'ring': return next.gate.maneuver ? 'A blue stunt ring: fly through it during a maneuver (Left Alt). It only counts mid-maneuver.' : 'Fly through the orange ring. The next one lights up when you pass.';
       case 'land': return 'Slow down (S), line up with T1 and descend gently.';
       case 'survive': return `Stay inside the red zone over ${next.territoryId}, below ${next.airspace.ceiling} m. Keep turning: steady flight is easy to hit.`;
       case 'escape': return `Get out past the blue line, more than ${next.distance} m from ${next.territoryId}. Fly fast and keep turning.`;
@@ -3278,6 +3315,7 @@ export class Game {
       'target-escaped': 'Failed: it got away',
       'target-bombed': 'Failed: the bomb was released',
       'escort-lost': 'Failed: your bomber was lost',
+      'cargo-broken': 'Failed: the cargo broke',
     };
     const succeeded = mission.status === 'succeeded';
     const spec = state.plane;
@@ -3531,7 +3569,7 @@ function airList(air: { fighters: number; scouts: number; bombers: number; skill
 }
 
 /** Icons for installations, by kind. */
-const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage' };
+const KIND_ICONS: Record<InstallationKind, IconName> = { turret: 'turret', launcher: 'launcher', radar: 'radar', supply: 'supply', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell' };
 
 const EVENT_ICONS: Record<EventKind, IconName> = { raid: 'raid', 'high-value': 'supply', convoy: 'bomber', 'supply-run': 'escort' };
 

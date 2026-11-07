@@ -6,17 +6,21 @@ import type { ZoneRef } from '../../src/aircraft/Bomb';
 import type { AiOrders, Contact } from '../../src/ai/AiAircraft';
 import { AirTraffic, type AirEvent, type AirSpawn } from '../../src/ai/AirTraffic';
 import { Base, STORE, type BaseEvent, type BaseSave } from '../../src/base/Base';
-import { chooseRaidTarget } from '../../src/base/Raids';
+import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, EVENTS, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
+import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
 import { overHome } from '../../src/defenses/Layout';
 import { Mission, type MissionSpec, type Point3 } from '../../src/missions/Mission';
-import type { MissionContext } from '../../src/missions/MissionGenerator';
+import { convoyMission, shipmentMission, type MissionContext } from '../../src/missions/MissionGenerator';
+import { scoutPlan } from '../../src/ai/FlightPlans';
+import { Progress, type ProgressData } from '../../src/progress/Progress';
+import { SessionEvents, type SessionEvent, type SessionEventKind } from './SessionEvents';
 import {
   NET,
   NEUTRAL_FRAME,
@@ -32,10 +36,13 @@ import {
   type DeskState,
   type OwnFlight,
   type Weapon,
+  type OperationDTO,
 } from '../../src/net/protocol';
 import { ownerOfSide, sharedWorld, territoryName, type SharedWorld } from '../../src/net/World';
 import { deskLabel, sameName } from '../../src/net/Username';
 import type { GameEvent } from '../../src/systems/GameState';
+import { applyBaseEconomy, applyCapacities, startingStock } from '../../src/systems/Economy';
+import type { Bundle, Resource } from '../../src/systems/ResourceManager';
 import { GameState } from '../../src/systems/GameState';
 import { seededRng, type Rng } from '../../src/systems/Random';
 import { launchPoint } from '../../src/world/Grid';
@@ -85,6 +92,12 @@ export interface PvpEvent {
 export interface PlayerCarry {
   /** Their paper as last saved; null or absent: a new player, who starts with ECONOMY.startingPaper. */
   paper?: number | null;
+  /**
+   * v0.0.18: their ink and rubber balls as last saved. Null or absent: they have never had any (a
+   * new player, or one from before v0.0.18), and get a first stock (`takeFirstStock`).
+   */
+  ink?: number | null;
+  rubber?: number | null;
   /** Names this placement in ledger keys (default: a new UUID). */
   stint?: string;
   /** The planes they own (none: a new player's empty hangar). */
@@ -98,6 +111,8 @@ export interface PlayerCarry {
   board?: Record<string, string>;
   /** Lifetime statistics so far. */
   stats?: Record<string, number>;
+  /** v0.0.18: medals, records, achievements, streaks and mastery so far (multiplayer's own). */
+  profile?: ProgressData;
   /**
    * New-player protection and the raid shield as clock times (ms; null: none). Absent: a brand-new
    * player, whose new-player protection starts now.
@@ -163,6 +178,8 @@ export class ServerWorld {
   readonly history = new History();
   readonly attacks = new AttackBook();
   readonly kills = new KillBook();
+  /** v0.0.18: the session's world events. */
+  readonly sessionEvents: SessionEvents;
   /** v0.0.17: the Merit this session's play earns, for the ledger. */
   readonly merit = new MeritBook();
   readonly pilots = new Map<string, Pilot>();
@@ -177,6 +194,8 @@ export class ServerWorld {
   /** Wrecked AI installations and when they stand up again. */
   private readonly aiWrecks = new Map<string, number>();
   private readonly missionKeys = new WeakMap<Mission, string>();
+  /** v0.0.18: first stocks of ink and rubber balls given on placing, not yet taken for the ledger. */
+  private readonly firstStocks = new Map<string, Bundle>();
   /** Paper changes of players who have left, not yet taken for the ledger. */
   private readonly leftovers = new Map<string, PaperChange[]>();
   /** What players who have left were carrying, and their last missions' outcomes. */
@@ -208,11 +227,18 @@ export class ServerWorld {
     this.clock = options.clock ?? Date.now;
     this.seed = options.seed ?? Math.floor(Math.random() * 1e9);
     this.rng = seededRng(this.seed);
+    // Events roll from their own sequence, so they never change what the rest of the world rolls.
+    this.sessionEvents = new SessionEvents(seededRng(this.seed + 4441));
     // Desk names draw from their own sequence, so they never change what the world's rules roll.
     this.nameRng = seededRng(this.seed + 7177);
     this.shared = sharedWorld();
     this.territories = this.shared.territories;
     this.network = new DefenseNetwork(this.shared.layout.installations, this.rng);
+    // v0.0.18: a player's weapons reload from that player's ink store.
+    this.network.supply = (side, ink, what) => {
+      const owner = [...this.pilots.values()].find((p) => p.side === side);
+      return !owner || owner.resources.spendOf('ink', ink, `${what} reloaded`, 'supply');
+    };
     // The traffic's own "home" is only used for single-player's raids, which multiplayer doesn't
     // send: give it one far outside the world, and the real homes through AirInput.homes.
     const nowhere = new Territory('none', 1e5, 1e5, 1, null);
@@ -379,6 +405,11 @@ export class ServerWorld {
     const t = this.territories.find((x) => x.id === territoryId)!;
     this.owners.set(territoryId, id);
     this.desks.delete(territoryId);
+    // v0.0.18: cards that now aim at this player's home are dealt again (missions never go there).
+    for (const other of this.pilots.values()) {
+      if (other.id === id || !other.director || !other.state || other.flying) continue;
+      if (other.director.validate()) other.state.updateOffers(other.cards());
+    }
     p.home = t;
     p.arrivedAt = this.time;
     // The AI's defenses make way for the player's base.
@@ -392,8 +423,22 @@ export class ServerWorld {
     if (save) base.load(save);
     else base.startFresh();
     p.base = base;
-    p.resources.capacity = base.capacity;
+    applyCapacities(base, p.resources);
     if (carry.paper !== undefined && carry.paper !== null) p.resources.restore(carry.paper);
+    // v0.0.18: ink and rubber balls. A first stock for whoever has never had any: a new player's
+    // starting amounts, or, for a player from before v0.0.18, half of what their base holds.
+    const first: Bundle = {};
+    for (const r of ['ink', 'rubber'] as const) {
+      let amount: number;
+      const saved = carry[r];
+      if (saved !== undefined && saved !== null) amount = saved;
+      else {
+        amount = carry.paper === undefined || carry.paper === null ? (r === 'ink' ? ECONOMY.startingInk : ECONOMY.startingRubber) : startingStock(r, base.capacityOf(r));
+        first[r] = amount;
+      }
+      p.resources.restoreOf(r, amount);
+    }
+    this.firstStocks.set(id, first);
     p.journal = new PaperJournal(carry.stint ?? randomUUID(), p.resources, (source, label) => {
       if (p.cause) return p.cause;
       const m = p.state?.mission;
@@ -404,6 +449,8 @@ export class ServerWorld {
     // The garage and the hangar as the player left them (before the board, which looks at what they can fly).
     for (const plane of carry.planes ?? []) p.planeIds.set(plane.design, plane.id);
     p.lifetime = { ...(carry.stats ?? {}) };
+    p.progress = new Progress(this.clock);
+    if (carry.profile) p.progress.data = structuredClone(carry.profile);
     if (carry.director) {
       // The board as it was left: cards made again from their recipes keep their ids (and so
       // their rewards' keys); cards that make no sense on this desk are dealt afresh.
@@ -597,6 +644,13 @@ export class ServerWorld {
     return d;
   }
 
+  /** The first stock of ink and rubber balls the player was given on placing (once; empty after). */
+  takeFirstStock(id: string): Bundle {
+    const first = this.firstStocks.get(id) ?? {};
+    this.firstStocks.delete(id);
+    return first;
+  }
+
   /** Missions the player flew to the end since the last call (also after they left). */
   takeOutcomes(id: string): MissionOutcome[] {
     const left = this.leftOutcomes.get(id) ?? [];
@@ -647,7 +701,7 @@ export class ServerWorld {
     const board: Record<string, string> = {};
     for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
     const clock = (t: number) => (t > this.time ? new Date(Math.round(this.wallOf(t))) : null);
-    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
+    return { stats, director: p.director.save(), profile: p.progress?.data ?? null, garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -660,11 +714,11 @@ export class ServerWorld {
    * world had already made (a duplicate key, or a debit it couldn't cover), so the world follows the
    * store. Returns the new balance.
    */
-  adjustPaper(id: string, delta: number): number | null {
+  adjustPaper(id: string, delta: number, resource: Resource = 'paper'): number | null {
     const p = this.pilots.get(id);
     if (!p?.journal) return null;
-    p.resources.restore(Math.max(0, p.resources.paper + Math.round(delta)));
-    return p.resources.paper;
+    p.resources.restoreOf(resource, Math.max(0, p.resources.amount(resource) + Math.round(delta)));
+    return p.resources.amount(resource);
   }
 
   /** The player's paper capacity and protected reserve right now (saved with their balance). */
@@ -809,6 +863,7 @@ export class ServerWorld {
     this.updateAttacks();
     this.rebuildAi();
     this.updateDesks();
+    this.updateSessionEvents(dt);
     this.pvpTimer -= dt;
     if (this.pvpTimer <= 0) {
       this.pvpTimer = PVP_REFRESH;
@@ -836,27 +891,28 @@ export class ServerWorld {
     const f = frame ?? NEUTRAL_FRAME;
     // Their buildings set how fast paper comes in and how much the store holds. Paper is produced
     // only while the player is connected: nothing comes in while they are away.
-    st.income.perMinute = p.connected ? base.production : 0;
-    st.income.capacity = base.capacity;
-    p.resources.capacity = base.capacity;
+    applyBaseEconomy(base, p.resources, st.incomes, p.connected);
     st.tick(NET.step);
     base.recordIncome(st.income.lastPaid);
     p.journal?.tick(NET.step);
     const m = p.flight.model;
     // v0.0.16: the maneuver chosen at home; GameState refuses changes in the air.
     m.maneuverSlot = st.maneuverSlot;
+    m.cargoFactor = st.cargoFactor;
     if (st.phase === 'flying' && m.status === 'flying') {
       // v0.0.17: time in the air earns Merit (capped); a plane waiting on the pad never does.
       if (p.connected && !st.emergency) this.merit.fly(p.id, NET.step);
+      const wasManeuvering = m.activeManeuver;
       const result = p.flight.step(f, home, this.territories, this.solids());
       if (!result) return;
+      if (m.activeManeuver && !wasManeuvering) st.recordManeuver();
       for (const c of result.collisions) {
         this.pilotCollision(p, c);
         if (st.phase !== 'flying') return;
       }
       switch (result.outcome) {
         case 'flying':
-          st.updateFlight(m.prevPosition, m.position, NET.step);
+          st.updateFlight(m.prevPosition, m.position, NET.step, m.activeManeuver !== null);
           if (st.phase !== 'flying') return;
           if (f.fire) this.pilotFire(p);
           if (f.bomb) this.pilotBomb(p);
@@ -1022,7 +1078,7 @@ export class ServerWorld {
       const v = m.getVelocity(this.v1);
       out.push({
         id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z,
-        signature: m.spec.signature, radius: m.spec.hitRadius, shielded: this.shielded(p), role: 'player',
+        signature: p.state?.signatureNow(m.boost.active) ?? m.spec.signature, radius: m.spec.hitRadius, shielded: this.shielded(p), role: 'player',
       });
     }
     return out;
@@ -1067,6 +1123,8 @@ export class ServerWorld {
         this.emit({ t: 'down', id: a.id, p: v3(a.position), v: v3(v), kind: a.spec.id, side: a.side });
         this.history.forget(a.id);
         const shooter = e.by ? (this.pilotOfPlane(e.by) ?? this.ownerOfInstallation(e.by)) : null;
+        const ev = this.sessionEvents.about(a.id);
+        if (ev) this.settleEvent(ev, 'resolved');
         const owner = this.missionOwner(a.id);
         // The mission it belongs to counts it whoever finished it; the shooter gets the credit.
         if (owner && owner.pilot !== shooter) owner.pilot.state?.aircraftDestroyed(owner.id, a.role, false);
@@ -1087,6 +1145,8 @@ export class ServerWorld {
       case 'escaped': {
         const owner = this.missionOwner(e.aircraft.id);
         owner?.pilot.state?.aircraftEscaped(owner.id);
+        const ev = this.sessionEvents.about(e.aircraft.id);
+        if (ev) this.settleEvent(ev, 'failed');
         break;
       }
       default:
@@ -1104,7 +1164,7 @@ export class ServerWorld {
       // Nothing shoots at a plane over its own home (as single-player).
       if (p.home && overHome(p.home, m.position.x, m.position.z)) continue;
       const v = m.getVelocity(this.v1);
-      targets.push({ id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z, signature: m.spec.signature, role: 'player' });
+      targets.push({ id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z, signature: p.state?.signatureNow(m.boost.active) ?? m.spec.signature, role: 'player' });
     }
     for (const a of this.air.aircraft) {
       if (!a.alive) continue;
@@ -1263,6 +1323,7 @@ export class ServerWorld {
     if (ai) {
       st.recordShotHit();
       const { dealt, destroyed } = this.air.damage(ai.id, r.damage, shooter.plane, true);
+      this.sessionEvents.contribute(ai.id, shooter.id, dealt);
       if (dealt > 0) {
         st.recordDamage(dealt, null);
         this.emit({ t: 'dmg', tg: ai.id, n: dealt, p: v3(at), by: shooter.id, fatal: destroyed, k: 'ink' });
@@ -1273,7 +1334,8 @@ export class ServerWorld {
     if (installation && this.mayDamage(shooter, installation)) {
       st.recordShotHit();
       // Cardboard depots shrug off most of the ink.
-      const factor = installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1;
+      // v0.0.18: the Thug's cannon hits structures harder.
+      const factor = (installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1) * (shooter.state?.plane?.gun.structureFactor ?? 1);
       this.damageInstallation(installation, r.damage * factor, shooter, 'ink');
     }
   }
@@ -1293,6 +1355,7 @@ export class ServerWorld {
   private damageInstallation(i: Installation, amount: number, by: Pilot | null, weapon: Weapon): number {
     const { dealt, destroyed } = i.damage(Math.round(amount));
     if (dealt <= 0) return 0;
+    if (by) this.sessionEvents.contribute(i.id, by.id, dealt);
     const centre = { x: i.spec.x, y: i.spec.ground + i.spec.pivot * 0.6, z: i.spec.z };
     this.emit({ t: 'dmg', tg: i.id, n: dealt, p: v3(centre), by: by?.id, fatal: destroyed, k: weapon });
     if (by?.state) by.state.recordDamage(dealt, destroyed ? i.id : null, true, i.spec.kind === 'turret');
@@ -1316,6 +1379,8 @@ export class ServerWorld {
     if (destroyed) {
       this.solidsCache = null;
       this.emit({ t: 'inst', id: i.id, wrecked: true });
+      const ev = this.sessionEvents.about(i.id);
+      if (ev) this.settleEvent(ev, 'resolved');
     }
     return dealt;
   }
@@ -1405,8 +1470,9 @@ export class ServerWorld {
       if (victim?.state && victim.base) {
         const store = victim.base.store.spec;
         const onStore = Math.hypot(s.x - store.x, s.z - store.z) < 1;
-        const lost = victim.state.raidHit(this.attacks.loss(victim.base.vulnerable(), onStore), victim.base.protectedPaper, 'Raid hit your base');
-        this.note(victim, 'raid', 'Base hit', lost > 0 ? `−${lost}` : null, 'bad');
+        const { losses, floors } = raidLosses(victim.base, onStore);
+        const lost = victim.state.raidHitAll(losses, floors, 'Raid hit your base');
+        this.note(victim, 'raid', 'Base hit', lossText(lost), 'bad');
       }
     }
     if (b.tag) {
@@ -1416,6 +1482,160 @@ export class ServerWorld {
         owner?.pilot.state?.escortStrike(owner.id, hit);
       }
     }
+  }
+
+  // ---- World events (v0.0.18) ----------------------------------------------------------------------
+
+  /** Starts, runs and ends the session's events. */
+  private updateSessionEvents(dt: number): void {
+    const players = [...this.pilots.values()].filter((p) => p.connected && !p.leaving && p.home).length;
+    const started = this.sessionEvents.tick(dt, players, (kind, uid) => this.startEvent(kind, uid));
+    if (started) {
+      this.news(started.title, 'info');
+      this.offerEventCards();
+    }
+    for (const e of this.sessionEvents.expire(this.time)) this.settleEvent(e, 'expired');
+    // A supply drop goes to the first plane that flies low over it.
+    for (const e of this.sessionEvents.active) {
+      if (e.kind !== 'supply-drop' || !e.drop) continue;
+      const d = e.drop;
+      for (const p of this.pilots.values()) {
+        if (!p.flying || !p.state) continue;
+        const pos = p.flight.model.position;
+        if (Math.abs(pos.x - d.x) <= EVENTS.session.dropHalf && Math.abs(pos.z - d.z) <= EVENTS.session.dropHalf && pos.y - d.top <= EVENTS.session.dropCeiling) {
+          this.collectDrop(e, p);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Starts an event of `kind` now, if one can happen (the developer's tools and tests). */
+  forceEvent(kind: SessionEventKind): SessionEvent | null {
+    const e = this.startEvent(kind, randomUUID());
+    if (!e) return null;
+    this.sessionEvents.events.push(e);
+    this.news(e.title, 'info');
+    this.offerEventCards();
+    return e;
+  }
+
+  /** Makes an event of `kind`, or null if it can't happen right now. */
+  private startEvent(kind: SessionEventKind, uid: string): SessionEvent | null {
+    const aiDesks = this.territories.filter((t) => this.deskState(t.id) === 'ai' && !this.owners.has(t.id));
+    const pick = <T,>(xs: T[]): T | undefined => xs[Math.floor(this.rng() * xs.length)];
+    switch (kind) {
+      case 'high-value': {
+        const depots = this.network.installations.filter((i) => i.alive && i.side === 'enemy' && i.spec.kind === 'supply' && aiDesks.some((t) => t.id === i.spec.territoryId) && !this.sessionEvents.about(i.id));
+        const depot = pick(depots);
+        if (!depot) return null;
+        return { uid, kind, territoryId: depot.spec.territoryId, title: `Shipment at ${this.deskName(depot.spec.territoryId)}: destroy the supply depot`, until: this.time + EVENTS.shipmentTime, target: depot.id, status: 'active' };
+      }
+      case 'convoy': {
+        if (this.air.room < 1) return null;
+        const zone = aiDesks.filter((t) => t.threat >= 1);
+        const start = pick(zone);
+        if (!start) return null;
+        const path = [start];
+        for (let n = 0; n < 2; n++) {
+          const last = path[path.length - 1];
+          const next = aiDesks.filter((t) => !path.includes(t)).sort((a, b) => Math.hypot(a.x - last.x, a.z - last.z) - Math.hypot(b.x - last.x, b.z - last.z))[0];
+          if (next) path.push(next);
+        }
+        const id = `ev-${uid.slice(0, 8)}`;
+        this.air.spawn({ ...scoutPlan(this.territories, path.map((t) => t.id), 'medium', id, this.rng, 'event'), role: 'bomber', speed: 13 });
+        return { uid, kind, territoryId: path[Math.floor(path.length / 2)].id, title: `Enemy convoy crossing ${path.map((t) => this.deskName(t.id)).join(' → ')}`, until: null, target: id, status: 'active' };
+      }
+      case 'supply-drop': {
+        const free = this.territories.filter((t) => !this.owners.has(t.id) && !this.sessionEvents.active.some((e) => e.territoryId === t.id));
+        const t = pick(free);
+        if (!t) return null;
+        const resource = this.rng() < 0.5 ? ('ink' as const) : ('rubber' as const);
+        return {
+          uid, kind, territoryId: t.id, title: `Supply drop on ${this.deskName(t.id)}: ${resource === 'ink' ? 'ink' : 'rubber balls'}, first come first served`,
+          until: this.time + EVENTS.session.dropTime, target: null, status: 'active',
+          drop: { x: t.x, z: t.z, top: t.top, resource, amount: EVENTS.session.drop[resource] },
+        };
+      }
+      case 'ink-storm':
+        return { uid, kind, territoryId: null, title: `Ink storm: missions pay double ink for ${Math.round(EVENTS.session.stormTime / 60)} minutes`, until: this.time + EVENTS.session.stormTime, target: null, status: 'active' };
+    }
+  }
+
+  /** Puts the newest active shipment or convoy on the board of every player not in the air. */
+  private offerEventCards(): void {
+    const live = [...this.sessionEvents.active].reverse().find((e) => e.kind === 'high-value' || e.kind === 'convoy');
+    for (const p of this.pilots.values()) {
+      const director = p.director;
+      if (!director || !p.home || p.flying) continue;
+      const current = director.event;
+      if ((current?.eventId ?? null) === (live?.uid ?? null)) continue;
+      if (!live) {
+        director.setEvent(null);
+        p.state?.updateOffers(p.cards());
+        continue;
+      }
+      const ctx = this.missionContext(p);
+      const t = this.territories.find((x) => x.id === live.territoryId);
+      if (!t) continue;
+      const spec = live.kind === 'high-value'
+        ? shipmentMission(t, live.target!, 'medium', ctx, this.rng, Math.round(EVENTS.shipmentTime / 60))
+        : convoyMission(live.target!, [t], 'medium', false, ctx, this.rng);
+      director.setEvent({ slot: 'event', source: 'event', mission: new Mission(spec), recipe: null, eventId: live.uid, reasons: [`World event: ${live.title}`] });
+      p.state?.updateOffers(p.cards());
+    }
+  }
+
+  /** The event's card is being flown by these players (they are paid by it, not by the bounty). */
+  private eventFlyers(e: SessionEvent): Set<string> {
+    const out = new Set<string>();
+    for (const p of this.pilots.values()) {
+      const m = p.state?.mission;
+      if (m && p.director?.offerFor(m)?.eventId === e.uid) out.add(p.id);
+    }
+    return out;
+  }
+
+  /** An event is over: bounties split by damage, cards taken off the board. */
+  private settleEvent(e: SessionEvent, status: SessionEvent['status']): void {
+    if (e.status !== 'active') return;
+    e.status = status;
+    if (status === 'resolved' && e.target && (e.kind === 'high-value' || e.kind === 'convoy')) {
+      const bounty = e.kind === 'high-value' ? EVENTS.bounty['high-value'] : EVENTS.bounty.convoy;
+      for (const share of this.sessionEvents.split(e.target, bounty, this.eventFlyers(e))) {
+        const p = this.pilots.get(share.player);
+        if (!p?.state) continue;
+        p.cause = `event:${e.uid}:${p.id}`;
+        p.state.payBonus(share.amount, e.kind === 'high-value' ? 'Shipment bounty' : 'Convoy bounty');
+        p.cause = null;
+        this.note(p, 'trophy', e.kind === 'high-value' ? 'Shipment destroyed' : 'Convoy down', `+${share.amount}`, 'good');
+      }
+      this.news(e.kind === 'high-value' ? 'The shipment was destroyed' : 'The convoy was shot down', 'good');
+    } else if (status === 'expired' && e.kind === 'ink-storm') {
+      this.news('The ink storm is over', 'info');
+    } else if (status !== 'resolved' && e.kind !== 'ink-storm') {
+      this.news(e.kind === 'convoy' ? 'The convoy got away' : e.kind === 'supply-drop' ? 'The supply drop was taken away' : 'The shipment was moved on', 'info');
+    }
+    // Shipments and convoys leave the boards (a card being flown stays with its pilot).
+    for (const p of this.pilots.values()) {
+      if (p.director?.event?.eventId === e.uid && !p.flying) {
+        p.director.setEvent(null);
+        p.state?.updateOffers(p.cards());
+      }
+    }
+    this.offerEventCards();
+  }
+
+  /** A player flew low over a supply drop first: it is theirs (once: keyed by the event). */
+  private collectDrop(e: SessionEvent, p: Pilot): void {
+    const d = e.drop!;
+    p.cause = `event:${e.uid}:${p.id}`;
+    p.resources.earnOf(d.resource, d.amount, 'bonus', 'Supply drop');
+    p.state!.payBonus(EVENTS.session.drop.paper, 'Supply drop');
+    p.cause = null;
+    this.note(p, d.resource === 'ink' ? 'inkwell' : 'rubber', 'Supply drop', `+${d.amount} ${d.resource === 'ink' ? 'ink' : 'rubber'}`, 'good');
+    this.news(`${p.name} took the supply drop`, 'info');
+    this.settleEvent(e, 'resolved');
   }
 
   // ---- Raids between players ----------------------------------------------------------------------
@@ -1445,10 +1665,13 @@ export class ServerWorld {
     const attacker = this.pilots.get(attack.attacker);
     const victim = this.pilots.get(attack.victim);
     let lost = 0;
+    let lostAll: Bundle = {};
     if (outcome === 'bombed' && victim?.state && victim.base) {
       const onStore = attack.target.installationId === victim.base.idOf(STORE);
       victim.cause = `raid:${attack.uid}:loss`;
-      lost = victim.state.raidHit(this.attacks.loss(victim.base.vulnerable(), onStore), victim.base.protectedPaper, `Raided by ${attacker?.name ?? 'a rival'}`);
+      const { losses, floors } = raidLosses(victim.base, onStore);
+      lostAll = victim.state.raidHitAll(losses, floors, `Raided by ${attacker?.name ?? 'a rival'}`);
+      lost = lostAll.paper ?? 0;
       victim.cause = null;
       victim.shieldUntil = this.time + PVP.raidShield;
       if (attacker) {
@@ -1463,10 +1686,10 @@ export class ServerWorld {
     const reward = attacker?.state?.mission?.status === 'succeeded' ? attacker.state.mission.reward : 0;
     if (victim) {
       victim.report = {
-        id: attack.id, role: 'defender', other: attacker?.name ?? '?', territoryId: attack.territoryId, outcome, paperLost: lost,
+        id: attack.id, role: 'defender', other: attacker?.name ?? '?', territoryId: attack.territoryId, outcome, paperLost: lost, inkLost: lostAll.ink ?? 0, rubberLost: lostAll.rubber ?? 0,
         reward: 0, structures: attack.structures, defenseReward,
       };
-      if (outcome === 'bombed') this.note(victim, 'raid', `Raided by ${attacker?.name ?? '?'}`, lost > 0 ? `−${lost}` : null, 'bad');
+      if (outcome === 'bombed') this.note(victim, 'raid', `Raided by ${attacker?.name ?? '?'}`, lossText(lostAll), 'bad');
       else if (outcome === 'repelled') this.note(victim, 'ok', 'Raid repelled', null, 'good');
     }
     if (attacker) {
@@ -1605,6 +1828,12 @@ export class ServerWorld {
         break;
       case 'mission-succeeded':
         this.endMissionAi(p);
+        // v0.0.18: an ink storm pays the mission's ink again (once: keyed by the mission).
+        if (this.sessionEvents.storm && (st.mission?.supplies.ink ?? 0) > 0) {
+          p.cause = `storm:${p.missionId(st.mission!)}`;
+          p.resources.earnOf('ink', Math.round(st.mission!.supplies.ink! * (EVENTS.session.stormFactor - 1)), 'bonus', 'Ink storm');
+          p.cause = null;
+        }
         p.stats.missions++;
         p.addScore(PVP.score.mission);
         this.note(p, 'ok', 'Complete', `+${e.reward}`, 'good');
@@ -1751,6 +1980,10 @@ export class ServerWorld {
     });
     const damageTaken = Math.min(1, sortie.damageTaken / plane.maxHealth);
     const card = p.pvpCard(mission);
+    // v0.0.18: an operation's bonuses are keyed by the operation and stage, so a retry, a reconnect or
+    // a restart never pays them twice.
+    const opOffer = p.director?.offerFor(mission);
+    const opKey = opOffer?.operationId ? `op:${opOffer.operationId}:${opOffer.stage ?? 0}` : null;
     p.director?.afterSortie(
       mission,
       {
@@ -1760,17 +1993,32 @@ export class ServerWorld {
       },
       { success, recovered, damageTaken, time: mission.elapsed, par: mission.spec.par ?? 0, reward: success ? mission.reward : 0 },
     );
-    for (const payout of p.director?.takePayouts() ?? []) st.payBonus(payout.amount, payout.label);
+    const payouts = p.director?.takePayouts() ?? [];
+    const operationDone = payouts.some((x) => x.label.endsWith('operation bonus'));
+    payouts.forEach((payout, i) => {
+      p.cause = opKey ? `${opKey}:${i}` : null;
+      st.payBonus(payout.amount, payout.label);
+      p.cause = null;
+    });
+    // v0.0.18: medals, records and achievements, decided here. Recognition only: no paper (no streak
+    // bonus in multiplayer), a little Merit for medals and achievements (each keyed: never twice).
+    const prog = p.progress?.sortieEnded({ mission, sortie, aircraft: plane.id, maxHealth: plane.maxHealth, recovered, operationCompleted: operationDone });
+    if (prog && !st.emergency) {
+      if (prog.medal && success) this.merit.medal(p.id, p.missionId(mission), prog.medal, mission.title);
+      for (const a of prog.achievements) this.merit.achievement(p.id, a.id, a.title);
+    }
+    for (const a of prog?.achievements ?? []) this.note(p, 'medal', a.title, null, 'good');
     p.result = {
       recovered, missionTitle: mission.title, status: mission.status, failure: mission.failure, reward: success ? mission.reward : 0,
       elapsed: mission.elapsed, sortie: { ...sortie }, pvp: card?.tag ?? null,
+      medal: prog?.medal ?? null, records: prog?.records ?? [], achievements: (prog?.achievements ?? []).map((a) => ({ title: a.title, detail: a.detail })),
     };
     if (card) p.pvp = p.pvp.filter((c) => c !== card);
   }
 
   private onBaseEvent(p: Pilot, e: BaseEvent): void {
     this.solidsCache = null;
-    if (p.base) p.resources.capacity = p.base.capacity;
+    if (p.base) applyCapacities(p.base, p.resources);
     switch (e.type) {
       case 'built':
         this.note(p, 'build', `${BASE.buildings[e.kind].short}`, `−${e.cost}`, 'good');
@@ -1785,7 +2033,7 @@ export class ServerWorld {
         this.note(p, 'remove', `${BASE.buildings[e.kind].short} removed`, e.refund > 0 ? `+${e.refund}` : null, 'info');
         break;
       case 'refused': {
-        const what = { paper: 'Need paper', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
+        const what = { paper: 'Need paper', materials: 'Need ink or rubber', slot: 'Wrong slot', unique: 'Only one', 'max-level': 'Max level', destroyed: 'Repair first', intact: 'Intact' }[e.reason];
         this.note(p, e.reason === 'paper' ? 'paper' : 'warn', what, e.reason === 'paper' ? `−${e.missing}` : null, 'bad');
         break;
       }
@@ -1806,6 +2054,8 @@ export class ServerWorld {
       territories: this.territories,
       homeId: home.id,
       launch,
+      // v0.0.18: discovery flights go to landmarks this player hasn't discovered yet.
+      visited: new Set(p.progress?.data.discovered ?? []),
       dummies: [],
       obstacles: [
         ...this.shared.decorGround,
@@ -1819,7 +2069,7 @@ export class ServerWorld {
 
   private situation(p: Pilot): Situation {
     const costs = Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, p.state?.buildCostFor(id) ?? AIRCRAFT[id].cost])) as Record<AircraftId, number>;
-    return { paper: p.resources.paper, costs, airRoom: this.air.room, raidActive: false };
+    return { paper: p.resources.paper, ink: p.resources.ink, rubber: p.resources.rubber, costs, airRoom: this.air.room, raidActive: false };
   }
 
   // ---- Geometry -----------------------------------------------------------------------------------
@@ -1933,8 +2183,20 @@ export class ServerWorld {
       key: this.missionKey(m),
       spec: spec as MissionSpec,
       slot,
-      slotLabel: pvp ? 'Rival' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
+      slotLabel: pvp ? 'Rival' : offer?.source === 'operation' ? 'Operation' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
       pvp: pvp?.tag ?? null,
+      operation: this.operationOf(p, offer),
+    };
+  }
+
+  /** v0.0.18: the operation a card is a stage of, for the board. */
+  private operationOf(p: Pilot, offer: ReturnType<MissionDirector['offerFor']>): OperationDTO | undefined {
+    const op = p.director?.operation;
+    if (!op || offer?.source !== 'operation' || offer.operationId !== op.id) return undefined;
+    return {
+      codename: op.codename, territoryId: op.territoryId, stage: offer.stage ?? 0,
+      stages: op.stages.map((st) => ({ label: st.label, status: st.status, optional: OPTIONAL_LABELS[st.optional.kind], met: st.optional.met, skipped: !!st.skipped })),
+      bonus: op.bonus, earned: op.earned, remaining: remainingRewards(op), active: op.status === 'active',
     };
   }
 
@@ -1966,18 +2228,22 @@ export class ServerWorld {
       swaps: p.director?.swaps ?? 0,
       economy: {
         paper, capacity: base.capacity, rate: Math.round(income.ratePerMinute(paper) * 10) / 10, state: income.stateFor(paper),
-        progress: Math.round(income.progress * 100) / 100, protectedPaper: base.protectedPaper, vulnerable: base.vulnerable(), production: base.production,
+        progress: Math.round(income.progress * 100) / 100, protectedPaper: base.protectedPaper, vulnerable: base.vulnerable(), production: base.netProductionOf('paper'),
+        stores: (['ink', 'rubber'] as const).map((r) => ({
+          id: r, amount: p.resources.amount(r), capacity: base.capacityOf(r),
+          rate: Math.round(st.incomes[r].ratePerMinute(p.resources.amount(r)) * 10) / 10, protected: base.protectedOf(r),
+        })),
       },
       garage: {
         chosen: st.aircraft,
         maneuver: st.maneuverSlot,
         hangar: [...st.hangar].map(([id, h]) => ({ id, condition: h.condition, health: h.health })),
-        costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, { kind: st.buildKindFor(id), cost: st.buildCostFor(id) }])) as Record<AircraftId, { kind: 'fold' | 'refit' | 'rollout'; cost: number }>,
+        costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, { kind: st.buildKindFor(id), cost: st.buildCostFor(id), materials: st.buildMaterialsFor(id) }])) as Record<AircraftId, { kind: 'fold' | 'refit' | 'rollout'; cost: number; materials: { ink?: number; rubber?: number } }>,
         emergency: st.emergencyAvailable(),
       },
       plane: plane
         ? {
-            id: plane.id, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
+            id: plane.id, cargoFactor: st.cargoFactor, detection: plane.traits?.stealth ? this.network.detectionOf(p.plane) : undefined, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
             ammo: st.gun?.ammo ?? plane.gun.ammo, ammoMax: plane.gun.ammo, gunReady: st.gun?.canFire() ?? false,
             bombs: st.bombsLoaded, bombsMax: plane.bombs.capacity, falling: st.bombsFalling, cooldown: Math.round(st.bombCooldown * 10) / 10,
             rearm: st.rearmProgress === null ? null : Math.round(st.rearmProgress * 100) / 100,
@@ -2026,6 +2292,8 @@ function failureWord(reason: string): string {
       return 'Too late';
     case 'escort-lost':
       return 'Bomber lost';
+    case 'cargo-broken':
+      return 'Cargo broke';
     default:
       return 'Failed';
   }

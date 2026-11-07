@@ -39,6 +39,7 @@ import {
   type Store,
   type TokenOrigin,
   type TransactionInput,
+  type LedgerResource,
   type TransactionRecord,
   type TransactionResult,
   type WorldRecord,
@@ -46,6 +47,12 @@ import {
 
 const PLAYER_COLUMNS = 'p.id, p.public_id, p.display_name, p.created_at, p.last_seen_at, p.revoked_at, p.username, p.username_changed_at';
 const INVITE_COLUMNS = 'id, label, max_uses, uses, created_at, expires_at, revoked_at';
+
+/** The balances column of a resource (never from player input: only these three). */
+function columnOf(resource: LedgerResource): 'paper' | 'ink' | 'rubber' {
+  if (resource !== 'paper' && resource !== 'ink' && resource !== 'rubber') throw new Error(`unknown resource ${String(resource)}`);
+  return resource;
+}
 
 /** The store in PostgreSQL. Every multi-step change runs in one transaction. */
 export class PgStore implements Store {
@@ -199,9 +206,10 @@ export class PgStore implements Store {
 
   // ---- Paper and the transaction log ------------------------------------------------------------
 
-  async balance(worldId: string, playerId: string): Promise<number> {
-    const { rows } = await this.db.query<{ paper: string }>('select paper from balances where world_id = $1 and player_id = $2', [worldId, playerId]);
-    return rows.length > 0 ? Number(rows[0].paper) : 0;
+  async balance(worldId: string, playerId: string, resource: LedgerResource = 'paper'): Promise<number> {
+    const column = columnOf(resource);
+    const { rows } = await this.db.query<{ amount: string | null }>(`select ${column} as amount from balances where world_id = $1 and player_id = $2`, [worldId, playerId]);
+    return rows.length > 0 ? Number(rows[0].amount ?? 0) : 0;
   }
 
   async applyTransaction(t: TransactionInput): Promise<TransactionResult> {
@@ -209,8 +217,10 @@ export class PgStore implements Store {
     return this.db.transaction(async (tx) => {
       await tx.query('insert into balances (world_id, player_id) values ($1, $2) on conflict do nothing', [t.worldId, t.playerId]);
       // The balance row is the lock: changes to one player's paper happen one after another.
-      const locked = await tx.query<{ paper: string }>('select paper from balances where world_id = $1 and player_id = $2 for update', [t.worldId, t.playerId]);
-      const balance = Number(locked.rows[0].paper);
+      const resource = t.resource ?? 'paper';
+      const column = columnOf(resource);
+      const locked = await tx.query<{ amount: string | null }>(`select ${column} as amount from balances where world_id = $1 and player_id = $2 for update`, [t.worldId, t.playerId]);
+      const balance = Number(locked.rows[0].amount ?? 0);
       // Seen this key before? (Checked after the lock: a racing twin has committed or rolled back by now.)
       const seen = await tx.query('select 1 from transactions where world_id = $1 and idem_key = $2', [t.worldId, t.key]);
       if (seen.rows.length > 0) return { status: 'duplicate' as const, balance };
@@ -219,18 +229,18 @@ export class PgStore implements Store {
       // The unique (world_id, idem_key) constraint is the last word: a twin for another player
       // with the same key would fail here and roll the whole change back.
       await tx.query(
-        `insert into transactions (world_id, player_id, idem_key, kind, amount, balance_after, reason, reference)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [t.worldId, t.playerId, t.key, t.kind, t.amount, after, t.reason, t.reference ?? null],
+        `insert into transactions (world_id, player_id, idem_key, kind, amount, balance_after, reason, reference, resource)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [t.worldId, t.playerId, t.key, t.kind, t.amount, after, t.reason, t.reference ?? null, resource],
       );
-      await tx.query('update balances set paper = $3, updated_at = now() where world_id = $1 and player_id = $2', [t.worldId, t.playerId, after]);
+      await tx.query(`update balances set ${column} = $3, updated_at = now() where world_id = $1 and player_id = $2`, [t.worldId, t.playerId, after]);
       return { status: 'applied' as const, balance: after };
     });
   }
 
   async transactions(worldId: string, playerId: string, limit = 100): Promise<TransactionRecord[]> {
     const { rows } = await this.db.query(
-      `select world_id, player_id, idem_key, kind, amount, balance_after, reason, reference, created_at
+      `select world_id, player_id, idem_key, kind, amount, balance_after, reason, reference, resource, created_at
          from transactions where world_id = $1 and player_id = $2 order by id desc limit $3`,
       [worldId, playerId, limit],
     );
@@ -243,15 +253,17 @@ export class PgStore implements Store {
       balanceAfter: Number(r.balance_after),
       reason: String(r.reason),
       reference: r.reference === null ? null : String(r.reference),
+      resource: String(r.resource) as LedgerResource,
       createdAt: r.created_at as Date,
     }));
   }
 
   async economy(worldId: string, playerId: string): Promise<EconomyRecord | null> {
     if (!isUuid(playerId)) return null;
-    const { rows } = await this.db.query('select paper, capacity, protected from balances where world_id = $1 and player_id = $2', [worldId, playerId]);
+    const { rows } = await this.db.query('select paper, capacity, protected, ink, rubber from balances where world_id = $1 and player_id = $2', [worldId, playerId]);
     if (rows.length === 0) return null;
-    return { paper: Number(rows[0].paper), capacity: Number(rows[0].capacity), protected: Number(rows[0].protected) };
+    const r = rows[0];
+    return { paper: Number(r.paper), capacity: Number(r.capacity), protected: Number(r.protected), ink: r.ink === null ? null : Number(r.ink), rubber: r.rubber === null ? null : Number(r.rubber) };
   }
 
   async setEconomyLimits(worldId: string, playerId: string, capacity: number, protectedPaper: number): Promise<void> {
@@ -298,13 +310,14 @@ export class PgStore implements Store {
 
   async progress(worldId: string, playerId: string): Promise<ProgressRecord | null> {
     if (!isUuid(playerId)) return null;
-    const { rows } = await this.db.query('select stats, director, garage, protect_until, shield_until from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
+    const { rows } = await this.db.query('select stats, director, garage, profile, protect_until, shield_until from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
     if (rows.length === 0) return null;
     const director = rows[0].director as Record<string, unknown> | null;
     return {
       stats: (rows[0].stats as Record<string, number>) ?? {},
       director: director && Object.keys(director).length > 0 ? director : null,
       garage: (rows[0].garage as Record<string, unknown>) ?? {},
+      profile: rows[0].profile && Object.keys(rows[0].profile as object).length > 0 ? rows[0].profile : null,
       protectUntil: (rows[0].protect_until as Date | null) ?? null,
       shieldUntil: (rows[0].shield_until as Date | null) ?? null,
     };
@@ -312,10 +325,11 @@ export class PgStore implements Store {
 
   async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
     await this.db.query(
-      `insert into progress (world_id, player_id, stats, director, garage, protect_until, shield_until) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7)
+      `insert into progress (world_id, player_id, stats, director, garage, protect_until, shield_until, profile) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb)
        on conflict (world_id, player_id) do update set stats = excluded.stats, director = excluded.director, garage = excluded.garage,
-         protect_until = excluded.protect_until, shield_until = excluded.shield_until, updated_at = now()`,
-      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage), record.protectUntil ?? null, record.shieldUntil ?? null],
+         protect_until = excluded.protect_until, shield_until = excluded.shield_until,
+         profile = case when excluded.profile = '{}'::jsonb then progress.profile else excluded.profile end, updated_at = now()`,
+      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage), record.protectUntil ?? null, record.shieldUntil ?? null, JSON.stringify(record.profile ?? {})],
     );
   }
 

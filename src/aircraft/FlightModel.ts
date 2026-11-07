@@ -127,6 +127,8 @@ export class FlightModel {
   maneuverCooldown = 0;
   /** The move being flown, or null. */
   activeManeuver: ManeuverId | null = null;
+  /** v0.0.18: heavy cargo on board: speeds are scaled by this (1: none). Set from GameState.cargoFactor. */
+  cargoFactor = 1;
   /** Why the last press of the Maneuver key did nothing, and for how much longer the HUD says so. */
   lastRefusal: ManeuverRefusal | null = null;
   refusalTime = 0;
@@ -334,7 +336,7 @@ export class FlightModel {
     this.boost.update(dt, controls.boost && !autopilot);
     const braking = controls.throttle < 0 && this.throttleSpeed <= f.minSpeed && !autopilot && !this.boost.active;
     this.throttleSpeed = clamp(this.throttleSpeed + controls.throttle * f.throttleAccel * dt, f.minSpeed, f.maxSpeed);
-    const targetSpeed = braking ? f.minSpeed * ACRO.airbrakeFloor : this.throttleSpeed + (this.boost.active ? f.boostSpeed : 0);
+    const targetSpeed = (braking ? f.minSpeed * ACRO.airbrakeFloor : this.throttleSpeed + (this.boost.active ? f.boostSpeed : 0)) * (braking ? 1 : this.cargoFactor);
     const response = this.boost.active ? f.boostResponse : braking ? ACRO.airbrakeResponse : f.speedResponse;
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-response * dt)) - Math.sin(this.pitch) * f.pitchSpeedEffect * dt;
     this.speed = clamp(this.speed, f.minSpeed * ACRO.airbrakeFloor, f.maxSpeed + f.boostSpeed);

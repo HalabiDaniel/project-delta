@@ -138,7 +138,7 @@ export function simulateEconomy(opts: SimulationOptions): SimulationResult {
       damageDealt: success ? 60 : 20, damageTaken: lost ? choice.plane.maxHealth : choice.plane.maxHealth * (success ? 0.25 : 0.5),
       bombsDropped: mission.spec.bombs > 0 ? 2 : 0, bombHits: success && mission.spec.bombs > 0 ? 1 : 0, shotsFired: 40, shotsHit: success ? 10 : 4,
       targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0, enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0,
-      bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, rearms: 0, distanceFlown: 500, landings: lost ? 0 : 1,
+      bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, inkSpent: 0, rubberSpent: 0, maneuvers: 0, rearms: 0, distanceFlown: 500, landings: lost ? 0 : 1,
       emergency: choice.emergency, outcome: lost ? ('lost' as const) : ('recovered' as const),
     };
     const p = progress.sortieEnded({ mission, sortie, aircraft: choice.plane.id, maxHealth: choice.plane.maxHealth, recovered: !lost, operationCompleted: false });

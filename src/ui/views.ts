@@ -109,6 +109,8 @@ export interface MissionCardView {
   stars: number;
   multiplier: number;
   reward: number;
+  /** v0.0.18: ink and rubber balls paid with the paper (absent: none). */
+  supplies?: { ink?: number; rubber?: number };
   rewardNote: string;
   modifiers: Array<{ id: string; label: string; detail: string }>;
   recommended: boolean;
@@ -188,6 +190,8 @@ export interface ManeuverPickerView {
 export interface AircraftStatusView {
   name: string;
   roleLabel: string;
+  /** v0.0.18: a stealth plane's detection state (undefined: not a stealth plane, not shown). */
+  detection?: 'hidden' | 'detected' | 'locked';
   accent: string;
   health: number;
   maxHealth: number;

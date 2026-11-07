@@ -28,6 +28,12 @@ export interface SaveData {
   version: number;
   savedAt: number;
   paper: number;
+  /**
+   * v0.0.18: ink and rubber balls. Null in a save from before them: the game then starts the player
+   * with a share of what their base holds (startingStock in systems/Economy.ts).
+   */
+  ink: number | null;
+  rubber: number | null;
   /** The design chosen in the garage. */
   aircraft: AircraftId;
   /** Planes waiting at home: the player's saved loadouts. */
@@ -328,6 +334,8 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     version: SAVE_VERSION,
     savedAt: check.num(raw.savedAt, 'savedAt', 0, Number.MAX_SAFE_INTEGER, 0),
     paper: check.int(raw.paper, 'paper', 0, 1_000_000, ECONOMY.startingPaper),
+    ink: raw.ink === undefined || raw.ink === null ? null : check.int(raw.ink, 'ink', 0, 1_000_000, ECONOMY.startingInk),
+    rubber: raw.rubber === undefined || raw.rubber === null ? null : check.int(raw.rubber, 'rubber', 0, 1_000_000, ECONOMY.startingRubber),
     aircraft: check.oneOf(raw.aircraft, 'aircraft', AIRCRAFT_ORDER, STARTER_AIRCRAFT),
     hangar: check.list(raw.hangar, 'hangar', (h, i) => {
       if (!isObject(h)) return null;
@@ -355,7 +363,7 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
     ledger: {
       entries: check.list(ledger.entries, 'ledger.entries', (e) => {
         if (!isObject(e)) return null;
-        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'refund', 'raid', 'reset'] as const, null);
+        const source = check.oneOf(e.source, 'ledger source', ['spend', 'reward', 'bonus', 'income', 'refund', 'raid', 'reset', 'arm', 'supply', 'upkeep'] as const, null);
         if (!source) return null;
         return {
           at: check.num(e.at, 'ledger at', 0, Number.MAX_SAFE_INTEGER, 0),
@@ -426,11 +434,11 @@ function validateEfficiency(v: unknown, check: Checker): Efficiency | null {
 }
 
 const ESCALATIONS: readonly Escalation[] = ['wingman', 'escorted', 'extra-target', 'return', 'tight-clock'];
-const SITUATIONAL: readonly Situational[] = ['high-value', 'alert', 'recovery', 'emergency'];
+const SITUATIONAL: readonly Situational[] = ['high-value', 'alert', 'recovery', 'emergency', 'short-ink', 'short-rubber'];
 const REGULAR_TYPES = MISSION_TYPES.filter((t) => !EVENT_TYPES.includes(t));
 /** History and records can also hold world events' missions. */
 const ALL_TYPES: readonly MissionType[] = [...MISSION_TYPES, ...EVENT_TYPES];
-const FAILURES: readonly MissionFailure[] = ['missed', 'out-of-time', 'aircraft-lost', 'abandoned', 'target-escaped', 'target-bombed', 'escort-lost'];
+const FAILURES: readonly MissionFailure[] = ['missed', 'out-of-time', 'aircraft-lost', 'abandoned', 'target-escaped', 'target-bombed', 'escort-lost', 'cargo-broken'];
 
 function validateRecipe(r: unknown, check: Checker, where: string): Recipe | null {
   if (!isObject(r)) return null;
@@ -558,6 +566,11 @@ function validateDirector(d: unknown, check: Checker): DirectorState | null {
   };
 }
 
+/** v0.0.18: a progress record from anywhere (the server's store too), checked field by field. */
+export function cleanProgress(p: unknown, problems: string[] = []): ProgressData {
+  return validateProgress(p, new Checker(problems));
+}
+
 function validateProgress(p: unknown, check: Checker): ProgressData {
   const out = emptyProgress();
   if (!isObject(p)) {
@@ -582,6 +595,13 @@ function validateProgress(p: unknown, check: Checker): ProgressData {
   const streak = isObject(p.streak) ? p.streak : {};
   out.streak = { current: check.int(streak.current, 'streak.current', 0, 1e6, 0), best: check.int(streak.best, 'streak.best', 0, 1e6, 0) };
   out.clean = check.int(p.clean, 'clean', 0, 1e6, 0);
+  // v0.0.18: best times and discovered landmarks (absent in older saves).
+  if (isObject(p.times)) {
+    for (const [k, v] of Object.entries(p.times)) {
+      if (typeof k === 'string' && k.length <= 60 && typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e5) out.times[k] = v;
+    }
+  }
+  if (Array.isArray(p.discovered)) out.discovered = [...new Set(p.discovered.filter((t): t is string => typeof t === 'string' && /^T\d{1,2}$/.test(t)))];
   if (isObject(p.mastery)) {
     for (const id of AIRCRAFT_ORDER) {
       const m = p.mastery[id];

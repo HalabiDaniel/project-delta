@@ -387,6 +387,18 @@ export interface EconomyDTO {
   protectedPaper: number;
   vulnerable: number;
   production: number;
+  /** v0.0.18: ink and rubber balls, with their store limits, rates and protected reserves. */
+  stores?: StoreDTO[];
+}
+
+/** One store beyond paper (v0.0.18). */
+export interface StoreDTO {
+  id: 'ink' | 'rubber';
+  amount: number;
+  capacity: number;
+  /** Per minute right now (boost, full, upkeep and being offline included). */
+  rate: number;
+  protected: number;
 }
 
 export interface GarageDTO {
@@ -394,12 +406,17 @@ export interface GarageDTO {
   /** v0.0.16: the maneuver in the slot of the plane on the pad or in the air (else the chosen design's); null: none. */
   maneuver?: ManeuverId | null;
   hangar: Array<{ id: AircraftId; condition: 'ready' | 'recovered'; health: number }>;
-  costs: Record<AircraftId, { kind: BuildKind; cost: number }>;
+  /** `materials`: ink and rubber balls on top of the paper (v0.0.18; absent: none). */
+  costs: Record<AircraftId, { kind: BuildKind; cost: number; materials?: { ink?: number; rubber?: number } }>;
   emergency: boolean;
 }
 
 export interface PlaneDTO {
   id: AircraftId;
+  /** v0.0.18: heavy cargo slows the plane by this (absent: 1), for the client's prediction. */
+  cargoFactor?: number;
+  /** v0.0.18: a stealth plane's detection state, decided by the server (absent: not a stealth plane). */
+  detection?: 'hidden' | 'detected' | 'locked';
   emergency: boolean;
   health: number;
   maxHealth: number;
@@ -431,6 +448,20 @@ export interface CardDTO {
   slot: 'safe' | 'balanced' | 'risky' | 'event' | 'pvp';
   slotLabel: string;
   pvp: PvpTag | null;
+  /** v0.0.18: the operation this card is a stage of (absent: none). */
+  operation?: OperationDTO;
+}
+
+/** An operation in multiplayer (v0.0.18): a short chain of sorties with a shared payout. */
+export interface OperationDTO {
+  codename: string;
+  territoryId: string;
+  stage: number;
+  stages: Array<{ label: string; status: 'done' | 'locked' | 'open'; optional: string; met: boolean | null; skipped: boolean }>;
+  bonus: number;
+  earned: number;
+  remaining: number;
+  active: boolean;
 }
 
 export interface MissionProgressDTO {
@@ -471,6 +502,10 @@ export interface ResultDTO {
   elapsed: number;
   sortie: SortieLog;
   pvp: PvpTag | null;
+  /** v0.0.18: decided by the server: the medal, new records and achievements unlocked. */
+  medal?: 'bronze' | 'silver' | 'gold' | null;
+  records?: string[];
+  achievements?: Array<{ title: string; detail: string }>;
 }
 
 /** The defender's (or attacker's) report on a raid between players. */
@@ -481,6 +516,9 @@ export interface AttackReportDTO {
   territoryId: string;
   outcome: 'bombed' | 'repelled' | 'abandoned';
   paperLost: number;
+  /** v0.0.18: ink and rubber balls lost (absent: none). */
+  inkLost?: number;
+  rubberLost?: number;
   reward: number;
   structures: Array<{ name: string; destroyed: boolean }>;
   defenseReward: number;

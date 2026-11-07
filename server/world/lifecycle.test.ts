@@ -145,9 +145,9 @@ describe('fair disconnects', () => {
     const raids = world.takePvp().filter((e) => e.kind === 'raid');
     expect(raids).toHaveLength(1);
     expect(raids[0]).toMatchObject({ attacker: 'a', victim: 'b', success: true });
-    // The loss was one ledger change, keyed by the raid.
+    // The loss was one ledger change per resource (v0.0.18), each keyed by the raid.
     const losses = world.takePaper('b').filter((c) => c.key.startsWith('raid:'));
-    expect(losses).toHaveLength(1);
+    expect(losses.map((c) => c.resource ?? 'paper')).toEqual(['paper', 'ink', 'rubber']);
   });
 
   it('a defender who leaves for good keeps their base on the desk until the raid is settled, then the gap starts', () => {

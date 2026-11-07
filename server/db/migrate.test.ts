@@ -76,6 +76,29 @@ describe.skipIf(!TEST_DATABASE_URL)('migrating PostgreSQL', () => {
     expect(await type(wreck)).toBe('dart');
   });
 
+  it('0009 keeps every v0.0.17 balance and transaction, adds ink and rubber balls as unset, and accepts the ink well (v0.0.18)', async () => {
+    t = await testDatabase();
+    const all = loadMigrations();
+    await migrate(t!.db, all.slice(0, 8));
+    const db = t!.db;
+    const world = (await db.query<{ id: string }>(`insert into worlds (id, name, format) values (gen_random_uuid(), 'w', 1) returning id`)).rows[0].id;
+    const player = (await db.query<{ id: string }>(`insert into players (id, public_id, display_name) values (gen_random_uuid(), 'old001', 'Old') returning id`)).rows[0].id;
+    await db.query(`insert into balances (world_id, player_id, paper, capacity, protected) values ($1, $2, 240, 500, 75)`, [world, player]);
+    await db.query(`insert into transactions (world_id, player_id, idem_key, kind, amount, balance_after, reason) values ($1, $2, 'start:x', 'reward', 240, 240, 'Starting paper')`, [world, player]);
+    await db.query(`insert into bases (player_id, store_health) values ($1, 120)`, [player]);
+    await db.query(`insert into base_buildings (player_id, slot, kind, level, health) values ($1, 'D1', 'turret', 2, 110)`, [player]);
+    await expect(db.query(`insert into base_buildings (player_id, slot, kind, level, health) values ($1, 'E1', 'inkwell', 1, 85)`, [player])).rejects.toThrow();
+    await migrate(t!.db, all);
+    const bal = (await db.query('select paper, capacity, protected, ink, rubber from balances where player_id = $1', [player])).rows[0];
+    expect(bal).toMatchObject({ capacity: '500', protected: '75', ink: null, rubber: null });
+    expect(Number(bal.paper)).toBe(240);
+    const tx = (await db.query('select idem_key, resource, amount from transactions where player_id = $1', [player])).rows;
+    expect(tx).toEqual([{ idem_key: 'start:x', resource: 'paper', amount: '240' }]);
+    await db.query(`insert into base_buildings (player_id, slot, kind, level, health) values ($1, 'E1', 'inkwell', 1, 85)`, [player]);
+    await expect(db.query(`insert into base_buildings (player_id, slot, kind, level, health) values ($1, 'E2', 'goldmine', 1, 85)`, [player])).rejects.toThrow();
+    await expect(db.query(`insert into transactions (world_id, player_id, idem_key, kind, amount, balance_after, resource) values ($1, $2, 'k', 'reward', 1, 1, 'gold')`, [world, player])).rejects.toThrow();
+  });
+
   it('rolls a failing migration back completely', async () => {
     t = await testDatabase();
     const base = loadMigrations();

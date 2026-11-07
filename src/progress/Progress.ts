@@ -109,6 +109,11 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
   { id: 'all-planes', title: 'Hangar regular', detail: 'Complete a mission in every design' },
   { id: 'emergency', title: 'Scrap paper hero', detail: 'Complete a mission in the free emergency plane' },
   { id: 'ace', title: 'Paper ace', detail: 'Shoot down five enemy aircraft' },
+  // v0.0.18
+  { id: 'stunt-course', title: 'Show-off', detail: 'Complete a stunt course' },
+  { id: 'acrobat', title: 'Origami acrobat', detail: 'Fly five maneuvers in one sortie' },
+  { id: 'record-breaker', title: 'Record breaker', detail: 'Beat your own best time on a timed challenge' },
+  { id: 'explorer', title: 'Explorer', detail: 'Discover five landmarks' },
 ];
 
 /** This visit, for the session summary. */
@@ -147,6 +152,10 @@ export interface ProgressData {
   medals: Record<Medal, number>;
   /** Designs with a mission completed in them. */
   completedIn: AircraftId[];
+  /** v0.0.18: best times (s) on timed challenges, by the mission's record key ("time-trial:T7"). */
+  times: Record<string, number>;
+  /** v0.0.18: desks whose landmark has been discovered. */
+  discovered: string[];
 }
 
 export const emptyProgress = (): ProgressData => ({
@@ -158,6 +167,8 @@ export const emptyProgress = (): ProgressData => ({
   landings: 0,
   medals: { bronze: 0, silver: 0, gold: 0 },
   completedIn: [],
+  times: {},
+  discovered: [],
 });
 
 /** Everything a finished sortie tells progress. */
@@ -275,6 +286,21 @@ export class Progress {
         records.push(`${BEST_LABELS.longestFlight}: ${(sortie.distanceFlown / 1000).toFixed(2)} km`);
       }
     }
+    // v0.0.18: timed challenges keep a best time; discovery flights remember the landmark.
+    let beaten = false;
+    if (mission && success && mission.spec.recordKey) {
+      const key = mission.spec.recordKey;
+      const before = d.times[key];
+      if (before === undefined || mission.elapsed < before) {
+        d.times[key] = Math.round(mission.elapsed * 10) / 10;
+        records.push(`${mission.title}: ${clock(mission.elapsed)}${before !== undefined ? ` (was ${clock(before)})` : ''}`);
+        beaten = before !== undefined;
+      }
+    }
+    if (mission && success && mission.spec.type === 'discovery') {
+      const where = mission.objectives.find((o) => 'territoryId' in o);
+      if (where && 'territoryId' in where && !d.discovered.includes(where.territoryId)) d.discovered.push(where.territoryId);
+    }
     if (sortie.aircraftDestroyed > 0 && (!d.bests.mostKills || sortie.aircraftDestroyed > d.bests.mostKills.count)) {
       d.bests.mostKills = { count: sortie.aircraftDestroyed, title: mission?.title ?? 'Free flight' };
       records.push(`${BEST_LABELS.mostKills}: ${sortie.aircraftDestroyed}`);
@@ -302,6 +328,10 @@ export class Progress {
     unlock('all-planes', AIRCRAFT_ORDER.every((id) => d.completedIn.includes(id)));
     unlock('emergency', success && sortie.emergency);
     unlock('ace', kills >= 5);
+    unlock('stunt-course', success && mission?.spec.type === 'stunt');
+    unlock('acrobat', (sortie.maneuvers ?? 0) >= 5);
+    unlock('record-breaker', beaten);
+    unlock('explorer', d.discovered.length >= 5);
     return { medal, records, achievements: unlocked, streak: d.streak.current, streakBonus };
   }
 

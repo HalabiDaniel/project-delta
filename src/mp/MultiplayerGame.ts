@@ -1001,6 +1001,10 @@ export class MultiplayerGame {
     if (m.economy) {
       this.resources.capacity = m.economy.capacity;
       this.resources.restore(m.economy.paper);
+      for (const s of m.economy.stores ?? []) {
+        this.resources.capacities[s.id] = s.capacity;
+        this.resources.restoreOf(s.id, s.amount);
+      }
       st.income.perMinute = m.economy.production;
       st.income.capacity = m.economy.capacity;
       if (this.lastPaper >= 0 && m.economy.paper !== this.lastPaper) this.hud.paperDelta(m.economy.paper - this.lastPaper);
@@ -1223,7 +1227,9 @@ export class MultiplayerGame {
       r.fold = p.fold / 255;
       r.boosting = p.boost;
       // v0.0.17: their rank effects, as this viewer chose to see them (only theirs to us: "everyone").
-      const look = this.rankUi?.shown === 'everyone' ? lookFor(this.rankOf(id)?.effects ?? []) : { trail: null, aura: null };
+      // v0.0.18: a stealth design keeps its trail and aura hidden with it, unless boosting gives it away.
+      const hidden = !!AIRCRAFT[r.spec.id]?.traits?.stealth && !p.boost;
+      const look = this.rankUi?.shown === 'everyone' && !hidden ? lookFor(this.rankOf(id)?.effects ?? []) : { trail: null, aura: null };
       r.rankTrail = look.trail;
       r.rankAura = look.aura;
       // Unfold at launch: a paper crane opening into the plane, as the plane leaves the pad.
@@ -1582,6 +1588,7 @@ export class MultiplayerGame {
       this.maneuverQueued = false;
       // The slot as the server has it (chosen at home, locked in the air); snapshots carry it too.
       m.maneuverSlot = this.priv.garage?.maneuver ?? null;
+      m.cargoFactor = this.priv.plane?.cargoFactor ?? 1;
       const wasManeuvering = m.activeManeuver;
       this.outbox.push(frame);
       const result = this.predictor.apply(frame, this.predictionWorld());
@@ -1814,7 +1821,9 @@ export class MultiplayerGame {
   /** Our own plane's rank trail and aura, unless we turned them off (or chose to see none). */
   private ownRankLook(): void {
     const own = this.rankUi.prefs;
-    const shown = this.rankUi.shown !== 'none' && own;
+    // v0.0.18: while a stealth plane is hidden, its rank effects are hidden too.
+    const hidden = this.priv.plane?.detection === 'hidden';
+    const shown = this.rankUi.shown !== 'none' && own && !hidden;
     const look = shown ? lookFor(activeEffects(stepAt(own.index), { off: own.off as EffectId[] })) : { trail: null, aura: null };
     this.trails.rankTrail = look.trail;
     this.trails.rankAura = look.aura;

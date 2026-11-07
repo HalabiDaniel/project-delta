@@ -12,7 +12,7 @@ import { homeHeading } from '../world/Grid';
  * workshop – a paper workshop (T1, player-built): more paper per minute.
  * storage  – a storage box (T1, player-built): holds and protects more paper.
  */
-export type InstallationKind = 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage';
+export type InstallationKind = 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage' | 'inkwell';
 
 /** A weapon's numbers where they differ from the defaults in DEFENSES (player buildings by level). */
 export interface WeaponStats {
@@ -350,6 +350,15 @@ function installation(t: Territory, kind: InstallationKind, slot: Slot, suffix: 
       return {
         ...base, name: b.name, role: b.purpose, pivot: 2.4, arc: null, range: 0, maxHealth: b.levels[0].health, footprint: 2.8,
         shapes: [box, { kind: 'box', x, y: g + 3, z, hx: 0.35, hy: 0.6, hz: 0.35, yaw: facing }],
+        solids: [box],
+      };
+    }
+    case 'inkwell': {
+      const b = BASE.buildings.inkwell;
+      const box: Shape = { kind: 'box', x, y: g + 1, z, hx: 1.4, hy: 1, hz: 1.4, yaw: facing };
+      return {
+        ...base, name: b.name, role: b.purpose, pivot: 2, arc: null, range: 0, maxHealth: b.levels[0].health, footprint: 2.4,
+        shapes: [box],
         solids: [box],
       };
     }

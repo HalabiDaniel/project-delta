@@ -12,7 +12,7 @@ import type { PriceView, RaidAlertView } from './views';
  * the price chip shared with the build tray. Base management itself is src/ui/hud/DeskHud.ts.
  */
 export const BUILDING_ICONS: Record<BuildingKind | 'store', IconName> = {
-  turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', store: 'store',
+  turret: 'turret', launcher: 'launcher', radar: 'radar', workshop: 'workshop', storage: 'storage', inkwell: 'inkwell', store: 'store',
 };
 
 const tip = (t: string): string => attrs(tooltipAttrs(t));
@@ -80,6 +80,8 @@ export class RaidHud {
       <div class="stats">
         ${row('bomber', count(r.aircraftDestroyed), T.base.raidersShotDown(r.byDefenses, r.byPlayer), r.aircraftDestroyed > 0 ? 'good' : undefined)}
         ${row('paper', r.paperLost > 0 ? `−${paper(r.paperLost)}` : count(0), T.base.paperLost, r.paperLost > 0 ? 'hostile' : 'good')}
+        ${(r.inkLost ?? 0) > 0 ? row('inkwell', `−${count(r.inkLost)}`, T.base.inkLost, 'hostile') : ''}
+        ${(r.rubberLost ?? 0) > 0 ? row('rubber', `−${count(r.rubberLost)}`, T.base.rubberLost, 'hostile') : ''}
         ${r.prevented > 0 ? row('shield', `+${paper(r.prevented)}`, T.base.paperSaved, 'good') : ''}
         ${r.destroyed.length + r.damaged.length > 0 ? row('warn', count(r.destroyed.length + r.damaged.length), T.base.hit([...r.destroyed, ...r.damaged]), 'hostile') : ''}
         ${r.repairCost > 0 ? row('repair', paper(r.repairCost), T.base.repairCost, 'warn') : ''}

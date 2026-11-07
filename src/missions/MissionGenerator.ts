@@ -5,6 +5,7 @@ import { neighbours } from '../ai/Navigation';
 import { AI, DIRECTOR, MISSIONS, RAIDS, THREAT, TIERS, WORLD, type AiRole, type Difficulty, type Side, type TerritoryState, type ThreatLevel, type Tier } from '../config';
 import { pick, randRange, shuffled, type Rng } from '../systems/Random';
 import type { Territory } from '../world/Territory';
+import { landmarkSpot } from '../world/territories/decor';
 import {
   Mission,
   type Escalation,
@@ -23,10 +24,11 @@ export const MISSION_TYPES: readonly MissionType[] = [
   'bombing', 'precision', 'recon', 'delivery', 'return', 'multi-bomb', 'rings', 'practice',
   'suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack',
   'dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined',
+  'stunt', 'time-trial', 'discovery', 'strafe',
 ];
 
 /** Mission types built around the defenses. Every deal includes one, when the world has defenses. */
-export const DEFENSE_TYPES: readonly MissionType[] = ['suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack'];
+export const DEFENSE_TYPES: readonly MissionType[] = ['suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack', 'strafe'];
 
 /** Mission types against (or with) AI aircraft. Every deal includes one. */
 export const AIR_TYPES: readonly MissionType[] = ['dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined'];
@@ -39,7 +41,7 @@ const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
 /** A defensive installation, as far as missions care. */
 export interface InstallationInfo {
   id: string;
-  kind: 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage';
+  kind: 'turret' | 'launcher' | 'radar' | 'supply' | 'workshop' | 'storage' | 'inkwell';
   territoryId: string;
   /** T1's own guns and store are the player's; missions only ever go up against the enemy's. */
   side?: Side;
@@ -67,6 +69,8 @@ export interface MissionContext {
   states?: ReadonlyMap<string, TerritoryState>;
   /** Multiplayer: territories missions never send the player to (other players' homes). */
   excluded?: ReadonlySet<string>;
+  /** v0.0.18: desks whose landmark the player has already discovered (discovery flights go elsewhere first). */
+  visited?: ReadonlySet<string>;
 }
 
 /** Home, or (multiplayer) another player's home: never an ordinary mission's target or route. */
@@ -123,7 +127,7 @@ export function generateOffers(ctx: MissionContext, rng: Rng, count: number = MI
 
 /** Can a mission of this type be offered at this difficulty: is there a fitting target in its threat window? */
 export function supports(type: MissionType, difficulty: Difficulty, ctx: MissionContext): boolean {
-  if (type === 'rings') return true;
+  if (type === 'rings' || type === 'stunt') return true;
   const needed = type === 'multi-bomb' ? 2 : 1;
   if (EVENT_TYPES.includes(type)) return false;
   return eligible(type, difficulty, ctx).filter((t) => inWindow(threatOf(t, ctx), type, difficulty)).length >= needed;
@@ -210,12 +214,76 @@ function draftMission(type: MissionType, difficulty: Difficulty, ctx: MissionCon
     case 'delivery': {
       const t = target();
       const distance = distanceTo(t) - t.half;
-      const limit = Math.ceil((distance / MISSIONS.referenceSpeed) * MISSIONS.deliverySlack[difficulty] + MISSIONS.deliveryExtraTime);
-      return make(distanceTo(t), {
-        title: `Rush delivery to ${t.id}`,
-        description: `Reach ${t.id}'s airspace within ${limit} s.`,
+      // v0.0.18: from medium up, fragile or heavy cargo (heavy cargo gets more time: it is slower).
+      const cargo = rng() < MISSIONS.cargoChance[difficulty] ? (rng() < 0.5 ? ('fragile' as const) : ('heavy' as const)) : undefined;
+      const slack = MISSIONS.deliverySlack[difficulty] / (cargo === 'heavy' ? MISSIONS.heavyCargo : 1);
+      const limit = Math.ceil((distance / MISSIONS.referenceSpeed) * slack + MISSIONS.deliveryExtraTime);
+      const what = cargo === 'fragile' ? 'Fragile delivery' : cargo === 'heavy' ? 'Heavy delivery' : 'Rush delivery';
+      const note = cargo === 'fragile' ? ' Fragile: one hard knock and it breaks.' : cargo === 'heavy' ? ' Heavy: the plane flies slower until it is delivered.' : '';
+      return make(distanceTo(t) * (cargo ? MISSIONS.cargoBonus : 1), {
+        title: `${what} to ${t.id}`,
+        description: `Reach ${t.id}'s airspace within ${limit} s.${note}`,
         timeLimit: limit,
+        cargo,
+        recordKey: `delivery:${t.id}`,
         objectives: [{ kind: 'reach', territoryId: t.id, airspace: airspace(t, MISSIONS.deliveryCeiling) }],
+      });
+    }
+    case 'stunt': {
+      // v0.0.18: a ring course where some rings must be flown through during a maneuver, and one is a low pass.
+      const gates = ringCourse(ctx, MISSIONS.stuntRings[difficulty], MISSIONS.ringRadius[difficulty] + 0.8, rng);
+      const order = shuffled(rng, gates.map((_, i) => i).slice(1));
+      const tricks = new Set(order.slice(0, MISSIONS.maneuverGates[difficulty]));
+      const low = order[MISSIONS.maneuverGates[difficulty]];
+      gates.forEach((g, i) => {
+        if (tricks.has(i)) {
+          g.maneuver = true;
+          g.y = Math.max(g.y, 14);
+        }
+        if (i === low) g.y = MISSIONS.lowGate;
+      });
+      let length = 0;
+      let from = { x: ctx.launch.x, z: ctx.launch.z };
+      for (const g of gates) {
+        length += distanceTo(g, from);
+        from = g;
+      }
+      return make(length, {
+        title: 'Stunt course',
+        description: `Fly through ${gates.length} rings in order: ${tricks.size === 1 ? 'the striped one' : `the ${tricks.size} striped ones`} during a maneuver, and one low pass.`,
+        ordered: true,
+        recordKey: 'stunt',
+        objectives: gates.map((gate, i) => ({ kind: 'ring', gate, number: i + 1 })),
+      });
+    }
+    case 'time-trial': {
+      // v0.0.18: a desk's own circuit, the same every time (seeded by the desk), so its record is worth beating.
+      const t = target();
+      const gates = trialCircuit(t, MISSIONS.trialRings, MISSIONS.ringRadius[difficulty]);
+      let length = 0;
+      let from = { x: ctx.launch.x, z: ctx.launch.z };
+      for (const g of gates) {
+        length += distanceTo(g, from);
+        from = g;
+      }
+      const limit = Math.ceil((length / MISSIONS.referenceSpeed) * MISSIONS.trialSlack[difficulty] + 4);
+      return make(length, {
+        title: `Time trial: ${t.id} circuit`,
+        description: `Round ${t.id}'s circuit of ${gates.length} rings within ${limit} s. Beat your best time.`,
+        timeLimit: limit,
+        ordered: true,
+        recordKey: `time-trial:${t.id}`,
+        objectives: gates.map((gate, i) => ({ kind: 'ring', gate, number: i + 1 })),
+      });
+    }
+    case 'discovery': {
+      const t = target();
+      const spot = landmarkSpot(t)!;
+      const half = MISSIONS.discoveryHalf;
+      return make(distanceTo(spot), {
+        title: `Discover: ${spot.name}`,
+        description: `Fly to the ${spot.name.toLowerCase()} on ${t.id} and take a close look (below ${MISSIONS.discoveryCeiling} m).`,
+        objectives: [{ kind: 'reach', territoryId: t.id, airspace: { x: spot.x, z: spot.z, half, ceiling: MISSIONS.discoveryCeiling } }],
       });
     }
     case 'return': {
@@ -288,6 +356,20 @@ function draftMission(type: MissionType, difficulty: Difficulty, ctx: MissionCon
             : `Destroy one of the ${targets.length} ink turrets on ${t.id}, with ink or bombs.`,
         bombs: 1 + spareBombs,
         objectives: [{ kind: 'destroy', territoryId: t.id, targets: targets.map((i) => i.id), count, what: 'defense' }],
+      });
+    }
+    case 'strafe': {
+      // v0.0.18: ground attack: wreck several structures (weapons, radar, depot) on one desk, quickly.
+      const t = target();
+      const structures = on(t);
+      const count = Math.min(MISSIONS.strafeCount[difficulty], structures.length);
+      const limit = Math.ceil(distanceTo(t) / MISSIONS.referenceSpeed + MISSIONS.strafeTime[difficulty]);
+      return make(distanceTo(t), {
+        title: `Strafing run: ${t.id}`,
+        description: `Wreck ${count} of the ${structures.length} structures on ${t.id} within ${limit} s: weapons, radar or depot. Come in low and keep firing.`,
+        bombs: 1 + spareBombs,
+        timeLimit: limit,
+        objectives: [{ kind: 'destroy', territoryId: t.id, targets: structures.map((i) => i.id), count, what: 'defense' }],
       });
     }
     case 'danger-recon': {
@@ -611,6 +693,11 @@ export function codename(rng: Rng): string {
 }
 
 /** Territories a mission of this type could target, whatever their threat. */
+/** Every desk with a landmark (and open to missions) has been discovered. */
+function allVisited(ctx: MissionContext): boolean {
+  return ctx.territories.every((t) => offLimits(t, ctx) || !landmarkSpot(t) || ctx.visited!.has(t.id));
+}
+
 function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext): Territory[] {
   const on = (t: Territory) => (ctx.installations ?? []).filter((i) => i.territoryId === t.id);
   return ctx.territories.filter((t) => {
@@ -622,12 +709,19 @@ function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext
         return (ctx.dummies ?? []).filter((d) => d.territoryId === t.id).length >= MISSIONS.practiceCount[difficulty];
       case 'suppression':
         return on(t).some((i) => i.kind === 'turret' || i.kind === 'launcher');
+      case 'strafe':
+        return on(t).length >= MISSIONS.strafeCount[difficulty] && threatOf(t, ctx) >= 1;
       case 'fortified':
         return on(t).some((i) => i.kind === 'supply');
       case 'multi-stage':
         return on(t).some((i) => i.kind === 'radar') && on(t).some((i) => i.kind === 'supply');
       case 'bomber-intercept':
         return MISSIONS.raidOrigins[difficulty].includes(t.id) && homeStore(ctx) !== null;
+      case 'discovery':
+        // A landmark not yet discovered, while there are any; an unguarded or lightly guarded desk.
+        return landmarkSpot(t) !== null && threatOf(t, ctx) <= 1 && (!ctx.visited || allVisited(ctx) || !ctx.visited.has(t.id));
+      case 'time-trial':
+        return threatOf(t, ctx) === 0;
 
       default:
         return threatOf(t, ctx) >= ((MISSIONS.minThreat as Partial<Record<MissionType, number>>)[type] ?? 0) && threatOf(t, ctx) <= (MISSIONS.maxThreat[type] ?? 3);
@@ -688,7 +782,7 @@ function precisionSpot(t: Territory, radius: number, obstacles: ReadonlyArray<{ 
   return best;
 }
 
-type Parts = Pick<MissionSpec, 'title' | 'description' | 'objectives'> & Partial<Pick<MissionSpec, 'bombs' | 'timeLimit' | 'ordered' | 'aircraft'>>;
+type Parts = Pick<MissionSpec, 'title' | 'description' | 'objectives'> & Partial<Pick<MissionSpec, 'bombs' | 'timeLimit' | 'ordered' | 'aircraft' | 'cargo' | 'recordKey'>>;
 
 /** Enemy aircraft already in the air that a world event's mission is about (they are not sent up by it). */
 interface KnownAir {
@@ -717,6 +811,7 @@ function spec(type: MissionType, difficulty: Difficulty, tier: Tier, draft: Draf
     modifiers,
     rewardParts: reward,
     reward: rewardTotal(reward),
+    supplies: missionSupplies(type, tier, modifiers),
     par: parTime(type, draft.distance, parts),
     bombs: 0,
     timeLimit: null,
@@ -725,6 +820,22 @@ function spec(type: MissionType, difficulty: Difficulty, tier: Tier, draft: Draf
     codename: codename(rng),
     ...parts,
   };
+}
+
+/**
+ * v0.0.18: ink and rubber balls a mission pays: the type's supplies times the tier's multiplier,
+ * plus the recovery extra for a card that pays what the player is short of. Whole numbers only.
+ */
+export function missionSupplies(type: MissionType, tier: Tier, modifiers: readonly ModifierId[] = []): { ink?: number; rubber?: number } {
+  const base = MISSIONS.supplies[type] ?? {};
+  const m = TIERS[tier].multiplier;
+  const out: { ink?: number; rubber?: number } = {};
+  for (const r of ['ink', 'rubber'] as const) {
+    let v = Math.round((base[r] ?? 0) * m);
+    if (modifiers.includes(r === 'ink' ? 'short-ink' : 'short-rubber')) v += DIRECTOR.recoverySupplies[r];
+    if (v > 0) out[r] = v;
+  }
+  return out;
 }
 
 /**
@@ -988,6 +1099,38 @@ function airspace(t: Territory, ceiling: number) {
  * starts at the crossing nearest home, prefers to keep going straight and never turns twice in a
  * row, so every ring can be reached with a comfortable turn.
  */
+/**
+ * v0.0.18: a desk's time-trial circuit: rings in a loop round the desk, at heights and spacing set by
+ * the desk's id alone, so the circuit (and so its record) is the same in every session.
+ */
+export function trialCircuit(t: Territory, count: number, radius: number): RingGate[] {
+  let seed = 0;
+  for (const c of t.id) seed = (seed * 31 + c.charCodeAt(0)) >>> 0;
+  const r = seededLocal(seed);
+  const loop = t.half + 18;
+  const start = r() * Math.PI * 2;
+  const gates: RingGate[] = [];
+  for (let k = 0; k < count; k++) {
+    const a = start + (k / count) * Math.PI * 2;
+    const x = t.x + Math.sin(a) * loop;
+    const z = t.z + Math.cos(a) * loop;
+    // Facing along the loop (the direction of travel as `a` grows), as ringCourse's yaw.
+    gates.push({ x, y: 9 + Math.round(r() * 14), z, yaw: Math.atan2(-Math.cos(a), Math.sin(a)), radius });
+  }
+  return gates;
+}
+
+/** A small seeded sequence (mulberry32) for circuits that must not depend on anything but their seed. */
+function seededLocal(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function ringCourse(ctx: MissionContext, count: number, radius: number, rng: Rng): RingGate[] {
   const gridSize = ctx.gridSize ?? WORLD.gridSize;
   const spacing = ctx.spacing ?? WORLD.territorySize + WORLD.gap;

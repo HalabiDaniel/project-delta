@@ -69,6 +69,8 @@ export class MissionMarkers {
     sheetClean: glowMaterial(PALETTE.recon, 0.1),
     sheetBlown: glowMaterial(PALETTE.bullseyeRed, 0.12),
     ringNext: glowMaterial(PALETTE.ringNext, 0.95),
+    /** v0.0.18: a stunt ring to fly through during a maneuver. */
+    ringTrick: glowMaterial(PALETTE.recon, 0.95),
     practiceRing: glowMaterial(PALETTE.target, 0.85),
     ringWaiting: flatMaterial(PALETTE.paper),
     platformTarget: flatMaterial(PALETTE.target),
@@ -241,7 +243,8 @@ export class MissionMarkers {
           m.body.setLocalScale(1, 1, 1);
           // The hoop's render component holds its own mesh instance, so set the material there.
           const hoop = m.body.children[0] as pc.Entity;
-          hoop.render!.meshInstances[0].material = state === 'open' ? this.mat.ringNext : this.mat.ringWaiting;
+          const trick = m.objective.gate.maneuver;
+          hoop.render!.meshInstances[0].material = state === 'open' ? (trick ? this.mat.ringTrick : this.mat.ringNext) : trick ? this.mat.ringTrick : this.mat.ringWaiting;
         }
         break;
       case 'land':
