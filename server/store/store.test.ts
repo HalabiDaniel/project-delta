@@ -333,6 +333,11 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(ofA.map((r) => r.id)).toEqual([raid.id, kill.id]);
       expect(ofA[0]).toMatchObject({ kind: 'raid', attacker: a.publicId, victim: b.publicId, success: true });
       expect((await store.pvpRecords(world.id, b.id, since)).map((r) => r.id)).toEqual([raid.id, kill.id]);
+      // v0.0.19: what rivalries are made of goes in the same table, read back the same way.
+      const kinds = ['assist', 'defend', 'coop', 'bounty', 'challenge', 'mischief'] as const;
+      const more = kinds.map((kind, i) => ({ id: randomUUID(), kind, attacker: a.id, victim: b.id, success: true, at: new Date(Date.now() - 20_000 + i) }));
+      for (const r of more) await store.addPvpRecord(world.id, r);
+      expect((await store.pvpRecords(world.id, a.id, since)).map((r) => r.kind)).toEqual(['raid', 'kill', ...kinds]);
     });
 
     it('keeps protections as clock times with the progress', async () => {

@@ -66,6 +66,8 @@ export const PlayerState = schema(
     title: t.string().default(''),
     /** v0.0.19: their alliance for this session (0: none). */
     ally: t.uint8().default(0),
+    /** v0.0.19: what they are known for ('raider', 'defender', 'ace', 'helper'; '' for nothing yet). */
+    rep: t.string().default(''),
   },
   'PlayerState',
 );

@@ -1385,6 +1385,27 @@ export const COOP = {
   jointStrength: 1.6,
 } as const;
 
+/** v0.0.19: what a player is known for (plan §5B). */
+export type ReputationKind = 'raider' | 'defender' | 'ace' | 'helper';
+
+/**
+ * v0.0.19 (plan §5, GDD §12.3): reputation and rivalries. Every notable interaction between two
+ * players is recorded (pvp_records) and remembered for `memory` seconds; the "nemesis" is whoever
+ * has beaten a player most often (at least `nemesisMin` times), the most recent breaking a tie. The
+ * director weighs rematch and payback cards towards rivals, always within the protections, and
+ * says why. Reputation never changes combat. Provisional values. The rules are in server/world/Rivalry.ts.
+ */
+export const RIVALRY = {
+  memory: 14 * 24 * 3600,
+  nemesisMin: 2,
+  /** A raid or hunt card's target is this many times likelier to be your nemesis, or someone who raided you within `payback` seconds. */
+  rematchWeight: 3,
+  paybackWeight: 2,
+  payback: 1800,
+  /** A reputation needs at least this many of what it is about, and the label is the one with the most. */
+  reputationMin: 3,
+} as const;
+
 /** v0.0.19: the kinds of raid on another player's base (plan "Also A", §4). */
 export type RaidKind = 'bombing' | 'staged' | 'strike' | 'challenge';
 

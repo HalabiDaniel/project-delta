@@ -1874,6 +1874,8 @@ export class MultiplayerGame {
             id, name: p.name, colour: p.colour, territory: p.territory, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists,
             raids: p.raids, defends: p.defends, missions: p.missions, ping: p.ping, connected: p.connected, me: id === this.me,
             status: PHASE_WORDS[p.phase] ?? '', protect: p.protect, shield: p.shield, rank: this.insigniaOf(id),
+            rep: p.rep || null, ally: p.ally, allied: id !== this.me && !!this.priv.alliance?.members.includes(id),
+            nemesis: this.priv.rivals?.nemesis?.id === id ? { wins: this.priv.rivals.nemesis.wins, losses: this.priv.rivals.nemesis.losses } : null,
             presence: presenceOf({ present: true, connected: p.connected, protect: p.protect, shield: p.shield, desk: p.territory ? (DESK_STATES[s?.territories.get(p.territory)?.state ?? 0] ?? null) : null }),
           }))
           .sort((a, b) => b.score - a.score || b.kills - a.kills)

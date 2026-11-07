@@ -31,7 +31,7 @@ import { refusal, type Authenticated } from './identity/Identity';
 import { economyWorld, services } from './services';
 import type { AircraftRecord, EconomyRecord, PlayerRecord, ProgressRecord, PvpRecord } from './store/Store';
 import { USERNAME, USERNAME_PROBLEMS, suggestUsername, usernameProblem } from '../src/net/Username';
-import { ECONOMY, PVP, SESSION } from '../src/config';
+import { ECONOMY, PVP, RIVALRY, SESSION } from '../src/config';
 import { log, type Level, type LogFields } from './log';
 import { LIMITS, RateLimit } from './RateLimit';
 import pkg from '../package.json' with { type: 'json' };
@@ -46,6 +46,7 @@ import { planesFrom, progressFrom } from './world/carry';
 import { ServerWorld, type ServerWorldOptions } from './world/ServerWorld';
 import { dailyAward, type MeritEvent } from './world/Merit';
 import { RankKeeper, isTierPromotion, type Promotion } from './world/RankKeeper';
+import { reputationOf } from './world/Rivalry';
 import type { PromotionDTO } from '../src/net/protocol';
 
 /** A session's settings, given by the server only (a client can't create a room). */
@@ -81,7 +82,8 @@ export interface RoomMetadata {
 let opened = 0;
 
 /** How far back raids and kills are loaded for a placed player (s): as far as any rule looks. */
-const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow);
+/** v0.0.19: rivalries remember further back than the fairness windows (RIVALRY.memory). */
+const PVP_MEMORY = Math.max(PVP.farmWindow, PVP.pairCooldown, PVP.killWindow, RIVALRY.memory);
 
 /** The longest real time one simulation callback may catch up on (a stalled event loop doesn't snowball). */
 const MAX_CATCH_UP = 0.25;
@@ -976,6 +978,7 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       ps.missions = p.stats.missions;
       ps.score = p.stats.score;
       ps.ally = world.alliances.of(id)?.id ?? 0;
+      ps.rep = reputationOf(p.social) ?? '';
       ps.ping = Math.round(p.rtt * 1000);
       ps.phase = Math.max(0, PHASES.indexOf(p.state?.phase ?? 'desk'));
       const m = p.flight.model;

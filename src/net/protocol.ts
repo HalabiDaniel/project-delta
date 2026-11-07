@@ -486,6 +486,16 @@ export interface BountyDTO {
   reason: string;
 }
 
+/** v0.0.19: who you have fought (and helped), from your side. */
+export interface RivalsDTO {
+  /** Whoever has beaten you most often (null: nobody often enough). */
+  nemesis: { id: string; name: string; wins: number; losses: number } | null;
+  list: Array<{ id: string; name: string; wins: number; losses: number; helps: number }>;
+  /** What you are known for (null: nothing yet), and the counts behind it. */
+  reputation: 'raider' | 'defender' | 'ace' | 'helper' | null;
+  counts: { raids: number; defends: number; kills: number; helps: number };
+}
+
 /** v0.0.19: your alliance for the session. */
 export interface AllianceDTO {
   /** Its number (null: not in one), and its members (public ids, you included). */
@@ -630,6 +640,8 @@ export interface MeDTO {
   situation?: SituationDTO;
   /** v0.0.19: your alliance for this session, the offers waiting, and who may escort your bombers. */
   alliance?: AllianceDTO;
+  /** v0.0.19: your nemesis, your rivals and your reputation. */
+  rivals?: RivalsDTO;
   /**
    * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
    * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.

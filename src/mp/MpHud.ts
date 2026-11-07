@@ -86,6 +86,11 @@ export interface ScoreRow {
   presence: Presence;
   /** Rank insignia (v0.0.17); absent today. */
   rank?: InsigniaView | null;
+  /** v0.0.19: what they are known for, whether they are your nemesis (with your record), and their alliance (0: none). */
+  rep?: string | null;
+  nemesis?: { wins: number; losses: number } | null;
+  ally?: number;
+  allied?: boolean;
 }
 
 /** Another player raiding our base: who, how far, how long, and the one-press response. */
@@ -185,7 +190,7 @@ export function scoreboardHtml(rows: readonly ScoreRow[]): string {
     .map((r) => {
       const left = r.protect > 0 ? r.protect : r.shield;
       return `<tr data-id="${esc(r.id)}" data-presence="${r.presence}"${r.me ? ' data-me' : ''}>
-        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}${insigniaSlot(r.rank)}<b>${esc(r.name)}</b>${r.me ? chip({ label: H.you, tone: 'friend' }) : ''}</th>
+        <th scope="row" class="mp-pilot" style="--owner:${colourCss(r.colour)}">${icon('fighter', 'icon mp-swatch')}${insigniaSlot(r.rank)}<b>${esc(r.name)}</b>${r.me ? chip({ label: H.you, tone: 'friend' }) : ''}${socialChips(r)}</th>
         <td>${esc(r.territory || '—')}</td><td class="num mp-score">${count(r.score)}</td><td class="num">${count(r.kills)}</td><td class="num">${count(r.assists)}</td><td class="num">${count(r.deaths)}</td>
         <td class="num">${count(r.raids)}</td><td class="num">${count(r.defends)}</td><td class="num">${count(r.missions)}</td>
         <td class="mp-phase">${esc(r.status)}</td>
@@ -194,6 +199,15 @@ export function scoreboardHtml(rows: readonly ScoreRow[]): string {
     })
     .join('');
   return `<table class="mp-table"><thead><tr>${head(null, H.pilot, H.pilot)}${head('home', H.desk)}${head('medal', H.score)}${head('kills', H.shotDown)}${head(null, H.assists, H.assistsHead)}${head('crumple', H.deaths)}${head('bomb', H.raids)}${head('shield', H.defends)}${head('ok', H.missions)}${head('plane', H.doing)}${head('info', H.presence)}${head('radar', H.ping)}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** v0.0.19: an ally, a nemesis and a reputation, each an icon and a word (never colour alone). */
+function socialChips(r: ScoreRow): string {
+  return [
+    r.allied ? chip({ label: H.ally, icon: 'users', tone: 'friend', tip: H.allyTip }) : r.ally ? chip({ label: H.alliance(r.ally), icon: 'users', tone: 'plain' }) : '',
+    r.nemesis ? chip({ label: H.nemesis, icon: 'swords', tone: 'hostile', tip: H.nemesisTip(r.nemesis.wins, r.nemesis.losses) }) : '',
+    r.rep ? chip({ label: H.reputation[r.rep] ?? r.rep, icon: r.rep === 'raider' ? 'bomb' : r.rep === 'defender' ? 'shield' : r.rep === 'ace' ? 'kills' : 'heart', tone: 'plain', tip: H.reputationTip[r.rep] }) : '',
+  ].join('');
 }
 
 function pingLevel(r: Pick<ScoreRow, 'connected' | 'ping'>): 'ok' | 'worn' | 'critical' {
