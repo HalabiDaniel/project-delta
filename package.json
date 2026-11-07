@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
-  "description": "paperwars.io v0.0.17 - player ranks",
+  "description": "paperwars.io v0.0.18 - economy and content depth",
   "type": "module",
   "scripts": {
     "dev": "vite",

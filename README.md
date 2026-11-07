@@ -1,4 +1,16 @@
-# paperwars.io: v0.0.17 (player ranks), on top of v0.0.16 (flight maneuvers), v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.18 (economy and content depth), on top of v0.0.17 (player ranks), v0.0.16 (flight maneuvers), v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.18: economy and content depth (coded; next, the developer approves the numbers and
+> playtests with the invited friend).** **Ink** and **rubber balls** join paper as real territory
+> resources: produced, stored, protected, spent and lost by server-authoritative rules, with an
+> **ink well** to build and upkeep on big bases. Planes take ink and rubber to fold and arm, but a
+> free basic load means nobody is ever grounded. New missions (stunt courses, time trials against
+> your record, discovery flights, fragile and heavy cargo, strafing runs), **world events in
+> multiplayer sessions** (shipments, convoys, supply drops, ink storms), **medals, records and
+> achievements decided by the server**, the **radar signature and stealth** system, the Lightning and
+> Thug finalised, and a **long-run economy simulator** (`npm run sim`). See
+> [v0.0.18: economy and content depth](#v0018-economy-and-content-depth) and the
+> [plan](docs/roadmap/v0.0.18.md).
 
 > **v0.0.17: player ranks (coded; next, the developer plays online and confirms the pace).** Every
 > multiplayer player earns **Merit** on the server (missions, shoot-downs and assists, raids and
@@ -172,7 +184,7 @@ navigation, hints).
 
 - **Swift** is the starter (first in the garage, cheapest) and the **free emergency plane**
   (`STARTER_AIRCRAFT`, `emergencyPlane()`); **Falcon** is the agile fighter (best turn rate, no
-  bombs, a stealth value that does nothing until v0.0.18); **Dart** is the fast recon plane
+  bombs, a stealth trait, active since v0.0.18); **Dart** is the fast recon plane
   (fastest in the game, longest range of the four, no bombs, recon objectives fill 1.5× faster);
   **Widewing** is unchanged. Numbers in the [aircraft table](#aircraft).
 - **Saves migrate** (single-player save format 3): every aircraft id is kept; only "Emergency
@@ -365,6 +377,151 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
 
+## v0.0.18: economy and content depth
+
+Built from the [plan](docs/roadmap/v0.0.18.md), one phase per commit. Every number below is
+provisional and lives in `src/config.ts`. The developer approves them against the simulator and the
+playtest (see *Decisions for the developer*).
+
+### Three resources (sections 1 and 2)
+
+| Resource | What it is for | Where it comes from | Where it goes |
+|---|---|---|---|
+| Paper | Planes, buildings, repairs | Base production, workshops, missions | Folding, building, repairs, raids |
+| Ink | Gun rounds, turret and launcher reloads, materials | 1.5/min from the crew, ink wells, missions, events | Arming, reloads, materials, raids |
+| Rubber balls | Bombs, materials | 0.6/min scavenged, missions, events | Arming bombs, materials, raids |
+
+- **One model for all three** (`src/systems/ResourceManager.ts`): bundles are spent all or nothing;
+  each resource has its own capacity, protected reserve and income (`HomeIncome` per resource,
+  `applyBaseEconomy` in `src/systems/Economy.ts`, shared by single-player, the server and the
+  simulator). Production only while online in multiplayer, as before.
+- **Storage and production:** start 60 ink and 12 rubber balls; the base holds 150 ink and 30
+  rubber balls; reserves of 20 ink and 4 rubber balls are never raided. **Ink well** (new
+  building, economy or utility slot): 2.5 / 5 / 8 ink per minute for 65 / 50 / 80 paper (level 3
+  also takes 4 rubber balls). **Storage boxes** now also hold 100 / 220 / 400 ink and 10 / 24 / 40
+  rubber balls, and guard 10 / 20 / 35 and 2 / 4 / 6.
+- **Arming** (`ECONOMY.arming`): 1 ink per 10 gun rounds, 2 rubber balls per paper bomb and 1 per
+  mini bomb, at launch and when topping up on the runway. **35% of the rounds and the first bomb
+  are free**, so an empty store means a lighter plane, never a grounded one. The free emergency Swift
+  takes nothing.
+- **Materials on a new plane** (`materials` in `AIRCRAFT`; none for a refit): Swift none (the
+  starter stays paper-only), Dart 4 ink, Specter 4 ink, Falcon 10 ink, Jumper 6 ink + 2 rubber,
+  Thug 12 ink + 2 rubber, Raptor 14 ink, Lightning 8 ink + 3 rubber, Widewing 6 rubber, Lancer 4 ink
+  + 6 rubber, Ghost 6 ink + 8 rubber.
+- **Defenses reload from the stores** (`DEFENSES.ammo`): a player's turret pays 2 ink per magazine
+  and a launcher 3 ink per rocket; with the store empty they reload 2.5 times slower, never stop.
+  The AI's defenses are free.
+- **Raids** (`RAIDS.lossOther`): a bomb on target takes 20% (store) or 10% (other building) of each
+  vulnerable stock, capped at 80 / 40 paper, 40 / 20 ink and 8 / 4 rubber balls. The attacker is
+  still paid by the game. The defense report lists every resource lost.
+- **Upkeep** (`upkeep` on a building level): top-level buildings beyond the first of their kind
+  cost a little per minute, paid out of production (never out of the store, never below zero):
+  workshop 3 costs 0.6 ink/min, ink well 3 and storage 3 cost 0.5 and 0.4 paper/min. Base
+  management shows gross production, upkeep and net production.
+- **Missions pay ink and rubber balls** (`MISSIONS.supplies`, scaled by tier): combat pays ink,
+  bombing pays rubber balls, and deliveries pay well. A player short of ink (under 25) or rubber
+  balls (under 4) gets a recovery card that pays 30 ink or 8 rubber balls on top.
+- **Persistence:** migration `0009` adds ink and rubber balances and a `resource` on every
+  transaction; an existing player's first stock is half of what their base holds, written once
+  (`stock:<player>:ink`). Backup, rehearsal and rollback steps are in
+  [docs/PERSISTENCE.md](docs/PERSISTENCE.md#v0018-ink-and-rubber-balls).
+
+### Missions (section 3)
+
+- **Stunt course:** rings in order; the blue ones only count when flown through *during a
+  maneuver*, and one is a low pass at 4.5 m.
+- **Time trial:** each desk has a fixed circuit of six rings (seeded by the desk, so the same every
+  session); best times are kept per circuit.
+- **Discovery flight** to a desk's landmark (Pencil cup, Ink bottle…), undiscovered ones first.
+- **Delivery cargo** from medium up: *fragile* (one hard knock and it breaks) or *heavy* (the plane
+  is 15% slower, the clock longer, the pay higher).
+- **Strafing run** (ground attack, built for the Thug): wreck 2 to 4 of a defended desk's
+  structures against the clock.
+- Records: best times for time trials, stunts and deliveries; new achievements *Show-off*,
+  *Origami acrobat* (five maneuvers in a sortie), *Record breaker* and *Explorer* (five landmarks).
+- **Operations in multiplayer** show their stages on the card; their bonuses are keyed by operation
+  and stage, so they pay once.
+- Stunts, time trials and discoveries are rare (weights 0.35 to 0.4): they are a detour, not a
+  living.
+
+### World events in multiplayer (section 4)
+
+`server/world/SessionEvents.ts`: one scheduler per session, paced by the players connected (one
+event at a time up to eight players, two above; the clock runs faster only as the session fills).
+
+- **Shipment** at an AI desk's supply depot, and an **enemy convoy** crossing AI desks: bounties
+  (45 and 50 paper) split by each player's share of the damage (10% to count), keyed
+  `event:<uid>:<player>`; players flying the event's card are paid by the card instead.
+- **Supply drop:** 45 ink or 10 rubber balls (and 15 paper) on a free desk, for the first plane low
+  over it.
+- **Ink storm:** missions pay double ink for ten minutes.
+- Events only ever happen on AI or free desks: never on a player's base, online or not.
+
+### Server-side progression (section 5)
+
+Every multiplayer pilot has a `Progress` run by the server: medals, records, best times, streaks,
+achievements, aircraft mastery, discovered landmarks. Shown on the results card and saved with the
+player (migration `0010`, `progress.profile`, checked field by field when it comes back).
+Recognition only: no paper for it in multiplayer; medals (2 / 4 / 7) and achievements (12, once) are
+Merit sources, each keyed so it is never paid twice. Single-player keeps its own local progress.
+
+### Radar signature and stealth (section 8)
+
+- `src/aircraft/Signature.ts`: a stealth design (Falcon, Lightning) is 20% quieter while quiet;
+  firing (+0.35), opening the bomb bay (+0.45) or boosting (+0.2) reveals it, fading over 3 s.
+- The live signature feeds the defenses, AI pilots' target pickup and the threat panels.
+- Rocket locks on a plane below signature 1 take 1 / signature longer, at most 1.8 times.
+- Nothing is unseen within 28 m (visual range).
+- A stealth pilot's plane card shows **Hidden / Detected / Locked on** (decided by the server in
+  multiplayer). Rank trails and auras hide while a stealth plane is hidden.
+
+### The Lightning and the Thug (sections 6 and 9)
+
+- **Lightning:** the lowest-signature fighter (0.65, stealth), one internal ink gun, two mini bombs
+  in a bay that gives it away when it opens, average speed and turn. 80 paper + 8 ink + 3 rubber.
+- **Thug:** armour absorbs 25% of enemy rounds, rockets and blasts (not collisions); a rotary
+  cannon that hits structures and defenses twice as hard; top speed 25 (was 26), slower to turn;
+  three mini bombs. 70 paper + 12 ink + 2 rubber.
+
+### The economy simulator (section 7)
+
+`npm run sim -- --days 7 --seed 1` (`src/sim/LongRun.ts`, `tools/sim.ts`; `--players`, `--json`,
+`--csv`, `--strict`) plays newcomer, steady, aggressive, idle and exploiter players through daily
+sessions with the real rules (base, incomes while online, director and generator, materials and
+arming, raid losses, raid rewards and repeat rule, arrival grace). It reports balances, Merit and
+rank, gain and Merit per hour, recovery after raids, flows by source and sink, and design usage. It
+flags a runaway leader, a dead end, or an exploit that beats play. A 3-day fixed-seed run is in CI
+(`src/sim/longrun.test.ts`). Findings from the 7-day run are in
+[docs/checkpoints/0.0.18-economy/](docs/checkpoints/0.0.18-economy/README.md).
+
+### Also fixed
+
+- A mission card dealt before another player claimed its target desk could still send you to their
+  home; such cards are now dealt again when the player arrives.
+
+### Decisions for the developer
+
+- The resource roles and every number above (`ECONOMY`, `BASE`, `RAIDS.lossOther`,
+  `DEFENSES.ammo`, `MISSIONS.supplies`, `EVENTS.session`, `STEALTH`, the materials).
+- The simulator's findings: storage caps bind within a week of an hour a day (good against
+  snowballing, but the caps may be too low for a satisfying late game); very short sessions drift
+  down in ink and rubber balls; the simulated chooser takes the cheapest suitable plane, so it says
+  little about the dear designs.
+- The Lightning's and Thug's stats and the stealth rules.
+- The migration plan in [docs/PERSISTENCE.md](docs/PERSISTENCE.md#v0018-ink-and-rubber-balls):
+  a backup first, a rehearsal on a copy, then the deploy.
+
+### Not done yet
+
+- **Supply runs in multiplayer** (a friendly bomber heading for one player's home) and
+  **deliveries to another player's desk** with their consent: both need cooperation settings, which
+  arrive with v0.0.19's social systems.
+- New art: the Lightning's bay doors, the Thug's nose-cannon muzzle and armour dents, a parachute
+  crate for supply drops (a drop is announced and marked by its card for now), and placeholder sounds
+  for the new events.
+- The two-player playtest on the private server, and the migration rehearsal on a copy of the live
+  database.
+
 ## v0.0.17: player ranks
 
 Built from the [plan](docs/roadmap/v0.0.17.md) with the developer's ladder and insignia of
@@ -423,9 +580,8 @@ Built from the [plan](docs/roadmap/v0.0.17.md) with the developer's ladder and i
 ### Not done yet
 
 - Opening another player's full card from a scoreboard row (the scoreboard is hold-to-view).
-- The Inkslinger emote (emotes are a fixed set until v0.0.23's cosmetics), overshoot-kill Merit and
-  medals as a source (v0.0.18), the stealth rule's test (stealth is v0.0.18; effects are drawn only
-  with their plane).
+- The Inkslinger emote (emotes are a fixed set until v0.0.23's cosmetics) and overshoot-kill Merit.
+  (Medals as a Merit source and the stealth rule arrived in v0.0.18.)
 - The load test with every effect on, and the online playtest.
 
 ## v0.0.16: flight maneuvers
@@ -2107,6 +2263,6 @@ The road to the first public release is planned version by version in
 | [v0.1.0](docs/roadmap/v0.1.0.md) | First public release, after a testing period |
 
 The roadmap was last reordered on 2026-11-07 (see [the roadmap](docs/roadmap/README.md)).
-**v0.0.17 (player ranks) is the latest version; next up is v0.0.18 (economy and content depth).** From v0.1.0 on,
+**v0.0.18 (economy and content depth) is the latest version; next up is v0.0.19 (advanced multiplayer).** From v0.1.0 on,
 0.1.x releases are small improvements, 0.x.0 releases are major versions, and 1.0.0 is the first
 full version.
