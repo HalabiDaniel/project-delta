@@ -571,6 +571,14 @@ export const en = {
   },
 
   /** The top bar: resources, streak and the icon buttons (src/ui/EconomyStrip.ts). */
+  /** v0.0.18: a stealth plane's detection state, on the flight HUD's plane card. */
+  stealth: {
+    hidden: 'Hidden',
+    detected: 'Detected',
+    locked: 'Locked on',
+    tip: 'Stealth: defenses notice you later. Firing, bombing or boosting gives you away for a moment.',
+  },
+
   economy: {
     paper: 'Paper',
     storage: (resource: string) => `${resource}: storage`,

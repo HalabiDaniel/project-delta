@@ -1073,7 +1073,7 @@ export class ServerWorld {
       const v = m.getVelocity(this.v1);
       out.push({
         id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z,
-        signature: m.spec.signature, radius: m.spec.hitRadius, shielded: this.shielded(p), role: 'player',
+        signature: p.state?.signatureNow(m.boost.active) ?? m.spec.signature, radius: m.spec.hitRadius, shielded: this.shielded(p), role: 'player',
       });
     }
     return out;
@@ -1159,7 +1159,7 @@ export class ServerWorld {
       // Nothing shoots at a plane over its own home (as single-player).
       if (p.home && overHome(p.home, m.position.x, m.position.z)) continue;
       const v = m.getVelocity(this.v1);
-      targets.push({ id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z, signature: m.spec.signature, role: 'player' });
+      targets.push({ id: p.plane, side: p.side, x: m.position.x, y: m.position.y, z: m.position.z, vx: v.x, vy: v.y, vz: v.z, signature: p.state?.signatureNow(m.boost.active) ?? m.spec.signature, role: 'player' });
     }
     for (const a of this.air.aircraft) {
       if (!a.alive) continue;
@@ -2237,7 +2237,7 @@ export class ServerWorld {
       },
       plane: plane
         ? {
-            id: plane.id, cargoFactor: st.cargoFactor, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
+            id: plane.id, cargoFactor: st.cargoFactor, detection: plane.traits?.stealth ? this.network.detectionOf(p.plane) : undefined, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
             ammo: st.gun?.ammo ?? plane.gun.ammo, ammoMax: plane.gun.ammo, gunReady: st.gun?.canFire() ?? false,
             bombs: st.bombsLoaded, bombsMax: plane.bombs.capacity, falling: st.bombsFalling, cooldown: Math.round(st.bombCooldown * 10) / 10,
             rearm: st.rearmProgress === null ? null : Math.round(st.rearmProgress * 100) / 100,

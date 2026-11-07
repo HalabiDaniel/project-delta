@@ -519,6 +519,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     inspiration: 'F-35',
     shape: 'swift',
     maneuvers: ['foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'spiralDrill'],
+    traits: { stealth: true },
   },
   thug: {
     id: 'thug',
@@ -656,6 +657,22 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     maneuvers: [],
   },
 };
+
+/**
+ * v0.0.18: the radar signature system (GDD §5.2, plan v0.0.18 §8). Every plane's `signature`
+ * scales how far defenses, AI pilots and threat panels notice it. A plane with the stealth trait
+ * is quieter still while it does nothing loud (`quiet`); firing, opening the bomb bay or boosting
+ * reveals it (`reveal` added to its signature, fading over `revealTime`). Rocket locks on a plane
+ * below signature 1 take longer, by 1 / signature, never more than `maxLock` times: locks stay
+ * possible. Visual range is untouched: inside `visual` metres anything is seen, whatever it is.
+ */
+export const STEALTH = {
+  quiet: 0.8,
+  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2 },
+  revealTime: 3,
+  maxLock: 1.8,
+  visual: 28,
+} as const;
 
 /** Garage order, roughly cheapest first: the starter Swift, then the rest up to the bombers. */
 export const AIRCRAFT_ORDER: readonly AircraftId[] = ['swift', 'dart', 'falcon', 'specter', 'thug', 'jumper', 'raptor', 'lightning', 'widewing', 'lancer', 'ghost'];

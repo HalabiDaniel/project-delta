@@ -415,6 +415,8 @@ export interface PlaneDTO {
   id: AircraftId;
   /** v0.0.18: heavy cargo slows the plane by this (absent: 1), for the client's prediction. */
   cargoFactor?: number;
+  /** v0.0.18: a stealth plane's detection state, decided by the server (absent: not a stealth plane). */
+  detection?: 'hidden' | 'detected' | 'locked';
   emergency: boolean;
   health: number;
   maxHealth: number;

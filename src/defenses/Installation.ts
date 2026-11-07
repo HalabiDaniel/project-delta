@@ -1,6 +1,7 @@
 import { Durability } from '../combat/Damage';
 import type { ShotOrder } from '../combat/Ordnance';
-import { DEFENSES, type Side } from '../config';
+import { lockFactor, type DetectionState } from '../aircraft/Signature';
+import { DEFENSES, STEALTH, type Side } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Rng } from '../systems/Random';
 import type { InstallationSpec } from './Layout';
@@ -169,7 +170,8 @@ export class Installation {
 
   /** How close a plane must be before this installation notices it on its own. */
   detectionRange(target: Pick<Target, 'signature'>, scale = 1): number {
-    return this.spec.range * target.signature * scale;
+    // v0.0.18: never under visual range (STEALTH.visual): a stealthy plane is noticed closer, never not at all.
+    return Math.max(Math.min(STEALTH.visual, this.spec.range), this.spec.range * target.signature * scale);
   }
 
   /** Is the plane within this installation's own detection range? */
@@ -308,7 +310,8 @@ export class Installation {
 
     const c = DEFENSES.launcher;
     if (engage && this.cooldown <= 0 && error <= 15 * DEG) {
-      this.lock = Math.min(1, this.lock + dt / c.lockTime);
+      // v0.0.18: a low-signature plane takes longer to lock on to (never impossibly long).
+      this.lock = Math.min(1, this.lock + dt / (c.lockTime * lockFactor(target.signature)));
       this.state = 'locking';
       if (this.lock >= 1) {
         this.lock = 0;
@@ -379,6 +382,20 @@ export class DefenseNetwork {
 
   get(id: string): Installation | undefined {
     return this.byId.get(id);
+  }
+
+  /**
+   * v0.0.18: what the defenses know of plane `targetId`, for its pilot's HUD: locked (a launcher is
+   * locking on or firing at it), detected (something is following it), or hidden.
+   */
+  detectionOf(targetId: string): DetectionState {
+    let detected = false;
+    for (const i of this.installations) {
+      if (!i.alive || i.targetId !== targetId || i.state === 'idle' || i.state === 'destroyed') continue;
+      if (i.spec.kind === 'launcher' && (i.state === 'locking' || i.state === 'firing')) return 'locked';
+      if (i.unseen < 0.5) detected = true;
+    }
+    return detected ? 'detected' : 'hidden';
   }
 
   /** Puts up a new installation (a building the player just built), at `health` (default: full). */

@@ -190,6 +190,8 @@ export interface ManeuverPickerView {
 export interface AircraftStatusView {
   name: string;
   roleLabel: string;
+  /** v0.0.18: a stealth plane's detection state (undefined: not a stealth plane, not shown). */
+  detection?: 'hidden' | 'detected' | 'locked';
   accent: string;
   health: number;
   maxHealth: number;

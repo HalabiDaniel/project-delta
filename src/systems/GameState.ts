@@ -4,6 +4,7 @@ import { Gun } from '../combat/Gun';
 import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, MISSIONS, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
 import { canCarry, cycleManeuver, defaultManeuver } from '../aircraft/maneuvers';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
+import { RadarSignature } from '../aircraft/Signature';
 import { armingFor, materialsOf, newIncomes, type Arming, type Incomes } from './Economy';
 import { HomeIncome } from './HomeIncome';
 import { describeBundle, type Bundle, type ResourceManager } from './ResourceManager';
@@ -212,6 +213,8 @@ export class GameState {
   /** The plane on the pad or in the air is the free emergency plane. */
   emergency = false;
 
+  /** v0.0.18: the plane's radar signature: firing, bombing and boosting give it away for a moment. */
+  readonly radar = new RadarSignature();
   /** v0.0.18: every income, paper's included (`income` is `incomes.paper`). */
   readonly incomes: Incomes;
   private buildDuration: number = PLANE.buildTime;
@@ -438,6 +441,7 @@ export class GameState {
   /** Advances everything that runs on a clock: income, folding, guns, bombs, rearming and the mission timer. */
   tick(dt: number): void {
     this.income.update(dt, this.resources);
+    this.radar.update(dt);
     this.incomes.ink.update(dt, this.resources);
     this.incomes.rubber.update(dt, this.resources);
     if (this.phase === 'building') {
@@ -494,6 +498,7 @@ export class GameState {
     if (!this.canFire()) return null;
     const barrel = this.gun!.fire()!;
     this.sortie!.shotsFired++;
+    this.radar.reveal('fire');
     this.emit({ type: 'fired', barrel, ammo: this.gun!.ammo });
     if (this.gun!.empty) this.emit({ type: 'out-of-ammo' });
     return barrel;
@@ -507,6 +512,7 @@ export class GameState {
     if (!this.canDropBomb()) return false;
     this.bombsLoaded--;
     this.bombsFalling++;
+    this.radar.reveal('bomb');
     this.bombCooldown = BOMB.dropCooldown;
     this.sortie!.bombsDropped++;
     this.emit({ type: 'bomb-dropped', remaining: this.bombsLoaded });
@@ -681,6 +687,15 @@ export class GameState {
   get cargoFactor(): number {
     const m = this.mission;
     return this.phase === 'flying' && m?.isActive && m.spec.cargo === 'heavy' ? MISSIONS.heavyCargo : 1;
+  }
+
+  /**
+   * v0.0.18: the plane's signature right now, for defenses, AI pilots and threat panels. `boosting`:
+   * the flight model's boost is on (it reveals the plane too).
+   */
+  signatureNow(boosting = false): number {
+    if (boosting) this.radar.reveal('boost');
+    return this.plane ? this.radar.valueFor(this.plane) : 1;
   }
 
   /** v0.0.18: the plane started a maneuver (counted for stunts and achievements). */

@@ -1374,7 +1374,7 @@ export class Game {
       const v = plane.getVelocity(this.v2);
       player = {
         id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z,
-        signature: plane.spec.signature, radius: plane.spec.hitRadius, shielded: this.playerShielded(), role: 'player',
+        signature: this.state.signatureNow(plane.motion.boost.active), radius: plane.spec.hitRadius, shielded: this.playerShielded(), role: 'player',
       };
     }
     const out = this.airTraffic.update(dt, {
@@ -1730,7 +1730,7 @@ export class Game {
     const targets: Target[] = [];
     if (flying && !safe) {
       const v = plane.getVelocity(this.v2);
-      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: plane.spec.signature });
+      targets.push({ id: PLAYER_ID, side: 'player', x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, signature: this.state.signatureNow(plane.motion.boost.active) });
     }
     for (const a of this.airTraffic.aircraft) {
       if (!a.alive) continue;
@@ -2945,6 +2945,7 @@ export class Game {
     return {
       name: spec.name,
       roleLabel: spec.roleLabel,
+      detection: spec.traits?.stealth ? this.defenses.detectionOf(PLAYER_ID) : undefined,
       accent: css(spec.accent),
       health: state.durability.health,
       maxHealth: spec.maxHealth,

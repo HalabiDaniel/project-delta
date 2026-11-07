@@ -8,7 +8,7 @@ import type { Collider } from '../combat/Collision';
 import { Durability } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
 import type { ShotOrder } from '../combat/Ordnance';
-import { AI, AIRCRAFT, BOMB, DEFENSES, WEAPONS, WORLD, type AircraftId, type AircraftSpec, type AiRole, type Difficulty, type PilotSkill, type Side } from '../config';
+import { AI, AIRCRAFT, BOMB, DEFENSES, WEAPONS, WORLD, type AircraftId, type AircraftSpec, type AiRole, type Difficulty, type PilotSkill, type Side, STEALTH } from '../config';
 import type { Point3 } from '../missions/Mission';
 import type { Rng } from '../systems/Random';
 import type { Territory } from '../world/Territory';
@@ -652,7 +652,8 @@ export class AiAircraft {
     for (const c of world.contacts) {
       if (c.side === this.side || c.shielded || c.id === own.id) continue;
       if (!this.mayChase(world, c)) continue;
-      const range = AI.detection * c.signature;
+      // v0.0.18: within visual range anything is seen, whatever its signature.
+      const range = Math.max(STEALTH.visual, AI.detection * c.signature);
       const near = dist(p, c) <= range || (bomber !== null && dist(bomber, c) <= range * 0.8);
       if (!near && c !== prey) continue;
       // The prey is wanted most; otherwise the nearest.
@@ -686,7 +687,7 @@ export class AiAircraft {
     for (const c of world.contacts) {
       if (c.side === this.side || c.id === own.id) continue;
       const d = dist(own, c);
-      if (d <= range * c.signature && d < bestDistance) {
+      if (d <= Math.max(STEALTH.visual, range * c.signature) && d < bestDistance) {
         best = c;
         bestDistance = d;
       }

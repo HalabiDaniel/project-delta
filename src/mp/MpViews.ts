@@ -377,6 +377,7 @@ export class MpViews {
     return {
       name: spec.name,
       roleLabel: spec.roleLabel,
+      detection: spec.traits?.stealth ? (this.g.priv.plane?.detection ?? 'hidden') : undefined,
       accent: css(spec.accent),
       health: st.durability.health,
       maxHealth: spec.maxHealth,

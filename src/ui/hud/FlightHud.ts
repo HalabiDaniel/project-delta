@@ -111,9 +111,12 @@ export class FlightHud {
     toggle(this.el.plane, showPlane);
     if (a && showPlane) {
       this.text('name', a.name);
-      const roleHtml = kbadge({ label: a.roleLabel });
-      if (this.el.role.dataset.k !== a.roleLabel) {
-        this.el.role.dataset.k = a.roleLabel;
+      // v0.0.18: a stealth plane shows its detection state where its role would be.
+      const d = a.detection;
+      const label = d ? T.stealth[d] : a.roleLabel;
+      const roleHtml = kbadge({ label, tone: d === 'locked' ? 'hostile' : d === 'detected' ? 'warn' : d === 'hidden' ? 'good' : undefined, tip: d ? T.stealth.tip : undefined });
+      if (this.el.role.dataset.k !== label) {
+        this.el.role.dataset.k = label;
         this.el.role.innerHTML = roleHtml;
       }
       const hp = a.maxHealth > 0 ? a.health / a.maxHealth : 0;
