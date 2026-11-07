@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, DEFENSES, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
@@ -55,7 +55,10 @@ import { randomUUID } from 'node:crypto';
 import { Pilot } from './Pilot';
 import { PlayerGuns, type Hittable, type RoundImpact } from './PlayerGuns';
 import { MeritBook, type MeritEvent } from './Merit';
-import { huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
+import { bountyMission, huntMission, interceptMission, raidMission, reconMission } from './PvpMissions';
+import { BountyBoard, type Bounty } from './Bounties';
+import { addThreat, DirectorLog, median, strengthOf, threatNow, tierGap, tierOf, weakKill, weakKillsWithin, type DirectorDecision, type PlayerSituation } from './Situation';
+import type { SocialData } from './SocialData';
 import { EscortBook, type Candidate, type Leader } from './Escorts';
 
 export interface ServerWorldOptions {
@@ -114,6 +117,8 @@ export interface PlayerCarry {
   stats?: Record<string, number>;
   /** v0.0.18: medals, records, achievements, streaks and mastery so far (multiplayer's own). */
   profile?: ProgressData;
+  /** v0.0.19: threat, mutes and reputation counts so far. */
+  social?: SocialData;
   /**
    * New-player protection and the raid shield as clock times (ms; null: none). Absent: a brand-new
    * player, whose new-player protection starts now.
@@ -187,6 +192,11 @@ export class ServerWorld {
   readonly merit = new MeritBook();
   /** v0.0.19: the AI escorts players bought, and their orders. */
   readonly escorts = new EscortBook();
+  /** v0.0.19: open bounties, and the director's decisions for the developer's panel. */
+  readonly bounties = new BountyBoard();
+  readonly directorLog = new DirectorLog();
+  /** v0.0.19: how the director sees each player, worked out again every PVP_REFRESH. */
+  readonly situations = new Map<string, PlayerSituation>();
   readonly pilots = new Map<string, Pilot>();
   /** Territory id → the player who claimed it. */
   readonly owners = new Map<string, string>();
@@ -456,6 +466,7 @@ export class ServerWorld {
     for (const plane of carry.planes ?? []) p.planeIds.set(plane.design, plane.id);
     p.lifetime = { ...(carry.stats ?? {}) };
     p.progress = new Progress(this.clock);
+    if (carry.social) p.social = structuredClone(carry.social);
     if (carry.profile) p.progress.data = structuredClone(carry.profile);
     if (carry.director) {
       // The board as it was left: cards made again from their recipes keep their ids (and so
@@ -711,7 +722,7 @@ export class ServerWorld {
     const board: Record<string, string> = {};
     for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
     const clock = (t: number) => (t > this.time ? new Date(Math.round(this.wallOf(t))) : null);
-    return { stats, director: p.director.save(), profile: p.progress?.data ?? null, garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
+    return { stats, director: p.director.save(), profile: p.progress?.data ?? null, social: p.social, garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -895,6 +906,8 @@ export class ServerWorld {
     this.pvpTimer -= dt;
     if (this.pvpTimer <= 0) {
       this.pvpTimer = PVP_REFRESH;
+      this.updateSituations();
+      this.updateBounties();
       for (const p of this.pilots.values()) this.refreshPvp(p, false);
     }
     const ms = performance.now() - started;
@@ -1391,6 +1404,10 @@ export class ServerWorld {
     if (i.side === 'enemy') return true;
     const owner = ownerOfSide(i.side);
     if (!owner || owner === p.id) return false;
+    // v0.0.19: an installation bounty lets whoever flies its card damage that one installation.
+    const b = this.bounties.onInstallation(i.id);
+    const card = p.pvpCard(p.state?.mission ?? null);
+    if (b && card?.tag.kind === 'bounty' && card.tag.bounty === b.id) return true;
     return this.attacks.by(p.id)?.victim === owner;
   }
 
@@ -1399,6 +1416,10 @@ export class ServerWorld {
     const { dealt, destroyed } = i.damage(Math.round(amount));
     if (dealt <= 0) return 0;
     if (by) this.sessionEvents.contribute(i.id, by.id, dealt);
+    // v0.0.19: damage towards an installation bounty; wrecked, it is paid by contribution.
+    const bounty = this.bounties.onInstallation(i.id);
+    if (bounty && by) this.bounties.contribute(bounty, by.id, dealt);
+    if (bounty && destroyed) this.payBounty(bounty, bounty.damage);
     const centre = { x: i.spec.x, y: i.spec.ground + i.spec.pivot * 0.6, z: i.spec.z };
     this.emit({ t: 'dmg', tg: i.id, n: dealt, p: v3(centre), by: by?.id, fatal: destroyed, k: weapon });
     if (by?.state) by.state.recordDamage(dealt, destroyed ? i.id : null, true, i.spec.kind === 'turret');
@@ -1801,6 +1822,178 @@ export class ServerWorld {
     return [...out].sort();
   }
 
+  // ---- The multiplayer director (v0.0.19) ---------------------------------------------------------
+
+  /** How the director sees `p` right now (GDD §11.2): resources, planes, record, threat, base, strength. */
+  situationOf(p: Pilot): PlayerSituation | null {
+    const st = p.state;
+    if (!st || !p.home || !p.base) return null;
+    const now = this.clock();
+    const records = p.director?.performance.records.slice(-10) ?? [];
+    const types = new Map<string, number>();
+    for (const r of records) types.set(r.type, (types.get(r.type) ?? 0) + 1);
+    const planes = st.hangar.size + (st.plane && !st.emergency && !st.hangar.has(st.plane.id) ? 1 : 0);
+    const mine = this.network.on(p.home.id);
+    const weapons = mine.filter((i) => i.isWeapon && i.alive).length;
+    const max = mine.reduce((sum, i) => sum + i.spec.maxHealth, 0);
+    const health = mine.reduce((sum, i) => sum + i.health, 0);
+    const resources = { paper: p.resources.paper, ink: p.resources.ink, rubber: p.resources.rubber };
+    const strength = strengthOf({ ...resources, planes, weapons });
+    const sorties = (p.lifetime.successes ?? 0) + (p.lifetime.failures ?? 0) + st.stats.successes + st.stats.failures;
+    return {
+      id: p.id, name: p.name, resources, planes,
+      recent: { success: records.filter((r) => r.success).length, failure: records.filter((r) => !r.success).length },
+      preferred: [...types].sort((a, b) => b[1] - a[1]).map(([t]) => t),
+      raids: this.attacks.history.filter((r) => r.attacker === p.id && this.time - r.at < BOUNTIES.window).length + (this.attacks.by(p.id) ? 1 : 0),
+      weakKills: weakKillsWithin(p.social, now, BOUNTIES.window),
+      threat: Math.round(threatNow(p.social, now) * 10) / 10,
+      condition: max > 0 ? Math.round((health / max) * 100) / 100 : 1,
+      strength, relative: 1, tier: 'intermediate', online: p.connected && !p.leaving, sorties,
+    };
+  }
+
+  /** Every placed player's situation, with strength relative to the session's median and the tier it gives. */
+  private updateSituations(): void {
+    const all: PlayerSituation[] = [];
+    for (const p of this.pilots.values()) {
+      const s = this.situationOf(p);
+      if (s) all.push(s);
+    }
+    const middle = median(all.filter((s) => s.online).map((s) => s.strength));
+    for (const s of all) {
+      s.relative = middle > 0 ? Math.round((s.strength / middle) * 100) / 100 : 1;
+      const before = this.situations.get(s.id)?.tier;
+      s.tier = tierOf(s.strength, middle, s.sorties);
+      if (before && before !== s.tier) this.decide('tier', `${s.name}: ${before} → ${s.tier} (strength ${s.strength}, ${s.relative}× the median)`, [s.id]);
+    }
+    this.situations.clear();
+    for (const s of all) this.situations.set(s.id, s);
+  }
+
+  /** A director decision: kept for the developer's panel, and handed to the room's log. */
+  private decide(kind: DirectorDecision['kind'], text: string, players: string[]): void {
+    this.directorLog.add({ at: Math.round(this.time), kind, text, players });
+  }
+
+  /** Director decisions since the last call (the room logs them). */
+  takeDecisions(): DirectorDecision[] {
+    return this.directorLog.take();
+  }
+
+  /**
+   * An advanced player is never offered a raid on a newcomer (GDD §11.3), unless that newcomer
+   * attacked them within SITUATION.retaliation.
+   */
+  mismatch(attacker: Pilot, victim: Pilot): boolean {
+    if (this.situations.get(attacker.id)?.tier !== 'advanced' || this.situations.get(victim.id)?.tier !== 'newcomer') return false;
+    const struck = this.attacks.history.some((r) => r.attacker === victim.id && r.victim === attacker.id && this.time - r.at < SITUATION.retaliation);
+    const hurt = victim.aggression.get(attacker.id);
+    return !struck && !(hurt !== undefined && this.time - hurt < SITUATION.retaliation);
+  }
+
+  /** An intermediate player (or a newcomer) taking on a stronger one is paid more (GDD §11.4). */
+  underdogFactor(attacker: Pilot, victim: Pilot): number {
+    const a = this.situations.get(attacker.id)?.tier;
+    const v = this.situations.get(victim.id)?.tier;
+    if (!a || !v || a === 'advanced') return 1;
+    return 1 + SITUATION.underdogBonus * Math.max(0, tierGap(a, v));
+  }
+
+  /** The players `id` is allied with this session (v0.0.19 alliances; none until phase 4). */
+  alliesOf(_id: string): string[] {
+    return [];
+  }
+
+  /** Decaying rewards between a pair (v0.0.19 anti-farming); 1 until phase 8. */
+  pairFactor(_a: string, _b: string, _source: string): number {
+    return 1;
+  }
+
+  /**
+   * Places, ends and cancels bounties (plan §2C). Only on a fair objective, only for aggression or
+   * demonstrated threat, never on an offline or protected player.
+   */
+  private updateBounties(): void {
+    for (const b of this.bounties.expired(this.time)) this.endBounty(b, 'expired', 'time ran out');
+    for (const b of [...this.bounties.open]) {
+      const t = this.pilots.get(b.target);
+      if (!t || !t.connected || t.leaving) this.endBounty(b, 'cancelled', 'target left');
+      else if (b.kind !== 'installation' && !t.flying) this.endBounty(b, 'expired', 'target landed');
+      else if (b.installation && !this.network.get(b.installation.id)?.alive) this.endBounty(b, 'cancelled', 'installation gone');
+    }
+    for (const t of this.pilots.values()) {
+      const s = this.situations.get(t.id);
+      if (!s || !s.online || !t.home || this.time < t.protectUntil || this.bounties.refusal(t.id, this.time)) continue;
+      const raid = this.attacks.by(t.id);
+      if (raid && t.flying) {
+        const earlier = this.attacks.history.filter((r) => r.attacker === t.id && this.time - r.at < BOUNTIES.window).length;
+        if (earlier + 1 >= BOUNTIES.repeatRaids) {
+          const victim = this.pilots.get(raid.victim);
+          this.placeBounty('raid', t, `${earlier + 1} raids by ${t.name} in a row`, { defender: raid.victim });
+          void victim;
+          continue;
+        }
+        if (s.threat >= BOUNTIES.bomberThreat && t.state?.plane?.role === 'bomber') {
+          this.placeBounty('bomber', t, `${t.name} is raiding in a bomber`);
+          continue;
+        }
+      }
+      if (t.flying && s.weakKills >= BOUNTIES.streak) {
+        this.placeBounty('ace', t, `${s.weakKills} kills on weaker players`);
+        continue;
+      }
+      if (s.tier === 'advanced' && s.threat >= BOUNTIES.installationThreat && this.time >= t.shieldUntil && !this.attacks.on(t.id) && this.time - t.arrivedAt >= this.arrivalGrace) {
+        const store = t.base?.idOf(STORE);
+        const st = t.base ? this.network.installations.find((i) => i.id === store) : undefined;
+        const weapons = this.network.on(t.home.id).filter((i) => i.isWeapon && i.alive);
+        // The forward defense: the weapon furthest from the store.
+        const forward = weapons.sort((a, b) => (st ? Math.hypot(b.spec.x - st.spec.x, b.spec.z - st.spec.z) - Math.hypot(a.spec.x - st.spec.x, a.spec.z - st.spec.z) : 0))[0];
+        if (forward) {
+          this.placeBounty('installation', t, `${t.name} has been pushing everyone around`, {
+            installation: { id: forward.id, name: forward.spec.name, territoryId: t.home.id, x: forward.spec.x, z: forward.spec.z },
+          });
+        }
+      }
+    }
+  }
+
+  private placeBounty(kind: Bounty['kind'], t: Pilot, reason: string, extra: Pick<Bounty, 'installation' | 'defender'> = {}): Bounty | null {
+    const threat = this.situations.get(t.id)?.threat ?? 0;
+    const b = this.bounties.place(kind, t.id, t.name, threat, reason, this.time, extra);
+    if (!b) return null;
+    this.news(`Bounty on ${t.name}: ${b.pot} paper`, 'info');
+    this.note(t, 'target', 'Bounty on you', `${b.pot}`, 'warn');
+    this.decide('bounty', `${kind} bounty on ${t.name} (threat ${threat}, pot ${b.pot}): ${reason}`, [t.id]);
+    return b;
+  }
+
+  /** The bounty is over without being paid. */
+  private endBounty(b: Bounty, status: 'expired' | 'cancelled', why: string): void {
+    this.bounties.close(b, status, this.time);
+    this.decide('bounty-ended', `Bounty on ${b.targetName} ${status}: ${why}`, [b.target]);
+  }
+
+  /** Pays a bounty by contribution (once), and closes it. */
+  private payBounty(b: Bounty, damage: ReadonlyMap<string, number>): void {
+    if (b.status !== 'open') return;
+    const excluded = new Set([b.target, ...this.alliesOf(b.target)]);
+    const shares = BountyBoard.split(b, damage, excluded, (player) => this.pairFactor(player, b.target, 'bounty'));
+    const paid: string[] = [];
+    for (const share of shares) {
+      const p = this.pilots.get(share.player);
+      if (!p?.state) continue;
+      p.cause = `bounty:${b.uid}:${p.id}`;
+      p.state.payBonus(share.amount, `Bounty on ${b.targetName}`);
+      p.cause = null;
+      p.social.reputation.helps++;
+      this.note(p, 'target', 'Bounty', `+${share.amount}`, 'good');
+      paid.push(`${p.name} ${share.amount}`);
+    }
+    this.bounties.close(b, paid.length > 0 ? 'paid' : 'cancelled', this.time);
+    if (paid.length > 0) this.news(`The bounty on ${b.targetName} is paid`, 'good');
+    this.decide(paid.length > 0 ? 'bounty-paid' : 'bounty-ended', paid.length > 0 ? `Bounty on ${b.targetName} paid: ${paid.join(', ')}` : `Bounty on ${b.targetName} brought down with no contributor`, [b.target, ...shares.map((s) => s.player)]);
+  }
+
   // ---- Raids between players ----------------------------------------------------------------------
 
   /** Raids under way: lookouts notice raiders without a radar; the territory shows the alert. */
@@ -1839,6 +2032,7 @@ export class ServerWorld {
       victim.shieldUntil = this.time + PVP.raidShield;
       if (attacker) {
         attacker.stats.raids++;
+        attacker.social.reputation.raids++;
         attacker.addScore(PVP.score.raid);
         this.merit.raid(attacker.id, victim.id, attack.uid, victim.name);
       }
@@ -1890,7 +2084,15 @@ export class ServerWorld {
     const others = [...this.pilots.values()].filter((o) => o !== p && o.home && o.base && o.state);
     const offered: Array<() => void> = [];
     // A raid: on a base that may be raided now, keeping the same target while it stays valid.
-    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0);
+    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0 && !this.mismatch(p, o));
+    // v0.0.19: a bounty card first, for any open bounty not on this player or an ally.
+    const allies = new Set(this.alliesOf(p.id));
+    const bounty = this.bounties.open.find((b) => b.target !== p.id && !allies.has(b.target) && (b.kind === 'installation' || this.pilots.get(b.target)?.flying));
+    const bountyTarget = bounty ? this.pilots.get(bounty.target) : undefined;
+    if (bounty && bountyTarget) {
+      const role = bountyTarget.state?.plane ? aiRoleFor(bountyTarget.state.plane) : 'fighter';
+      offered.push(() => add(`bounty:${bounty.id}`, () => ({ spec: bountyMission(bounty, bountyTarget.home, role), tag: { kind: 'bounty', target: bounty.target, name: bounty.targetName, territoryId: bounty.installation?.territoryId ?? bountyTarget.home?.id ?? null, bounty: bounty.id, why: bounty.reason } })));
+    }
     const current = p.pvp.find((c) => c.tag.kind === 'raid' && raidable.some((o) => o.id === c.tag.target));
     const victim = current ? this.pilots.get(current.tag.target)! : raidable.length > 0 ? raidable[Math.floor(this.rng() * raidable.length)] : null;
     if (victim) {
@@ -1898,7 +2100,7 @@ export class ServerWorld {
         add(`raid:${victim.id}`, () => {
           const t = chooseRaidTarget(victim.base!, this.rng);
           const weapons = victim.base!.network.on(victim.home!.id).filter((i) => i.isWeapon && i.alive).length;
-          const reward = this.attacks.reward(weapons, victim.base!.vulnerable(), this.attacks.repeatFactor(p.id, victim.id, this.time));
+          const reward = Math.round((this.attacks.reward(weapons, victim.base!.vulnerable(), this.attacks.repeatFactor(p.id, victim.id, this.time)) * this.underdogFactor(p, victim)) / 5) * 5;
           const spec = raidMission(victim.name, victim.home!, { installationId: t.installationId, name: t.name, x: t.strike.x, z: t.strike.z }, reward);
           return { spec, tag: { kind: 'raid', target: victim.id, name: victim.name, territoryId: victim.home!.id } };
         }),
@@ -1939,6 +2141,11 @@ export class ServerWorld {
         return this.attacks.on(p.id)?.attacker === other.id;
       case 'recon':
         return true;
+      case 'bounty': {
+        const b = tag.bounty !== undefined ? this.bounties.get(tag.bounty) : undefined;
+        if (!b) return false;
+        return b.installation ? !!this.network.get(b.installation.id)?.alive : other.flying;
+      }
     }
   }
 
@@ -2061,6 +2268,8 @@ export class ServerWorld {
     this.attacks.start(p.id, victim.id, victim.home.id, target, this.time);
     // Raiding someone ends your own new-player protection.
     p.protectUntil = 0;
+    // v0.0.19: raids launched are what threat is made of.
+    addThreat(p.social, SITUATION.raidThreat, this.clock());
     this.note(victim, 'raid', `${p.name} is coming`, territoryName(victim.home.id), 'warn', 'raid');
     this.refreshPvp(victim, false);
   }
@@ -2091,8 +2300,20 @@ export class ServerWorld {
       this.pvpOut.push({ id: kill.id, kind: 'kill', attacker: k.id, victim: p.id, success: true, at: Math.round(this.wallOf(kill.at)) });
       this.merit.kill(k.id, p.id, kill.id, p.name, p.protectUntil > this.time);
       if (bounty > 0) k.state.payBonus(bounty, `Shot down ${p.name}`);
+      k.social.reputation.kills++;
+      // v0.0.19: a kill on a clearly weaker player counts towards threat and the "ace" bounty.
+      const ks = this.situations.get(k.id);
+      const vs = this.situations.get(p.id);
+      if (ks && vs && vs.strength < ks.strength * SITUATION.weaker) weakKill(k.social, this.clock(), BOUNTIES.window);
       k.state.aircraftDestroyed(p.plane, role, true);
       this.note(k, 'crumple', `Shot down ${p.name}`, bounty > 0 ? `+${bounty}` : null, 'good');
+    }
+    // v0.0.19: a bounty on this plane is paid by contribution: everyone who damaged it this sortie.
+    const bountyOn = this.bounties.on(p.id);
+    if (bountyOn && bountyOn.kind !== 'installation' && !p.forfeit) {
+      const damage = new Map<string, number>();
+      for (const e of p.damageLog) damage.set(e.by, (damage.get(e.by) ?? 0) + e.amount);
+      this.payBounty(bountyOn, damage);
     }
     // A raider down: a defense if the player being raided brought it down (their plane or their guns).
     const attack = this.attacks.by(p.id);
@@ -2101,6 +2322,7 @@ export class ServerWorld {
       const byDefender = !!defender && killer === defender.id;
       if (byDefender && defender.state) {
         defender.stats.defends++;
+        defender.social.reputation.defends++;
         this.merit.defend(defender.id, p.id, attack.uid, p.name);
         defender.addScore(PVP.score.defend);
         // Paid for flying up to meet the raider, not for the base's guns alone (as single-player's raids).
@@ -2115,6 +2337,7 @@ export class ServerWorld {
       const a = this.pilots.get(id);
       if (!a?.state) continue;
       a.stats.assists++;
+      a.social.reputation.helps++;
       a.addScore(PVP.score.assist);
       if (k) this.merit.assist(a.id, p.id, this.kills.last!.id, p.name, p.protectUntil > this.time);
       const share = Math.round(PVP.killBase * PVP.assistShare);
@@ -2351,7 +2574,7 @@ export class ServerWorld {
       key: this.missionKey(m),
       spec: spec as MissionSpec,
       slot,
-      slotLabel: pvp ? 'Rival' : offer?.source === 'operation' ? 'Operation' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
+      slotLabel: pvp ? (pvp.tag.kind === 'bounty' ? 'Bounty' : 'Rival') : offer?.source === 'operation' ? 'Operation' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
       pvp: pvp?.tag ?? null,
       operation: this.operationOf(p, offer),
     };
@@ -2434,6 +2657,8 @@ export class ServerWorld {
         active: this.escorts.of(p.id).map((e) => ({ id: e.id, kind: e.kind })),
       },
       reveal: this.revealFor(p),
+      bounties: this.bounties.open.map((b) => ({ id: b.id, kind: b.kind, target: b.target, targetName: b.targetName, pot: b.pot, left: Math.max(0, Math.ceil(b.expires - this.time)), reason: b.reason })),
+      situation: { tier: this.situations.get(p.id)?.tier ?? 'intermediate', threat: Math.round(threatNow(p.social, this.clock()) * 10) / 10 },
     };
   }
 

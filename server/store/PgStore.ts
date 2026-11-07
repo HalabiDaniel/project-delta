@@ -310,7 +310,7 @@ export class PgStore implements Store {
 
   async progress(worldId: string, playerId: string): Promise<ProgressRecord | null> {
     if (!isUuid(playerId)) return null;
-    const { rows } = await this.db.query('select stats, director, garage, profile, protect_until, shield_until from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
+    const { rows } = await this.db.query('select stats, director, garage, profile, social, protect_until, shield_until from progress where world_id = $1 and player_id = $2', [worldId, playerId]);
     if (rows.length === 0) return null;
     const director = rows[0].director as Record<string, unknown> | null;
     return {
@@ -318,6 +318,7 @@ export class PgStore implements Store {
       director: director && Object.keys(director).length > 0 ? director : null,
       garage: (rows[0].garage as Record<string, unknown>) ?? {},
       profile: rows[0].profile && Object.keys(rows[0].profile as object).length > 0 ? rows[0].profile : null,
+      social: rows[0].social && Object.keys(rows[0].social as object).length > 0 ? rows[0].social : null,
       protectUntil: (rows[0].protect_until as Date | null) ?? null,
       shieldUntil: (rows[0].shield_until as Date | null) ?? null,
     };
@@ -325,11 +326,12 @@ export class PgStore implements Store {
 
   async saveProgress(worldId: string, playerId: string, record: ProgressRecord): Promise<void> {
     await this.db.query(
-      `insert into progress (world_id, player_id, stats, director, garage, protect_until, shield_until, profile) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb)
+      `insert into progress (world_id, player_id, stats, director, garage, protect_until, shield_until, profile, social) values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb, $9::jsonb)
        on conflict (world_id, player_id) do update set stats = excluded.stats, director = excluded.director, garage = excluded.garage,
          protect_until = excluded.protect_until, shield_until = excluded.shield_until,
-         profile = case when excluded.profile = '{}'::jsonb then progress.profile else excluded.profile end, updated_at = now()`,
-      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage), record.protectUntil ?? null, record.shieldUntil ?? null, JSON.stringify(record.profile ?? {})],
+         profile = case when excluded.profile = '{}'::jsonb then progress.profile else excluded.profile end,
+         social = case when excluded.social = '{}'::jsonb then progress.social else excluded.social end, updated_at = now()`,
+      [worldId, playerId, JSON.stringify(record.stats), JSON.stringify(record.director ?? {}), JSON.stringify(record.garage), record.protectUntil ?? null, record.shieldUntil ?? null, JSON.stringify(record.profile ?? {}), JSON.stringify(record.social ?? {})],
     );
   }
 

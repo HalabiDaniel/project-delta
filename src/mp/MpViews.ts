@@ -173,7 +173,7 @@ export class MpViews {
     }
     const card = mission ? g.cards.get(mission) : undefined;
     if (!note && card?.pvp && choosing) {
-      note = pvpNote(card.pvp.kind, card.pvp.name);
+      note = pvpNote(card.pvp.kind, card.pvp.name, card.pvp.why);
       tag = V.rival;
     }
 
@@ -700,7 +700,7 @@ export class MpViews {
     if (mission.status === 'failed') return I.lost(home);
     if (phase === 'landed') return I.landed('R', 'Space');
     const card = this.g.cards.get(mission);
-    if (card?.pvp) return pvpNote(card.pvp.kind, card.pvp.name);
+    if (card?.pvp) return pvpNote(card.pvp.kind, card.pvp.name, card.pvp.why);
     const next = mission.objectives[mission.openObjectives()[0]];
     switch (next?.kind) {
       case 'bomb': return I.bomb;
@@ -1101,8 +1101,9 @@ export class MpViews {
 }
 
 /** What a card against another player is about, in a sentence. */
-function pvpNote(kind: 'raid' | 'recon' | 'hunt' | 'intercept', name: string): string {
-  return V.pvp[kind](name);
+function pvpNote(kind: string, name: string, why?: string): string {
+  const text = V.pvp[kind]?.(name) ?? '';
+  return why ? `${text} ${V.why(why)}` : text;
 }
 
 /** The danger on a mission card (single-player's). */

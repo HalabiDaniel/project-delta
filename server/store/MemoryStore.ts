@@ -296,7 +296,8 @@ export class MemoryStore implements Store {
     const before = this.progresses.get(`${worldId}/${playerId}`);
     // As PgStore: a record without a profile keeps the one saved before.
     const profile = record.profile ?? before?.profile ?? null;
-    this.progresses.set(`${worldId}/${playerId}`, structuredClone({ ...record, profile, protectUntil: record.protectUntil ?? null, shieldUntil: record.shieldUntil ?? null }));
+    const social = record.social ?? before?.social ?? null;
+    this.progresses.set(`${worldId}/${playerId}`, structuredClone({ ...record, profile, social, protectUntil: record.protectUntil ?? null, shieldUntil: record.shieldUntil ?? null }));
   }
 
   async recordMission(worldId: string, playerId: string, outcome: MissionOutcome): Promise<boolean> {

@@ -159,6 +159,11 @@ export interface ProgressRecord {
    * checked when it is loaded. Absent or null: none yet.
    */
   profile?: unknown;
+  /**
+   * v0.0.19: threat, mutes and reputation counts (server/world/SocialData.ts), checked when it is
+   * loaded. Absent or null: none yet (a record without it keeps the one saved before).
+   */
+  social?: unknown;
   /** New-player protection and the raid shield, as clock times (null: none). */
   protectUntil?: Date | null;
   shieldUntil?: Date | null;

@@ -441,12 +441,38 @@ export interface PlaneDTO {
   stopped: boolean;
 }
 
-/** What kind of player-versus-player card it is, and against whom. */
+/**
+ * What kind of player-versus-player card it is, and against whom. v0.0.19 adds bounties (`bounty`:
+ * the bounty's id).
+ */
 export interface PvpTag {
-  kind: 'raid' | 'recon' | 'hunt' | 'intercept';
+  kind: 'raid' | 'recon' | 'hunt' | 'intercept' | 'bounty';
   target: string;
   name: string;
   territoryId: string | null;
+  /** v0.0.19: the bounty this card is for. */
+  bounty?: number;
+  /** v0.0.19: why the director offered it, in words ("Rematch with Bo"), when there is a reason to tell. */
+  why?: string;
+}
+
+/** v0.0.19: an open bounty, as everyone in the session sees it. */
+export interface BountyDTO {
+  id: number;
+  kind: 'bomber' | 'raid' | 'installation' | 'ace';
+  target: string;
+  targetName: string;
+  pot: number;
+  /** Seconds left. */
+  left: number;
+  reason: string;
+}
+
+/** v0.0.19: how the director sees you. */
+export interface SituationDTO {
+  tier: 'newcomer' | 'intermediate' | 'advanced';
+  /** Threat, rounded to one decimal: how aggressive you have been lately. */
+  threat: number;
 }
 
 export interface CardDTO {
@@ -556,6 +582,9 @@ export interface MeDTO {
   raid?: RaidReport | null;
   /** v0.0.19: your escorts: chosen for the next sortie, and in the air. */
   escorts?: EscortsDTO;
+  /** v0.0.19: the bounties open in the session, and how the director sees you. */
+  bounties?: BountyDTO[];
+  situation?: SituationDTO;
   /**
    * v0.0.19: aircraft (and installations) your mini-map shows wherever they are: what your spotter,
    * or a Specter flown by you or someone you cooperate with, reveals. Position only, never a lock.

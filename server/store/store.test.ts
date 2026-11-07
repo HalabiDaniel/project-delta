@@ -269,7 +269,7 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect(await store.progress(world.id, p.id)).toBeNull();
       const record = { stats: { kills: 3, sorties: 9 }, director: { swaps: 2, offers: [] }, garage: { aircraft: 'falcon', board: { safe: randomUUID() } } };
       await store.saveProgress(world.id, p.id, record);
-      expect(await store.progress(world.id, p.id)).toEqual({ ...record, profile: null, protectUntil: null, shieldUntil: null });
+      expect(await store.progress(world.id, p.id)).toEqual({ ...record, profile: null, social: null, protectUntil: null, shieldUntil: null });
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 4, sorties: 10 } });
       expect((await store.progress(world.id, p.id))?.stats).toEqual({ kills: 4, sorties: 10 });
       // v0.0.18: the multiplayer profile (medals, records, achievements), kept when a save has none.
@@ -278,6 +278,11 @@ function contract(label: string, open: () => Promise<Store>, extra?: (store: () 
       expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
       await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 5, sorties: 11 } });
       expect((await store.progress(world.id, p.id))?.profile).toEqual(profile);
+      // v0.0.19: threat, mutes and reputation, kept the same way.
+      const social = { threat: 2.5, threatAt: 1_700_000_000_000, weakKills: [], mutes: ['abc'], reputation: { raids: 1, defends: 2, kills: 3, helps: 4 } };
+      await store.saveProgress(world.id, p.id, { ...record, social });
+      await store.saveProgress(world.id, p.id, { ...record, stats: { kills: 6, sorties: 12 } });
+      expect((await store.progress(world.id, p.id))?.social).toEqual(social);
       const outcome = { id: randomUUID(), template: 'strike', state: 'completed' as const, outcome: null, reward: 60, spec: { title: 'Strike' } };
       expect(await store.recordMission(world.id, p.id, outcome)).toBe(true);
       expect(await store.recordMission(world.id, p.id, { ...outcome, reward: 999 })).toBe(false);

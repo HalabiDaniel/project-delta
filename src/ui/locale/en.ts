@@ -1068,7 +1068,18 @@ export const en = {
       recon: (name: string) => `Fly low over ${name}'s base for a while. Their guns will notice.`,
       hunt: (name: string) => `${name} is in the air. Shoot them down before the clock runs out.`,
       intercept: (name: string) => `${name} is raiding your base. Get up there and shoot them down; your guns help over home.`,
-    },
+      // v0.0.19
+      bounty: (name: string) => `The director put a bounty on ${name}. Everyone who helps shares the pot, by how much they did.`,
+      escort: (name: string) => `Fly with ${name}'s bomber and keep it in the air. Paid once, if it gets its bombs on target.`,
+      defend: (name: string) => `${name}'s base is being raided. Help them shoot the raider down; they keep priority on the reward.`,
+      joint: (name: string) => `A joint attack: you and another pilot have the same target on ${name}. Shared by what each of you did.`,
+      strike: (name: string) => `Strafe ${name}'s infrastructure low, with guns and rockets. Their guns are awake.`,
+      challenge: (name: string) => `Call ${name} out to a dogfight over their own desk. If they don't show up, they pay a little.`,
+      challenged: (name: string) => `${name} challenged you to a dogfight over your desk. Take off and win it; staying home costs a little paper.`,
+      mischief: (name: string) => `Harmless mischief on ${name}'s desk. Nothing gets broken, nothing gets taken.`,
+    } as Record<string, (name: string) => string>,
+    /** v0.0.19: why the director offered a card ("Rematch with Bo"). */
+    why: (why: string) => `Why: ${why}.`,
     air: (fighters: number, scouts: number, bombers: number, skill: string) =>
       `Air: ${[fighters ? `${fighters} fighter${fighters > 1 ? 's' : ''}` : '', scouts ? `${scouts} scout${scouts > 1 ? 's' : ''}` : '', bombers ? `${bombers} bomber${bombers > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ')} (${skill.toLowerCase()})`,
     airThreat: 'Air threat',

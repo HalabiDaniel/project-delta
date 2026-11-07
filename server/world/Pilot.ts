@@ -14,6 +14,7 @@ import { ResourceManager } from '../../src/systems/ResourceManager';
 import type { Territory } from '../../src/world/Territory';
 import type { DamageEntry } from './Attacks';
 import { InputClock } from './InputClock';
+import { emptySocial, type SocialData } from './SocialData';
 import type { PaperJournal } from './Paper';
 import { randomUUID } from 'node:crypto';
 
@@ -101,6 +102,8 @@ export class Pilot {
   readonly aggression = new Map<string, number>();
   /** Cards against other players on the board. */
   pvp: PvpCard[] = [];
+  /** v0.0.19: threat, mutes and reputation counts, carried between sessions. */
+  social: SocialData = emptySocial();
   /** The mission's AI aircraft still to go up, and time since launch. */
   spawns: AirSpawn[] = [];
   missionTime = 0;

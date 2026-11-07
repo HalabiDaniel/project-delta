@@ -1273,6 +1273,74 @@ export const PVP = {
   combatWindow: 10,
 } as const;
 
+/**
+ * v0.0.19 (plan §2A–B, GDD §11.2–11.5): the multiplayer director's view of each player. Strength
+ * is what a player could bring to a fight (resources, planes, defenses), compared with the
+ * session's median to sort players into tiers. Threat is how aggressive they have been lately
+ * (raids launched, kills on weaker players), decaying with a half-life; it survives restarts with the
+ * player. Bounties look at threat, never at wealth alone. Provisional values.
+ * The rules that use them are in server/world/Situation.ts.
+ */
+export const SITUATION = {
+  /** Strength: resources count by these weights, each plane in the hangar by `plane`, each standing weapon by `weapon`. */
+  weights: { paper: 1, ink: 1.5, rubber: 3, plane: 40, weapon: 25 },
+  /** A newcomer: fewer than `newcomerSorties` sorties flown and below `newcomerStrength` of the median. */
+  newcomerSorties: 8,
+  newcomerStrength: 0.8,
+  /** Advanced: at least `advancedStrength` times the session's median strength, or `advancedSorties` sorties and above the median. */
+  advancedStrength: 1.6,
+  advancedSorties: 60,
+  /** Threat added per raid launched, per kill on a weaker player (strength below `weaker` of the killer's), and its half-life (seconds). */
+  raidThreat: 1,
+  weakKillThreat: 1.5,
+  weaker: 0.7,
+  halfLife: 1200,
+  /**
+   * An advanced player can't be offered a raid on a newcomer (protection from disproportionate
+   * attacks, GDD §11.3), unless that newcomer attacked them within `retaliation` seconds.
+   */
+  retaliation: 900,
+  /** An intermediate player raiding a stronger one is paid this much more per tier of difference (GDD §11.4). */
+  underdogBonus: 0.25,
+  /** Director decisions kept for the developer's debug panel. */
+  logSize: 100,
+} as const;
+
+/** v0.0.19: what a bounty asks for (plan §2C). */
+export type BountyKind = 'bomber' | 'raid' | 'installation' | 'ace';
+
+/**
+ * v0.0.19 (plan §2C, GDD §11.6): bounties. The director places one only on a fair objective, only
+ * because of aggression or demonstrated threat (never wealth), never on an offline or protected
+ * player, at most one per target and `maxOpen` in a session. The pot is shared by contribution
+ * (damage dealt, from the damage log), paid once by the server; the target and their allies get
+ * nothing from it. Provisional values. The rules that use them are in server/world/Bounties.ts.
+ */
+export const BOUNTIES = {
+  /** The pot for each kind, before the target's threat adds `perThreat` a point (capped at `maxPot`). */
+  pot: { bomber: 60, raid: 55, installation: 45, ace: 70 } as Record<BountyKind, number>,
+  perThreat: 6,
+  maxPot: 120,
+  /** What flying the bounty card itself pays on success, on top of a share of the pot. */
+  cardReward: 5,
+  /** Triggers: an active raid by a player with this much threat (bomber); this many raids by one player within `window` (raid); this many kills on weaker players within `window` (ace); this much threat on an advanced player (installation). */
+  bomberThreat: 2,
+  repeatRaids: 2,
+  streak: 3,
+  installationThreat: 3,
+  window: 1800,
+  /** A bounty lasts this long at most (seconds); a plane bounty also ends when its target lands. */
+  duration: 300,
+  /** After a bounty on a player ends, the next waits this long. */
+  targetCooldown: 600,
+  /** Open bounties in one session at once. */
+  maxOpen: 3,
+  /** Contributors who dealt less than this share of the damage get nothing (no tag-and-run). */
+  minShare: 0.1,
+  /** The defender's guaranteed share of a "prevent a raid" pot, if they contributed at all. */
+  defenderShare: 0.5,
+} as const;
+
 /** v0.0.19: the AI escort aircraft a player can buy for one sortie. */
 export type EscortKind = 'wingman' | 'guard' | 'spotter';
 export const ESCORT_ORDER: readonly EscortKind[] = ['wingman', 'guard', 'spotter'];

@@ -2,6 +2,7 @@ import { AIRCRAFT, AIRCRAFT_ORDER, type AircraftId, type ManeuverId } from '../.
 import { cleanProgress, parseDirector } from '../../src/systems/SaveGame';
 import type { AircraftRecord, ProgressRecord } from '../store/Store';
 import type { CarriedPlane, PlayerCarry } from './ServerWorld';
+import { cleanSocial } from './SocialData';
 
 /**
  * Between the store's records of what a player carries (planes, progress) and the world's
@@ -33,7 +34,7 @@ export function planesFrom(records: AircraftRecord[]): CarriedPlane[] {
 }
 
 /** The player's progress, as the world takes it. */
-export function progressFrom(record: ProgressRecord | null): Pick<PlayerCarry, 'aircraft' | 'director' | 'board' | 'stats' | 'maneuvers' | 'profile'> {
+export function progressFrom(record: ProgressRecord | null): Pick<PlayerCarry, 'aircraft' | 'director' | 'board' | 'stats' | 'maneuvers' | 'profile' | 'social'> {
   if (!record) return {};
   const stats: Record<string, number> = {};
   for (const [k, v] of Object.entries(record.stats ?? {})) if (/^[a-zA-Z]{1,32}$/.test(k) && typeof v === 'number' && Number.isFinite(v) && v >= 0) stats[k] = Math.round(v);
@@ -52,5 +53,7 @@ export function progressFrom(record: ProgressRecord | null): Pick<PlayerCarry, '
   }
   // v0.0.18: medals, records and achievements, checked field by field.
   const profile = record.profile ? cleanProgress(record.profile) : undefined;
-  return { stats, aircraft, board, maneuvers, director: parseDirector(record.director), profile };
+  // v0.0.19: threat, mutes and reputation counts, checked field by field.
+  const social = record.social ? cleanSocial(record.social) : undefined;
+  return { stats, aircraft, board, maneuvers, director: parseDirector(record.director), profile, social };
 }

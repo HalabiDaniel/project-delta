@@ -636,6 +636,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     }
     this.writePvp();
     this.writeMerit(this.world.takeMerit());
+    // v0.0.19: the director's decisions, for the developer (the log, and the admin endpoint's panel).
+    for (const d of this.world.takeDecisions()) this.log('info', `director.${d.kind}`, { text: d.text, players: d.players.join(','), at: d.at });
   }
 
   // ---- Ranks (v0.0.17) --------------------------------------------------------------------------

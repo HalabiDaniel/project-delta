@@ -1,4 +1,5 @@
-import { MISSIONS, PVP, RAIDS, type AiRole } from '../../src/config';
+import { BOUNTIES, MISSIONS, PVP, RAIDS, type AiRole } from '../../src/config';
+import type { Bounty } from './Bounties';
 import type { MissionSpec } from '../../src/missions/Mission';
 import { planeId } from '../../src/net/protocol';
 import { territoryName } from '../../src/net/World';
@@ -85,6 +86,41 @@ export function huntMission(rivalId: string, rivalName: string, rivalHome: Terri
     ordered: false,
     objectives: [{ kind: 'intercept', territoryId: rivalHome?.id ?? PVP.centre, targets: [planeId(rivalId)], count: 1, what: role }],
     codename: `Hunt for ${rivalName}`,
+  };
+}
+
+/** v0.0.19: a bounty card. Flying it pays a little; the pot is shared by everyone who contributed. */
+export function bountyMission(b: Bounty, targetHome: Territory | null, role: AiRole | 'aircraft'): MissionSpec {
+  const pot = `${b.pot} paper shared by everyone who helps`;
+  if (b.kind === 'installation' && b.installation) {
+    const i = b.installation;
+    return {
+      type: 'suppression',
+      difficulty: 'hard',
+      tier: 'hard',
+      title: `Bounty: ${b.targetName}'s ${i.name.toLowerCase()}`,
+      description: `${b.reason}. Wreck ${b.targetName}'s ${i.name.toLowerCase()} on ${territoryName(i.territoryId)}: ${pot}. Their guns will answer.`,
+      reward: BOUNTIES.cardReward,
+      bombs: 2,
+      timeLimit: BOUNTIES.duration,
+      ordered: false,
+      objectives: [{ kind: 'destroy', territoryId: i.territoryId, targets: [i.id], count: 1 }],
+      codename: `Bounty on ${b.targetName}`,
+    };
+  }
+  const what = b.kind === 'bomber' ? 'their bomber' : b.kind === 'raid' ? 'them before their bombs land' : 'them';
+  return {
+    type: 'dogfight',
+    difficulty: 'hard',
+    tier: 'hard',
+    title: `Bounty: ${b.targetName}`,
+    description: `${b.reason}. Shoot down ${what}: ${pot}.`,
+    reward: BOUNTIES.cardReward,
+    bombs: 0,
+    timeLimit: BOUNTIES.duration,
+    ordered: false,
+    objectives: [{ kind: 'intercept', territoryId: targetHome?.id ?? PVP.centre, targets: [planeId(b.target)], count: 1, what: role }],
+    codename: `Bounty on ${b.targetName}`,
   };
 }
 
