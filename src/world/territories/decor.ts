@@ -4,7 +4,7 @@ import { BASE, DEFENSES, MISSIONS, TARGETS, WORLD } from '../../config';
 import type { MaterialId } from '../../render/style';
 import { homeHeading } from '../Grid';
 import { transformPoint, type Place } from '../props/MeshBuilder';
-import { LANDMARKS, type LandmarkId } from '../props/landmarks';
+import { LANDMARK_NAMES, LANDMARKS, type LandmarkId } from '../props/landmarks';
 import type { Territory } from '../Territory';
 import { HOME_DESK, THEMES, type Detail, type Placement, type TerritoryLayout, type ThemeId } from './themes';
 
@@ -209,6 +209,14 @@ export function landmarkRadius(id: LandmarkId): number {
 const layouts = new Map<string, TerritoryLayout>();
 
 /** A territory's layout: Home Desk's hand-made one on T1, generated from its decor for the others. */
+/** v0.0.18: where a desk's landmark stands (world x, z) and what it is, or null if it has none. */
+export function landmarkSpot(t: Territory): { x: number; z: number; name: string } | null {
+  const lm = territoryLayout(t).landmark;
+  if (!lm) return null;
+  const p = frameToWorld(t, territoryFacing(t), lm.at[0], lm.at[1]);
+  return { x: p.x, z: p.z, name: LANDMARK_NAMES[lm.id] };
+}
+
 export function territoryLayout(t: Territory): TerritoryLayout {
   let layout = layouts.get(t.id);
   if (!layout) {

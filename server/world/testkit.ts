@@ -54,9 +54,12 @@ export function run(world: ServerWorld, seconds: number, controls: (id: string, 
 export function launch(world: ServerWorld, p: Pilot, aircraft: AircraftId = 'falcon'): void {
   world.command(p.id, { a: 'aircraft', id: aircraft });
   const st = p.state!;
-  for (let i = 0; i < st.offers.length; i++) {
-    st.select(i);
-    if (world.suits(p, aircraft)) break;
+  // The card already chosen if the plane suits it, else the first one it does.
+  if (!world.suits(p, aircraft)) {
+    for (let i = 0; i < st.offers.length; i++) {
+      st.select(i);
+      if (world.suits(p, aircraft)) break;
+    }
   }
   if (!world.command(p.id, { a: 'build' })) throw new Error(`can't build: ${st.phase}, paper ${p.resources.paper}`);
   run(world, buildDuration(AIRCRAFT[aircraft], st.buildKind) + 0.2);

@@ -1461,6 +1461,9 @@ export const MISSIONS = {
     shipment: 25,
     convoy: 28,
     'supply-run': 28,
+    stunt: 20,
+    'time-trial': 18,
+    discovery: 18,
   },
   /**
    * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
@@ -1490,6 +1493,9 @@ export const MISSIONS = {
     shipment: 1.1,
     convoy: 0.6,
     'supply-run': 0.8,
+    stunt: 0.6,
+    'time-trial': 0.6,
+    discovery: 0.7,
   },
   /** Mission types built around defenses need targets with at least this threat level. */
   minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1 },
@@ -1521,6 +1527,7 @@ export const MISSIONS = {
     'low-attack': { rubber: 2, ink: 4 }, suppression: { ink: 10 }, practice: { ink: 8 }, dogfight: { ink: 10 }, patrol: { ink: 8 },
     'scout-intercept': { ink: 6 }, 'bomber-intercept': { ink: 8 }, escort: { ink: 8 }, combined: { ink: 6, rubber: 2 }, 'multi-stage': { ink: 6, rubber: 2 },
     delivery: { ink: 18 }, survival: { ink: 6 }, shipment: { rubber: 3 }, convoy: { ink: 8 }, 'supply-run': { ink: 10, rubber: 3 },
+    stunt: { ink: 4 }, 'time-trial': { ink: 4 }, discovery: { rubber: 3 },
   } as Partial<Record<string, { ink?: number; rubber?: number }>>,
   /**
    * Seconds a good run spends on the job itself, on top of the flight there at the reference
@@ -1530,7 +1537,7 @@ export const MISSIONS = {
     bombing: 15, precision: 22, recon: 14, delivery: 0, return: 25, 'multi-bomb': 30, rings: 6, practice: 28,
     suppression: 30, 'danger-recon': 22, fortified: 25, 'multi-stage': 50, survival: 18, 'low-attack': 28,
     dogfight: 30, 'scout-intercept': 30, 'bomber-intercept': 25, escort: 45, patrol: 35, combined: 35,
-    shipment: 25, convoy: 30, 'supply-run': 45,
+    shipment: 25, convoy: 30, 'supply-run': 45, stunt: 14, 'time-trial': 4, discovery: 6,
   },
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
   referenceSpeed: 20,
@@ -1567,6 +1574,28 @@ export const MISSIONS = {
   /** Survival challenge: total time to spend in a defended territory's airspace. */
   survivalTime: { easy: 12, medium: 16, hard: 20 },
   survivalCeiling: 32,
+  /**
+   * v0.0.18 stunts: rings, of which `maneuverGates` must be flown through during a maneuver, and one
+   * low gate at `lowGate` metres. Time trials: a desk's fixed circuit (the same rings every time, so
+   * a record means something), its time limit = the reference flight × `trialSlack`.
+   */
+  stuntRings: { easy: 4, medium: 5, hard: 6 },
+  maneuverGates: { easy: 1, medium: 2, hard: 2 },
+  lowGate: 4.5,
+  trialRings: 6,
+  trialSlack: { easy: 1.9, medium: 1.6, hard: 1.35 },
+  /** Discovery: the airspace over a landmark to reach, and its ceiling. */
+  discoveryHalf: 10,
+  discoveryCeiling: 32,
+  /**
+   * v0.0.18 deliveries: from medium up, a delivery may carry fragile cargo (any knock over
+   * `fragileImpact` damage fails it) or heavy cargo (top speed and boost times `heavyCargo`).
+   */
+  cargoChance: { easy: 0, medium: 0.4, hard: 0.6 },
+  fragileImpact: 4,
+  heavyCargo: 0.85,
+  /** Fragile and heavy cargo pay this much more. */
+  cargoBonus: 1.25,
   /** Low-level strike: stay below this height within `lowApproachRadius` of the bullseye. */
   lowCeiling: { easy: 16, medium: 13, hard: 10 },
   lowApproachRadius: 60,
@@ -1601,6 +1630,9 @@ export const SUITABILITY = {
     shipment: { firepower: 2, payload: 2, maneuverability: 1 },
     convoy: { speed: 3, firepower: 2, durability: 1 },
     'supply-run': { firepower: 3, maneuverability: 2, durability: 1 },
+    stunt: { maneuverability: 3, speed: 1 },
+    'time-trial': { speed: 3, maneuverability: 2 },
+    discovery: { speed: 2, stealth: 1, maneuverability: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus

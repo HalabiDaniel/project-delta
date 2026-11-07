@@ -230,6 +230,9 @@ export function persistenceCases(server: () => ColyseusTestServer): void {
         const pilot = r.world.pilots.get(ann.id)!;
         // A plane on the pad (paid for), and a board to come back to.
         ann.client.send('cmd', { a: 'aircraft', id: 'dart' });
+        await eventually(() => pilot.state!.aircraft === 'dart');
+        // A card the Dart can fly (it carries no bombs).
+        for (let i = 0; i < pilot.state!.offers.length && !r.world.suits(pilot, 'dart'); i++) pilot.state!.select(i);
         ann.client.send('cmd', { a: 'build' });
         await eventually(() => pilot.state!.phase === 'ready', 4000);
         pilot.stats.kills = 2;

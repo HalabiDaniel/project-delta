@@ -22,6 +22,13 @@ export type MissionType =
   | 'escort'
   | 'patrol'
   | 'combined'
+  /**
+   * v0.0.18: a stunt course (rings, some flown during a maneuver, a low pass), a time trial round
+   * a desk's fixed circuit against the clock and the record, and a discovery flight to a landmark.
+   */
+  | 'stunt'
+  | 'time-trial'
+  | 'discovery'
   /** World events: a high-value shipment to destroy, an enemy convoy to intercept, a friendly supply run to escort. */
   | 'shipment'
   | 'convoy'
@@ -63,7 +70,7 @@ export type Medal = 'bronze' | 'silver' | 'gold';
  * target-bombed  – the bomber to intercept released its bomb.
  * escort-lost    – the friendly bomber to protect was shot down.
  */
-export type MissionFailure = 'missed' | 'out-of-time' | 'aircraft-lost' | 'abandoned' | 'target-escaped' | 'target-bombed' | 'escort-lost';
+export type MissionFailure = 'missed' | 'out-of-time' | 'aircraft-lost' | 'abandoned' | 'target-escaped' | 'target-bombed' | 'escort-lost' | 'cargo-broken';
 
 export interface Point3 {
   x: number;
@@ -95,6 +102,8 @@ export interface RingGate {
   z: number;
   yaw: number;
   radius: number;
+  /** v0.0.18 stunts: only counts when flown through during a maneuver (any the plane carries). */
+  maneuver?: boolean;
 }
 
 /**
@@ -170,6 +179,13 @@ export interface MissionSpec {
    * by the tier; more for a recovery card that pays what the player is short of).
    */
   supplies?: { ink?: number; rubber?: number };
+  /**
+   * v0.0.18 deliveries: fragile cargo fails on any hard knock (a collision or a rough landing);
+   * heavy cargo slows the plane (MISSIONS.heavyCargo) until it is delivered.
+   */
+  cargo?: 'fragile' | 'heavy';
+  /** v0.0.18: timed challenges keep a record under this key ("time-trial:T7"): the time to beat. */
+  recordKey?: string;
   /** Bombs offered for this mission; a plane carries as many as its rack holds. Missions without bombing objectives offer none. */
   bombs: number;
   /** Seconds from launch, or null for no time limit. */
@@ -335,7 +351,7 @@ export class Mission {
    * indices of objectives completed by this step. `reconRate` speeds up reconnaissance dwell
    * time (the Dart's recon bonus).
    */
-  updateFlight(prev: Point3, pos: Point3, dt: number, reconRate = 1): number[] {
+  updateFlight(prev: Point3, pos: Point3, dt: number, reconRate = 1, maneuvering = false): number[] {
     const completed: number[] = [];
     if (!this.isActive) return completed;
     this.objectives.forEach((objective, i) => {
@@ -353,7 +369,8 @@ export class Mission {
           if (insideAirspace(objective.airspace, pos)) this.progress[i] = 1;
           break;
         case 'ring':
-          if (crossesRing(objective.gate, prev, pos)) this.progress[i] = 1;
+          // v0.0.18: a maneuver gate only counts flown through during a maneuver.
+          if (crossesRing(objective.gate, prev, pos) && (!objective.gate.maneuver || maneuvering)) this.progress[i] = 1;
           break;
         case 'escape':
           if (Math.hypot(pos.x - objective.x, pos.z - objective.z) >= objective.distance) this.progress[i] = 1;

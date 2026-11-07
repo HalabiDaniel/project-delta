@@ -180,6 +180,9 @@ export const en = {
     shipment: 'High-value target',
     convoy: 'Convoy interception',
     'supply-run': 'Supply run escort',
+    stunt: 'Stunt course',
+    'time-trial': 'Time trial',
+    discovery: 'Discovery flight',
   } satisfies Record<MissionType, string>,
 
   slotKind: { defense: 'Defense slot', radar: 'Radar slot', economy: 'Economy slot', utility: 'Utility slot' } satisfies Record<SlotKind, string>,
@@ -244,6 +247,11 @@ export const en = {
       title: 'Your bomber was lost',
       why: 'The bomber you were escorting was shot down.',
       advice: 'Stay close to it and go after the fighters that turn towards it first.',
+    },
+    'cargo-broken': {
+      title: 'The cargo broke',
+      why: 'The fragile cargo took a hard knock.',
+      advice: 'Fly smooth: keep clear of props and walls, and land gently if you have to land.',
     },
   } satisfies Record<MissionFailure, { title: string; why: string; advice: string }>,
 
@@ -967,6 +975,7 @@ export const en = {
     holdOut: (where: string) => `Hold out over ${where}`,
     escape: 'Escape',
     ring: (n: number, of: number) => `Ring ${n}/${of}`,
+    trickRing: (n: number, of: number) => `Ring ${n}/${of} · maneuver`,
     bombersTarget: (where: string) => `${where} · bomber's target`,
     patrolOver: (where: string) => `Patrol over ${where}`,
     /** The objective strip's step labels. */

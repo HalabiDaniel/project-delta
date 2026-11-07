@@ -438,7 +438,7 @@ const SITUATIONAL: readonly Situational[] = ['high-value', 'alert', 'recovery', 
 const REGULAR_TYPES = MISSION_TYPES.filter((t) => !EVENT_TYPES.includes(t));
 /** History and records can also hold world events' missions. */
 const ALL_TYPES: readonly MissionType[] = [...MISSION_TYPES, ...EVENT_TYPES];
-const FAILURES: readonly MissionFailure[] = ['missed', 'out-of-time', 'aircraft-lost', 'abandoned', 'target-escaped', 'target-bombed', 'escort-lost'];
+const FAILURES: readonly MissionFailure[] = ['missed', 'out-of-time', 'aircraft-lost', 'abandoned', 'target-escaped', 'target-bombed', 'escort-lost', 'cargo-broken'];
 
 function validateRecipe(r: unknown, check: Checker, where: string): Recipe | null {
   if (!isObject(r)) return null;
@@ -590,6 +590,13 @@ function validateProgress(p: unknown, check: Checker): ProgressData {
   const streak = isObject(p.streak) ? p.streak : {};
   out.streak = { current: check.int(streak.current, 'streak.current', 0, 1e6, 0), best: check.int(streak.best, 'streak.best', 0, 1e6, 0) };
   out.clean = check.int(p.clean, 'clean', 0, 1e6, 0);
+  // v0.0.18: best times and discovered landmarks (absent in older saves).
+  if (isObject(p.times)) {
+    for (const [k, v] of Object.entries(p.times)) {
+      if (typeof k === 'string' && k.length <= 60 && typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e5) out.times[k] = v;
+    }
+  }
+  if (Array.isArray(p.discovered)) out.discovered = [...new Set(p.discovered.filter((t): t is string => typeof t === 'string' && /^T\d{1,2}$/.test(t)))];
   if (isObject(p.mastery)) {
     for (const id of AIRCRAFT_ORDER) {
       const m = p.mastery[id];

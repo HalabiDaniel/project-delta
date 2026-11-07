@@ -311,7 +311,7 @@ export class MpViews {
       modifiers: (m.spec.modifiers ?? []).map((id) => ({ id, label: DIRECTOR.modifiers[id].label, detail: DIRECTOR.modifiers[id].detail })),
       recommended: false,
       expires: null,
-      operation: null,
+      operation: card?.operation ? { ...card.operation, confirming: false } : null,
       bombs: m.spec.bombs,
       timeLimit: m.spec.timeLimit,
       threat: card?.pvp ? this.pvpThreat(card.pvp.territoryId) : threatSummary(m),
@@ -580,7 +580,7 @@ export class MpViews {
         return o.precision ? O.inkSpot(where(o.territoryId)) : O.bomb(where(o.territoryId));
       case 'recon': return O.scout(where(o.territoryId), m(o.airspace.ceiling));
       case 'reach': return O.reach(where(o.territoryId));
-      case 'ring': return V.ring(o.number, mission.objectives.length);
+      case 'ring': return o.gate.maneuver ? V.trickRing(o.number, mission.objectives.length) : V.ring(o.number, mission.objectives.length);
       case 'land': return O.land(o.territoryId);
       case 'survive': return O.hold(o.territoryId, Math.floor(mission.progress[index] * o.duration), T.units.seconds(num(o.duration)));
       case 'escape': return O.escape(o.territoryId, m(o.distance));

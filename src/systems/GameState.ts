@@ -1,7 +1,7 @@
 import { assessSuitability, bombLoad, buildDuration, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, MISSIONS, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
 import { canCarry, cycleManeuver, defaultManeuver } from '../aircraft/maneuvers';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
 import { armingFor, materialsOf, newIncomes, type Arming, type Incomes } from './Economy';
@@ -78,6 +78,8 @@ export interface SortieLog {
   /** v0.0.18: ink and rubber balls spent on the plane: materials, arming and topping up. */
   inkSpent: number;
   rubberSpent: number;
+  /** v0.0.18: maneuvers flown during the sortie (for stunt medals and achievements). */
+  maneuvers: number;
   rearms: number;
   /** Metres flown, over every take-off of the sortie. */
   distanceFlown: number;
@@ -661,6 +663,8 @@ export class GameState {
     const dealt = this.durability.damage(Math.round(amount));
     if (dealt <= 0) return { dealt: 0, destroyed: false };
     this.sortie!.damageTaken += dealt;
+    // v0.0.18: fragile cargo breaks on a hard knock (a collision or a rough landing), not on ink.
+    if (!enemy && dealt >= MISSIONS.fragileImpact && this.mission?.spec.cargo === 'fragile' && this.mission.isActive) this.failMission('cargo-broken');
     this.emit({ type: 'damaged', amount: dealt, source, health: this.durability.health });
     if (this.durability.destroyed) {
       if (enemy) this.sortie!.killedBy = by;
@@ -670,14 +674,28 @@ export class GameState {
   }
 
   /** One step of flight from `prev` to `pos`: distance flown, recon time, deliveries and rings. */
-  updateFlight(prev: Point3, pos: Point3, dt: number): void {
+  /**
+   * v0.0.18: the plane's top speed while carrying heavy cargo (MISSIONS.heavyCargo) until the
+   * delivery is made; 1 otherwise. The flight model reads it (client and server alike).
+   */
+  get cargoFactor(): number {
+    const m = this.mission;
+    return this.phase === 'flying' && m?.isActive && m.spec.cargo === 'heavy' ? MISSIONS.heavyCargo : 1;
+  }
+
+  /** v0.0.18: the plane started a maneuver (counted for stunts and achievements). */
+  recordManeuver(): void {
+    if (this.phase === 'flying' && this.sortie) this.sortie.maneuvers++;
+  }
+
+  updateFlight(prev: Point3, pos: Point3, dt: number, maneuvering = false): void {
     if (this.phase !== 'flying') return;
     const step = Math.hypot(pos.x - prev.x, pos.y - prev.y, pos.z - prev.z);
     if (this.sortie) this.sortie.distanceFlown += step;
     const mission = this.mission;
     if (!mission) return;
     const approaches = mission.objectives.map((_, i) => mission.approachState(i));
-    for (const index of mission.updateFlight(prev, pos, dt, this.plane?.traits?.reconRate ?? 1)) this.objectiveComplete(index);
+    for (const index of mission.updateFlight(prev, pos, dt, this.plane?.traits?.reconRate ?? 1, maneuvering)) this.objectiveComplete(index);
     approaches.forEach((before, index) => {
       if (before !== 'blown' && mission.approachState(index) === 'blown' && mission.isActive) this.emit({ type: 'approach-blown', index });
     });
@@ -857,7 +875,7 @@ function newSortie(aircraft: AircraftId, kind: BuildKind, paperSpent: number): S
   return {
     aircraft, kind, paperSpent, paperEarned: 0, damageDealt: 0, damageTaken: 0,
     bombsDropped: 0, bombHits: 0, shotsFired: 0, shotsHit: 0, targetsDestroyed: 0, defensesDestroyed: 0, turretsDestroyed: 0,
-    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, inkSpent: 0, rubberSpent: 0,
+    enemyShots: 0, enemyHits: 0, killedBy: null, aircraftDestroyed: 0, bombersIntercepted: 0, objectivesProtected: 0, paperLost: 0, paperOverflow: 0, inkSpent: 0, rubberSpent: 0, maneuvers: 0,
     rearms: 0, distanceFlown: 0, landings: 0, emergency: false, outcome: 'flying',
   };
 }

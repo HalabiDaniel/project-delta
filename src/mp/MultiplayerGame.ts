@@ -1586,6 +1586,7 @@ export class MultiplayerGame {
       this.maneuverQueued = false;
       // The slot as the server has it (chosen at home, locked in the air); snapshots carry it too.
       m.maneuverSlot = this.priv.garage?.maneuver ?? null;
+      m.cargoFactor = this.priv.plane?.cargoFactor ?? 1;
       const wasManeuvering = m.activeManeuver;
       this.outbox.push(frame);
       const result = this.predictor.apply(frame, this.predictionWorld());

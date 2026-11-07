@@ -42,6 +42,10 @@ export const TEMPLATES: Record<MissionType, { category: Category; weight: number
   shipment: { category: 'bombing', weight: 0 },
   convoy: { category: 'interception', weight: 0 },
   'supply-run': { category: 'escort', weight: 0 },
+  // v0.0.18: stunts and time trials are flight challenges; a discovery is a flight to a landmark.
+  stunt: { category: 'flight', weight: 0.35 },
+  'time-trial': { category: 'flight', weight: 0.35 },
+  discovery: { category: 'recon', weight: 0.4 },
 };
 
 export function categoryOf(type: MissionType): Category {

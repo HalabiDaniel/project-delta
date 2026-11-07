@@ -593,7 +593,7 @@ export function flyable(spec: Pick<MissionSpec, 'type' | 'bombs' | 'objectives'>
 }
 
 function needsTarget(type: MissionType): boolean {
-  return type !== 'rings';
+  return type !== 'rings' && type !== 'stunt';
 }
 
 function weightedPick<T extends { weight: number }>(rng: Rng, items: readonly T[]): T {

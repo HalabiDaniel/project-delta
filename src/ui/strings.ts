@@ -247,6 +247,9 @@ export const MISSION_ICONS: Record<MissionType, IconName> = {
   shipment: 'supply',
   convoy: 'bomber',
   'supply-run': 'escort',
+  stunt: 'maneuver',
+  'time-trial': 'timer',
+  discovery: 'map',
 };
 
 export const SLOT_KIND_ICONS: Record<SlotKind, IconName> = { defense: 'shield', radar: 'radar', economy: 'paper', utility: 'slot' };

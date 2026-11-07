@@ -413,6 +413,8 @@ export interface GarageDTO {
 
 export interface PlaneDTO {
   id: AircraftId;
+  /** v0.0.18: heavy cargo slows the plane by this (absent: 1), for the client's prediction. */
+  cargoFactor?: number;
   emergency: boolean;
   health: number;
   maxHealth: number;
@@ -444,6 +446,20 @@ export interface CardDTO {
   slot: 'safe' | 'balanced' | 'risky' | 'event' | 'pvp';
   slotLabel: string;
   pvp: PvpTag | null;
+  /** v0.0.18: the operation this card is a stage of (absent: none). */
+  operation?: OperationDTO;
+}
+
+/** An operation in multiplayer (v0.0.18): a short chain of sorties with a shared payout. */
+export interface OperationDTO {
+  codename: string;
+  territoryId: string;
+  stage: number;
+  stages: Array<{ label: string; status: 'done' | 'locked' | 'open'; optional: string; met: boolean | null; skipped: boolean }>;
+  bonus: number;
+  earned: number;
+  remaining: number;
+  active: boolean;
 }
 
 export interface MissionProgressDTO {

@@ -352,7 +352,11 @@ export class Game {
       ...staticContext,
       installations: layout.installations.filter((i) => defenses.get(i.id)?.alive ?? true),
       states: events?.territoryStates,
+      // v0.0.18: discovery flights go to landmarks not yet discovered first.
+      visited: discovered,
     });
+    // Kept up to date from the progress (loaded below, and after every sortie).
+    const discovered = new Set<string>();
     let state: GameState | null = null;
     const situation = (): Situation => ({
       paper: resources.paper,
@@ -381,6 +385,7 @@ export class Game {
       resources.restoreOf('rubber', saved.rubber ?? startingStock('rubber', base.capacityOf('rubber')));
       ledger.load(saved.ledger.entries, saved.ledger.totals, new Map(saved.ledger.byAircraft), new Map(saved.ledger.byType));
       progress.data = saved.progress;
+      for (const t of progress.data.discovered) discovered.add(t);
       if (saved.director) director.load(saved.director);
       else director.deal();
     } else {
@@ -1095,6 +1100,9 @@ export class Game {
     const opBefore = director.operation;
     const offer = director.offerFor(mission);
     const p = progress.sortieEnded({ mission, sortie, aircraft: plane.id, maxHealth: plane.maxHealth, recovered, operationCompleted: false });
+    // v0.0.18: a discovered landmark stops being a discovery target (the context's set is live).
+    const visited = this.missionContext().visited as Set<string> | undefined;
+    for (const t of progress.data.discovered) visited?.add(t);
     const success = mission.status === 'succeeded';
     const damageTaken = Math.min(1, sortie.damageTaken / plane.maxHealth);
     director.afterSortie(
@@ -1271,6 +1279,7 @@ export class Game {
     this.camera.setLook(controls.look());
     // The slot was chosen at home; it is locked in the air (GameState refuses changes while flying).
     plane.motion.maneuverSlot = state.maneuverSlot;
+    plane.motion.cargoFactor = state.cargoFactor;
     const wasManeuvering = plane.motion.activeManeuver;
     const result = plane.fly(
       dt,
@@ -1289,6 +1298,7 @@ export class Game {
     );
     this.maneuverQueued = false;
     if (plane.motion.activeManeuver && !wasManeuvering) {
+      state.recordManeuver();
       this.sounds.play('whoosh', { caption: false });
     }
     for (const collision of result.collisions) {
@@ -1301,7 +1311,7 @@ export class Game {
           this.steerTime += dt;
           if (this.steerTime >= STEER_SECONDS) this.tutorial.note('steered');
         }
-        state.updateFlight(plane.prevPosition, plane.position, dt);
+        state.updateFlight(plane.prevPosition, plane.position, dt, plane.motion.activeManeuver !== null);
         if (controls.held('firePrimary') && !this.paused) this.fire();
         if (state.phase === 'flying') this.camera.updateFollow(dt, plane, world.territories, this.bombCamFocus(dt));
         break;
@@ -3137,7 +3147,7 @@ export class Game {
         return o.precision ? `Ink spot ${o.territoryId}` : `Bomb ${o.territoryId}`;
       case 'recon': return `Scout ${o.territoryId} <${o.airspace.ceiling} m`;
       case 'reach': return `Reach ${o.territoryId}`;
-      case 'ring': return `Ring ${o.number}/${mission.objectives.length}`;
+      case 'ring': return `Ring ${o.number}/${mission.objectives.length}${o.gate.maneuver ? ' · maneuver' : ''}`;
       case 'land': return `Land ${o.territoryId}`;
       case 'survive': return `Hold ${o.territoryId} ${Math.floor(mission.progress[index] * o.duration)}/${o.duration}s`;
       case 'escape': return `Escape ${o.territoryId} ${o.distance} m`;
@@ -3245,6 +3255,7 @@ export class Game {
         'target-escaped': 'It got away.',
         'target-bombed': 'The bomber released its bomb.',
         'escort-lost': 'Your bomber was shot down.',
+        'cargo-broken': 'The fragile cargo broke.',
       };
       return `${why[mission.failure ?? ''] ?? 'The mission is lost.'} Land on T1 to recover the plane anyway.`;
     }
@@ -3261,7 +3272,7 @@ export class Game {
         return 'Line up on the target and right-click to drop. The ball keeps your speed, so release before you are over it.';
       case 'recon': return `Stay low over ${next.territoryId}: time only counts inside the blue zone, below ${next.airspace.ceiling} m. Mind the pencil stands.`;
       case 'reach': return `Get into ${next.territoryId}'s airspace before the clock runs out. Shift boosts.`;
-      case 'ring': return 'Fly through the orange ring. The next one lights up when you pass.';
+      case 'ring': return next.gate.maneuver ? 'A blue stunt ring: fly through it during a maneuver (Left Alt). It only counts mid-maneuver.' : 'Fly through the orange ring. The next one lights up when you pass.';
       case 'land': return 'Slow down (S), line up with T1 and descend gently.';
       case 'survive': return `Stay inside the red zone over ${next.territoryId}, below ${next.airspace.ceiling} m. Keep turning: steady flight is easy to hit.`;
       case 'escape': return `Get out past the blue line, more than ${next.distance} m from ${next.territoryId}. Fly fast and keep turning.`;
@@ -3302,6 +3313,7 @@ export class Game {
       'target-escaped': 'Failed: it got away',
       'target-bombed': 'Failed: the bomb was released',
       'escort-lost': 'Failed: your bomber was lost',
+      'cargo-broken': 'Failed: the cargo broke',
     };
     const succeeded = mission.status === 'succeeded';
     const spec = state.plane;

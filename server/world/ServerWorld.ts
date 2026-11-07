@@ -12,6 +12,7 @@ import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
 import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, ECONOMY, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
+import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
 import { overHome } from '../../src/defenses/Layout';
@@ -32,6 +33,7 @@ import {
   type DeskState,
   type OwnFlight,
   type Weapon,
+  type OperationDTO,
 } from '../../src/net/protocol';
 import { ownerOfSide, sharedWorld, territoryName, type SharedWorld } from '../../src/net/World';
 import { deskLabel, sameName } from '../../src/net/Username';
@@ -879,18 +881,21 @@ export class ServerWorld {
     const m = p.flight.model;
     // v0.0.16: the maneuver chosen at home; GameState refuses changes in the air.
     m.maneuverSlot = st.maneuverSlot;
+    m.cargoFactor = st.cargoFactor;
     if (st.phase === 'flying' && m.status === 'flying') {
       // v0.0.17: time in the air earns Merit (capped); a plane waiting on the pad never does.
       if (p.connected && !st.emergency) this.merit.fly(p.id, NET.step);
+      const wasManeuvering = m.activeManeuver;
       const result = p.flight.step(f, home, this.territories, this.solids());
       if (!result) return;
+      if (m.activeManeuver && !wasManeuvering) st.recordManeuver();
       for (const c of result.collisions) {
         this.pilotCollision(p, c);
         if (st.phase !== 'flying') return;
       }
       switch (result.outcome) {
         case 'flying':
-          st.updateFlight(m.prevPosition, m.position, NET.step);
+          st.updateFlight(m.prevPosition, m.position, NET.step, m.activeManeuver !== null);
           if (st.phase !== 'flying') return;
           if (f.fire) this.pilotFire(p);
           if (f.bomb) this.pilotBomb(p);
@@ -1789,6 +1794,10 @@ export class ServerWorld {
     });
     const damageTaken = Math.min(1, sortie.damageTaken / plane.maxHealth);
     const card = p.pvpCard(mission);
+    // v0.0.18: an operation's bonuses are keyed by the operation and stage, so a retry, a reconnect or
+    // a restart never pays them twice.
+    const opOffer = p.director?.offerFor(mission);
+    const opKey = opOffer?.operationId ? `op:${opOffer.operationId}:${opOffer.stage ?? 0}` : null;
     p.director?.afterSortie(
       mission,
       {
@@ -1798,7 +1807,11 @@ export class ServerWorld {
       },
       { success, recovered, damageTaken, time: mission.elapsed, par: mission.spec.par ?? 0, reward: success ? mission.reward : 0 },
     );
-    for (const payout of p.director?.takePayouts() ?? []) st.payBonus(payout.amount, payout.label);
+    (p.director?.takePayouts() ?? []).forEach((payout, i) => {
+      p.cause = opKey ? `${opKey}:${i}` : null;
+      st.payBonus(payout.amount, payout.label);
+      p.cause = null;
+    });
     p.result = {
       recovered, missionTitle: mission.title, status: mission.status, failure: mission.failure, reward: success ? mission.reward : 0,
       elapsed: mission.elapsed, sortie: { ...sortie }, pvp: card?.tag ?? null,
@@ -1971,8 +1984,20 @@ export class ServerWorld {
       key: this.missionKey(m),
       spec: spec as MissionSpec,
       slot,
-      slotLabel: pvp ? 'Rival' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
+      slotLabel: pvp ? 'Rival' : offer?.source === 'operation' ? 'Operation' : slot === 'safe' ? 'Safe' : slot === 'risky' ? 'High risk' : slot === 'event' ? 'World event' : 'Balanced',
       pvp: pvp?.tag ?? null,
+      operation: this.operationOf(p, offer),
+    };
+  }
+
+  /** v0.0.18: the operation a card is a stage of, for the board. */
+  private operationOf(p: Pilot, offer: ReturnType<MissionDirector['offerFor']>): OperationDTO | undefined {
+    const op = p.director?.operation;
+    if (!op || offer?.source !== 'operation' || offer.operationId !== op.id) return undefined;
+    return {
+      codename: op.codename, territoryId: op.territoryId, stage: offer.stage ?? 0,
+      stages: op.stages.map((st) => ({ label: st.label, status: st.status, optional: OPTIONAL_LABELS[st.optional.kind], met: st.optional.met, skipped: !!st.skipped })),
+      bonus: op.bonus, earned: op.earned, remaining: remainingRewards(op), active: op.status === 'active',
     };
   }
 
@@ -2019,7 +2044,7 @@ export class ServerWorld {
       },
       plane: plane
         ? {
-            id: plane.id, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
+            id: plane.id, cargoFactor: st.cargoFactor, emergency: st.emergency, health: Math.round(st.durability?.health ?? plane.maxHealth), maxHealth: plane.maxHealth,
             ammo: st.gun?.ammo ?? plane.gun.ammo, ammoMax: plane.gun.ammo, gunReady: st.gun?.canFire() ?? false,
             bombs: st.bombsLoaded, bombsMax: plane.bombs.capacity, falling: st.bombsFalling, cooldown: Math.round(st.bombCooldown * 10) / 10,
             rearm: st.rearmProgress === null ? null : Math.round(st.rearmProgress * 100) / 100,
@@ -2068,6 +2093,8 @@ function failureWord(reason: string): string {
       return 'Too late';
     case 'escort-lost':
       return 'Bomber lost';
+    case 'cargo-broken':
+      return 'Cargo broke';
     default:
       return 'Failed';
   }
