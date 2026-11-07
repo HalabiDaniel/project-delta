@@ -2,11 +2,12 @@ import { Client, type Room } from '@colyseus/sdk';
 import { Vec3 } from 'playcanvas';
 import { predictImpact } from '../../src/aircraft/Bomb';
 import { wrapAngle, yawFromDirection } from '../../src/aircraft/FlightModel';
-import { AIRCRAFT, PLANE, type AircraftId } from '../../src/config';
+import { AIRCRAFT, PLANE, type AircraftId, type BuildingKind, type EscortKind } from '../../src/config';
+import { buildingSpec, homeDefenses } from '../../src/defenses/Layout';
 import { Predictor } from '../../src/net/Prediction';
 import { CLOSE_KICKED, CLOSE_RESTARTING, CLOSE_SESSION_ENDED, CLOSE_TAKEN_OVER, NET, NEUTRAL_FRAME, PROTOCOL_VERSION, packFrames, type InputFrame, type MeDTO, type NetEvent, type OwnFlight, type UsernameDTO, type WelcomeDTO } from '../../src/net/protocol';
 import { WorldState, signedAngle } from '../../src/net/schema';
-import { sharedWorld } from '../../src/net/World';
+import { sharedWorld, sideOf } from '../../src/net/World';
 
 /** Delay and jitter applied to everything a bot sends and receives (simulated network), in ms. */
 export interface NetConditions {
@@ -79,9 +80,18 @@ export class Bot {
     readonly name: string,
     readonly aircraft: AircraftId = 'falcon',
     readonly net: NetConditions = { latency: 0, jitter: 0, stall: 0 },
-    /** hunter: dogfights. raider: takes raid cards against other players and bombs their bases. */
-    readonly role: 'hunter' | 'raider' = 'hunter',
+    /**
+     * hunter: dogfights. raider: takes raid cards against other players and bombs their bases; v0.0.19:
+     * strikes and staged raids too (in a Thug: strafe the marked structure, then bomb). helper (v0.0.19):
+     * takes cooperation cards (escort a bomber, help defend, joint attacks) when there are any.
+     */
+    readonly role: 'hunter' | 'raider' | 'helper' = 'hunter',
+    /** v0.0.19: the AI escorts it buys for every sortie (none by default). */
+    readonly escorts: EscortKind[] = [],
   ) {}
+
+  /** v0.0.19: the escorts were asked for at the desk this sortie. */
+  private escortsAsked = false;
 
   /**
    * Joins a session: `sessionId`, or the one quick join picks (as the browser's Quick join: the
@@ -324,15 +334,37 @@ export class Bot {
     switch (this.priv.phase) {
       case 'desk': {
         let plane = this.aircraft;
+        // v0.0.19: escorts for the next sortie, once per sortie.
+        if (this.escorts.length > 0 && !this.escortsAsked && JSON.stringify(this.priv.escorts?.plan ?? []) !== JSON.stringify(this.escorts)) {
+          room.send('cmd', { a: 'escorts', kinds: this.escorts });
+          this.escortsAsked = true;
+          break;
+        }
+        // v0.0.19: raiders welcome anyone to fly escort on their bombers (helpers take those cards).
+        if (this.role === 'raider' && this.priv.alliance && this.priv.alliance.welcome !== 'anyone') {
+          room.send('cmd', { a: 'coop', w: 'anyone' });
+          break;
+        }
         if (this.role === 'raider') {
-          // Wait for a raid card, pick it and a bomber.
-          const raid = (this.priv.offers ?? []).findIndex((c) => c.pvp?.kind === 'raid');
+          // Wait for a raid card (bombing, staged) or a strike, pick it and a plane for it.
+          const offers = this.priv.offers ?? [];
+          const raid = offers.findIndex((c) => c.pvp?.kind === 'raid' || c.pvp?.kind === 'strike');
           if (raid < 0) break;
           if (this.priv.selected !== raid) {
             room.send('cmd', { a: 'select', i: raid });
             break;
           }
-          plane = 'widewing';
+          const kind = offers[raid].pvp?.raid;
+          plane = kind === 'staged' || kind === 'strike' ? 'thug' : 'widewing';
+        }
+        if (this.role === 'helper') {
+          // v0.0.19: a cooperation card if there is one (escort a bomber, help defend, joint attack).
+          const offers = this.priv.offers ?? [];
+          const coop = offers.findIndex((c) => c.pvp?.kind === 'escort' || c.pvp?.kind === 'defend' || c.pvp?.kind === 'joint');
+          if (coop >= 0 && this.priv.selected !== coop) {
+            room.send('cmd', { a: 'select', i: coop });
+            break;
+          }
         }
         if (this.priv.garage?.chosen !== plane) room.send('cmd', { a: 'aircraft', id: plane });
         else room.send('cmd', { a: 'build' });
@@ -343,6 +375,7 @@ export class Bot {
         break;
       case 'debrief':
       case 'crashed':
+        this.escortsAsked = false;
         room.send('cmd', { a: 'continue' });
         break;
       case 'landed':
@@ -357,8 +390,18 @@ export class Bot {
   private controls(room: Room<unknown, WorldState>): Omit<InputFrame, 'seq'> {
     const m = this.predictor.model;
     if (m.status !== 'flying') return NEUTRAL_FRAME;
-    const bomb = this.role === 'raider' ? this.priv.mission?.spec.objectives.find((o) => o.kind === 'bomb') : undefined;
-    if (bomb && bomb.kind === 'bomb' && this.priv.progress?.status === 'active') return this.bombRun(bomb.zone.x, bomb.zone.z);
+    // v0.0.19: the objective under way (staged raids are ordered: the structure first, then the store).
+    const spec = this.role === 'raider' ? this.priv.mission?.spec : undefined;
+    const done = this.priv.progress?.progress ?? [];
+    const open = spec?.objectives.findIndex((o, i) => (done[i] ?? 0) < 1 && (o.kind === 'bomb' || o.kind === 'destroy'));
+    const next = spec && open !== undefined && open >= 0 ? spec.objectives[open] : undefined;
+    if (next && this.priv.progress?.status === 'active') {
+      if (next.kind === 'bomb') return this.bombRun(next.zone.x, next.zone.z);
+      if (next.kind === 'destroy') {
+        const at = this.installationAt(room, next.targets.find((id) => (room.state.installations.get(id)?.hp ?? 0) > 0) ?? next.targets[0]);
+        if (at) return this.strafe(at.x, at.z, at.y);
+      }
+    }
     const p = m.position;
     let tx = Math.cos(performance.now() / 9000) * 90;
     let tz = Math.sin(performance.now() / 9000) * 90;
@@ -400,6 +443,32 @@ export class Bot {
     const release = Math.hypot(hit.x - x, hit.z - z) < 3 && now - this.droppedAt > 1500;
     if (release) this.droppedAt = now;
     return { ...NEUTRAL_FRAME, mx, my, throttle: -1, bomb: release };
+  }
+
+  /** v0.0.19: low and straight at a structure, firing once lined up (a strike, a staged raid's first stage). */
+  private strafe(x: number, z: number, y: number): Omit<InputFrame, 'seq'> {
+    const m = this.predictor.model;
+    const p = m.position;
+    const d = Math.hypot(x - p.x, z - p.z);
+    const yaw = yawFromDirection(x - p.x, z - p.z);
+    const aimY = d > 40 ? 10 : y;
+    const pitch = Math.max(-0.45, Math.min(0.3, Math.atan2(aimY - p.y, Math.max(1, d))));
+    const mx = Math.max(-40, Math.min(40, wrapAngle(m.aimYaw - yaw) / PLANE.mouseSensitivity));
+    const my = Math.max(-40, Math.min(40, (m.aimPitch - pitch) / PLANE.mouseSensitivity));
+    const lined = Math.abs(wrapAngle(m.yaw - yaw)) < 0.15;
+    // Pull up before flying into it, and come round again.
+    const pull = d < 12 ? { my: Math.min(my, -30) } : {};
+    return { ...NEUTRAL_FRAME, mx, my, throttle: -1, fire: lined && d < 60, ...pull };
+  }
+
+  /** v0.0.19: where an installation stands (a player's building from its slot, or a store). */
+  private installationAt(room: Room<unknown, WorldState>, id: string): { x: number; y: number; z: number } | null {
+    const s = room.state.installations.get(id);
+    const home = shared.territories.find((t) => id.startsWith(`${t.id}-`));
+    if (!s || !home) return null;
+    const side = s.owner ? sideOf(s.owner) : 'enemy';
+    const spec = s.slot === 'store' ? homeDefenses(home, side)[0] : s.slot ? buildingSpec(home, s.slot, s.kind as BuildingKind, s.level, side) : null;
+    return spec ? { x: spec.x, y: spec.ground + 2, z: spec.z } : null;
   }
 
   private droppedAt = 0;
