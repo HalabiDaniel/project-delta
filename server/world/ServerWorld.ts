@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses, raidTargetFor } from '../../src
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, RAID_KINDS, RIVALRY, SOCIAL, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, FARMING, RAID_KINDS, RIVALRY, SOCIAL, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord, PvpKind } from '../store/Store';
@@ -64,6 +64,7 @@ import { CoopBook, type JointAttack } from './Coop';
 import { reputationOf, RivalryBook } from './Rivalry';
 import { MISCHIEF_ORDER, SocialBook, type PendingReport } from './Social';
 import { MAX_MUTES } from './SocialData';
+import { FarmWatch, type FarmFlag, type FarmKind, type Flow } from '../../src/systems/Farming';
 import { BountyBoard, type Bounty } from './Bounties';
 import { addThreat, DirectorLog, median, strengthOf, threatNow, tierGap, tierOf, weakKill, weakKillsWithin, type DirectorDecision, type PlayerSituation } from './Situation';
 import type { SocialData } from './SocialData';
@@ -221,6 +222,8 @@ export class ServerWorld {
   readonly rivalry = new RivalryBook();
   /** v0.0.19: ink marks, mischief limits and reports. */
   readonly social = new SocialBook();
+  /** v0.0.19: every reward flowing between two players, watched for farming. */
+  readonly farm = new FarmWatch();
   /** v0.0.19: how the director sees each player, worked out again every PVP_REFRESH. */
   readonly situations = new Map<string, PlayerSituation>();
   readonly pilots = new Map<string, Pilot>();
@@ -1875,10 +1878,14 @@ export class ServerWorld {
     const o = this.pilots.get(owner);
     if (o && escort) this.note(o, 'escort', `${ESCORTS.roster[escort.kind].short} down`, null, 'bad');
     if (!shooter?.state || shooter.id === owner || ESCORTS.killReward <= 0) return;
-    shooter.cause = `escort-kill:${id}`;
-    shooter.state.payBonus(ESCORTS.killReward, `Shot down ${o?.name ?? 'an'}'s escort`);
-    shooter.cause = null;
-    this.note(shooter, 'crumple', 'Escort down', `+${ESCORTS.killReward}`, 'good');
+    const reward = Math.round(ESCORTS.killReward * this.pairFactor(shooter.id, owner, 'kill'));
+    if (reward > 0) {
+      shooter.cause = `escort-kill:${id}`;
+      shooter.state.payBonus(reward, `Shot down ${o?.name ?? 'an'}'s escort`);
+      shooter.cause = null;
+    }
+    this.flow(shooter.id, owner, 'kill', Math.max(1, reward));
+    this.note(shooter, 'crumple', 'Escort down', reward > 0 ? `+${reward}` : null, 'good');
   }
 
   /** The owner's plane, for their escorts' orders. */
@@ -1941,6 +1948,7 @@ export class ServerWorld {
     if (!target?.home) return;
     if (tag.mischief === 'banner') this.social.markBanner(target.home.id, p.id, this.time);
     this.recordPvp('mischief', p.id, target.id, true);
+    this.flow(p.id, target.id, 'mischief', p.state?.mission?.reward ?? 0);
     const what = tag.mischief === 'banner' ? `inked ${target.name}'s banner` : tag.mischief === 'stunt' ? `showed off over ${target.name}'s desk` : `buzzed ${target.name}'s desk`;
     this.news(`${p.name} ${what}`, 'info');
     if (!target.social.mutes.includes(p.id)) this.note(target, 'pencil', `${p.name} ${tag.mischief === 'banner' ? 'inked your banner' : 'teased you'}`, null, 'info');
@@ -2126,9 +2134,24 @@ export class ServerWorld {
     return [...this.pilots.values()].filter((p) => p.connected && !p.leaving && p.home).length;
   }
 
-  /** Decaying rewards between a pair (v0.0.19 anti-farming); 1 until phase 8. */
-  pairFactor(_a: string, _b: string, _source: string): number {
-    return 1;
+  /** Decaying rewards between a pair (v0.0.19 anti-farming): the share of a new reward between them paid now. */
+  pairFactor(a: string, b: string, _source: string): number {
+    return this.farm.factor(a, b, this.time);
+  }
+
+  /** A reward between two players was paid: the anti-farming rules see it, and may flag the pair. */
+  private flow(earner: string, from: string, kind: FarmKind, amount: number, extra: Pick<Flow, 'cost' | 'defended'> = {}): void {
+    if (amount <= 0 || earner === from) return;
+    const flag = this.farm.record({ earner, from, kind, amount, at: this.time, ...extra });
+    if (!flag) return;
+    const a = this.pilots.get(flag.a)?.name ?? flag.a;
+    const b = this.pilots.get(flag.b)?.name ?? flag.b;
+    this.decide('farming', `Rewards between ${a} and ${b} paused for ${Math.round(FARMING.pause / 60)} min: ${flag.detail}`, [flag.a, flag.b]);
+  }
+
+  /** v0.0.19: farming flags raised since the last call, for the store (the developer's log). */
+  takeFarmFlags(): FarmFlag[] {
+    return this.farm.takeFlags();
   }
 
   /**
@@ -2208,6 +2231,7 @@ export class ServerWorld {
       p.state.payBonus(share.amount, `Bounty on ${b.targetName}`);
       p.cause = null;
       this.recordPvp('bounty', p.id, b.target, true, `${b.uid}:${p.id}`);
+      this.flow(p.id, b.target, 'bounty', share.amount);
       p.social.reputation.helps++;
       this.note(p, 'crown', 'Bounty', `+${share.amount}`, 'good');
       paid.push(`${p.name} ${share.amount}`);
@@ -2354,6 +2378,7 @@ export class ServerWorld {
       p.state.payBonus(s.amount, `Joint attack on ${j.targetName}`);
       p.cause = null;
       for (const m of j.members) if (m !== p.id) this.recordPvp('coop', p.id, m, true, `${j.uid}:${p.id}:${m}`);
+      this.flow(p.id, j.target, 'coop', s.amount);
       p.social.reputation.helps++;
       this.note(p, 'users', 'Joint attack', `+${s.amount}`, 'good');
     }
@@ -2374,6 +2399,7 @@ export class ServerWorld {
         p.state.payBonus(pay, `Escorted ${bomber.name}`);
         p.cause = null;
         this.recordPvp('coop', p.id, bomber.id, true);
+        this.flow(p.id, bomber.id, 'escort', pay);
         p.social.reputation.helps++;
         this.note(p, 'escort', `Escorted ${bomber.name}`, `+${pay}`, 'good');
       }
@@ -2399,6 +2425,7 @@ export class ServerWorld {
       p.state.payBonus(s.amount, `Helped defend ${this.pilots.get(attack.victim)?.name ?? 'a base'}`);
       p.cause = null;
       this.recordPvp('coop', p.id, attack.victim, true, `${attack.uid}:${p.id}`);
+      this.flow(p.id, attack.victim, 'coop', s.amount);
       p.social.reputation.helps++;
       this.note(p, 'users', 'Joint defense', `+${s.amount}`, 'good');
     }
@@ -2479,7 +2506,7 @@ export class ServerWorld {
     }
     // v0.0.19: a challenge won in the air pays the winner the rest of the challenge's reward.
     if (outcome === 'won' && attacker?.state) {
-      const extra = Math.max(0, RAID_KINDS.challenge.reward - (attacker.state.mission?.reward ?? 0));
+      const extra = Math.round(Math.max(0, RAID_KINDS.challenge.reward - (attacker.state.mission?.reward ?? 0)) * this.pairFactor(attacker.id, attack.victim, 'challenge'));
       if (extra > 0) {
         attacker.cause = `challenge:${attack.uid}:won`;
         attacker.state.payBonus(extra, `Won the challenge with ${victim?.name ?? 'a rival'}`);
@@ -2498,6 +2525,11 @@ export class ServerWorld {
       }
     }
     const success = outcome === 'bombed' || outcome === 'struck' || outcome === 'won' || outcome === 'declined';
+    // v0.0.19: what the raid paid between the two, for the anti-farming rules (undefended raids are a pattern).
+    if (success && attacker) {
+      const paidOut = (attacker.state?.mission?.status === 'succeeded' ? attacker.state.mission.reward : 0) + Math.max(0, RAID_KINDS.challenge.reward - (attacker.state?.mission?.reward ?? 0)) * (outcome === 'won' ? 1 : 0);
+      this.flow(attacker.id, attack.victim, attack.kind === 'challenge' ? 'challenge' : 'raid', Math.max(1, paidOut), { defended: attack.defended || attack.answered });
+    }
     const record = this.attacks.finish(attack, success, this.time);
     this.recordPvp(attack.kind === 'challenge' ? 'challenge' : 'raid', record.attacker, record.victim, record.success, record.id!);
     const reward = (attacker?.state?.mission?.status === 'succeeded' ? attacker.state.mission.reward : 0) + partial;
@@ -2551,7 +2583,8 @@ export class ServerWorld {
     const others = everyone.filter((o) => !this.peaceful(p.id, o.id));
     const offered: Array<() => void> = [];
     // A raid: on a base that may be raided now, keeping the same target while it stays valid.
-    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0 && !this.mismatch(p, o));
+    // v0.0.19: never between a pair whose rewards the anti-farming rules have paused.
+    const raidable = others.filter((o) => this.attacks.refusal(p, o, this.time, this.arrivalGrace) === null && this.attacks.repeatFactor(p.id, o.id, this.time) > 0 && !this.mismatch(p, o) && !this.farm.isPaused(p.id, o.id, this.time));
     // v0.0.19: a bounty card first, for any open bounty not on this player or an ally.
     const allies = new Set(this.alliesOf(p.id));
     const bounty = this.bounties.open.find((b) => b.target !== p.id && !allies.has(b.target) && (b.kind === 'installation' || this.pilots.get(b.target)?.flying));
@@ -2621,7 +2654,7 @@ export class ServerWorld {
     const staleRaid = victim && !current && p.pvp.some((c) => c.key.startsWith(`raid:${victim.id}#`));
     if (victim) offered.push(() => add(`raid:${victim.id}`, () => this.raidCard(p, victim), !!staleRaid));
     // A hunt: someone else is in the air.
-    const airborne = others.filter((o) => o.flying);
+    const airborne = others.filter((o) => o.flying && !this.farm.isPaused(p.id, o.id, this.time));
     const currentHunt = p.pvp.find((c) => c.tag.kind === 'hunt' && airborne.some((o) => o.id === c.tag.target));
     const prey = currentHunt ? this.pilots.get(currentHunt.tag.target)! : this.pickRival(p, airborne);
     if (prey) {
@@ -2629,7 +2662,7 @@ export class ServerWorld {
       offered.push(() => add(`hunt:${prey.id}`, () => ({ spec: huntMission(prey.id, prey.name, prey.home, role), tag: { kind: 'hunt', target: prey.id, name: prey.name, territoryId: prey.home?.id ?? null, why: this.rivalWeight(p, prey).why } })));
     }
     // v0.0.19: harmless mischief: never on an offline or new player, nor on anyone who muted you; rate-limited per target.
-    const teased = everyone.filter((o) => o.connected && !o.leaving && this.time >= o.protectUntil && this.time - o.arrivedAt >= this.arrivalGrace && !o.social.mutes.includes(p.id) && !this.social.mischiefRefusal(p.id, o.id, this.time));
+    const teased = everyone.filter((o) => !this.farm.isPaused(p.id, o.id, this.time) && o.connected && !o.leaving && this.time >= o.protectUntil && this.time - o.arrivedAt >= this.arrivalGrace && !o.social.mutes.includes(p.id) && !this.social.mischiefRefusal(p.id, o.id, this.time));
     const currentMischief = p.pvp.find((c) => c.tag.kind === 'mischief' && teased.some((o) => o.id === c.tag.target));
     const mark = currentMischief ? this.pilots.get(currentMischief.tag.target)! : teased.length > 0 ? teased[Math.floor(this.rng() * teased.length)] : null;
     if (mark) {
@@ -2840,7 +2873,7 @@ export class ServerWorld {
       const t = raidTargetFor(base, key);
       return { installationId: t.installationId, name: t.name, x: t.strike.x, z: t.strike.z };
     };
-    const factor = this.attacks.repeatFactor(p.id, victim.id, this.time) * this.underdogFactor(p, victim);
+    const factor = this.attacks.repeatFactor(p.id, victim.id, this.time) * this.underdogFactor(p, victim) * this.pairFactor(p.id, victim.id, 'raid');
     const weapons = base.network.on(home.id).filter((i) => i.isWeapon && i.alive).length;
     const round5 = (n: number) => Math.round(n / 5) * 5;
     const why = this.rivalWeight(p, victim).why;
@@ -2953,14 +2986,17 @@ export class ServerWorld {
       const kill = this.kills.last!;
       this.recordPvp('kill', k.id, p.id, true, kill.id);
       this.merit.kill(k.id, p.id, kill.id, p.name, p.protectUntil > this.time);
-      if (bounty > 0) k.state.payBonus(bounty, `Shot down ${p.name}`);
+      // v0.0.19: decayed (or paused) between a pair that keeps trading kills.
+      const paid = Math.round(bounty * this.pairFactor(k.id, p.id, 'kill'));
+      if (paid > 0) k.state.payBonus(paid, `Shot down ${p.name}`);
+      this.flow(k.id, p.id, 'kill', Math.max(1, paid), { cost });
       k.social.reputation.kills++;
       // v0.0.19: a kill on a clearly weaker player counts towards threat and the "ace" bounty.
       const ks = this.situations.get(k.id);
       const vs = this.situations.get(p.id);
       if (ks && vs && vs.strength < ks.strength * SITUATION.weaker) weakKill(k.social, this.clock(), BOUNTIES.window);
       k.state.aircraftDestroyed(p.plane, role, true);
-      this.note(k, 'crumple', `Shot down ${p.name}`, bounty > 0 ? `+${bounty}` : null, 'good');
+      this.note(k, 'crumple', `Shot down ${p.name}`, paid > 0 ? `+${paid}` : null, 'good');
     }
     // v0.0.19: a bounty on this plane is paid by contribution: everyone who damaged it this sortie.
     const bountyOn = this.bounties.on(p.id);
@@ -3005,8 +3041,9 @@ export class ServerWorld {
       this.recordPvp('assist', a.id, p.id, true);
       a.addScore(PVP.score.assist);
       if (k) this.merit.assist(a.id, p.id, this.kills.last!.id, p.name, p.protectUntil > this.time);
-      const share = Math.round(PVP.killBase * PVP.assistShare);
+      const share = Math.round(PVP.killBase * PVP.assistShare * this.pairFactor(a.id, p.id, 'assist'));
       if (!st.emergency && share > 0) a.state.payBonus(share, `Assist on ${p.name}`);
+      if (!st.emergency) this.flow(a.id, p.id, 'assist', Math.max(1, share));
       this.note(a, 'crumple', 'Assist', share > 0 && !st.emergency ? `+${share}` : null, 'good');
     }
     // Missions after this plane count it whoever brought it down.

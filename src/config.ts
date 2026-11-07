@@ -1385,6 +1385,35 @@ export const COOP = {
   jointStrength: 1.6,
 } as const;
 
+/**
+ * v0.0.19 (plan §7, GDD §8.7, §13.6): anti-farming. Every reward that flows between two players
+ * (kills, assists, raids, bounties, escorts, cooperation, challenges, mischief) is watched per pair,
+ * both directions together. Each new flow within `window` pays `decay[n]` of itself (the same idea as
+ * PVP.killRepeat and PVP.repeat, across every source), and a pattern that looks like farming pauses
+ * rewards between the pair for `pause` seconds and is logged for the developer: never an automatic
+ * ban. Provisional values. The rules are in src/systems/Farming.ts.
+ */
+export const FARMING = {
+  window: 1800,
+  /** Counted per direction (what one earns from the other), so two real rivals trading blows keep their rewards longer. */
+  decay: [1, 1, 1, 0.8, 0.6, 0.45, 0.3, 0.15, 0] as readonly number[],
+  pause: 1800,
+  /**
+   * Patterns within `window`: `kills` kills between the pair with at least `oneSided` of them going one
+   * way; `losses` expensive planes (cost ≥ `expensive`) lost by one to the other; `undefended` raids
+   * nobody defended; `bounties` bounty shares on each other; `flowCap` paper earned by one from the other.
+   */
+  kills: 6,
+  oneSided: 0.85,
+  /** …or this many kills between them whichever way they went (kills traded in turns). */
+  traded: 10,
+  losses: 4,
+  expensive: 60,
+  undefended: 3,
+  bounties: 2,
+  flowCap: 400,
+} as const;
+
 /** v0.0.19: harmless mischief on another player's desk (plan §6B, GDD §7.2). */
 export type MischiefKind = 'banner' | 'flyby' | 'stunt';
 

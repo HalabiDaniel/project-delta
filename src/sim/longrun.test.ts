@@ -42,6 +42,18 @@ describe('the long-run economy', () => {
     }
   });
 
+  it('v0.0.19: two accounts trading kills earn less than playing, and the pair is flagged and paused', () => {
+    const farmed = simulateLongRun({ players: ['steady', 'steady', 'farmer', 'farmer'], days: 2, seed: 11, ctx, homes });
+    const steady = farmed.players.filter((p) => p.profile === 'steady').map((p) => p.gainPerHour);
+    const farmers = farmed.players.filter((p) => p.profile === 'farmer');
+    for (const f of farmers) expect(f.gainPerHour).toBeLessThan(Math.min(...steady));
+    expect(farmed.flags.exploitBeatsPlay).toBe(false);
+    expect(farmed.farming.flags.length).toBeGreaterThan(0);
+    expect(farmed.farming.withheld).toBeGreaterThan(0);
+    // The raid-trading exploiters of v0.0.18 are flagged too (raids nobody defends).
+    expect(report.farming.flags.some((f) => f.reason === 'undefended' || f.reason === 'flow')).toBe(true);
+  });
+
   it('exports CSV with a row per player per day', () => {
     const csv = longRunCsv(report).trim().split('\n');
     expect(csv[0]).toMatch(/^player,profile,day/);

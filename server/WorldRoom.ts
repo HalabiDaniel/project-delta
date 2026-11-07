@@ -642,6 +642,19 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
     // v0.0.19: the director's decisions, for the developer (the log, and the admin endpoint's panel).
     for (const d of this.world.takeDecisions()) this.log('info', `director.${d.kind}`, { text: d.text, players: d.players.join(','), at: d.at });
     this.writeReports();
+    this.writeFarmFlags();
+  }
+
+  /** v0.0.19: pairs the anti-farming rules flagged, for the developer (the log and farm_flags; never a ban). */
+  private writeFarmFlags(): void {
+    const worldId = this.worldId;
+    for (const f of this.world.takeFarmFlags()) {
+      this.log('warn', 'farming.flag', { a: f.a, b: f.b, reason: f.reason, detail: f.detail });
+      if (!worldId) continue;
+      services()
+        .store.addFarmFlag({ worldId, aId: this.known.get(f.a) ?? null, bId: this.known.get(f.b) ?? null, reason: f.reason, data: { detail: f.detail, a: f.a, b: f.b, session: this.roomId } })
+        .catch((error: unknown) => this.log('error', 'farming.error', { error }));
+    }
   }
 
   // ---- Ranks (v0.0.17) --------------------------------------------------------------------------
