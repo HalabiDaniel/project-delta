@@ -102,6 +102,9 @@ export class Pilot {
   readonly aggression = new Map<string, number>();
   /** Cards against other players on the board. */
   pvp: PvpCard[] = [];
+  /** v0.0.19: when a bay bomber's bay last opened (world time), and the last "bay opening" note. */
+  bayOpenAt = -Infinity;
+  bayNoteAt = -Infinity;
   /** v0.0.19: threat, mutes and reputation counts, carried between sessions. */
   social: SocialData = emptySocial();
   /** The mission's AI aircraft still to go up, and time since launch. */

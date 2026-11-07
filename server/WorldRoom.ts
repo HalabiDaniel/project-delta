@@ -1035,6 +1035,8 @@ export class WorldRoom extends Room<{ state: WorldState; metadata: RoomMetadata 
       const phase = p.state?.phase;
       plane.bombs = phase === 'flying' || phase === 'landed' ? (p.state?.bombsLoaded ?? 0) : 0;
       plane.emergency = p.state?.emergency ?? false;
+      // v0.0.19: the Ghost's bay doors, open around a release.
+      plane.bay = !!p.state?.plane?.traits?.bay && world.time - p.bayOpenAt < 2;
       // v0.0.19: an ink splat on the plane, and who threw it.
       const ink = SocialBook.left(world.social.planeInk.get(id), world.time);
       plane.ink = ink?.seconds ?? 0;

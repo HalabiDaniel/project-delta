@@ -1179,7 +1179,12 @@ export class MultiplayerGame {
       this.noteTutorial('folded');
       this.lostPlane = null;
     }
-    if (phase === 'flying' && (before === 'ready' || before === 'building')) this.noteTutorial('launched');
+    if (phase === 'flying' && (before === 'ready' || before === 'building')) {
+      this.noteTutorial('launched');
+      // v0.0.19: placeholder engine cues for the Ghost and the Specter (final sounds: v0.0.25).
+      if (st.plane?.id === 'ghost') this.sounds.play('hush', { caption: false });
+      if (st.plane?.id === 'specter') this.sounds.play('whine', { caption: false });
+    }
     if (phase === 'landed') this.noteTutorial('landed');
     if (phase === 'debrief' && before === 'landed') this.noteTutorial('sortie-ended');
     if (phase === 'crashed' && st.plane && !this.priv.result?.sortie.emergency) this.lostPlane = st.plane.id;
@@ -1451,7 +1456,9 @@ export class MultiplayerGame {
         this.onDamage(e);
         break;
       case 'drop':
+        // v0.0.19: our own drops only come from the server for a bay bomber (the Ghost's bay can hold a release back).
         if (e.o !== this.me) this.bombs.release({ x: e.p[0], y: e.p[1], z: e.p[2] }, { x: e.v[0], y: e.v[1], z: e.v[2] }, e.kind as BombKind, true, `srv:${e.o}`);
+        else if (this.state?.plane?.traits?.bay) this.bombs.release({ x: e.p[0], y: e.p[1], z: e.p[2] }, { x: e.v[0], y: e.v[1], z: e.v[2] }, e.kind as BombKind, true, 'own');
         break;
       case 'boom': {
         const point = at(e.p);
@@ -1696,7 +1703,7 @@ export class MultiplayerGame {
   private cosmeticBomb(): void {
     const st = this.state!;
     const spec = st.plane;
-    if (!spec || this.cosmeticBombs <= 0 || st.bombCooldown > 0) return;
+    if (!spec || this.cosmeticBombs <= 0 || st.bombCooldown > 0 || spec.traits?.bay) return;
     this.cosmeticBombs--;
     const m = this.predictor.model;
     const slots = PLANE_SHAPES[spec.id].bombSlots;

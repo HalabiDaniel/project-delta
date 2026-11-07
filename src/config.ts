@@ -347,6 +347,19 @@ export interface AircraftTraits {
   stealth?: boolean;
   /** Reconnaissance dwell time counts this many times faster (recon and dangerous recon objectives). */
   reconRate?: number;
+  /**
+   * v0.0.19: an internal bomb bay (the Ghost). Opening it reveals the plane sharply (STEALTH.reveal.bay,
+   * far more than an ordinary drop), and on a raid on a player the bay opens and the defender is
+   * warned PVP.bayWarning seconds before any release counts.
+   */
+  bay?: boolean;
+  /**
+   * v0.0.19: an unarmed surveillance drone (the Specter). It can't damage anything, not even by
+   * ramming; it reveals hostile aircraft and defenses within DRONES.reveal on its pilot's mini-map and
+   * on the maps of whoever its pilot cooperates with; shooting it down pays DRONES.killReward, fixed.
+   * It can complete reconnaissance objectives.
+   */
+  drone?: boolean;
 }
 
 /** New players start with this design chosen; it is also the pattern of the free emergency plane. */
@@ -591,32 +604,33 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'swift',
     maneuvers: ['paperPivot', 'craneFlip', 'updraftRoll', 'slipRoll'],
   },
+  // v0.0.19: final role and stats. Unarmed, slow, long-winged; it sees for everyone it works with.
   specter: {
     id: 'specter',
     name: 'Specter',
     role: 'recon',
     roleLabel: 'Surveillance drone',
-    cost: 50,
-    refitCost: 10,
-    materials: { ink: 4 },
-    tagline: 'A long, quiet glider that is hard to spot. Barely armed, no bombs.',
+    cost: 35,
+    refitCost: 8,
+    tagline: 'An unarmed drone with very long wings. It sees far and shares what it sees: hostile planes and defenses show on your map, and on your partners\'.',
     flight: {
-      minSpeed: 8, cruiseSpeed: 19, maxSpeed: 28,
-      throttleAccel: 12, speedResponse: 2, pitchSpeedEffect: 7,
-      maxTurnRate: 1.15, maxPitchRate: 0.95, aimGain: 2.6, rollResponse: 4.5, pitchResponse: 4.5, maxBank: 48 * DEG,
-      boostSpeed: 10, boostResponse: 4, boostDuration: 1.2, boostCooldown: 4,
+      minSpeed: 7, cruiseSpeed: 16, maxSpeed: 24,
+      throttleAccel: 10, speedResponse: 1.8, pitchSpeedEffect: 6,
+      maxTurnRate: 1.0, maxPitchRate: 0.85, aimGain: 2.4, rollResponse: 3.6, pitchResponse: 4, maxBank: 42 * DEG,
+      boostSpeed: 8, boostResponse: 3.5, boostDuration: 1.2, boostCooldown: 4.5,
       collisionRadius: 0.8,
     },
-    maxHealth: 60,
-    gun: { barrels: 1, ammo: 30, interval: 0.2, damage: 4, speed: 60, range: 60 },
-    gunLabel: 'Light ink gun',
+    maxHealth: 45,
+    gun: { barrels: 1, ammo: 0, interval: 1, damage: 0, speed: 60, range: 1 },
+    gunLabel: 'Unarmed',
     bombs: { capacity: 0, kind: 'small' },
-    signature: 0.55,
-    hitRadius: 1.15,
+    signature: 0.7,
+    hitRadius: 1.2,
     accent: [0.6, 0.62, 0.66],
     inspiration: 'RQ-4 Global Hawk',
     shape: 'dart',
     maneuvers: ['slipRoll', 'spiralDrill', 'paperPivot'],
+    traits: { drone: true, reconRate: 2 },
   },
   lancer: {
     id: 'lancer',
@@ -645,15 +659,17 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'widewing',
     maneuvers: [],
   },
+  // v0.0.19: final role and stats. The quietest thing in the sky until its bay opens; fragile once found.
   ghost: {
     id: 'ghost',
     name: 'Ghost',
     role: 'bomber',
     roleLabel: 'Stealth bomber',
-    cost: 120,
-    refitCost: 26,
-    materials: { ink: 6, rubber: 8 },
-    tagline: 'A flying wing defenses barely notice. Four bombs, no dogfighting.',
+    cost: 130,
+    refitCost: 30,
+    materials: { ink: 8, rubber: 10 },
+    buildTime: 4.5,
+    tagline: 'A flying wing defenses barely notice, until its bay opens. Three bombs, slow and fragile once found: no dogfighting.',
     flight: {
       minSpeed: 9, cruiseSpeed: 18, maxSpeed: 27,
       throttleAccel: 9, speedResponse: 1.2, pitchSpeedEffect: 10,
@@ -661,16 +677,17 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
       boostSpeed: 10, boostResponse: 3.5, boostDuration: 1, boostCooldown: 4.5,
       collisionRadius: 1,
     },
-    maxHealth: 140,
+    maxHealth: 95,
     gun: { barrels: 1, ammo: 30, interval: 0.22, damage: 5, speed: 60, range: 60 },
     gunLabel: 'Defensive ink gun',
-    bombs: { capacity: 4, kind: 'standard' },
-    signature: 0.5,
+    bombs: { capacity: 3, kind: 'standard' },
+    signature: 0.38,
     hitRadius: 1.45,
     accent: [0.3, 0.3, 0.34],
     inspiration: 'B-2 Spirit',
     shape: 'widewing',
     maneuvers: [],
+    traits: { stealth: true, bay: true },
   },
 };
 
@@ -684,7 +701,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
  */
 export const STEALTH = {
   quiet: 0.8,
-  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2 },
+  /** v0.0.19: `bay`: the Ghost's internal bay opening (much louder than an ordinary drop). */
+  reveal: { fire: 0.35, bomb: 0.45, boost: 0.2, bay: 1.1 },
   revealTime: 3,
   maxLock: 1.8,
   visual: 28,
@@ -1066,7 +1084,7 @@ export const AI: {
    * flies the role's default above. Bombers need a bomb bay, so the Raptor only ever flies as a
    * fighter (v0.0.15).
    */
-  designs: { scout: ['dart'], fighter: ['falcon', 'raptor'], bomber: ['widewing'] },
+  designs: { scout: ['dart', 'specter'], fighter: ['falcon', 'raptor'], bomber: ['widewing', 'ghost'] },
   roleLabels: { scout: 'Scout', fighter: 'Fighter', bomber: 'Bomber' },
   skill: {
     easy: {
@@ -1262,6 +1280,8 @@ export const PVP = {
   cards: 2,
   /** Wrecked AI installations stand up again after this long (seconds). */
   aiRebuild: 120,
+  /** v0.0.19: a bay bomber on a raid on a player opens its bay (and the defender is warned) this long before any release counts. */
+  bayWarning: 6,
   /** Scoreboard points. */
   score: { kill: 10, assist: 4, raid: 15, defend: 10, mission: 5 },
   /** A player just placed on a desk can't be the target of a new raid for this long (v0.0.13, provisional). */
@@ -1412,6 +1432,20 @@ export const FARMING = {
   undefended: 3,
   bounties: 2,
   flowCap: 400,
+} as const;
+
+/**
+ * v0.0.19 (plan §8C): the Specter's rules. Its reveal shows positions only, never a lock; it doesn't
+ * stack between several Specters (the union is shown). A Specter pilot who had a bounty's target in
+ * their reveal within `creditWindow` seconds counts as a contributor worth `creditShare` of the damage
+ * dealt (once), and their reveal goes to whoever flies that bounty's card. Shooting a Specter down
+ * pays `killReward`, fixed.
+ */
+export const DRONES = {
+  reveal: 140,
+  creditShare: 0.15,
+  creditWindow: 20,
+  killReward: 5,
 } as const;
 
 /** v0.0.19: harmless mischief on another player's desk (plan §6B, GDD §7.2). */

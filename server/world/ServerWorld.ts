@@ -10,7 +10,7 @@ import { chooseRaidTarget, lossText, raidLosses, raidTargetFor } from '../../src
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, FARMING, RAID_KINDS, RIVALRY, SOCIAL, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, BOUNTIES, COOP, DEFENSES, DRONES, FARMING, RAID_KINDS, RIVALRY, SOCIAL, DESK_NAMES, ECONOMY, ESCORTS, EVENTS, SITUATION, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, TIERS, WEAPONS, type AircraftId, type ManeuverId, type RaidKind, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import { OPTIONAL_LABELS, remainingRewards } from '../../src/director/Operations';
 import type { AircraftRecord, MissionOutcome, ProgressRecord, PvpKind } from '../store/Store';
@@ -1087,7 +1087,8 @@ export class ServerWorld {
       const installation = this.network.get(c.id);
       damage = Math.round(damage * (installation ? DEFENSES.hardness[installation.spec.kind] : DEFENSES.hardness.barrier));
       const ram = Math.round(impactDamage(c.closing) * DAMAGE_RAM);
-      if (installation && ram > 0 && this.mayDamage(p, installation)) this.damageInstallation(installation, ram, p, 'ram');
+      // v0.0.19: a drone damages nothing, not even by ramming.
+      if (installation && ram > 0 && !st.plane?.traits?.drone && this.mayDamage(p, installation)) this.damageInstallation(installation, ram, p, 'ram');
     }
     if (damage <= 0) return;
     this.hurtPilot(p, damage, c.kind === 'rough-landing' ? 'landing' : 'impact', 'crash', null, p.flight.model.position);
@@ -1117,7 +1118,30 @@ export class ServerWorld {
 
   private pilotBomb(p: Pilot): void {
     const st = p.state!;
+    // v0.0.19: a bay bomber on a raid opens its bay first: the defender is warned (if not already)
+    // and no release counts until PVP.bayWarning has passed since the warning.
+    const attack = this.attacks.by(p.id);
+    if (attack && st.plane?.traits?.bay && st.canDropBomb()) {
+      if (!attack.detected) {
+        this.detect(attack, 'Bay opening');
+        st.openBay();
+        p.bayOpenAt = this.time;
+        this.note(p, 'bombload', 'Bay opening', `${PVP.bayWarning} s`, 'warn');
+        return;
+      }
+      const since = this.time - (attack.detectedAt ?? -Infinity);
+      if (since < PVP.bayWarning) {
+        st.openBay();
+        p.bayOpenAt = this.time;
+        if (this.time - p.bayNoteAt > 1) {
+          p.bayNoteAt = this.time;
+          this.note(p, 'bombload', 'Bay opening', `${Math.ceil(PVP.bayWarning - since)} s`, 'warn');
+        }
+        return;
+      }
+    }
     if (!st.dropBomb()) return;
+    if (st.plane?.traits?.bay) p.bayOpenAt = this.time;
     const spec = st.plane!;
     const m = p.flight.model;
     const slots = PLANE_SHAPES[spec.id].bombSlots;
@@ -1125,7 +1149,8 @@ export class ServerWorld {
     const at = m.toWorld(lx, ly, lz, { x: 0, y: 0, z: 0 });
     const v = m.getVelocity(this.v1);
     this.bombs.release({ owner: p.id, tag: null, strike: null, side: p.side, kind: spec.bombs.kind, clean: st.releaseClean, x: at.x, y: at.y, z: at.z, vx: v.x, vy: v.y, vz: v.z });
-    this.emit({ t: 'drop', o: p.id, p: v3(at), v: v3(v), kind: spec.bombs.kind }, { except: p.id });
+    // v0.0.19: a bay bomber's own client doesn't guess its drops (the bay may hold them back): it is told too.
+    this.emit({ t: 'drop', o: p.id, p: v3(at), v: v3(v), kind: spec.bombs.kind }, spec.traits?.bay ? {} : { except: p.id });
   }
 
   /**
@@ -1981,6 +2006,34 @@ export class ServerWorld {
   revealFor(p: Pilot): string[] {
     const out = new Set<string>();
     const friends = this.friendsOf(p);
+    // v0.0.19: what a Specter sees, flown by this player or anyone they cooperate with (or who flies
+    // the same bounty's card): hostile aircraft and defenses within DRONES.reveal. Union, never stacked.
+    const sameBounty = (() => {
+      const card = p.pvpCard(p.state?.mission ?? null);
+      const b = card?.tag.kind === 'bounty' && card.tag.bounty !== undefined ? this.bounties.get(card.tag.bounty) : undefined;
+      return b ? [...b.spotted].filter(([, at]) => this.time - at <= DRONES.creditWindow).map(([id]) => id) : [];
+    })();
+    for (const id of new Set([p.id, ...this.cooperators(p), ...sameBounty])) {
+      const s = this.pilots.get(id);
+      if (!s?.flying || !s.state?.plane?.traits?.drone) continue;
+      const sp = s.flight.model.position;
+      const near = (x: number, z: number) => Math.hypot(x - sp.x, z - sp.z) <= DRONES.reveal;
+      for (const o of this.pilots.values()) {
+        if (o === p || !o.flying || friends.includes(o.side) || this.peaceful(p.id, o.id)) continue;
+        const q = o.flight.model.position;
+        if (near(q.x, q.z)) out.add(o.plane);
+      }
+      for (const a of this.air.aircraft) {
+        if (!a.alive || a.side === p.side || friends.includes(a.side) || this.escorts.get(a.id)?.owner === p.id) continue;
+        if (near(a.position.x, a.position.z)) out.add(a.id);
+      }
+      for (const i of this.network.installations) {
+        if (!i.alive || !i.isWeapon || i.side === p.side) continue;
+        const owner = ownerOfSide(i.side);
+        if (owner && this.peaceful(p.id, owner)) continue;
+        if (near(i.spec.x, i.spec.z)) out.add(i.id);
+      }
+    }
     // v0.0.19: allies share radar contacts: what any ally's working radar sees.
     for (const id of this.alliesOf(p.id)) {
       const ally = this.pilots.get(id);
@@ -2160,6 +2213,17 @@ export class ServerWorld {
    */
   private updateBounties(): void {
     for (const b of this.bounties.expired(this.time)) this.endBounty(b, 'expired', 'time ran out');
+    // v0.0.19: Specter pilots who have a bounty's target in their reveal (not the target, nor an ally of theirs).
+    for (const b of this.bounties.open) {
+      const t = this.pilots.get(b.target);
+      if (b.kind === 'installation' || !t?.flying) continue;
+      const tp = t.flight.model.position;
+      for (const s of this.pilots.values()) {
+        if (s === t || !s.flying || !s.state?.plane?.traits?.drone || this.peaceful(s.id, t.id)) continue;
+        const sp = s.flight.model.position;
+        if (Math.hypot(sp.x - tp.x, sp.z - tp.z) <= DRONES.reveal) b.spotted.set(s.id, this.time);
+      }
+    }
     for (const b of [...this.bounties.open]) {
       const t = this.pilots.get(b.target);
       if (!t || !t.connected || t.leaving) this.endBounty(b, 'cancelled', 'target left');
@@ -2982,7 +3046,8 @@ export class ServerWorld {
       k.stats.kills++;
       k.addScore(PVP.score.kill);
       const cost = st.emergency ? 0 : plane.cost;
-      const bounty = this.kills.record(k.id, p.id, cost, st.emergency, this.time);
+      // v0.0.19: a drone pays a small fixed amount, so it is neither a free information source nor a farm.
+      const bounty = plane.traits?.drone ? (this.kills.record(k.id, p.id, 0, true, this.time), DRONES.killReward) : this.kills.record(k.id, p.id, cost, st.emergency, this.time);
       const kill = this.kills.last!;
       this.recordPvp('kill', k.id, p.id, true, kill.id);
       this.merit.kill(k.id, p.id, kill.id, p.name, p.protectUntil > this.time);
@@ -3003,6 +3068,11 @@ export class ServerWorld {
     if (bountyOn && bountyOn.kind !== 'installation' && !p.forfeit) {
       const damage = new Map<string, number>();
       for (const e of p.damageLog) damage.set(e.by, (damage.get(e.by) ?? 0) + e.amount);
+      // v0.0.19: a Specter pilot who revealed the target lately counts too (once, a fixed share).
+      const total = [...damage.values()].reduce((sum, n) => sum + n, 0);
+      for (const [spotter, at] of bountyOn.spotted) {
+        if (this.time - at <= DRONES.creditWindow && total > 0) damage.set(spotter, (damage.get(spotter) ?? 0) + total * DRONES.creditShare);
+      }
       this.payBounty(bountyOn, damage);
     }
     // v0.0.19: a joint attack on this bomber is paid by contribution between its two members.
@@ -3041,7 +3111,7 @@ export class ServerWorld {
       this.recordPvp('assist', a.id, p.id, true);
       a.addScore(PVP.score.assist);
       if (k) this.merit.assist(a.id, p.id, this.kills.last!.id, p.name, p.protectUntil > this.time);
-      const share = Math.round(PVP.killBase * PVP.assistShare * this.pairFactor(a.id, p.id, 'assist'));
+      const share = plane.traits?.drone ? 0 : Math.round(PVP.killBase * PVP.assistShare * this.pairFactor(a.id, p.id, 'assist'));
       if (!st.emergency && share > 0) a.state.payBonus(share, `Assist on ${p.name}`);
       if (!st.emergency) this.flow(a.id, p.id, 'assist', Math.max(1, share));
       this.note(a, 'crumple', 'Assist', share > 0 && !st.emergency ? `+${share}` : null, 'good');

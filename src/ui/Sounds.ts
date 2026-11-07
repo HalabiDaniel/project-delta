@@ -11,8 +11,10 @@
  * kill     – confirmation that the player shot one down.
  * whoosh   – an aircraft flashing past close by.
  * ink      – a burst of ink fire nearby.
+ * hush     – v0.0.19: the Ghost taking off: a near-silent breath (placeholder until v0.0.25's audio).
+ * whine    – v0.0.19: the Specter taking off: a high, thin drone whine (placeholder).
  */
-export type SoundName = 'spotted' | 'lock' | 'launch' | 'hit' | 'collapse' | 'pop' | 'bandit' | 'raid' | 'crumple' | 'kill' | 'whoosh' | 'ink';
+export type SoundName = 'spotted' | 'lock' | 'launch' | 'hit' | 'collapse' | 'pop' | 'bandit' | 'raid' | 'crumple' | 'kill' | 'whoosh' | 'ink' | 'hush' | 'whine';
 
 /** The combat track: a bass line and off-beat ticks at this tempo, in sixteenths. */
 const BPM = 132;
@@ -136,6 +138,13 @@ export class Sounds {
         break;
       case 'ink':
         this.burst(t, 0.05, 1800, 0.07);
+        break;
+      case 'hush':
+        this.burst(t, 0.9, 260, 0.05, 120);
+        break;
+      case 'whine':
+        this.tone(t, 2300, 2500, 0.8, 'sine', 0.035);
+        this.tone(t + 0.8, 2500, 2400, 0.6, 'sine', 0.025);
         break;
     }
   }

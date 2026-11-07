@@ -512,7 +512,8 @@ export class GameState {
     if (!this.canDropBomb()) return false;
     this.bombsLoaded--;
     this.bombsFalling++;
-    this.radar.reveal('bomb');
+    // v0.0.19: an internal bay gives the plane away far more than an ordinary drop.
+    this.radar.reveal(this.plane?.traits?.bay ? 'bay' : 'bomb');
     this.bombCooldown = BOMB.dropCooldown;
     this.sortie!.bombsDropped++;
     this.emit({ type: 'bomb-dropped', remaining: this.bombsLoaded });
@@ -698,6 +699,16 @@ export class GameState {
   signatureNow(boosting = false): number {
     if (boosting) this.radar.reveal('boost');
     return this.plane ? this.radar.valueFor(this.plane) : 1;
+  }
+
+  /** v0.0.19: the bay opens without a release yet (a raid's warning): the plane is revealed all the same. */
+  openBay(): void {
+    if (this.phase === 'flying' && this.plane?.traits?.bay) this.radar.reveal('bay');
+  }
+
+  /** v0.0.19: the plane is giving itself away right now (it fired, bombed, opened its bay or boosted lately). */
+  get revealed(): boolean {
+    return this.radar.revealed;
   }
 
   /** v0.0.18: the plane started a maneuver (counted for stunts and achievements). */

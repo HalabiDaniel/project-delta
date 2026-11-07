@@ -31,6 +31,8 @@ export interface Bounty {
   reason: string;
   /** Damage dealt towards it by each player (installation bounties; plane bounties use the damage log). */
   readonly damage: Map<string, number>;
+  /** v0.0.19: Specter pilots flying its card who had its target in their reveal, and when they last did. */
+  readonly spotted: Map<string, number>;
   status: 'open' | 'paid' | 'expired' | 'cancelled';
 }
 
@@ -69,7 +71,7 @@ export class BountyBoard {
     if (this.refusal(target, now)) return null;
     const bounty: Bounty = {
       id: this.nextId++, uid: randomUUID(), kind, target, targetName, pot: BountyBoard.pot(kind, threat), placedAt: now, expires: now + BOUNTIES.duration,
-      reason, damage: new Map(), status: 'open', ...extra,
+      reason, damage: new Map(), spotted: new Map(), status: 'open', ...extra,
     };
     this.open.push(bounty);
     return bounty;

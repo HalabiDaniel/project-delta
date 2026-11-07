@@ -124,7 +124,7 @@ describe('assessSuitability', () => {
     for (const id of ['swift', 'dart', 'falcon', 'widewing'] as const) expect(level(id, 'multi-stage')).toBe('possible');
   });
 
-  it('a rack too small for one bomb per target is the only thing that rules a plane out', () => {
+  it('a rack too small for one bomb per target (or, v0.0.19, no guns for a kill) is all that rules a plane out', () => {
     expect(level('swift', 'multi-bomb')).toBe('unsuitable');
     expect(level('lightning', 'multi-bomb', 'hard')).not.toBe('unsuitable');
     // Unconventional but possible: a bomber on a ring course, the starter on a bombing run.
@@ -136,8 +136,12 @@ describe('assessSuitability', () => {
     for (const type of MISSION_TYPES) {
       if (type === 'multi-bomb') continue;
       for (const id of AIRCRAFT_ORDER) {
-        const needsBombs = bombTargets(mission(type)) > 0;
-        if (bombless.includes(id) && needsBombs) expect(level(id, type)).toBe('unsuitable');
+        const m = mission(type);
+        const needsBombs = bombTargets(m) > 0;
+        // v0.0.19: the unarmed Specter can't shoot anything down, nor wreck anything without bombs.
+        const needsGuns = m.objectives.some((o) => o.kind === 'intercept' || (o.kind === 'destroy' && AIRCRAFT[id].bombs.capacity === 0));
+        const unarmed = AIRCRAFT[id].gun.ammo === 0;
+        if ((bombless.includes(id) && needsBombs) || (unarmed && needsGuns)) expect(level(id, type)).toBe('unsuitable');
         else expect(level(id, type)).not.toBe('unsuitable');
       }
     }
