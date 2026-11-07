@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { CAMERA, PALETTE } from '../config';
 import { STICK } from '../input/analog';
 import type { Territory } from '../world/Territory';
+import { wrapAngle } from './FlightModel';
 import { forwardFromAngles, type PlaneController } from './PlaneController';
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -19,6 +20,9 @@ export class ChaseCamera {
   private readonly wantLook = new pc.Vec3();
   private readonly dir = new pc.Vec3();
   private roll = 0;
+  /** v0.0.16: the heading the camera sits behind, and how far into the maneuver camera it is (0 → 1). */
+  private camYaw = 0;
+  private freeBlend = 0;
   /** Camera look from the controller's right stick, -1..1 each way (0 = straight behind). */
   private lookX = 0;
   private lookY = 0;
@@ -80,11 +84,19 @@ export class ChaseCamera {
     const boosting = plane.boost.active ? 1 : boostFrac;
     // Bigger planes get a little more room.
     const size = Math.abs(plane.model.shape.wingtip[0]) * plane.model.shape.scale;
-    const distance = (CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting) * (0.8 + 0.14 * size);
+    // v0.0.16: through a maneuver or a loop the nose can point straight up or the plane fly upside
+    // down, so the camera follows the heading of travel instead, level, a little further back, with
+    // the world's up kept up and the plane in the middle of the view.
+    const free = plane.motion.mode !== 'normal';
+    this.freeBlend += ((free ? 1 : 0) - this.freeBlend) * (1 - Math.exp(-(free ? 6 : 3) * dt));
+    const yawTarget = plane.motion.cameraYaw;
+    this.camYaw = this.freeBlend > 0.01 ? this.camYaw + wrapAngle(yawTarget - this.camYaw) * (1 - Math.exp(-(free ? 2.5 : 8) * dt)) : plane.yaw;
+    const distance = (CAMERA.distance + CAMERA.speedDistance * speedFrac + CAMERA.boostDistance * boosting + CAMERA.maneuverDistance * this.freeBlend) * (0.8 + 0.14 * size);
 
     // Looking around swings the camera about the plane (right on the stick looks right).
-    const looking = Math.min(1, Math.hypot(this.lookX, this.lookY));
-    forwardFromAngles(plane.yaw - this.lookX * STICK.lookYaw, plane.pitch * 0.6 - this.lookY * STICK.lookPitch, this.dir);
+    const looking = Math.max(Math.min(1, Math.hypot(this.lookX, this.lookY)), this.freeBlend);
+    const camPitch = plane.pitch * 0.6 * (1 - this.freeBlend);
+    forwardFromAngles(this.camYaw - this.lookX * STICK.lookYaw, camPitch - this.lookY * STICK.lookPitch, this.dir);
     this.wantPos.set(
       p.x - this.dir.x * distance,
       p.y - this.dir.y * distance + CAMERA.height,
@@ -109,7 +121,7 @@ export class ChaseCamera {
       this.wantPos.y += CAMERA.bombCamRise;
     }
     this.setFov(CAMERA.baseFov + CAMERA.speedFov * speedFrac + CAMERA.boostFov * boosting, dt);
-    this.move(CAMERA.followStiffness, dt, plane.roll * CAMERA.rollFollow);
+    this.move(CAMERA.followStiffness, dt, plane.roll * CAMERA.rollFollow * (1 - this.freeBlend));
   }
 
   /** Holds position and keeps watching a point (the crash site). */

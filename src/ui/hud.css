@@ -574,8 +574,27 @@ kbd.pad-hidden { display: none !important; }
 .gauge.boost .ui-bar { width: 4.2em; min-width: 0; --segs: 5; }
 .gauge.boost[data-state='active'] .ui-bar > i { background: var(--friend); }
 .gauge.boost[data-state='cooldown'] .ui-bar > i { background: var(--off); }
-/* v0.0.16's flight maneuvers (crease charges, "fast enough" marker, refusals, prompts) fill this. */
-.maneuver-slot { display: flex; align-items: center; gap: var(--s2); }
+/* v0.0.16: the maneuver slot: the move in the slot, its readiness, its key, and a note (refusal, air brake, loop). */
+.maneuver-slot { display: flex; align-items: center; gap: var(--s2); position: relative; }
+.maneuver-slot .icon { width: 1.3em; height: 1.3em; color: var(--ink-2); }
+.maneuver-slot .mv-name { font-size: var(--t-s); font-weight: 900; white-space: nowrap; }
+.maneuver-slot .ui-bar { width: 3.4em; min-width: 0; }
+.maneuver-slot[data-state='cooldown'] .ui-bar > i { background: var(--off); }
+.maneuver-slot[data-state='active'] .ui-bar > i, .maneuver-slot[data-state='loop'] .ui-bar > i { background: var(--friend); }
+.maneuver-slot[data-state='active'] .icon, .maneuver-slot[data-state='loop'] .icon { color: var(--friend); }
+.maneuver-slot[data-state='none'] { opacity: 0.55; }
+.maneuver-slot .mv-note { position: absolute; bottom: calc(100% + var(--s2)); left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.maneuver-slot .mv-note[data-tone='hostile'] { color: var(--hostile); }
+
+/* v0.0.16: the maneuver picker at home (on the pad, or landed at T1). */
+.maneuver-pick > .ui-card-body { display: flex; align-items: center; gap: var(--s2); }
+.maneuver-pick .mv-current { display: inline-flex; align-items: center; gap: var(--s2); min-width: 11em; }
+.maneuver-pick .mv-current .icon { width: 1.4em; height: 1.4em; color: var(--friend); }
+.maneuver-pick .mv-text { display: inline-flex; flex-direction: column; line-height: 1.1; }
+.maneuver-pick .mv-text small { font-size: var(--t-xs); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.maneuver-pick .mv-text b { font-size: var(--t-m); }
+.maneuver-pick .mv-next .icon { transform: scaleX(-1); }
+.maneuver-pick[data-state='disabled'] .mv-current .icon { color: var(--ink-3); }
 
 .landing > .ui-card-body { display: flex; gap: var(--s3); }
 .check { display: inline-flex; align-items: center; gap: 2px; color: var(--hostile); }

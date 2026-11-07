@@ -1,3 +1,5 @@
+import { interpolateAttitude } from '../aircraft/FlightModel';
+
 /** Where something is and how it is turned. */
 export interface Pose {
   x: number;
@@ -77,9 +79,8 @@ export class PoseBuffer {
     out.x = a.x + (b.x - a.x) * k;
     out.y = a.y + (b.y - a.y) * k;
     out.z = a.z + (b.z - a.z) * k;
-    out.yaw = a.yaw + angleDiff(a.yaw, b.yaw) * k;
-    out.pitch = a.pitch + angleDiff(a.pitch, b.pitch) * k;
-    out.roll = a.roll + angleDiff(a.roll, b.roll) * k;
+    // Along the shortest rotation: angle by angle would cut corners through a flip (v0.0.16).
+    interpolateAttitude(a, b, k, out);
     return true;
   }
 }

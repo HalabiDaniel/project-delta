@@ -48,6 +48,7 @@ import {
   HUD,
   type AlertTone,
   type DashboardView,
+  type ManeuverPickerView,
   type MissionCardView,
   type SessionView,
   type AircraftStatusView,
@@ -66,7 +67,8 @@ import {
 } from './ui/HUD';
 import { BUILDING_ICONS } from './ui/BaseHud';
 import { compass } from './ui/format';
-import { MISSION_ICONS, SAY, TIP_TEXT } from './ui/strings';
+import { MISSION_ICONS, SAY, T, TIP_TEXT } from './ui/strings';
+import { maneuverPickerView, maneuverSlotView } from './ui/maneuverView';
 import { controlLabel } from './ui/controlLabels';
 import { DEFAULT_ACCESS, normaliseAccess, type AccessSettings } from './ui/access';
 import { confirmOpen } from './ui/confirm';
@@ -204,6 +206,8 @@ export class Game {
   private lostPlane: AircraftId | null = null;
   /** Rearm and go: take off as soon as the ground crew is done. */
   private rearmThenGo = false;
+  /** v0.0.16: the Maneuver key was pressed since the last flight step. */
+  private maneuverQueued = false;
   /** Repeated scenery drawn instanced (v0.0.11). */
   instancer: Instancer | null = null;
 
@@ -357,6 +361,7 @@ export class Game {
     if (saved) {
       state.aircraft = saved.aircraft;
       for (const h of saved.hangar) state.hangar.set(h.id, { condition: h.condition, health: Math.min(h.health, AIRCRAFT[h.id].maxHealth), invested: h.invested });
+      for (const [id, man] of saved.maneuvers) state.maneuverChoice.set(id, man);
       // A plane that was in the air when the page closed is back at T1, as if it had landed.
       if (saved.inFlight && !state.hangar.has(saved.inFlight.aircraft) && saved.inFlight.health > 0) {
         state.hangar.set(saved.inFlight.aircraft, { condition: 'recovered', health: Math.min(saved.inFlight.health, AIRCRAFT[saved.inFlight.aircraft].maxHealth), invested: 0 });
@@ -398,6 +403,7 @@ export class Game {
       quickRebuild: () => game?.quickRebuild(),
       quickRepair: () => game?.quickRepair(),
       rearmAndGo: () => game?.rearmAndGo(),
+      cycleManeuver: (dir) => game?.cycleManeuver(dir),
       base: {
         selectSlot: (id) => game?.baseAction('select', id),
         choose: (kind) => game?.baseAction('choose', kind),
@@ -568,6 +574,19 @@ export class Game {
   }
 
   /** Landed at home: rearm, then take off as soon as the ground crew is done (at once if nothing is needed). */
+  /** v0.0.16: at home, the next (or previous) maneuver of the plane's set into its slot. */
+  cycleManeuver(dir: 1 | -1 = 1): void {
+    const { state } = this;
+    if (state.phase === 'flying') {
+      this.alert('maneuver', T.maneuver.locked, null, 'info', 1.6);
+      return;
+    }
+    if (state.cycleManeuver(dir)) {
+      this.sounds.play('pop', { caption: false });
+      this.requestSave();
+    }
+  }
+
   rearmAndGo(): void {
     if (this.paused || this.state.phase !== 'landed' || !this.rolledToStop) return;
     if (this.state.rearm() || this.state.rearmProgress !== null) this.rearmThenGo = true;
@@ -878,6 +897,7 @@ export class Game {
       paper: this.resources.paper,
       aircraft: state.aircraft,
       hangar,
+      maneuvers: [...state.maneuverChoice],
       inFlight: airborne ? { aircraft: state.plane!.id, health: state.durability?.health ?? 0 } : null,
       director: this.director.save(),
       progress: this.progress.data,
@@ -953,8 +973,14 @@ export class Game {
 
   // ---- Frame loop -----------------------------------------------------------------------------
 
+  /**
+   * Development (console, screenshots): game time runs at this rate; 0 freezes it. The maneuver
+   * screenshots (tools/maneuver-shots.mjs) stop a move at chosen points with it.
+   */
+  timeScale = 1;
+
   private tick(rawDt: number): void {
-    const dt = Math.min(rawDt, 0.05);
+    const dt = Math.min(rawDt, 0.05) * this.timeScale;
     this.controls.context = this.inputContext();
     this.controls.screen = `${this.state.phase}|${this.baseMode.open}|${this.paused}|${this.logbook.open}|${!!this.welcome}`;
     this.controls.update(dt);
@@ -1066,6 +1092,9 @@ export class Game {
     // The left stick steers as mouse movement would, with a little help near enemy aircraft.
     const stick = controls.stickMouse(plane.motion, PLANE, dt, plane.position, this.enemyAircraft());
     this.camera.setLook(controls.look());
+    // The slot was chosen at home; it is locked in the air (GameState refuses changes while flying).
+    plane.motion.maneuverSlot = state.maneuverSlot;
+    const wasManeuvering = plane.motion.activeManeuver;
     const result = plane.fly(
       dt,
       {
@@ -1077,10 +1106,15 @@ export class Game {
         autoLevel: !this.onApproach(),
         autopilot,
         gliding: state.outOfRange,
+        maneuver: this.maneuverQueued && !this.paused,
       },
       world.territories,
       this.solids(),
     );
+    this.maneuverQueued = false;
+    if (plane.motion.activeManeuver && !wasManeuvering) {
+      this.sounds.play('whoosh', { caption: false });
+    }
     for (const collision of result.collisions) {
       this.onCollision(collision);
       if (state.phase !== 'flying') return; // that one destroyed the plane
@@ -1922,6 +1956,11 @@ export class Game {
       case 'fireSecondary':
         if (state.phase === 'flying') this.dropBomb();
         return;
+      case 'maneuver':
+        if (state.phase === 'flying') this.maneuverQueued = true;
+        return;
+      case 'maneuverNext':
+        return this.cycleManeuver(1);
       case 'confirm':
         if (device === 'gamepad') return this.padConfirm();
         // Enter at the end of a landing asks with the confirm dialog first (Enter again confirms).
@@ -2292,10 +2331,12 @@ export class Game {
             altitude: plane.position.y,
             boost: { state: plane.boost.state, level: plane.boost.level },
             autopilot: this.boundary.state === 'autopilot',
+            maneuver: maneuverSlotView(plane.motion),
           }
         : null,
       aircraft: this.aircraftStatus(),
       ground: this.groundView(),
+      maneuverPicker: this.maneuverPicker(baseOpen),
       landing,
       boundary: { state: this.boundary.state, countdown: this.boundary.countdown },
       result: this.result(),
@@ -2319,6 +2360,15 @@ export class Game {
       tutorial: this.tutorial.view(tutorialContext),
       dashboard: choosing && !baseOpen ? this.dashboardView(buildCost, kind) : null,
     };
+  }
+
+  /** v0.0.16: the maneuver picker, at home whenever a plane is chosen, on the pad or stopped after landing. */
+  private maneuverPicker(baseOpen: boolean): ManeuverPickerView | null {
+    const { state } = this;
+    if (baseOpen || this.paused) return null;
+    const home = state.phase === 'desk' || state.phase === 'building' || state.phase === 'ready' || (state.phase === 'landed' && this.rolledToStop);
+    if (!home) return null;
+    return maneuverPickerView(state.maneuverSpec, state.maneuverSlot, true);
   }
 
   /** The home dashboard at the desk. */

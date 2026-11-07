@@ -1,6 +1,6 @@
-import { AIRCRAFT, LANDING, STARTER_AIRCRAFT } from '../config';
+import { AIRCRAFT, LANDING, MANEUVERS, STARTER_AIRCRAFT } from '../config';
 import { bind } from '../input/bindings';
-import { attrs, bar, button, card, glyph, pips, tooltipAttrs } from './components';
+import { attrs, bar, button, card, glyph, iconButton, pips, tooltipAttrs } from './components';
 import { attr, bindButton, esc, text, toggle, width } from './dom';
 import { clock, count, fixed, fmt, level, metres, num, paper, pct } from './format';
 import { icon, ICON_NAMES } from './icons';
@@ -27,7 +27,7 @@ export class PlaneHud {
 
   constructor(
     zones: { tr?: HTMLElement; bl: HTMLElement; bc: HTMLElement; br: HTMLElement; centre: HTMLElement },
-    actions: { build: () => void; launch: () => void; rearm: () => void; takeOff: () => void; endSortie: () => void; base: () => void; rearmAndGo?: () => void },
+    actions: { build: () => void; launch: () => void; rearm: () => void; takeOff: () => void; endSortie: () => void; base: () => void; rearmAndGo?: () => void; cycleManeuver?: (dir: 1 | -1) => void },
   ) {
     const add = (host: HTMLElement, html: string): HTMLElement => {
       host.insertAdjacentHTML('beforeend', html);
@@ -58,11 +58,21 @@ export class PlaneHud {
         <div class="gauge boost" data-p="boost" ${tip(ICON_NAMES.boost)}>${icon('boost')}${bar({ value: 1, label: ICON_NAMES.boost, kind: 'boost', attrs: { 'data-p': 'boost-bar' } })}${glyph(bind('boost'), { className: 'hint-key' })}</div>
         <div class="maneuver-slot" data-p="maneuvers" hidden></div>`,
     }));
-    // Extension point for v0.0.16 (flight maneuvers): crease charges, the "fast enough" marker,
-    // refusal reasons and contextual prompts go in this slot beside the boost meter, built from
-    // the components (pips, chip, glyph). It is empty and hidden until then; filling it needs no
-    // layout change (the instruments card is a flex row and grows to fit).
+    // v0.0.16: the maneuver slot beside the boost meter: the move in the slot, how ready it is, its
+    // key, and why a press did nothing (or that the air brake is open, or a loop is on).
     this.el.maneuvers = this.el.instruments.querySelector<HTMLElement>('[data-p="maneuvers"]')!;
+    this.el.maneuvers.innerHTML = `${icon('maneuver')}<b class="mv-name" data-p="mv-name"></b>${bar({ value: 1, label: T.maneuver.slot, kind: 'boost', size: 'mini', attrs: { 'data-p': 'mv-bar' } })}${glyph(bind('maneuver'), { className: 'hint-key' })}<span class="mv-note ui-chip" data-p="mv-note" hidden></span>`;
+    for (const n of this.el.maneuvers.querySelectorAll<HTMLElement>('[data-p]')) this.el[n.dataset.p!] = n;
+    // v0.0.16: choosing the maneuver for the slot, at home before take-off (on the pad, or landed).
+    this.el.picker = add(zones.bc, card({
+      className: 'maneuver-pick', label: T.maneuver.slot, fold: false,
+      bodyHtml: /* html */ `
+        ${iconButton({ icon: 'back', name: T.maneuver.prev, className: 'mv-prev', attrs: { 'data-p': 'mv-prev' } })}
+        <span class="mv-current" data-p="mv-current">${icon('maneuver')}<span class="mv-text"><small>${esc(T.maneuver.slot)}</small><b data-p="mv-pick-name"></b></span><em class="num" data-p="mv-of"></em></span>
+        ${iconButton({ icon: 'back', name: T.maneuver.next, className: 'mv-next', key: bind('maneuverNext'), attrs: { 'data-p': 'mv-next' } })}`,
+    }));
+    bindButton(this.el['mv-prev'], () => actions.cycleManeuver?.(-1));
+    bindButton(this.el['mv-next'], () => actions.cycleManeuver?.(1));
     this.el.ground = add(zones.bc, card({
       className: 'ground', label: ICON_NAMES.home, fold: false,
       bodyHtml: [
@@ -158,6 +168,30 @@ export class PlaneHud {
       text(this.el.alt, count(f.altitude));
       attr(this.el.boost, 'data-state', f.boost.state);
       width(this.el['boost-bar'].firstElementChild as HTMLElement, f.boost.level);
+    }
+    const mv = flying ? f?.maneuver : undefined;
+    toggle(this.el.maneuvers, !!mv);
+    if (mv) {
+      attr(this.el.maneuvers, 'data-state', mv.state);
+      text(this.el['mv-name'], mv.name);
+      attr(this.el.maneuvers, 'data-tip', mv.id ? MANEUVERS[mv.id].summary : T.maneuver.noneTip);
+      width(this.el['mv-bar'].firstElementChild as HTMLElement, mv.state === 'none' ? 0 : mv.readiness);
+      const note = mv.refusal ?? (mv.state === 'loop' ? T.maneuver.loop : mv.airbrake ? T.maneuver.airbrake : null);
+      toggle(this.el['mv-note'], note !== null);
+      text(this.el['mv-note'], note ?? '');
+      attr(this.el['mv-note'], 'data-tone', mv.refusal ? 'hostile' : 'friend');
+    }
+
+    const pick = v.maneuverPicker ?? null;
+    toggle(this.el.picker, pick !== null && !v.paused && !v.baseMode);
+    if (pick) {
+      const cur = pick.current;
+      text(this.el['mv-pick-name'], cur ? cur.name : T.maneuver.none);
+      text(this.el['mv-of'], cur && pick.count > 1 ? T.maneuver.of(pick.index + 1, pick.count) : '');
+      attr(this.el["mv-current"], "data-tip", cur ? T.maneuver.pickInfo(cur.summary, cur.inspiredBy) : T.maneuver.noneTip);
+      attr(this.el.picker, 'data-state', cur ? 'default' : 'disabled');
+      (this.el['mv-prev'] as HTMLButtonElement).disabled = !pick.canChange;
+      (this.el['mv-next'] as HTMLButtonElement).disabled = !pick.canChange;
     }
 
     const l = v.landing;

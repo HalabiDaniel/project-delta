@@ -53,6 +53,9 @@ export const KEY_TO_PAD: Readonly<Record<string, string>> = {
   L: '{view}',
   Tab: '{view}',
   Shift: '{rb}',
+  // v0.0.16: the maneuver in flight, changing it at home.
+  Alt: '{south}',
+  T: '{rs}',
   LMB: '{rt}',
   RMB: '{lt}',
   // Key caps that are words come from the dictionary, so a translation keeps working.
@@ -143,6 +146,8 @@ export function padControlLabels(family: PadFamily): Partial<Record<ControlActio
     fire: p('firePrimary'),
     bomb: p('fireSecondary'),
     boost: p('boost'),
+    maneuver: p('maneuver'),
+    maneuverPick: p('maneuverNext'),
     throttle: `${p('modifier')} + left stick ↕`,
     bank: `${p('modifier')} + left stick ↔`,
     rearm: p('service'),

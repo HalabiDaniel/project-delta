@@ -11,6 +11,8 @@ const LOCK_REQUEST_CAP_MS = 500;
 const GAME_KEYS = new Set([
   'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyR', 'KeyQ', 'KeyE', 'KeyM', 'Escape', 'Enter', 'NumpadEnter',
   'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyL', 'Backquote',
+  // v0.0.16: Left Alt flies the maneuver, T changes it at the pad.
+  'AltLeft', 'KeyT',
   // B base management, H key hints, U upgrade, Delete remove; 0–7 pick mission cards or base slots.
   'KeyB', 'KeyH', 'KeyU', 'Delete',
   // Multiplayer: Z / C / V emotes, Tab the scoreboard.
@@ -50,10 +52,15 @@ export class Input {
       // Keys typed into a form control (the developer panel's) are not for the game.
       if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scrolling, button activation or focus moves
+      if (e.code === 'AltLeft') e.preventDefault(); // no browser menu bar
       this.held.add(e.code);
       if (!e.repeat || REPEATING_KEYS.has(e.code)) for (const handler of this.keyHandlers) handler(e.code);
     });
-    window.addEventListener('keyup', (e) => this.held.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      // Releasing Alt alone opens the menu bar in some browsers (Firefox, Edge on Windows).
+      if (e.code === 'AltLeft') e.preventDefault();
+      this.held.delete(e.code);
+    });
     window.addEventListener('blur', () => {
       this.held.clear();
       this.buttons.clear();

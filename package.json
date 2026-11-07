@@ -1,8 +1,8 @@
 {
   "name": "paper-air-wars",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "private": true,
-  "description": "paperwars.io v0.0.15 - HUD and UI revamp",
+  "description": "paperwars.io v0.0.16 - flight maneuvers",
   "type": "module",
   "scripts": {
     "dev": "vite",

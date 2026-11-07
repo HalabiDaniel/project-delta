@@ -1,4 +1,4 @@
-import { AIRCRAFT_ORDER, BASE, SESSION, type AircraftId, type BuildingKind } from '../config';
+import { AIRCRAFT_ORDER, BASE, MANEUVER_ORDER, SESSION, type AircraftId, type BuildingKind, type ManeuverId } from '../config';
 import type { BaseSave } from '../base/Base';
 import type { RaidReport } from '../base/Raids';
 import type { MissionFailure, MissionSpec, MissionStatus } from '../missions/Mission';
@@ -187,9 +187,11 @@ export interface InputFrame {
   fire: boolean;
   /** A bomb release was asked for during this step. */
   bomb: boolean;
+  /** v0.0.16: the Maneuver key was pressed during this step (absent: no). */
+  maneuver?: boolean;
 }
 
-export const NEUTRAL_FRAME: Omit<InputFrame, 'seq'> = { mx: 0, my: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, fire: false, bomb: false };
+export const NEUTRAL_FRAME: Omit<InputFrame, 'seq'> = { mx: 0, my: 0, throttle: 0, bank: 0, boost: false, autoLevel: true, fire: false, bomb: false, maneuver: false };
 
 /** Mouse movement per step is clamped to this (a frame can't turn the plane round). */
 const MAX_MOUSE = 400;
@@ -208,7 +210,7 @@ export function packFrames(frames: readonly InputFrame[]): number[] {
   const out: number[] = [];
   for (const f of frames) {
     const flags =
-      axisBits(f.throttle) | (axisBits(f.bank) << 2) | (f.boost ? 16 : 0) | (f.autoLevel ? 32 : 0) | (f.fire ? 64 : 0) | (f.bomb ? 128 : 0);
+      axisBits(f.throttle) | (axisBits(f.bank) << 2) | (f.boost ? 16 : 0) | (f.autoLevel ? 32 : 0) | (f.fire ? 64 : 0) | (f.bomb ? 128 : 0) | (f.maneuver ? 256 : 0);
     out.push(f.seq, Math.round(f.mx * 10) / 10, Math.round(f.my * 10) / 10, flags);
   }
   return out;
@@ -220,7 +222,7 @@ export function unpackFrames(data: unknown): InputFrame[] {
   const frames: InputFrame[] = [];
   for (let i = 0; i < data.length; i += FIELDS) {
     const [seq, mx, my, flags] = data.slice(i, i + FIELDS);
-    if (!Number.isInteger(seq) || seq < 0 || !Number.isFinite(mx) || !Number.isFinite(my) || !Number.isInteger(flags) || flags < 0 || flags > 255) continue;
+    if (!Number.isInteger(seq) || seq < 0 || !Number.isFinite(mx) || !Number.isFinite(my) || !Number.isInteger(flags) || flags < 0 || flags > 511) continue;
     frames.push({
       seq,
       mx: clamp(mx, -MAX_MOUSE, MAX_MOUSE),
@@ -231,6 +233,7 @@ export function unpackFrames(data: unknown): InputFrame[] {
       autoLevel: (flags & 32) !== 0,
       fire: (flags & 64) !== 0,
       bomb: (flags & 128) !== 0,
+      maneuver: (flags & 256) !== 0,
     });
   }
   return frames;
@@ -242,6 +245,8 @@ export function unpackFrames(data: unknown): InputFrame[] {
 export type Command =
   | { a: 'select'; i: number }
   | { a: 'aircraft'; id: AircraftId }
+  /** v0.0.16: put this maneuver in the slot (at home only; the server checks the plane carries it). */
+  | { a: 'maneuver'; id: ManeuverId }
   | { a: 'build' }
   | { a: 'launch' }
   | { a: 'rearm' }
@@ -267,6 +272,8 @@ export function parseCommand(raw: unknown): Command | null {
       return Number.isInteger(c.i) && (c.i as number) >= 0 && (c.i as number) < 16 ? { a: 'select', i: c.i as number } : null;
     case 'aircraft':
       return AIRCRAFT_ORDER.includes(c.id as AircraftId) ? { a: 'aircraft', id: c.id as AircraftId } : null;
+    case 'maneuver':
+      return MANEUVER_ORDER.includes(c.id as ManeuverId) ? { a: 'maneuver', id: c.id as ManeuverId } : null;
     case 'build':
     case 'launch':
     case 'rearm':
@@ -357,6 +364,8 @@ export interface EconomyDTO {
 
 export interface GarageDTO {
   chosen: AircraftId;
+  /** v0.0.16: the maneuver in the slot of the plane on the pad or in the air (else the chosen design's); null: none. */
+  maneuver?: ManeuverId | null;
   hangar: Array<{ id: AircraftId; condition: 'ready' | 'recovered'; health: number }>;
   costs: Record<AircraftId, { kind: BuildKind; cost: number }>;
   emergency: boolean;

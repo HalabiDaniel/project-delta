@@ -18,11 +18,14 @@ import type { AircraftMarkerView, AirView } from '../ui/AirHud';
 import { BUILDING_ICONS } from '../ui/BaseHud';
 import { compass, count, fixed, km, num, paper, seconds } from '../ui/format';
 import { T } from '../ui/strings';
+import { maneuverPickerView, maneuverSlotView } from '../ui/maneuverView';
+import type { GamePhase } from '../systems/GameState';
 import type { GarageView } from '../ui/Garage';
 import type {
   AircraftStatusView,
   GroundView,
   HudView,
+  ManeuverPickerView,
   MissionCardView,
   ObjectiveView,
   RaidAlertView,
@@ -221,10 +224,12 @@ export class MpViews {
             altitude: m.position.y,
             boost: { state: m.boost.state, level: m.boost.level },
             autopilot: g.predictor.flight.boundary.state === 'autopilot',
+            maneuver: maneuverSlotView(m),
           }
         : null,
       aircraft: this.aircraftStatus(),
       ground: this.groundView(),
+      maneuverPicker: this.maneuverPicker(phase, baseOpen),
       landing,
       boundary: { state: flying ? g.predictor.flight.boundary.state : 'inside', countdown: g.predictor.flight.boundary.countdown },
       result: this.result(),
@@ -373,6 +378,15 @@ export class MpViews {
       },
       airborne: st.phase === 'flying',
     };
+  }
+
+  /** v0.0.16: the maneuver picker at home: on the pad, or stopped after landing. */
+  private maneuverPicker(phase: GamePhase | undefined, baseOpen: boolean): ManeuverPickerView | null {
+    const g = this.g;
+    if (!phase || baseOpen || g.paused) return null;
+    const home = phase === 'desk' || phase === 'building' || phase === 'ready' || (phase === 'landed' && !!g.priv.plane?.stopped);
+    if (!home) return null;
+    return maneuverPickerView(g.maneuverDesign, g.priv.garage?.maneuver ?? null, true);
   }
 
   private groundView(): GroundView | null {

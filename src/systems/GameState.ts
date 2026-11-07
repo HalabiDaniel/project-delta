@@ -1,7 +1,8 @@
 import { assessSuitability, bombLoad, buildDuration, type Suitability } from '../aircraft/Aircraft';
 import { Durability, type DamageSource } from '../combat/Damage';
 import { Gun } from '../combat/Gun';
-import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BOMB, ECONOMY, PLANE, RAIDS, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type AiRole, type ManeuverId } from '../config';
+import { canCarry, cycleManeuver, defaultManeuver } from '../aircraft/maneuvers';
 import type { Mission, MissionFailure, Objective, Point3 } from '../missions/Mission';
 import { HomeIncome } from './HomeIncome';
 import type { ResourceManager } from './ResourceManager';
@@ -106,6 +107,7 @@ export function emergencyPlane(): AircraftSpec {
 
 export type GameEvent =
   | { type: 'aircraft-selected'; aircraft: AircraftId }
+  | { type: 'maneuver-chosen'; aircraft: AircraftId; maneuver: ManeuverId }
   | { type: 'stowed'; aircraft: AircraftId }
   | { type: 'built'; cost: number; kind: BuildKind; aircraft: AircraftId }
   | { type: 'build-refused'; cost: number; reason: 'paper' | 'incompatible'; detail: string }
@@ -181,6 +183,11 @@ export class GameState {
   /** The design chosen in the garage. It stays chosen from one sortie to the next. */
   aircraft: AircraftId = STARTER_AIRCRAFT;
   readonly hangar = new Map<AircraftId, HangarPlane>();
+  /**
+   * v0.0.16: the maneuver chosen for each design's slot (designs left out fly their first one).
+   * It is chosen at home, before each take-off, and locked while the plane is in the air.
+   */
+  readonly maneuverChoice = new Map<AircraftId, ManeuverId>();
   /** The plane on the pad, in the air or just landed; null at the desk. */
   plane: AircraftSpec | null = null;
   durability: Durability | null = null;
@@ -324,6 +331,38 @@ export class GameState {
     this.aircraft = id;
     this.emit({ type: 'aircraft-selected', aircraft: id });
     return true;
+  }
+
+  /** The design whose maneuver slot is being set or flown: the plane on the pad or in the air, else the garage's choice. */
+  get maneuverSpec(): AircraftSpec {
+    return this.plane ?? this.chosen;
+  }
+
+  /** The maneuver in the slot of the plane on the pad or in the air (or the garage's choice); null for bombers. */
+  get maneuverSlot(): ManeuverId | null {
+    const spec = this.maneuverSpec;
+    return defaultManeuver(spec, this.maneuverChoice.get(spec.id));
+  }
+
+  /** The slot can be changed at home only: never in the air. */
+  canChangeManeuver(): boolean {
+    return this.phase !== 'flying' && this.maneuverSpec.maneuvers.length > 1;
+  }
+
+  /** Puts a maneuver in the slot. Refused in the air, or if the design cannot carry it. */
+  chooseManeuver(id: ManeuverId): boolean {
+    const spec = this.maneuverSpec;
+    if (this.phase === 'flying' || !canCarry(spec, id) || id === this.maneuverSlot) return false;
+    this.maneuverChoice.set(spec.id, id);
+    this.emit({ type: 'maneuver-chosen', aircraft: spec.id, maneuver: id });
+    return true;
+  }
+
+  /** The next (or previous) maneuver of the design's set into the slot. */
+  cycleManeuver(dir: 1 | -1 = 1): boolean {
+    if (!this.canChangeManeuver()) return false;
+    const next = cycleManeuver(this.maneuverSpec, this.maneuverSlot, dir);
+    return next !== null && this.chooseManeuver(next);
   }
 
   /** ready → desk: the plane on the pad goes into the hangar, ready to fly, with what was paid for it. */

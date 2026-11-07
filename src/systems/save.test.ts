@@ -34,6 +34,7 @@ function sample(): SaveData {
     paper: 137,
     aircraft: 'swift',
     hangar: [{ id: 'falcon', condition: 'recovered', health: 64, invested: 0 }],
+    maneuvers: [['falcon', 'paperHang'], ['dart', 'spiralDrill']],
     inFlight: { aircraft: 'swift', health: 80 },
     director: d.save(),
     progress,

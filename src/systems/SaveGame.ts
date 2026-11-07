@@ -1,7 +1,7 @@
 import { parseTutorial, type TutorialRecord } from '../progress/Tutorial';
 import { normaliseAccess, type AccessSettings } from '../ui/access';
 import { emptyBaseStats, type BaseSave, type BaseStats } from '../base/Base';
-import { AIRCRAFT, AIRCRAFT_ORDER, BASE, STARTER_AIRCRAFT, DEFENSES, DIRECTOR, ECONOMY, TIER_ORDER, type AircraftId, type BuildingKind, type Tier } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, BASE, STARTER_AIRCRAFT, DEFENSES, DIRECTOR, ECONOMY, MANEUVER_ORDER, TIER_ORDER, type AircraftId, type BuildingKind, type ManeuverId, type Tier } from '../config';
 import type { DirectorState, HistoryEntry, HistoryKind, OfferSource, Recipe, Slot } from '../director/MissionDirector';
 import type { Operation, OperationStage, OperationTemplate, OptionalKind } from '../director/Operations';
 import type { MissionRecord } from '../director/Performance';
@@ -32,6 +32,8 @@ export interface SaveData {
   aircraft: AircraftId;
   /** Planes waiting at home: the player's saved loadouts. */
   hangar: HangarSave[];
+  /** v0.0.16: the maneuver chosen for each design's slot (absent in older saves: the defaults). */
+  maneuvers: Array<[AircraftId, ManeuverId]>;
   /** A plane that was in the air when the page closed: it comes back to T1 as a recovered plane. */
   inFlight: { aircraft: AircraftId; health: number } | null;
   director: DirectorState | null;
@@ -336,6 +338,12 @@ export function validateSave(raw: unknown, problems: string[] = []): SaveData | 
         invested: check.int(h.invested, `hangar[${i}].invested`, 0, 1000, 0),
       };
     }).filter((h): h is HangarSave => h !== null && h.id !== null).filter((h, i, all) => all.findIndex((x) => x.id === h.id) === i),
+    maneuvers: check.list(raw.maneuvers, 'maneuvers', (m) => {
+      if (!Array.isArray(m) || m.length !== 2) return null;
+      const id = check.oneOf(m[0], 'maneuvers aircraft', AIRCRAFT_ORDER, null);
+      const man = check.oneOf(m[1], 'maneuvers maneuver', MANEUVER_ORDER, null);
+      return id && man && AIRCRAFT[id].maneuvers.includes(man) ? ([id, man] as [AircraftId, ManeuverId]) : null;
+    }).filter((m): m is [AircraftId, ManeuverId] => m !== null),
     inFlight: isObject(raw.inFlight)
       ? (() => {
           const id = check.oneOf(raw.inFlight.aircraft, 'inFlight.aircraft', AIRCRAFT_ORDER, null);

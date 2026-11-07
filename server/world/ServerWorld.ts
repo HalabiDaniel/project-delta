@@ -10,7 +10,7 @@ import { chooseRaidTarget } from '../../src/base/Raids';
 import { distanceToShape, footprint, type Collider } from '../../src/combat/Collision';
 import { blastDamage, impactDamage, roughLandingDamage, type DamageSource } from '../../src/combat/Damage';
 import { isRocket, Ordnance, type AircraftTarget, type FireEvent, type Shot } from '../../src/combat/Ordnance';
-import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, WEAPONS, type AircraftId, type Side } from '../../src/config';
+import { AI, AIRCRAFT, AIRCRAFT_ORDER, BASE, BOMB, DEFENSES, DESK_NAMES, PLAYER_ID, PVP, RAIDS, TERRITORY_LIFECYCLE, THREAT, WEAPONS, type AircraftId, type ManeuverId, type Side } from '../../src/config';
 import { MissionDirector, type DirectorState, type Situation } from '../../src/director/MissionDirector';
 import type { AircraftRecord, MissionOutcome, ProgressRecord } from '../store/Store';
 import { DefenseNetwork, type DefenseEvent, type Installation, type Target } from '../../src/defenses/Installation';
@@ -90,6 +90,8 @@ export interface PlayerCarry {
   planes?: CarriedPlane[];
   /** The design chosen in the garage. */
   aircraft?: AircraftId;
+  /** v0.0.16: the maneuver chosen for each design's slot. */
+  maneuvers?: Partial<Record<AircraftId, ManeuverId>>;
   /** The mission director as last saved, and the ids of the cards on the board by slot. */
   director?: DirectorState | null;
   board?: Record<string, string>;
@@ -412,6 +414,9 @@ export class ServerWorld {
       state.hangar.set(plane.design, { condition: plane.condition, health: Math.max(1, Math.min(spec.maxHealth, plane.health)), invested: plane.invested });
     }
     if (carry.aircraft && carry.aircraft in AIRCRAFT) state.aircraft = carry.aircraft;
+    for (const [id, man] of Object.entries(carry.maneuvers ?? {}) as Array<[AircraftId, ManeuverId]>) {
+      if (AIRCRAFT[id]?.maneuvers.includes(man)) state.maneuverChoice.set(id, man);
+    }
     // The board is checked against the new desk: a card that no longer makes sense here is replaced.
     if (carry.director && director.validate()) state.updateOffers(p.cards());
     state.onEvent((e) => this.onGameEvent(p, e));
@@ -634,7 +639,7 @@ export class ServerWorld {
     const board: Record<string, string> = {};
     for (const offer of p.director.offers) board[offer.slot] = p.missionId(offer.mission);
     const clock = (t: number) => (t > this.time ? new Date(Math.round(this.wallOf(t))) : null);
-    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
+    return { stats, director: p.director.save(), garage: { aircraft: st.aircraft, board, maneuvers: Object.fromEntries(st.maneuverChoice) }, protectUntil: clock(p.protectUntil), shieldUntil: clock(p.shieldUntil) };
   }
 
   /** Players with paper changes waiting for the ledger. */
@@ -702,6 +707,10 @@ export class ServerWorld {
       case 'aircraft':
         if (st.phase === 'building') return false;
         return st.selectAircraft(cmd.id);
+      case 'maneuver':
+        // At home only, and only a maneuver the plane carries (GameState checks both).
+        if (st.phase === 'landed' && !p.stopped) return false;
+        return st.chooseManeuver(cmd.id);
       case 'build': {
         const emergency = st.emergencyAvailable() && !st.resources.canAfford(st.buildCost);
         return emergency ? st.buildEmergency() : st.build();
@@ -826,6 +835,8 @@ export class ServerWorld {
     base.recordIncome(st.income.lastPaid);
     p.journal?.tick(NET.step);
     const m = p.flight.model;
+    // v0.0.16: the maneuver chosen at home; GameState refuses changes in the air.
+    m.maneuverSlot = st.maneuverSlot;
     if (st.phase === 'flying' && m.status === 'flying') {
       const result = p.flight.step(f, home, this.territories, this.solids(), st.outOfRange);
       if (!result) return;
@@ -1946,6 +1957,7 @@ export class ServerWorld {
       },
       garage: {
         chosen: st.aircraft,
+        maneuver: st.maneuverSlot,
         hangar: [...st.hangar].map(([id, h]) => ({ id, condition: h.condition, health: h.health })),
         costs: Object.fromEntries(AIRCRAFT_ORDER.map((id) => [id, { kind: st.buildKindFor(id), cost: st.buildCostFor(id) }])) as Record<AircraftId, { kind: 'fold' | 'refit' | 'rollout'; cost: number }>,
         emergency: st.emergencyAvailable(),

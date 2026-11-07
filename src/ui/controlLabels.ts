@@ -20,6 +20,8 @@ export type ControlAction =
   | 'fire'
   | 'bomb'
   | 'boost'
+  | 'maneuver'
+  | 'maneuverPick'
   | 'throttle'
   | 'bank'
   | 'rearm'
@@ -44,6 +46,8 @@ export const KEYBOARD_LABELS: Readonly<Record<ControlAction, string>> = {
   fire: T.keys.leftClick,
   bomb: T.keys.rightClick,
   boost: keyFor('boost'),
+  maneuver: keyFor('maneuver'),
+  maneuverPick: keyFor('maneuverNext'),
   throttle: `${keyFor('throttleUp')} / ${keyFor('throttleDown')}`,
   bank: `${keyFor('bankLeft')} / ${keyFor('bankRight')}`,
   rearm: keyFor('service'),

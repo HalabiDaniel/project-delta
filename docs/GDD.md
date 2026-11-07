@@ -305,7 +305,7 @@ The initial control model is arcade-oriented.
 - Left mouse button: Primary weapon.
 - Right mouse button: Secondary weapon or bomb release.
 - Space: Contextual boost, where supported.
-- Trick (Space in flight, A / Cross on a controller) plus a direction: a maneuver (§6.3, from 0.0.16).
+- Left Alt (A / Cross on a controller): the maneuver in the plane's slot (§6.3, from 0.0.16); T (RS) changes it at home.
 - R: Return or recall when eligible.
 - Escape: Menu.
 
@@ -328,7 +328,7 @@ Aircraft properties may include:
 
 The plane should be easy to control, with automatic stabilization and forgiving behavior at low speeds.
 
-On top of that, aircraft perform **maneuvers** (0.0.16): short scripted moves on one Trick button plus a direction, such as the Crane Flip (brake and flip so a chaser overshoots), Fold Back, Dive Fold and Corkscrew. They are arcade, not realistic: spectacular, readable from outside, limited by charges and entry speed, with no invulnerability. Each aircraft has its own set; fighters get the most.
+On top of that, fighters, multiroles and recon planes perform **maneuvers** (0.0.16), of two kinds. **Automatic** maneuvers are short scripted moves on one key, like the boost: the Crane Flip (brake and flip so a chaser overshoots), Fold Back, Dive Fold, Slip Roll, Updraft Roll, Paper Hang, Spiral Drill and Paper Pivot. Each design has a set; a plane carries **one** in its slot, chosen at home before each take-off. **Manual** maneuvers have no script: the flight model allows them (an air brake far below the normal minimum speed, tighter turns when slow, and loops past the pitch limit), so a good pilot brakes and lets a chaser pass, loops, or out-turns a faster plane. Bombers have neither the automatic moves nor loops. Arcade, not realistic, with cooldowns, entry speeds and no invulnerability.
 
 ### 6.4 Returning Home
 
@@ -948,7 +948,7 @@ The whole multiplayer system on the internet (the game on Vercel, the server and
 
 ### Version 0.0.16: Flight Maneuvers
 
-Five dogfight maneuvers on one Trick button plus a direction (Crane Flip, Fold Back, Dive Fold, Corkscrew and the Paper Hang), a deterministic track system in the shared flight model, per-aircraft sets and charges, a maneuver camera and effects, a flight-school chapter and contextual prompts, server validation and prediction, and AI aces that use them. See [v0.0.16](roadmap/v0.0.16.md).
+**Coded (2026-11-07).** Eight automatic maneuvers on one key (Left Alt, A / Cross), a per-design set and one slot per plane chosen before each take-off; manual maneuvers through the flight model (air brake, slower turns tighter, loops). A deterministic track system in the shared flight model, a maneuver camera, the HUD slot and the pad picker, server validation and prediction, and AI pilots that use them by skill. See [v0.0.16](roadmap/v0.0.16.md).
 
 ### Version 0.0.17: Player Ranks
 

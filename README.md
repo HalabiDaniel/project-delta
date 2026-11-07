@@ -1,4 +1,14 @@
-# paperwars.io: v0.0.15 (HUD and UI revamp), on top of v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+# paperwars.io: v0.0.16 (flight maneuvers), on top of v0.0.15 (HUD and UI revamp), v0.0.14 (going live), v0.0.13's sessions, v0.0.12's portable bases and v0.0.9 multiplayer
+
+> **v0.0.16: flight maneuvers (coded; next, the developer flies them).** Fighters, multiroles and
+> recon planes now have **automatic maneuvers**: eight scripted moves (Crane Flip, Fold Back, Dive
+> Fold, Slip Roll, Updraft Roll, Paper Hang, Spiral Drill, Paper Pivot) on **Left Alt** (A / Cross),
+> with a cooldown like the boost. Each design has a set; a plane carries **one** in its slot, chosen
+> at home before each take-off (**T**, RS, or the picker's arrows) and locked in the air. **Manual
+> maneuvers** come from the flight model: an **air brake** (hold S at the bottom of the throttle),
+> **tighter turns when slow**, and **loops** past the pitch limit. Bombers have none of it. See
+> [v0.0.16: flight maneuvers](#v0016-flight-maneuvers), the [plan](docs/roadmap/v0.0.16.md) and the
+> [diagrams](docs/roadmap/v0.0.16-maneuvers/README.md).
 
 > **v0.0.14: going live (phases 1 to 6 done; next, the developer's setup).** Everything the
 > multiplayer server needs to run on the internet: a `Dockerfile` Railway builds on its own,
@@ -344,6 +354,42 @@ on 15 desks (about 15 mesh instances each) and the practice targets are most of 
   Compass Rise, Stapler Bay, Back Row; T5 became Margin Hill) and the AI desk (T11).
 - The provisional stats and prices of the seven new aircraft.
 - Whether practice targets should become jets too (they cost a lot of draw calls as jets).
+
+## v0.0.16: flight maneuvers
+
+Built from the developer's brief of 2026-11-06 (it replaced the first plan's "Trick button plus a
+direction"). Brainstorm and trajectory diagrams: [docs/roadmap/v0.0.16-maneuvers/](docs/roadmap/v0.0.16-maneuvers/README.md).
+Screenshots from the real game: [docs/checkpoints/0.0.16-maneuvers/](docs/checkpoints/0.0.16-maneuvers/).
+
+| Key | What it does |
+|---|---|
+| Left Alt / A (Cross) | In flight: fly the maneuver in the slot |
+| T / RS (R3) | At home (desk, pad, or stopped after landing): the next maneuver of the plane's set into its slot |
+| Hold S at the bottom of the throttle | Air brake: down to 45 % of the minimum speed |
+| Keep pulling (or pushing) past the pitch limit | A loop through vertical; let go and it rolls upright and hands back |
+
+- **Automatic maneuvers** (`src/aircraft/maneuvers.ts`, tuned in `MANEUVERS` and `MANEUVER` in
+  `src/config.ts`): authored tracks of body rotations, speed and "grip", flown identically by the
+  pilot's game, the server and the AI. Each needs its cooldown, an entry speed and a clear path
+  (checked by flying it ahead of time); the HUD says why when the key does nothing ("Too slow",
+  "No room", "Too low", "Not ready yet"). No invulnerability; hitting something ends the move.
+- **Sets** (`AircraftSpec.maneuvers`): the Falcon and Raptor carry six, the Swift four, the
+  Lightning and Thug five, the Jumper and Dart four, the Specter three; bombers none.
+- **The slot** is chosen at home and remembered per design (`GameState.maneuverChoice`, saved; in
+  multiplayer the server holds it, checks it, and saves it in the garage record).
+- **Manual maneuvers** (`ACRO` in `src/config.ts`): the air brake, slower turns tighter, loops.
+- **Camera:** during a move or a loop it follows the heading of travel, level and a little further back.
+- **Multiplayer:** the press is a bit in the input frame; the flight snapshot grew from 23 to 39
+  numbers (move, travel direction, cooldown, loop); remote attitudes are interpolated as quaternions.
+- **AI:** veterans fly their plane's best move when chased, regulars sometimes a Fold Back or Slip
+  Roll, rookies never.
+
+### Decisions for the developer
+
+- The names, the keys (Left Alt rather than Ctrl: Ctrl+W closes the tab) and the per-plane sets.
+- The tuning: durations, cooldowns, entry speeds, the air brake floor, the loop rate.
+- Next pass after the playtest: the garage trick cards, a flight-school chapter, contextual prompts
+  and overshoot detection (moved from this plan; see its section 8).
 
 ## v0.0.15: HUD and UI revamp
 

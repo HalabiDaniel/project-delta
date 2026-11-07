@@ -1,9 +1,10 @@
 import { parseTutorial, STEER_SECONDS, Tutorial, type TutorialContext, type TutorialEvent } from '../progress/Tutorial';
 import * as pc from 'playcanvas';
-import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type BombKind, type Side } from '../config';
+import { AIRCRAFT, AIRCRAFT_ORDER, PALETTE, PLANE, STARTER_AIRCRAFT, type AircraftId, type AircraftSpec, type BombKind, type Side } from '../config';
+import { cycleManeuver as cycleManeuverIn } from '../aircraft/maneuvers';
 import { Bombs } from '../aircraft/Bomb';
 import { ChaseCamera } from '../aircraft/ChaseCamera';
-import { FlightModel, type AircraftStatus } from '../aircraft/FlightModel';
+import { FlightModel, interpolateAttitude, type AircraftStatus } from '../aircraft/FlightModel';
 import { FlightTrails } from '../aircraft/FlightTrails';
 import { PlaneController } from '../aircraft/PlaneController';
 import { PLANE_SHAPES } from '../aircraft/PlaneShapes';
@@ -213,6 +214,8 @@ export class MultiplayerGame {
   private mouseX = 0;
   private mouseY = 0;
   private bombQueued = false;
+  /** v0.0.16: the Maneuver key was pressed since the last fixed step. */
+  private maneuverQueued = false;
   private readonly prev: OwnPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 };
   private readonly offset = new pc.Vec3();
   /** Rounds and rockets in flight, for drawing only (the server's events start and end them). */
@@ -308,6 +311,7 @@ export class MultiplayerGame {
       select: (i) => game?.send({ a: 'select', i }),
       selectAircraft: (id) => game?.send({ a: 'aircraft', id }),
       rearm: () => game?.send({ a: 'rearm' }),
+      cycleManeuver: (dir) => game?.cycleManeuver(dir),
       takeOff: () => game?.takeOff(),
       endSortie: () => game?.send({ a: 'end' }),
       continueToDesk: () => game?.send({ a: 'continue' }),
@@ -687,6 +691,26 @@ export class MultiplayerGame {
     } else this.takeOff();
   }
 
+  /** v0.0.16: the design whose maneuver slot is shown: the plane on the pad or in the air, else the garage's choice. */
+  get maneuverDesign(): AircraftSpec {
+    return AIRCRAFT[this.priv.plane?.id ?? this.priv.garage?.chosen ?? this.state?.aircraft ?? STARTER_AIRCRAFT];
+  }
+
+  /** v0.0.16: at home, ask the server for the next (or previous) maneuver of the plane's set. */
+  cycleManeuver(dir: 1 | -1 = 1): void {
+    const phase = this.state?.phase;
+    if (!phase) return;
+    if (phase === 'flying') {
+      this.hud.alert('maneuver', T.maneuver.locked, null, 'info', 1.6);
+      return;
+    }
+    const next = cycleManeuverIn(this.maneuverDesign, this.priv.garage?.maneuver ?? null, dir);
+    if (next && next !== this.priv.garage?.maneuver) {
+      this.send({ a: 'maneuver', id: next });
+      this.sounds.play('pop', { caption: false });
+    }
+  }
+
   launchPlane(): void {
     if (this.state?.phase !== 'ready') return;
     this.send({ a: 'launch' });
@@ -883,6 +907,11 @@ export class MultiplayerGame {
       case 'fireSecondary':
         if (phase === 'flying') this.bombQueued = true;
         return;
+      case 'maneuver':
+        if (phase === 'flying') this.maneuverQueued = true;
+        return;
+      case 'maneuverNext':
+        return this.cycleManeuver(1);
       case 'service':
         if (phase === 'landed') this.send({ a: 'rearm' });
         else if (phase === 'flying') this.hud.alert('home', T.mpGame.rearmAtHome, null, 'info', 1.6);
@@ -1471,13 +1500,19 @@ export class MultiplayerGame {
         autoLevel: !this.views.onApproach(),
         fire: flying && live && controls.held('firePrimary'),
         bomb: flying && this.bombQueued,
+        maneuver: flying && live && this.maneuverQueued,
       };
       this.mouseX = 0;
       this.mouseY = 0;
       this.bombQueued = false;
+      this.maneuverQueued = false;
+      // The slot as the server has it (chosen at home, locked in the air); snapshots carry it too.
+      m.maneuverSlot = this.priv.garage?.maneuver ?? null;
+      const wasManeuvering = m.activeManeuver;
       this.outbox.push(frame);
       const result = this.predictor.apply(frame, this.predictionWorld());
       if (result?.collisions.length) this.effects.burst(this.plane.position, 'thud');
+      if (m.activeManeuver && !wasManeuvering) this.sounds.play('whoosh', { caption: false });
       this.cosmeticCooldown = Math.max(0, this.cosmeticCooldown - STEP);
       if (frame.fire) {
         this.cosmeticFire();
@@ -1578,9 +1613,8 @@ export class MultiplayerGame {
         this.prev.y + (m.position.y - this.prev.y) * k + this.offset.y,
         this.prev.z + (m.position.z - this.prev.z) * k + this.offset.z,
       );
-      motion.yaw = this.prev.yaw + angleDiff(this.prev.yaw, m.yaw) * k;
-      motion.pitch = this.prev.pitch + angleDiff(this.prev.pitch, m.pitch) * k;
-      motion.roll = this.prev.roll + angleDiff(this.prev.roll, m.roll) * k;
+      // Along the shortest rotation, so a flip through vertical draws cleanly (v0.0.16).
+      interpolateAttitude(this.prev, m, k, motion);
       if (this.ownWaggle > 0) {
         this.ownWaggle = Math.max(0, this.ownWaggle - dt);
         motion.roll += Math.sin((WAGGLE_TIME - this.ownWaggle) * 14) * 0.7 * Math.min(1, this.ownWaggle * 3);

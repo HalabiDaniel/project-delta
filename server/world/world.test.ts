@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AIRCRAFT, ECONOMY, PLANE, PVP } from '../../src/config';
 import { NET, parseCommand, planeId, unpackFrames, packFrames, type NetEvent } from '../../src/net/protocol';
 import { launch, place, player, quietWorld, run } from './testkit';
+import { FLIGHT_SNAPSHOT_SIZE } from '../../src/aircraft/FlightModel';
 
 const events = (world: ReturnType<typeof quietWorld>, type: NetEvent['t']) => world.drainEvents().map((o) => o.e).filter((e) => e.t === type);
 
@@ -107,7 +108,7 @@ describe('flight', () => {
     launch(world, a);
     const own = world.ownFor('a')!;
     expect(own.seq).toBe(a.inputs.lastSeq);
-    expect(own.flight.length).toBe(23);
+    expect(own.flight.length).toBe(FLIGHT_SNAPSHOT_SIZE);
   });
 });
 

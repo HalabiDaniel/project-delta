@@ -52,6 +52,7 @@ export class PilotFlight {
         autoLevel: frame.autoLevel,
         autopilot,
         gliding,
+        maneuver: frame.maneuver === true,
       },
       territories,
       solids,

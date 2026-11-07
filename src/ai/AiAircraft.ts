@@ -178,6 +178,8 @@ export class AiAircraft {
   /** The heading it wanted last step, and how fast that is swinging round (rad/s), for anticipating turns. */
   private lastWant: number | null = null;
   private swing = 0;
+  /** v0.0.16: fly the slot's maneuver on the next step. */
+  private maneuverPress = false;
 
   constructor(
     readonly orders: AiOrders,
@@ -194,6 +196,8 @@ export class AiAircraft {
     const [start, next] = [this.route[0], this.route[1] ?? orders.exit];
     this.model.spawn(start, headingTo(start, next).yaw, this.cruise());
     this.pauseLeft = rng() * this.skill.pause;
+    // v0.0.16: the best move this pilot knows that the plane carries (none for rookies and bombers).
+    this.model.maneuverSlot = this.skill.knows.find((m) => this.spec.maneuvers.includes(m)) ?? null;
   }
 
   get id(): string {
@@ -277,7 +281,9 @@ export class AiAircraft {
       throttle: this.throttleFor(decision.speed),
       boost: decision.boost,
       aim: this.avoid(decision.yaw, decision.pitch, world),
+      maneuver: this.maneuverPress,
     };
+    this.maneuverPress = false;
     const result = this.model.fly(dt, controls, world.territories, world.obstacles);
     step.collisions = result.collisions;
     step.void = result.outcome === 'void';
@@ -398,7 +404,11 @@ export class AiAircraft {
       this.jinkDir = world.rng() < 0.5 ? -1 : 1;
       return this.reposition(dt, world);
     }
-    // Something on our own tail: a pilot who knows how breaks hard.
+    // Something on our own tail: a pilot who knows a maneuver may fly it (v0.0.16)…
+    if (this.onMyTail(world, own) && this.skill.maneuvers > 0 && this.model.maneuverBlocker() === null && world.rng() < this.skill.maneuvers * dt) {
+      this.maneuverPress = true;
+    }
+    // …and one who knows how breaks hard.
     if (this.onMyTail(world, own) && world.rng() < this.skill.evasive * dt) {
       this.startJink(world.rng, 'attack');
       this.enter('evade');

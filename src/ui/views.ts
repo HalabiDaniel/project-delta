@@ -4,7 +4,7 @@ import type { RatingKey, SuitabilityLevel } from '../aircraft/Aircraft';
 import type { BoostState } from '../aircraft/Boost';
 import type { TouchdownCheck } from '../aircraft/Landing';
 import type { RaidReport } from '../base/Raids';
-import type { AircraftId, BuildingKind, SlotKind, TerritoryState, ThreatLevel, Tier } from '../config';
+import type { AircraftId, BuildingKind, ManeuverId, SlotKind, TerritoryState, ThreatLevel, Tier } from '../config';
 import type { Medal, MissionFailure, MissionStatus, MissionType } from '../missions/Mission';
 import type { BoundaryState } from '../systems/Boundary';
 import type { BuildKind, GamePhase } from '../systems/GameState';
@@ -153,6 +153,32 @@ export interface FlightView {
   altitude: number;
   boost: { state: BoostState; level: number };
   autopilot: boolean;
+  /** v0.0.16: the maneuver slot beside the boost (undefined: not shown). */
+  maneuver?: ManeuverSlotView;
+}
+
+/** v0.0.16: the maneuver slot in flight. */
+export interface ManeuverSlotView {
+  id: ManeuverId | null;
+  name: string;
+  /** none: a bomber (no maneuvers). loop: a manual loop is in progress. */
+  state: 'ready' | 'cooldown' | 'active' | 'loop' | 'none';
+  /** 0 → 1 as the move folds back in after use. */
+  readiness: number;
+  /** Why the last press did nothing, while the HUD still says so. */
+  refusal: string | null;
+  /** Below the plane's normal minimum speed: the air brake is open. */
+  airbrake: boolean;
+}
+
+/** v0.0.16: choosing the maneuver for the slot, at home before take-off. */
+export interface ManeuverPickerView {
+  /** The maneuver in the slot (null: the design has none). */
+  current: { id: ManeuverId; name: string; summary: string; inspiredBy: string } | null;
+  index: number;
+  count: number;
+  /** More than one to choose from, and the plane is at home. */
+  canChange: boolean;
 }
 
 export interface AircraftStatusView {
@@ -465,6 +491,8 @@ export interface HudView {
   flight: FlightView | null;
   aircraft: AircraftStatusView | null;
   ground: GroundView | null;
+  /** v0.0.16: the maneuver picker, at home with a plane chosen (on the pad or landed). */
+  maneuverPicker?: ManeuverPickerView | null;
   landing: LandingView | null;
   boundary: { state: BoundaryState; countdown: number };
   result: ResultView | null;
@@ -521,6 +549,8 @@ export interface HudActions {
   quickRepair(): void;
   /** Landed at home: rearm, then take off as soon as the ground crew is done. */
   rearmAndGo(): void;
+  /** v0.0.16: at home, put the next (or previous) maneuver in the slot. */
+  cycleManeuver?(dir: 1 | -1): void;
   base: {
     selectSlot(id: string): void;
     choose(kind: BuildingKind): void;

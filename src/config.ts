@@ -95,6 +95,108 @@ export const PLANE = {
   glideAngle: 5 * DEG,
 } as const;
 
+/**
+ * v0.0.16: the automatic maneuvers. A plane carries one in its maneuver slot, chosen at the pad
+ * before each take-off, and flies it on the Maneuver key (Left Alt, A / Cross). Bombers have none.
+ * The shapes of the moves are in aircraft/maneuvers.ts; these are their tuning numbers.
+ */
+export type ManeuverId =
+  | 'craneFlip' | 'foldBack' | 'diveFold' | 'slipRoll' | 'updraftRoll' | 'paperHang' | 'spiralDrill' | 'paperPivot';
+
+export const MANEUVER_ORDER: readonly ManeuverId[] = [
+  'craneFlip', 'foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'paperHang', 'spiralDrill', 'paperPivot',
+];
+
+export interface ManeuverSpec {
+  id: ManeuverId;
+  name: string;
+  /** What it does, in one line (pad picker, garage card, HUD tooltip). */
+  summary: string;
+  /** The real aerobatic figure it is based on. */
+  inspiredBy: string;
+  /** Seconds the move takes on a plane with the reference turn rate (scaled per plane). */
+  duration: number;
+  /** Seconds before it can be flown again, counted from the end of the move. */
+  cooldown: number;
+  /**
+   * Slowest entry, as a fraction of the way from the plane's minimum to its maximum speed (the
+   * boost counts). 0 = any speed.
+   */
+  minEntry: number;
+  /** Can be flown while gliding out of range. */
+  whileGliding: boolean;
+}
+
+export const MANEUVERS: Record<ManeuverId, ManeuverSpec> = {
+  craneFlip: { id: 'craneFlip', name: 'Crane Flip', inspiredBy: 'Kulbit', duration: 1.4, cooldown: 7, minEntry: 0.45, whileGliding: false,
+    summary: 'Air-brakes and flips the nose a full turn while sliding on: a chaser overshoots and you come out behind it.' },
+  foldBack: { id: 'foldBack', name: 'Fold Back', inspiredBy: 'Immelmann turn', duration: 1.9, cooldown: 6, minEntry: 0.3, whileGliding: false,
+    summary: 'Half loop up and roll upright: flying the other way, higher and a little slower.' },
+  diveFold: { id: 'diveFold', name: 'Dive Fold', inspiredBy: 'Split-S', duration: 1.9, cooldown: 6, minEntry: 0.1, whileGliding: false,
+    summary: 'Half roll onto the back and pull through a half loop down: the other way, lower and faster.' },
+  slipRoll: { id: 'slipRoll', name: 'Slip Roll', inspiredBy: 'Barrel roll', duration: 1.0, cooldown: 4.5, minEntry: 0, whileGliding: true,
+    summary: 'A fast roll with a sideways shove of about two wingspans (towards A or D): spoils aim and homing rockets.' },
+  updraftRoll: { id: 'updraftRoll', name: 'Updraft Roll', inspiredBy: 'Pop-up attack', duration: 2.2, cooldown: 6, minEntry: 0.2, whileGliding: false,
+    summary: 'A boosted climb with a full roll on the way up, levelling off higher on the same heading.' },
+  paperHang: { id: 'paperHang', name: 'Paper Hang', inspiredBy: 'Hammerhead (stall turn)', duration: 3.2, cooldown: 8, minEntry: 0.45, whileGliding: false,
+    summary: 'Straight up, hangs at the top, pivots on a wingtip and drops back down the way it came.' },
+  spiralDrill: { id: 'spiralDrill', name: 'Spiral Drill', inspiredBy: 'Rolling dive', duration: 2.2, cooldown: 6, minEntry: 0, whileGliding: false,
+    summary: 'A corkscrew dive that comes out lower and faster on the same heading: shakes off a tail.' },
+  paperPivot: { id: 'paperPivot', name: 'Paper Pivot', inspiredBy: 'Flat 180° (drift)', duration: 1.6, cooldown: 7, minEntry: 0.2, whileGliding: false,
+    summary: 'Swings the tail round flat and drifts, then boosts out the other way at the same height.' },
+};
+
+/** Shared maneuver rules (provisional). */
+export const MANEUVER = {
+  /** Turn rate the durations in MANEUVERS are written for; a nimbler plane flies them faster. */
+  referenceTurnRate: 1.6,
+  /** How strongly the turn rate changes a move's length (0 = not at all). */
+  agilityScale: 0.6,
+  /** The clearance check: the move's path, sampled this often (s), must stay this far from anything. */
+  clearanceStep: 0.1,
+  clearanceMargin: 1.2,
+  /** How far the move's path may sink below the lowest desk top before it counts as "too low". */
+  floorMargin: 8,
+  /** Seconds the HUD shows why the Maneuver key did nothing. */
+  refusalTime: 1.6,
+  /** Seconds for steering to blend back in after a move. */
+  exitBlend: 0.25,
+  /** Speed of the Slip Roll's sideways shove at its peak (m/s). */
+  slipShove: 14,
+} as const;
+
+/**
+ * v0.0.16: what the flight model allows for manual maneuvers (no script, just the pilot's flying).
+ * See docs/roadmap/v0.0.16.md section 2.
+ */
+export const ACRO = {
+  /** Holding S at the bottom of the throttle opens the air brake: the speed falls to this share of minSpeed. */
+  airbrakeFloor: 0.45,
+  /** How fast the air brake bites (1/s). */
+  airbrakeResponse: 2.2,
+  /** Below minSpeed the plane mushes down, up to this many m/s at the air-brake floor. */
+  slowSink: 3,
+  /** Slower turns tighter: up to this much more turn and pitch rate at the air-brake floor. */
+  slowTurnBonus: 0.55,
+  /**
+   * Pulling (or pushing) past the pitch limit by this much extra mouse aim (rad) lifts the limit:
+   * the plane loops through vertical. Fighters, multiroles and recon planes only.
+   */
+  loopEntry: 0.22,
+  /** Pitch rate while looping, as a multiple of the plane's maxPitchRate. */
+  loopRate: 1.15,
+  /** In a loop, A/D roll the plane at this rate (rad/s). */
+  loopRollRate: 2.6,
+  /** Mouse aim (rad) the loop's pull holds at most: how far the nose carries on after letting go. */
+  loopDemandMax: 0.3,
+  /** Mouse aim used up per radian the nose turns in a loop: a full loop takes about 2π × this of pull. */
+  loopDemandUse: 0.25,
+  /** With no pull for this long, the plane rolls itself upright and hands back to normal flight. */
+  loopIdle: 0.35,
+  /** Roll rate of that automatic recovery (rad/s). */
+  loopRecoverRate: 3.2,
+} as const;
+
 /** How one aircraft design flies. All the flight physics read these; nothing is hard-coded per plane. */
 export interface FlightProfile {
   minSpeed: number;
@@ -197,6 +299,11 @@ export interface AircraftSpec {
   shape: BaseShapeId;
   /** Special abilities beyond the numbers above. */
   traits?: AircraftTraits;
+  /**
+   * v0.0.16: the automatic maneuvers this design can carry in its maneuver slot, the first being
+   * the default. Empty for bombers.
+   */
+  maneuvers: readonly ManeuverId[];
 }
 
 export interface AircraftTraits {
@@ -245,6 +352,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.08, 0.62, 0.56],
     inspiration: 'SR-71 Blackbird',
     shape: 'dart',
+    maneuvers: ['slipRoll', 'diveFold', 'updraftRoll', 'spiralDrill'],
     traits: { reconRate: 1.5 },
   },
   falcon: {
@@ -272,6 +380,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.2, 0.45, 0.95],
     inspiration: 'Su-57',
     shape: 'falcon',
+    maneuvers: ['craneFlip', 'foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'paperHang'],
     traits: { stealth: true },
   },
   swift: {
@@ -299,6 +408,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.95, 0.58, 0.1],
     inspiration: 'F-16',
     shape: 'swift',
+    maneuvers: ['craneFlip', 'foldBack', 'diveFold', 'slipRoll'],
   },
   widewing: {
     id: 'widewing',
@@ -325,6 +435,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.82, 0.2, 0.32],
     inspiration: 'B-52 Stratofortress',
     shape: 'widewing',
+    maneuvers: [],
   },
   // ---- v0.0.15: the Raptor's final role and stats. The strongest pure dogfighter: it wins on
   // energy (the fastest fighter, the best climb, quickest to pick speed back up) and on guns, and
@@ -357,6 +468,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.35, 0.38, 0.45],
     inspiration: 'F-22',
     shape: 'falcon',
+    maneuvers: ['craneFlip', 'paperHang', 'foldBack', 'diveFold', 'slipRoll', 'paperPivot'],
   },
   // ---- v0.0.11: the rest of the roster built so far. Stats are first guesses for playtesting. ----
   lightning: {
@@ -384,6 +496,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.55, 0.45, 0.3],
     inspiration: 'F-35',
     shape: 'swift',
+    maneuvers: ['foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'spiralDrill'],
   },
   thug: {
     id: 'thug',
@@ -410,6 +523,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.45, 0.55, 0.3],
     inspiration: 'A-10 Thunderbolt II',
     shape: 'swift',
+    maneuvers: ['updraftRoll', 'diveFold', 'foldBack', 'slipRoll', 'spiralDrill'],
   },
   jumper: {
     id: 'jumper',
@@ -436,6 +550,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.3, 0.5, 0.62],
     inspiration: 'AV-8B Harrier',
     shape: 'swift',
+    maneuvers: ['paperPivot', 'craneFlip', 'updraftRoll', 'slipRoll'],
   },
   specter: {
     id: 'specter',
@@ -462,6 +577,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.6, 0.62, 0.66],
     inspiration: 'RQ-4 Global Hawk',
     shape: 'dart',
+    maneuvers: ['slipRoll', 'spiralDrill', 'paperPivot'],
   },
   lancer: {
     id: 'lancer',
@@ -488,6 +604,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.7, 0.35, 0.2],
     inspiration: 'B-1B Lancer',
     shape: 'widewing',
+    maneuvers: [],
   },
   ghost: {
     id: 'ghost',
@@ -514,6 +631,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     accent: [0.3, 0.3, 0.34],
     inspiration: 'B-2 Spirit',
     shape: 'widewing',
+    maneuvers: [],
   },
 };
 
@@ -826,6 +944,12 @@ export interface PilotSkill {
   boost: boolean;
   /** Chance per second of a hard evasive turn while something is on its tail. */
   evasive: number;
+  /**
+   * v0.0.16: chance per second of flying its maneuver while something is on its tail (0: never),
+   * and which maneuvers it knows: the first of its plane's set it knows goes in the slot.
+   */
+  maneuvers: number;
+  knows: readonly ManeuverId[];
   /** Breaks off a fight below this share of health (0: never), boosting and weaving away if `cleanBreak`. */
   disengageHealth: number;
   cleanBreak: boolean;
@@ -886,14 +1010,17 @@ export const AI: {
     easy: {
       label: 'Rookie', reaction: 1.0, trackingLag: 0.6, lead: 0.5, aimError: 6.5 * DEG, fireCone: 5 * DEG, burst: 0.35, pause: 1.5,
       throttle: 0.45, boost: false, evasive: 0, disengageHealth: 0, cleanBreak: false, positioning: 0, floor: 10, bombError: 10,
+      maneuvers: 0, knows: [],
     },
     medium: {
       label: 'Regular', reaction: 0.6, trackingLag: 0.38, lead: 0.8, aimError: 4.5 * DEG, fireCone: 4 * DEG, burst: 0.45, pause: 1,
       throttle: 0.75, boost: true, evasive: 0.35, disengageHealth: 0.25, cleanBreak: false, positioning: 0.5, floor: 7, bombError: 6,
+      maneuvers: 0.15, knows: ['foldBack', 'slipRoll'],
     },
     hard: {
       label: 'Veteran', reaction: 0.32, trackingLag: 0.22, lead: 0.95, aimError: 3.5 * DEG, fireCone: 3.5 * DEG, burst: 0.6, pause: 0.8,
       throttle: 1, boost: true, evasive: 0.7, disengageHealth: 0.35, cleanBreak: true, positioning: 1, floor: 4.5, bombError: 2.5,
+      maneuvers: 0.45, knows: ['craneFlip', 'paperHang', 'foldBack', 'slipRoll', 'spiralDrill', 'paperPivot', 'diveFold', 'updraftRoll'],
     },
   },
   /**
@@ -1523,6 +1650,8 @@ export const CAMERA = {
   /** Extra follow distance at full speed, and while boosting: the view pulls back as you speed up. */
   speedDistance: 4,
   boostDistance: 2,
+  /** v0.0.16: extra distance during a maneuver or a loop, so the pilot sees a chaser fly past. */
+  maneuverDistance: 4,
   height: 5,
   /** The camera aims this far ahead of the plane and this far below its flight line, so the ground
    * under the plane (its shadow, the target) stays in view. */

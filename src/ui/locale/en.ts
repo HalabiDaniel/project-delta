@@ -203,7 +203,7 @@ export const en = {
     clock: 'Time', distance: 'Distance', home: 'Home', kills: 'Shot down', crumple: 'Planes lost', damage: 'Damage', medal: 'Medal', streak: 'Streak',
     swap: 'Swap', book: 'Logbook', sound: 'Sound', mute: 'Muted', menu: 'Menu', info: 'Info', pencil: 'Pencil', graphics: 'Graphics', tip: 'Tip', close: 'Close', more: 'Details',
     trophy: 'Reward', users: 'Players', pause: 'Pause', plus: 'Add', minus: 'Less', check: 'Done', back: 'Back', map: 'Map', swords: 'Fight',
-    sun: 'Daylight', moon: 'Lights out',
+    sun: 'Daylight', moon: 'Lights out', maneuver: 'Maneuver',
   } satisfies Record<IconName, string>,
 
   /** The sortie report's failure reasons and advice (src/ui/reportText.ts). */
@@ -323,6 +323,8 @@ export const en = {
       ink: 'Ink',
       bomb: 'Bomb',
       boost: 'Boost',
+      maneuver: 'Maneuver',
+      maneuverPick: 'Change maneuver (home)',
       throttleBank: 'Throttle / bank',
       confirmLaunch: 'Confirm, launch',
       back: 'Back',
@@ -637,6 +639,33 @@ export const en = {
     turnBack: 'Turn back',
     autopilot: 'Autopilot',
     bombs: (name: string, loaded: number, capacity: number) => `${name} ${loaded}/${capacity}`,
+  },
+
+  /** v0.0.16: the maneuver slot (src/ui/PlaneHud.ts) and its picker at the pad. */
+  maneuver: {
+    slot: 'Maneuver',
+    none: 'No maneuvers',
+    noneTip: 'Bombers are too heavy for maneuvers. They can still use the air brake.',
+    pickInfo: (summary: string, inspiredBy: string) => `${summary} Based on the ${inspiredBy}.`,
+    pickTip: (key: string) => `The maneuver this plane flies on ${key}. Change it here before take-off.`,
+    locked: 'Chosen before take-off: land at T1 to change it',
+    prev: 'Previous maneuver',
+    next: 'Next maneuver',
+    ready: 'Ready',
+    active: 'In the move',
+    loop: 'Looping',
+    airbrake: 'Air brake',
+    of: (i: number, n: number) => `${i}/${n}`,
+    refusal: {
+      none: 'No maneuver on this plane',
+      cooldown: 'Not ready yet',
+      slow: 'Too slow',
+      low: 'Too low',
+      room: 'No room',
+      gliding: 'Gliding: only the Slip Roll',
+      busy: 'Not now',
+    },
+    prompt: (key: string, name: string) => `${key}: ${name}`,
   },
 
   /** The playtest feedback form, F8 (src/mp/FeedbackForm.ts). */

@@ -15,6 +15,8 @@ import { MOUSE_LEFT, MOUSE_RIGHT } from '../systems/Input';
 export type Action =
   // Flight
   | 'throttleUp' | 'throttleDown' | 'bankLeft' | 'bankRight' | 'boost' | 'firePrimary' | 'fireSecondary' | 'modifier'
+  // v0.0.16: fly the maneuver in the slot; at the pad, change which one is in the slot
+  | 'maneuver' | 'maneuverNext'
   // Sortie flow
   | 'confirm' | 'launch' | 'back' | 'pause' | 'fold' | 'service' | 'swap' | 'remove' | 'upgrade'
   // Selection
@@ -32,6 +34,8 @@ export type InputContext = 'flight' | 'home' | 'menu';
 export const KEYMAP: Readonly<Record<string, Action>> = {
   KeyW: 'throttleUp', KeyS: 'throttleDown', KeyA: 'bankLeft', KeyD: 'bankRight',
   ShiftLeft: 'boost', ShiftRight: 'boost',
+  // Left Alt flies the maneuver (not Ctrl: Ctrl+W closes the tab, and W is the throttle). T changes it at the pad.
+  AltLeft: 'maneuver', KeyT: 'maneuverNext',
   Enter: 'confirm', NumpadEnter: 'confirm', Space: 'launch', Escape: 'back',
   KeyF: 'fold', KeyR: 'service', KeyX: 'swap', Delete: 'remove', KeyU: 'upgrade',
   KeyQ: 'prevAircraft', KeyE: 'nextAircraft',
@@ -43,10 +47,10 @@ export const KEYMAP: Readonly<Record<string, Action>> = {
 
 /** Controller: per context, button → action on press. */
 export const PAD_PRESS: Readonly<Record<InputContext, Partial<Record<PadButton, Action>>>> = {
-  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3' },
+  flight: { lt: 'fireSecondary', west: 'service', menu: 'pause', up: 'emote1', left: 'emote2', right: 'emote3', south: 'maneuver' },
   home: {
     south: 'confirm', east: 'back', west: 'service', north: 'base', lb: 'prevAircraft', rb: 'nextAircraft',
-    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause',
+    lt: 'prevMission', rt: 'nextMission', view: 'logbook', menu: 'pause', rs: 'maneuverNext',
   },
   menu: { south: 'confirm', east: 'back', menu: 'pause', view: 'logbook' },
 };
@@ -64,7 +68,7 @@ export const MOUSE_HOLD: Partial<Record<Action, number>> = { firePrimary: MOUSE_
 /** How a key code reads on a key cap. */
 const KEY_NAMES: Readonly<Record<string, string>> = {
   Escape: 'Esc', Enter: 'Enter', NumpadEnter: 'Enter', Space: 'Space', ShiftLeft: 'Shift', ShiftRight: 'Shift',
-  Delete: 'Del', Backquote: '`', Tab: 'Tab',
+  Delete: 'Del', Backquote: '`', Tab: 'Tab', AltLeft: 'Alt',
 };
 
 /** A key code's label: KeyB → B, Digit1 → 1, Escape → Esc. */

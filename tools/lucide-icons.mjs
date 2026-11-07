@@ -23,6 +23,8 @@ export const MAP = {
   // Added with the style guide (2026-11-06).
   trophy: 'trophy', users: 'users', pause: 'pause', plus: 'plus', minus: 'minus', check: 'check', back: 'chevron-left',
   map: 'map', swords: 'swords', sun: 'sun', moon: 'moon',
+  // v0.0.16: the maneuver slot.
+  maneuver: 'rotate-ccw',
 };
 
 const require = createRequire(import.meta.url);
