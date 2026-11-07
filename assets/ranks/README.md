@@ -17,9 +17,9 @@ senior chevrons with bars), then the same star designs (one to four stars).
 | 7 | Hall Monitor | Sergeant Major | I–III | Gold upward chevrons: `hall-monitor-1.png` (one), `-2` (two), `-3` (three) |
 | 8 | Paper Hawk | Warrant Officer | I–III | Gold rocker chevrons: `paper-hawk-1.png` (one chevron over a rocker), `-2` (three over a rocker), `-3` (three, a rocker and two bars) |
 | 9 | Origami Ace | Lieutenant | I–III | Gold senior chevrons with three bars: `origami-ace-1.png` (plain centre), `-2` (diamond), `-3` (star) |
-| 10 | Star Pupil (proposed name) | Lieutenant | I–IV | Bronze stars: `star-pupil-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
+| 10 | Sky Scholar | Lieutenant | I–IV | Bronze stars: `sky-scholar-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
 | 11 | Hawk Eye | Captain | I–IV | Silver stars: `hawk-eye-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
-| 12 | Sky Scholar | Major | I–IV | Gold stars: `sky-scholar-1.png` (one). II–IV not received as files yet |
+| 12 | High Flyer | Major | I–IV | Gold stars: `high-flyer-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
 | 13 | Valedictorian | Colonel | I–III | Thin wings: `valedictorian-1.png` (bronze), `-2` (silver), `-3` (gold) |
 | 14 | Head of the Class | General | I–III | Thick wings: `head-of-the-class-1.png` (bronze), `-2` (silver), `-3` (gold) |
 | ∞ | Honor Roll | Marshal | One insignia, plus stars | `honor-roll.png` (gold swept wings) |
