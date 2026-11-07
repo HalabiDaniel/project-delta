@@ -21,10 +21,6 @@ senior chevrons with bars), then the same star designs (one to four stars).
 | 11 | Hawk Eye | Captain | I–IV | Silver stars: `hawk-eye-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
 | 12 | High Flyer | Major | I–IV | Gold stars: `high-flyer-1.png` (one), `-2` (two), `-3` (three in a triangle), `-4` (four in a diamond) |
 | 13 | Valedictorian | Colonel | I–III | Thin wings: `valedictorian-1.png` (bronze), `-2` (silver), `-3` (gold) |
-| 14 | Head of the Class | General | I–III | Thick wings: `head-of-the-class-1.png` (bronze), `-2` (silver), `-3` (gold) |
+| 14 | Dean's List (proposed name) | General | I–III | Thick wings: `deans-list-1.png` (bronze), `-2` (silver), `-3` (gold) |
+| 15 | Head of the Class | Field Marshal | I–III | Angled wings: `head-of-the-class-1.png` (bronze), `-2` (silver), `-3` (gold) |
 | ∞ | Honor Roll | Marshal | One insignia, plus stars | `honor-roll.png` (gold swept wings) |
-
-Not yet assigned to a rank:
-
-- `unassigned-bronze-down-chevrons-1.png` to `-3.png`: the first Blank Page art, one, two and
-  three bronze downward chevrons, replaced by the upward style.
