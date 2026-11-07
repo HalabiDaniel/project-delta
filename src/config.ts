@@ -259,6 +259,11 @@ export interface GunSpec {
   speed: number;
   /** Distance a round travels before it dries up. */
   range: number;
+  /**
+   * v0.0.18: damage against structures and defenses is multiplied by this (the Thug's cannon);
+   * absent: 1. Depots still shrug off most ink on top (DEFENSES.supply.inkFactor).
+   */
+  structureFactor?: number;
 }
 
 export type BombKind = 'standard' | 'small';
@@ -321,6 +326,11 @@ export interface AircraftSpec {
   shape: BaseShapeId;
   /** Special abilities beyond the numbers above. */
   traits?: AircraftTraits;
+  /**
+   * v0.0.18: armour: this share of every enemy round, rocket and blast is absorbed (the Thug). Absent:
+   * none. Collisions and rough landings are not armoured against. Counted in the durability rating.
+   */
+  armour?: number;
   /**
    * v0.0.16: the automatic maneuvers this design can carry in its maneuver slot, the first being
    * the default. Empty for bombers.
@@ -501,7 +511,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     cost: 80,
     refitCost: 18,
     materials: { ink: 8, rubber: 3 },
-    tagline: 'Hard to spot, good at everything: guns for a fight, two bombs for the target.',
+    tagline: 'The lowest-signature fighter: a gun for a fight, two mini bombs in an internal bay. Good at everything, best at nothing.',
     flight: {
       minSpeed: 10, cruiseSpeed: 21, maxSpeed: 31,
       throttleAccel: 14, speedResponse: 2.1, pitchSpeedEffect: 8,
@@ -512,7 +522,8 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     maxHealth: 110,
     gun: { barrels: 1, ammo: 100, interval: 0.1, damage: 7, speed: 74, range: 80 },
     gunLabel: 'Internal ink gun',
-    bombs: { capacity: 2, kind: 'standard' },
+    // v0.0.18: a light payload carried inside; opening the bay reveals it (STEALTH.reveal.bomb).
+    bombs: { capacity: 2, kind: 'small' },
     signature: 0.65,
     hitRadius: 1.0,
     accent: [0.55, 0.45, 0.3],
@@ -521,6 +532,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     maneuvers: ['foldBack', 'diveFold', 'slipRoll', 'updraftRoll', 'spiralDrill'],
     traits: { stealth: true },
   },
+
   thug: {
     id: 'thug',
     name: 'Thug',
@@ -529,18 +541,21 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     cost: 70,
     refitCost: 16,
     materials: { ink: 12, rubber: 2 },
-    tagline: 'Slow, armoured and loud. A spinning ink cannon and three mini bombs for low passes.',
+    buildTime: 2.6,
+    tagline: 'Slow, armoured and loud. A rotary ink cannon that chews through defenses, three mini bombs, and no business in a dogfight.',
     flight: {
-      minSpeed: 8, cruiseSpeed: 17, maxSpeed: 26,
-      throttleAccel: 11, speedResponse: 1.6, pitchSpeedEffect: 9,
-      maxTurnRate: 1.35, maxPitchRate: 1.1, aimGain: 2.8, rollResponse: 5, pitchResponse: 5, maxBank: 52 * DEG,
-      boostSpeed: 10, boostResponse: 4, boostDuration: 1.1, boostCooldown: 4,
+      minSpeed: 8, cruiseSpeed: 17, maxSpeed: 25,
+      throttleAccel: 10, speedResponse: 1.5, pitchSpeedEffect: 10,
+      maxTurnRate: 1.3, maxPitchRate: 1.0, aimGain: 2.8, rollResponse: 4.8, pitchResponse: 4.8, maxBank: 52 * DEG,
+      boostSpeed: 9, boostResponse: 3.5, boostDuration: 1.1, boostCooldown: 4.2,
       collisionRadius: 0.95,
     },
     maxHealth: 150,
-    gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70 },
+    // v0.0.18: the cannon hits structures and defenses twice as hard as ordinary ink.
+    gun: { barrels: 1, ammo: 220, interval: 0.05, damage: 5, speed: 70, range: 70, structureFactor: 2 },
     gunLabel: 'Rotary ink cannon',
     bombs: { capacity: 3, kind: 'small' },
+    armour: 0.25,
     signature: 1.15,
     hitRadius: 1.3,
     accent: [0.45, 0.55, 0.3],
@@ -548,6 +563,7 @@ export const AIRCRAFT: Record<AircraftId, AircraftSpec> = {
     shape: 'swift',
     maneuvers: ['updraftRoll', 'diveFold', 'foldBack', 'slipRoll', 'spiralDrill'],
   },
+
   jumper: {
     id: 'jumper',
     name: 'Jumper',
@@ -1481,6 +1497,7 @@ export const MISSIONS = {
     stunt: 20,
     'time-trial': 18,
     discovery: 18,
+    strafe: 30,
   },
   /**
    * How long each type keeps the player in harm's way, scaling the threat bonus: a survival
@@ -1513,9 +1530,13 @@ export const MISSIONS = {
     stunt: 0.6,
     'time-trial': 0.6,
     discovery: 0.7,
+    strafe: 1.3,
   },
   /** Mission types built around defenses need targets with at least this threat level. */
-  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1 },
+  minThreat: { suppression: 1, 'danger-recon': 1, survival: 1, 'low-attack': 1, fortified: 2, 'multi-stage': 2, combined: 1, strafe: 1 },
+  /** v0.0.18 strafing run: structures to wreck (by difficulty), and seconds on top of the flight there. */
+  strafeCount: { easy: 2, medium: 3, hard: 4 },
+  strafeTime: { easy: 50, medium: 40, hard: 32 },
   /** Extra reward for each enemy aircraft a mission sends up, by its pilot's skill. */
   airBonus: { easy: 6, medium: 8, hard: 10 },
   /** Bomber interception: where the raider sets out from. Harder raids start further off, and with an escort on hard. */
@@ -1544,7 +1565,7 @@ export const MISSIONS = {
     'low-attack': { rubber: 2, ink: 4 }, suppression: { ink: 10 }, practice: { ink: 8 }, dogfight: { ink: 10 }, patrol: { ink: 8 },
     'scout-intercept': { ink: 6 }, 'bomber-intercept': { ink: 8 }, escort: { ink: 8 }, combined: { ink: 6, rubber: 2 }, 'multi-stage': { ink: 6, rubber: 2 },
     delivery: { ink: 18 }, survival: { ink: 6 }, shipment: { rubber: 3 }, convoy: { ink: 8 }, 'supply-run': { ink: 10, rubber: 3 },
-    stunt: { ink: 4 }, 'time-trial': { ink: 4 }, discovery: { rubber: 3 },
+    stunt: { ink: 4 }, 'time-trial': { ink: 4 }, discovery: { rubber: 3 }, strafe: { ink: 10, rubber: 2 },
   } as Partial<Record<string, { ink?: number; rubber?: number }>>,
   /**
    * Seconds a good run spends on the job itself, on top of the flight there at the reference
@@ -1554,7 +1575,7 @@ export const MISSIONS = {
     bombing: 15, precision: 22, recon: 14, delivery: 0, return: 25, 'multi-bomb': 30, rings: 6, practice: 28,
     suppression: 30, 'danger-recon': 22, fortified: 25, 'multi-stage': 50, survival: 18, 'low-attack': 28,
     dogfight: 30, 'scout-intercept': 30, 'bomber-intercept': 25, escort: 45, patrol: 35, combined: 35,
-    shipment: 25, convoy: 30, 'supply-run': 45, stunt: 14, 'time-trial': 4, discovery: 6,
+    shipment: 25, convoy: 30, 'supply-run': 45, stunt: 14, 'time-trial': 4, discovery: 6, strafe: 35,
   },
   /** Mission time limits are worked out for a plane flying at this speed, whichever plane is chosen. */
   referenceSpeed: 20,
@@ -1650,6 +1671,7 @@ export const SUITABILITY = {
     stunt: { maneuverability: 3, speed: 1 },
     'time-trial': { speed: 3, maneuverability: 2 },
     discovery: { speed: 2, stealth: 1, maneuverability: 1 },
+    strafe: { firepower: 3, durability: 3, payload: 1 },
   },
   /**
    * Types that need a bit of everything are rated by the plane's weakest weighted rating (plus

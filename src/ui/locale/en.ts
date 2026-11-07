@@ -183,6 +183,7 @@ export const en = {
     stunt: 'Stunt course',
     'time-trial': 'Time trial',
     discovery: 'Discovery flight',
+    strafe: 'Strafing run',
   } satisfies Record<MissionType, string>,
 
   slotKind: { defense: 'Defense slot', radar: 'Radar slot', economy: 'Economy slot', utility: 'Utility slot' } satisfies Record<SlotKind, string>,

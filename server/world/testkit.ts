@@ -50,6 +50,17 @@ export function run(world: ServerWorld, seconds: number, controls: (id: string, 
   }
 }
 
+/** Chooses `aircraft` in the garage and a card it can fly (the selected one if it can). */
+export function chooseFlyable(world: ServerWorld, p: Pilot, aircraft: AircraftId): void {
+  world.command(p.id, { a: 'aircraft', id: aircraft });
+  const st = p.state!;
+  if (world.suits(p, aircraft)) return;
+  for (let i = 0; i < st.offers.length; i++) {
+    st.select(i);
+    if (world.suits(p, aircraft)) return;
+  }
+}
+
 /** Folds `aircraft` and launches it on the selected card (any card it suits). */
 export function launch(world: ServerWorld, p: Pilot, aircraft: AircraftId = 'falcon'): void {
   world.command(p.id, { a: 'aircraft', id: aircraft });

@@ -21,7 +21,8 @@ export function ratingValue(spec: AircraftSpec, key: RatingKey): number {
   switch (key) {
     case 'speed': return f.maxSpeed + f.boostSpeed / 2;
     case 'maneuverability': return (f.maxTurnRate / 1.8 + f.rollResponse / 8 + f.maxPitchRate / 1.5) / 3;
-    case 'durability': return spec.maxHealth;
+    // v0.0.18: armour counts as the health it saves.
+    case 'durability': return spec.maxHealth / (1 - (spec.armour ?? 0));
     case 'payload': return spec.bombs.capacity * BOMB.kinds[spec.bombs.kind].weight;
     case 'firepower': return spec.gun.damage / spec.gun.interval;
     case 'stealth': return spec.signature;

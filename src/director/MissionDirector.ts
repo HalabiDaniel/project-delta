@@ -536,6 +536,8 @@ export class MissionDirector {
     if (spec.type === 'bomber-intercept' && sit.raidActive && !spec.modifiers?.includes('emergency')) return 'a raid is already under way';
     const standing = new Set([...(ctx.installations ?? []).map((i) => i.id), ...(ctx.dummies ?? []).map((d) => d.id)]);
     for (const o of spec.objectives) {
+      // v0.0.18: a desk that became another player's home since the card was dealt is off limits.
+      if (o.kind !== 'land' && 'territoryId' in o && ctx.excluded?.has(o.territoryId)) return `${o.territoryId} is another player's home now`;
       if (o.kind === 'destroy' && o.what !== 'shipment' && o.targets.filter((id) => standing.has(id)).length < o.count) return `its target on ${o.territoryId} is destroyed`;
     }
     return null;

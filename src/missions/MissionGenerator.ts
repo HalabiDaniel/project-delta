@@ -24,11 +24,11 @@ export const MISSION_TYPES: readonly MissionType[] = [
   'bombing', 'precision', 'recon', 'delivery', 'return', 'multi-bomb', 'rings', 'practice',
   'suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack',
   'dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined',
-  'stunt', 'time-trial', 'discovery',
+  'stunt', 'time-trial', 'discovery', 'strafe',
 ];
 
 /** Mission types built around the defenses. Every deal includes one, when the world has defenses. */
-export const DEFENSE_TYPES: readonly MissionType[] = ['suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack'];
+export const DEFENSE_TYPES: readonly MissionType[] = ['suppression', 'danger-recon', 'fortified', 'multi-stage', 'survival', 'low-attack', 'strafe'];
 
 /** Mission types against (or with) AI aircraft. Every deal includes one. */
 export const AIR_TYPES: readonly MissionType[] = ['dogfight', 'scout-intercept', 'bomber-intercept', 'escort', 'patrol', 'combined'];
@@ -356,6 +356,20 @@ function draftMission(type: MissionType, difficulty: Difficulty, ctx: MissionCon
             : `Destroy one of the ${targets.length} ink turrets on ${t.id}, with ink or bombs.`,
         bombs: 1 + spareBombs,
         objectives: [{ kind: 'destroy', territoryId: t.id, targets: targets.map((i) => i.id), count, what: 'defense' }],
+      });
+    }
+    case 'strafe': {
+      // v0.0.18: ground attack: wreck several structures (weapons, radar, depot) on one desk, quickly.
+      const t = target();
+      const structures = on(t);
+      const count = Math.min(MISSIONS.strafeCount[difficulty], structures.length);
+      const limit = Math.ceil(distanceTo(t) / MISSIONS.referenceSpeed + MISSIONS.strafeTime[difficulty]);
+      return make(distanceTo(t), {
+        title: `Strafing run: ${t.id}`,
+        description: `Wreck ${count} of the ${structures.length} structures on ${t.id} within ${limit} s: weapons, radar or depot. Come in low and keep firing.`,
+        bombs: 1 + spareBombs,
+        timeLimit: limit,
+        objectives: [{ kind: 'destroy', territoryId: t.id, targets: structures.map((i) => i.id), count, what: 'defense' }],
       });
     }
     case 'danger-recon': {
@@ -695,6 +709,8 @@ function eligible(type: MissionType, difficulty: Difficulty, ctx: MissionContext
         return (ctx.dummies ?? []).filter((d) => d.territoryId === t.id).length >= MISSIONS.practiceCount[difficulty];
       case 'suppression':
         return on(t).some((i) => i.kind === 'turret' || i.kind === 'launcher');
+      case 'strafe':
+        return on(t).length >= MISSIONS.strafeCount[difficulty] && threatOf(t, ctx) >= 1;
       case 'fortified':
         return on(t).some((i) => i.kind === 'supply');
       case 'multi-stage':

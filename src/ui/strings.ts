@@ -250,6 +250,7 @@ export const MISSION_ICONS: Record<MissionType, IconName> = {
   stunt: 'maneuver',
   'time-trial': 'timer',
   discovery: 'map',
+  strafe: 'turret',
 };
 
 export const SLOT_KIND_ICONS: Record<SlotKind, IconName> = { defense: 'shield', radar: 'radar', economy: 'paper', utility: 'slot' };

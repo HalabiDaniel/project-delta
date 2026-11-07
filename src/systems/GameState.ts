@@ -666,7 +666,9 @@ export class GameState {
     if (this.phase !== 'flying' || !this.durability) return { dealt: 0, destroyed: false };
     const enemy = source === 'projectile' || source === 'blast';
     if (enemy && by) this.sortie!.enemyHits++;
-    const dealt = this.durability.damage(Math.round(amount));
+    // v0.0.18: armour absorbs a share of enemy rounds, rockets and blasts (never of collisions).
+    const armour = enemy ? (this.plane?.armour ?? 0) : 0;
+    const dealt = this.durability.damage(Math.round(amount * (1 - armour)));
     if (dealt <= 0) return { dealt: 0, destroyed: false };
     this.sortie!.damageTaken += dealt;
     // v0.0.18: fragile cargo breaks on a hard knock (a collision or a rough landing), not on ink.

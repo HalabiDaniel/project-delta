@@ -46,6 +46,8 @@ export const TEMPLATES: Record<MissionType, { category: Category; weight: number
   stunt: { category: 'flight', weight: 0.35 },
   'time-trial': { category: 'flight', weight: 0.35 },
   discovery: { category: 'recon', weight: 0.4 },
+  // v0.0.18: built for the Thug, fine for the Lightning and the Swift.
+  strafe: { category: 'assault', weight: 0.7 },
 };
 
 export function categoryOf(type: MissionType): Category {

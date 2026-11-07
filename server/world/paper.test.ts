@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AIRCRAFT, BASE, ECONOMY } from '../../src/config';
 import { PRODUCTION_EVERY } from './Paper';
 import { ServerWorld } from './ServerWorld';
-import { launch, place, player, quietWorld, run } from './testkit';
+import { launch, place, player, quietWorld, run, chooseFlyable } from './testkit';
 
 /**
  * Paper on the way to the ledger (v0.0.12 phase 2): every change the rules make in the world is
@@ -19,7 +19,7 @@ describe('the paper journal', () => {
     const a = player(world, 'a', 'T1');
     const start = a.resources.paper;
     run(world, 30);
-    world.command('a', { a: 'aircraft', id: 'swift' });
+    chooseFlyable(world, a, 'swift');
     expect(world.command('a', { a: 'build' })).toBe(true);
     run(world, 2.5);
     const changes = world.takePaper('a');

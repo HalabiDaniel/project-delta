@@ -39,3 +39,17 @@ describe('stealth in a two-player session', () => {
     expect(me?.plane?.detection).toMatch(/^(hidden|detected|locked)$/);
   });
 });
+
+describe('the Thug in a two-player session', () => {
+  it("its armour holds against a Raptor's ink on the server too", async () => {
+    const { launch } = await import('./testkit');
+    const world = quietWorld(3);
+    const a = player(world, 'a', 'T1', 'Ann');
+    const b = player(world, 'b', 'T3', 'Bo');
+    launch(world, a, 'thug');
+    launch(world, b, 'raptor');
+    const hurt = (world as unknown as { hurtPilot: (v: unknown, n: number, s: string, w: string, by: unknown, at: unknown) => number }).hurtPilot.bind(world);
+    const dealt = hurt(a, 20, 'projectile', 'ink', { player: 'b', name: 'Bo' }, { x: 0, y: 0, z: 0 });
+    expect(dealt).toBe(15);
+  });
+});

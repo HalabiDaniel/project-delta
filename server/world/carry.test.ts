@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AIRCRAFT } from '../../src/config';
 import { planesFrom, progressFrom } from './carry';
 import type { PlayerCarry } from './ServerWorld';
-import { launch, player, quietWorld, run } from './testkit';
+import { launch, player, quietWorld, run, chooseFlyable } from './testkit';
 
 /**
  * What travels with a player besides their buildings (v0.0.12 phase 4): their planes, the garage,
@@ -42,7 +42,7 @@ describe('planes and the hangar', () => {
   it('keeps a plane left on the pad, paid for: it rolls out free next time', () => {
     const world = quietWorld();
     const a = player(world, 'a', 'T1');
-    world.command('a', { a: 'aircraft', id: 'dart' });
+    chooseFlyable(world, a, 'dart');
     expect(world.command('a', { a: 'build' })).toBe(true);
     run(world, 2.5);
     expect(a.state!.phase).toBe('ready');
@@ -74,6 +74,8 @@ describe('planes and the hangar', () => {
     const world = quietWorld();
     const a = player(world, 'a', 'T1');
     a.resources.restore(0);
+    // The emergency plane carries no bomb: a card without bombs.
+    a.state!.select(Math.max(0, a.state!.offers.findIndex((m) => m.spec.bombs === 0)));
     world.command('a', { a: 'aircraft', id: 'swift' });
     expect(world.command('a', { a: 'build' })).toBe(true);
     expect(a.state!.emergency).toBe(true);

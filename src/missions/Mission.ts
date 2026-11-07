@@ -29,6 +29,8 @@ export type MissionType =
   | 'stunt'
   | 'time-trial'
   | 'discovery'
+  /** v0.0.18: a ground-attack strafing run: wreck several of a desk's structures against the clock. */
+  | 'strafe'
   /** World events: a high-value shipment to destroy, an enemy convoy to intercept, a friendly supply run to escort. */
   | 'shipment'
   | 'convoy'

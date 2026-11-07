@@ -1985,7 +1985,8 @@ export class Game {
     if (installation) {
       this.state.recordShotHit();
       // Cardboard depots shrug off most of the ink.
-      const factor = installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1;
+      // v0.0.18: the Thug's cannon hits structures harder.
+      const factor = (installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1) * (this.state.plane?.gun.structureFactor ?? 1);
       const dealt = this.damageInstallation(installation, impact.damage * factor, point);
       if (dealt > 0) this.hud.hitMarker(!installation.alive);
       return;

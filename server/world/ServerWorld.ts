@@ -405,6 +405,11 @@ export class ServerWorld {
     const t = this.territories.find((x) => x.id === territoryId)!;
     this.owners.set(territoryId, id);
     this.desks.delete(territoryId);
+    // v0.0.18: cards that now aim at this player's home are dealt again (missions never go there).
+    for (const other of this.pilots.values()) {
+      if (other.id === id || !other.director || !other.state || other.flying) continue;
+      if (other.director.validate()) other.state.updateOffers(other.cards());
+    }
     p.home = t;
     p.arrivedAt = this.time;
     // The AI's defenses make way for the player's base.
@@ -1329,7 +1334,8 @@ export class ServerWorld {
     if (installation && this.mayDamage(shooter, installation)) {
       st.recordShotHit();
       // Cardboard depots shrug off most of the ink.
-      const factor = installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1;
+      // v0.0.18: the Thug's cannon hits structures harder.
+      const factor = (installation.spec.kind === 'supply' ? DEFENSES.supply.inkFactor : 1) * (shooter.state?.plane?.gun.structureFactor ?? 1);
       this.damageInstallation(installation, r.damage * factor, shooter, 'ink');
     }
   }
